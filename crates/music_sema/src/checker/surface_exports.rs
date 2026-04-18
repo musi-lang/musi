@@ -6,7 +6,7 @@ use music_hir::{
     HirTemplatePart, HirVariantDef,
 };
 use music_module::ModuleKey;
-use music_names::{Ident, Interner, NameBindingId, NameSite, Symbol};
+use music_names::{Ident, Interner, NameBindingId, NameBindingKind, NameSite, Symbol};
 
 use super::surface_types::{SurfaceTyBuilder, lower_surface_effect_row};
 use super::{DeclState, ModuleState, TypingState};
@@ -308,8 +308,10 @@ impl ExportSurfaceCollector<'_, '_> {
             if let Some(comptime_value) = typing.binding_comptime_values().get(&export.binding) {
                 value = value.with_comptime_value(comptime_value.clone());
             }
-            if let Some(receiver) = typing.binding_attached_receiver(export.binding) {
-                value = value.with_receiver(this.tys.lower(receiver.receiver), receiver.is_mut);
+            if this.module.resolved.names.bindings.get(export.binding).kind
+                == NameBindingKind::AttachedMethod
+            {
+                value = value.with_attached_method();
             }
             Some(value)
         })

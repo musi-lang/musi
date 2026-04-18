@@ -12,7 +12,9 @@ where
 
     pub(super) fn lower_handler_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
-        let effect_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
+        let effect_tok = node
+            .child_tokens()
+            .find(|t| Self::is_ident_token_kind(t.kind()));
         let effect = self.intern_ident_token_or_placeholder(effect_tok, node.span());
         self.record_use(effect);
 
@@ -36,13 +38,15 @@ where
     }
 
     pub(super) fn lower_handle_clause(&mut self, node: SyntaxNode<'tree, 'src>) -> HirHandleClause {
-        let op_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
+        let op_tok = node
+            .child_tokens()
+            .find(|t| Self::is_ident_token_kind(t.kind()));
         let op = self.intern_ident_token_or_placeholder(op_tok, node.span());
 
         let mut params = Vec::<Ident>::new();
         for token in node
             .child_tokens()
-            .filter(|t| t.kind() == TokenKind::Ident)
+            .filter(|t| Self::is_ident_token_kind(t.kind()))
             .skip(1)
         {
             if let Some(ident) = self.intern_ident_token(token) {
@@ -118,7 +122,10 @@ where
             .slice_span(node.span())
             .unwrap_or_default()
             .into();
-        if let Some(tok) = node.child_tokens().find(|t| t.kind() == TokenKind::Ident) {
+        if let Some(tok) = node
+            .child_tokens()
+            .find(|t| Self::is_ident_token_kind(t.kind()))
+        {
             let name = self.intern_ident_token_or_placeholder(Some(tok), tok.span());
             self.record_use(name);
             return self.alloc_expr(

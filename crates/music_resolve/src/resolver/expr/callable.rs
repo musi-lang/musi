@@ -7,7 +7,9 @@ where
 {
     pub(super) fn lower_pi_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
-        let binder_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
+        let binder_tok = node
+            .child_tokens()
+            .find(|t| Self::is_ident_token_kind(t.kind()));
         let binder = self.intern_ident_token_or_placeholder(binder_tok, node.span());
 
         self.push_scope();
@@ -74,7 +76,7 @@ where
             {
                 arg_node
                     .child_tokens()
-                    .find(|t| t.kind() == TokenKind::Ident)
+                    .find(|t| Self::is_ident_token_kind(t.kind()))
                     .and_then(|tok| self.intern_ident_token(tok))
             } else {
                 None
@@ -145,9 +147,12 @@ where
 
         let access = HirAccessKind::Direct;
 
-        let name_tok = node
-            .child_tokens()
-            .find(|t| matches!(t.kind(), TokenKind::Ident | TokenKind::Int));
+        let name_tok = node.child_tokens().find(|t| {
+            matches!(
+                t.kind(),
+                TokenKind::Ident | TokenKind::KwAny | TokenKind::KwSome | TokenKind::Int
+            )
+        });
         let name = name_tok
             .and_then(|tok| {
                 tok.text()
@@ -166,7 +171,7 @@ where
 
         let as_name = node
             .child_tokens()
-            .find(|t| t.kind() == TokenKind::Ident)
+            .find(|t| Self::is_ident_token_kind(t.kind()))
             .and_then(|t| self.intern_ident_token(t));
         self.alloc_expr(origin, HirExprKind::TypeTest { base, ty, as_name })
     }

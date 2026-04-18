@@ -22,8 +22,8 @@ use super::schemes::BindingScheme;
 use super::surface::build_module_surface;
 use crate::api::{
     ClassFacts, ComptimeValue, ConstraintEvidence, ConstraintKey, DefinitionKey, ExprFacts,
-    ForeignLinkInfo, InstanceFacts, PatFacts, SemaDataDef, SemaDataVariantDef, SemaDiagList,
-    SemaEffectDef, SemaEffectOpDef, SemaEnv, SemaModule, SemaOptions, TargetInfo,
+    ExprMemberFact, ForeignLinkInfo, InstanceFacts, PatFacts, SemaDataDef, SemaDataVariantDef,
+    SemaDiagList, SemaEffectDef, SemaEffectOpDef, SemaEnv, SemaModule, SemaOptions, TargetInfo,
 };
 use crate::effects::EffectRow;
 
@@ -40,14 +40,13 @@ type BindingEvidenceKeyMap = HashMap<NameBindingId, Box<[ConstraintKey]>>;
 type BindingModuleTargetMap = HashMap<NameBindingId, ModuleKey>;
 type BindingConstIntMap = HashMap<NameBindingId, i64>;
 type BindingComptimeValueMap = HashMap<NameBindingId, ComptimeValue>;
-type BindingAttachedReceiverMap = HashMap<NameBindingId, AttachedReceiverInfo>;
 type SealedClassSet = HashSet<DefinitionKey>;
 type GatedBindingSet = HashSet<NameBindingId>;
 type ForeignLinkMap = HashMap<NameBindingId, ForeignLinkInfo>;
 type UnsafeBindingSet = HashSet<NameBindingId>;
+type AttachedMethodMap = HashMap<Symbol, Vec<NameBindingId>>;
 type EffectDefMap = HashMap<Box<str>, EffectDef>;
 type DataDefMap = HashMap<Box<str>, DataDef>;
-type AttachedMethodMap = HashMap<AttachedMethodKey, Vec<NameBindingId>>;
 type ClassIndexMap = HashMap<Symbol, HirExprId>;
 type ClassFactsByNameMap = HashMap<Symbol, ClassFacts>;
 type ClassFactsMap = HashMap<HirExprId, ClassFacts>;
@@ -58,7 +57,8 @@ type ExprCallableEffectsMap = HashMap<HirExprId, EffectRow>;
 type ExprModuleTargetMap = HashMap<HirExprId, ModuleKey>;
 type TypeTestTargetMap = HashMap<HirExprId, HirTyId>;
 type ExprEvidenceMap = HashMap<HirExprId, Box<[ConstraintEvidence]>>;
-type ExprAttachedBindingMap = HashMap<HirExprId, NameBindingId>;
+type ExprDotCallableBindingMap = HashMap<HirExprId, NameBindingId>;
+type ExprMemberFactMap = HashMap<HirExprId, ExprMemberFact>;
 type ExprComptimeValueMap = HashMap<HirExprId, ComptimeValue>;
 type ResumeCtxList = Vec<ResumeCtx>;
 type ExpectedTyList = Vec<HirTyId>;
@@ -159,30 +159,6 @@ pub type EffectDef = SemaEffectDef;
 pub type DataVariantDef = SemaDataVariantDef;
 pub type DataDef = SemaDataDef;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct AttachedMethodKey {
-    receiver: HirTyId,
-    name: Symbol,
-}
-
-impl AttachedMethodKey {
-    const fn new(receiver: HirTyId, name: Symbol) -> Self {
-        Self { receiver, name }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct AttachedReceiverInfo {
-    pub receiver: HirTyId,
-    pub is_mut: bool,
-}
-
-impl AttachedReceiverInfo {
-    const fn new(receiver: HirTyId, is_mut: bool) -> Self {
-        Self { receiver, is_mut }
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct ResumeCtx {
     pub arg: HirTyId,
@@ -256,11 +232,11 @@ pub struct TypingState {
     binding_module_targets: BindingModuleTargetMap,
     binding_const_ints: BindingConstIntMap,
     binding_comptime_values: BindingComptimeValueMap,
-    binding_attached_receivers: BindingAttachedReceiverMap,
     sealed_classes: SealedClassSet,
     gated_bindings: GatedBindingSet,
     foreign_links: ForeignLinkMap,
     unsafe_bindings: UnsafeBindingSet,
+    attached_methods: AttachedMethodMap,
     next_open_row_id: u32,
 }
 
@@ -275,7 +251,6 @@ impl TypingState {
 pub struct DeclState {
     effect_defs: EffectDefMap,
     data_defs: DataDefMap,
-    attached_methods: AttachedMethodMap,
     class_index: ClassIndexMap,
     class_facts_by_name: ClassFactsByNameMap,
     class_facts: ClassFactsMap,
@@ -297,7 +272,8 @@ pub struct FactState {
     expr_module_targets: ExprModuleTargetMap,
     type_test_targets: TypeTestTargetMap,
     expr_evidence: ExprEvidenceMap,
-    expr_attached_bindings: ExprAttachedBindingMap,
+    expr_dot_callable_bindings: ExprDotCallableBindingMap,
+    expr_member_facts: ExprMemberFactMap,
     expr_comptime_values: ExprComptimeValueMap,
 }
 
@@ -312,7 +288,8 @@ impl FactState {
             expr_module_targets: HashMap::new(),
             type_test_targets: HashMap::new(),
             expr_evidence: HashMap::new(),
-            expr_attached_bindings: HashMap::new(),
+            expr_dot_callable_bindings: HashMap::new(),
+            expr_member_facts: HashMap::new(),
             expr_comptime_values: HashMap::new(),
         }
     }
@@ -488,7 +465,8 @@ pub fn finish_module(
             expr_module_targets: facts.expr_module_targets,
             type_test_targets: facts.type_test_targets,
             expr_evidence: facts.expr_evidence,
-            expr_attached_bindings: facts.expr_attached_bindings,
+            expr_dot_callable_bindings: facts.expr_dot_callable_bindings,
+            expr_member_facts: facts.expr_member_facts,
             expr_comptime_values: facts.expr_comptime_values,
         },
         decls: crate::SemaDeclsBuild {
@@ -902,16 +880,24 @@ impl PassBase<'_, '_, '_> {
         let _prev = self.facts.expr_evidence.insert(id, evidence.into());
     }
 
-    pub fn set_expr_attached_binding(&mut self, id: HirExprId, binding: NameBindingId) {
-        let _prev = self.facts.expr_attached_bindings.insert(id, binding);
+    pub fn set_expr_dot_callable_binding(&mut self, id: HirExprId, binding: NameBindingId) {
+        let _prev = self.facts.expr_dot_callable_bindings.insert(id, binding);
+    }
+
+    pub fn set_expr_member_fact(&mut self, id: HirExprId, fact: ExprMemberFact) {
+        let _prev = self.facts.expr_member_facts.insert(id, fact);
+    }
+
+    pub fn expr_member_fact(&self, id: HirExprId) -> Option<&ExprMemberFact> {
+        self.facts.expr_member_facts.get(&id)
     }
 
     pub fn set_expr_comptime_value(&mut self, id: HirExprId, value: ComptimeValue) {
         let _prev = self.facts.expr_comptime_values.insert(id, value);
     }
 
-    pub fn expr_attached_binding(&self, id: HirExprId) -> Option<NameBindingId> {
-        self.facts.expr_attached_bindings.get(&id).copied()
+    pub fn expr_dot_callable_binding(&self, id: HirExprId) -> Option<NameBindingId> {
+        self.facts.expr_dot_callable_bindings.get(&id).copied()
     }
 
     pub fn set_pat_facts(&mut self, id: HirPatId, facts: PatFacts) {
@@ -1109,29 +1095,35 @@ impl PassBase<'_, '_, '_> {
         let _prev = self.decls.data_defs.insert(name.into(), def);
     }
 
-    pub fn insert_attached_method_binding(
-        &mut self,
-        receiver: HirTyId,
-        name: Symbol,
-        binding: NameBindingId,
-        is_mut: bool,
-    ) {
-        let _prev = self
-            .typing
-            .binding_attached_receivers
-            .insert(binding, AttachedReceiverInfo::new(receiver, is_mut));
-        self.decls
+    pub fn insert_attached_method(&mut self, name: Symbol, binding: NameBindingId) {
+        self.typing
             .attached_methods
-            .entry(AttachedMethodKey::new(receiver, name))
+            .entry(name)
             .or_default()
             .push(binding);
     }
 
-    pub fn attached_method_bindings(&self, receiver: HirTyId, name: Symbol) -> &[NameBindingId] {
-        self.decls
+    pub fn visible_attached_methods_named(&self, name: Symbol) -> Box<[NameBindingId]> {
+        self.typing
             .attached_methods
-            .get(&AttachedMethodKey::new(receiver, name))
-            .map_or(&[], Vec::as_slice)
+            .get(&name)
+            .cloned()
+            .unwrap_or_default()
+            .into_boxed_slice()
+    }
+
+    pub fn visible_callable_bindings_named(&self, name: Symbol) -> Box<[NameBindingId]> {
+        self.module
+            .resolved
+            .names
+            .bindings
+            .iter()
+            .filter_map(|(id, binding)| {
+                (binding.name == name && self.typing.binding_schemes.contains_key(&id))
+                    .then_some(id)
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice()
     }
 
     pub fn ensure_sum_data_def(&mut self, left: HirTyId, right: HirTyId) -> Box<str> {
@@ -1331,10 +1323,6 @@ impl TypingState {
         &self.binding_comptime_values
     }
 
-    pub fn binding_attached_receiver(&self, id: NameBindingId) -> Option<AttachedReceiverInfo> {
-        self.binding_attached_receivers.get(&id).copied()
-    }
-
     pub(super) fn is_gated_binding(&self, id: NameBindingId) -> bool {
         self.gated_bindings.contains(&id)
     }
@@ -1430,6 +1418,18 @@ impl<'ctx, 'interner, 'env> CheckPass<'ctx, 'interner, 'env> {
             .iter()
             .rev()
             .find_map(|scope| scope.get(key).cloned())
+    }
+
+    pub fn evidence_entries_in_scope(&self) -> Vec<(ConstraintKey, ConstraintEvidence)> {
+        self.evidence_scopes
+            .iter()
+            .rev()
+            .flat_map(|scope| {
+                scope
+                    .iter()
+                    .map(|(key, evidence)| (key.clone(), evidence.clone()))
+            })
+            .collect()
     }
 
     pub fn push_resume(&mut self, ctx: ResumeCtx) {

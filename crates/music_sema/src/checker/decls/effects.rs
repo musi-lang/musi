@@ -63,7 +63,14 @@ impl CheckPass<'_, '_, '_> {
         let _ = self.pop_expected_ty();
         let Some((effect_name, input_ty, result_ty)) = self.handler_contract(checked_handler.ty)
         else {
-            self.diag(origin.span, DiagKind::InvalidCallTarget, "");
+            let found = self.render_ty(checked_handler.ty);
+            let handler_span = self.expr(handler).origin.span;
+            self.diag_message(
+                handler_span,
+                DiagKind::InvalidCallTarget,
+                format!("handler expression lacks handler type `{found}`"),
+                format!("handler expression has type `{found}` here"),
+            );
             let mut effects = handled_facts.effects;
             effects.union_with(&checked_handler.effects);
             return ExprFacts::new(self.builtins().unknown, effects);

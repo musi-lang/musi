@@ -527,12 +527,16 @@ impl CheckPass<'_, '_, '_> {
                 |instantiated| instantiated.effects,
             ),
         );
+        let method_name = self.intern(export.name.as_ref());
         let evidence_keys = self
             .evidence_scope_for_constraints(&scheme.constraints)
             .into_keys()
             .collect::<Vec<_>>()
             .into_boxed_slice();
         self.insert_binding_scheme(binding, scheme);
+        if export.is_attached_method {
+            self.insert_attached_method(method_name, binding);
+        }
         if let Some(const_int) = export.const_int {
             self.insert_binding_const_int(binding, const_int);
         }
@@ -540,15 +544,5 @@ impl CheckPass<'_, '_, '_> {
             self.insert_binding_comptime_value(binding, comptime_value);
         }
         self.set_binding_evidence_keys(binding, evidence_keys);
-        if let Some(receiver_ty) = export.receiver_ty {
-            let imported_receiver = import_surface_ty(self, surface, receiver_ty);
-            let method_name = self.intern(&export.name);
-            self.insert_attached_method_binding(
-                imported_receiver,
-                method_name,
-                binding,
-                export.receiver_mut,
-            );
-        }
     }
 }

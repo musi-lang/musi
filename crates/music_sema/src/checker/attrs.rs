@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
 use music_arena::SliceRange;
+use music_builtin::{is_builtin_intrinsic_name, is_builtin_intrinsic_symbol, is_builtin_type_name};
 use music_hir::{
     HirAttr, HirAttrArg, HirExprId, HirExprKind, HirOrigin, HirPatKind, HirTyId, HirTyKind,
 };
@@ -112,39 +113,7 @@ impl CheckPass<'_, '_, '_> {
     }
 
     fn is_known_name(name: &str) -> bool {
-        matches!(
-            name,
-            "Type"
-                | "Array"
-                | "Any"
-                | "Unknown"
-                | "Syntax"
-                | "Empty"
-                | "Unit"
-                | "Bool"
-                | "Nat"
-                | "Int"
-                | "Int8"
-                | "Int16"
-                | "Int32"
-                | "Int64"
-                | "Nat8"
-                | "Nat16"
-                | "Nat32"
-                | "Nat64"
-                | "Float"
-                | "Float32"
-                | "Float64"
-                | "String"
-                | "Rune"
-                | "Range"
-                | "ClosedRange"
-                | "PartialRangeFrom"
-                | "PartialRangeUpTo"
-                | "PartialRangeThru"
-                | "CString"
-                | "CPtr"
-        )
+        is_builtin_type_name(name)
     }
 
     fn validate_known_attr(&mut self, attr: &HirAttr, origin: HirOrigin, inner: HirExprId) {
@@ -192,8 +161,12 @@ impl CheckPass<'_, '_, '_> {
         if !is_foreign {
             self.diag(origin.span, DiagKind::AttrIntrinsicRequiresForeignLet, "");
         }
-        if self.parse_named_string_arg(attr, "name").is_none() {
-            self.diag(origin.span, DiagKind::AttrIntrinsicRequiresNameString, "");
+        match self.parse_named_string_arg(attr, "name").as_deref() {
+            None => self.diag(origin.span, DiagKind::AttrIntrinsicRequiresNameString, ""),
+            Some(name) if !is_builtin_intrinsic_name(name) => {
+                self.diag(origin.span, DiagKind::AttrKnownUnknownName, "");
+            }
+            Some(_) => {}
         }
     }
 
@@ -398,7 +371,12 @@ impl CheckPass<'_, '_, '_> {
         for attr in self.attrs(self.expr(expr).mods.attrs) {
             let path = self.attr_path(&attr);
             match path.as_slice() {
-                ["link"] => self.validate_link_attr(&attr, self.expr(expr).origin),
+                ["link"] => {
+                    self.validate_link_attr(&attr, self.expr(expr).origin);
+                    if abi == "musi" {
+                        self.validate_musi_link_attr(&attr, self.expr(expr).origin);
+                    }
+                }
                 ["when"] => self.validate_when_attr(&attr, self.expr(expr).origin),
                 ["intrinsic"] => {
                     self.validate_intrinsic_attr(&attr, self.expr(expr).origin, true);
@@ -449,6 +427,14 @@ impl CheckPass<'_, '_, '_> {
             &[known.name_key, known.symbol_key],
             DiagKind::AttrLinkRequiresStringValue,
         );
+    }
+
+    fn validate_musi_link_attr(&mut self, attr: &HirAttr, origin: HirOrigin) {
+        if let Some(symbol) = self.parse_named_string_arg(attr, "symbol")
+            && !is_builtin_intrinsic_symbol(&symbol)
+        {
+            self.diag(origin.span, DiagKind::AttrKnownUnknownName, "");
+        }
     }
 
     pub(super) fn validate_when_attr(&mut self, attr: &HirAttr, origin: HirOrigin) {

@@ -13,7 +13,7 @@ type ExportedInstanceSiteList = Vec<ExportedInstanceSite>;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ImportSiteKind {
     Static { spec: ModuleSpecifier },
-    Dynamic,
+    NonLiteral,
     InvalidStringLit,
 }
 
@@ -163,15 +163,15 @@ pub fn collect_export_summary(source_id: SourceId, tree: &SyntaxTree) -> ModuleE
 fn classify_import_expr(node: SyntaxNode<'_, '_>) -> ImportSiteKind {
     let mut children = node.child_nodes();
     let Some(expr) = children.next() else {
-        return ImportSiteKind::Dynamic;
+        return ImportSiteKind::NonLiteral;
     };
     match expr.kind() {
         SyntaxNodeKind::LiteralExpr => {
             let Some(tok) = expr.child_tokens().next() else {
-                return ImportSiteKind::Dynamic;
+                return ImportSiteKind::NonLiteral;
             };
             if tok.kind() != TokenKind::String {
-                return ImportSiteKind::Dynamic;
+                return ImportSiteKind::NonLiteral;
             }
             let Some(raw) = tok.text() else {
                 return ImportSiteKind::InvalidStringLit;
@@ -184,19 +184,19 @@ fn classify_import_expr(node: SyntaxNode<'_, '_>) -> ImportSiteKind {
             }
         }
         SyntaxNodeKind::TemplateExpr => classify_static_template_import(expr),
-        _ => ImportSiteKind::Dynamic,
+        _ => ImportSiteKind::NonLiteral,
     }
 }
 
 fn classify_static_template_import(template: SyntaxNode<'_, '_>) -> ImportSiteKind {
     if template.child_nodes().next().is_some() {
-        return ImportSiteKind::Dynamic;
+        return ImportSiteKind::NonLiteral;
     }
     let Some(tok) = template.child_tokens().next() else {
-        return ImportSiteKind::Dynamic;
+        return ImportSiteKind::NonLiteral;
     };
     if tok.kind() != TokenKind::TemplateNoSubst {
-        return ImportSiteKind::Dynamic;
+        return ImportSiteKind::NonLiteral;
     }
     let Some(raw) = tok.text() else {
         return ImportSiteKind::InvalidStringLit;

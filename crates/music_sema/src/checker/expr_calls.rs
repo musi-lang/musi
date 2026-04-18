@@ -1,16 +1,16 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use music_arena::SliceRange;
 use music_hir::{HirArg, HirDim, HirExprId, HirExprKind, HirOrigin, HirTyId, HirTyKind};
 use music_names::{Ident, NameBindingId, Symbol};
 
-use crate::api::{ConstraintKind, ExprFacts};
+use crate::api::{ConstraintKind, ExprFacts, ExprMemberKind};
 use crate::effects::EffectRow;
 
 use super::const_eval::try_comptime_value;
 use super::decls::{call_effects_for_expr, module_export_for_expr, module_target_for_expr};
 use super::exprs::{check_expr, peel_mut_ty};
-use super::schemes::BindingScheme;
+use super::schemes::{BindingScheme, ConstraintObligation};
 use super::{CheckPass, DiagKind};
 
 pub(super) fn check_call_expr(
@@ -286,11 +286,11 @@ impl CheckPass<'_, '_, '_> {
     ) -> ExprFacts {
         let builtins = self.builtins();
         let callee_facts = check_expr(self, callee);
-        let (params, ret) =
+        let (params, mut ret) =
             if let HirTyKind::Arrow { params, ret, .. } = self.ty(callee_facts.ty).kind {
                 (self.ty_ids(params), ret)
             } else {
-                self.diag(origin.span, DiagKind::InvalidCallTarget, "");
+                self.invalid_call_target(callee, callee_facts.ty);
                 return ExprFacts::new(builtins.unknown, callee_facts.effects);
             };
 
@@ -315,14 +315,84 @@ impl CheckPass<'_, '_, '_> {
 
         if !has_runtime_spread {
             if param_index > params.len() || filled.iter().any(|filled| !filled) {
-                self.diag(origin.span, DiagKind::CallArityMismatch, "");
+                self.call_arity_mismatch(origin, callee, params.len(), args_vec.len());
             }
         } else if param_index > params.len() {
-            self.diag(origin.span, DiagKind::CallArityMismatch, "");
+            self.call_arity_mismatch(origin, callee, params.len(), args_vec.len());
         }
 
+        if let Some(class_ret) = self.resolve_class_member_call_evidence(origin, callee, &args_vec)
+        {
+            ret = class_ret;
+        }
         self.merge_call_effects(origin, callee, &mut effects);
         ExprFacts::new(ret, effects)
+    }
+
+    fn resolve_class_member_call_evidence(
+        &mut self,
+        origin: HirOrigin,
+        callee: HirExprId,
+        args: &[HirArg],
+    ) -> Option<HirTyId> {
+        let fact = self.expr_member_fact(callee)?;
+        if fact.kind != ExprMemberKind::ClassMember {
+            return None;
+        }
+        let HirExprKind::Field { base, .. } = self.expr(callee).kind else {
+            return None;
+        };
+        let HirExprKind::Name { name } = self.expr(base).kind else {
+            return None;
+        };
+        let class_name = name.name;
+        let class = self.class_facts_by_name(class_name)?.clone();
+        let member = fact
+            .index
+            .and_then(|index| class.members.get(usize::from(index)))
+            .cloned()?;
+        let mut subst = HashMap::new();
+        for (member_param, arg) in member.params.iter().copied().zip(args.iter()) {
+            let arg_ty = check_expr(self, arg.expr).ty;
+            if !self.unify_ty_for_type_params(&class.type_params, member_param, arg_ty, &mut subst)
+            {
+                let expected = self.substitute_ty(member_param, &subst);
+                let arg_origin = self.expr(arg.expr).origin;
+                self.type_mismatch(arg_origin, expected, arg_ty);
+            }
+        }
+        let subject = class
+            .type_params
+            .first()
+            .and_then(|param| subst.get(param).copied())
+            .unwrap_or_else(|| {
+                let Some(name) = class.type_params.first().copied() else {
+                    return self.builtins().unknown;
+                };
+                self.alloc_ty(HirTyKind::Named {
+                    name,
+                    args: SliceRange::EMPTY,
+                })
+            });
+        if subject == self.builtins().unknown {
+            return Some(self.substitute_ty(member.result, &subst));
+        }
+        let class_ty = self.alloc_ty(HirTyKind::Named {
+            name: class_name,
+            args: SliceRange::EMPTY,
+        });
+        let obligation = ConstraintObligation {
+            kind: ConstraintKind::Implements,
+            subject,
+            value: class_ty,
+            class_key: Some(class.key),
+        };
+        if let Some(evidence) = self.resolve_obligations_to_evidence(origin, &[obligation])
+            && !evidence.is_empty()
+        {
+            self.set_expr_evidence(callee, evidence);
+        }
+        Some(self.substitute_ty(member.result, &subst))
     }
 
     fn validate_unsafe_call(&mut self, origin: HirOrigin, callee: HirExprId) {
@@ -336,11 +406,51 @@ impl CheckPass<'_, '_, '_> {
         }
         let binding = match self.expr(callee).kind {
             HirExprKind::Name { name } => self.binding_id_for_use(name),
-            HirExprKind::Field { .. } => self.expr_attached_binding(callee),
+            HirExprKind::Field { .. } => self.expr_dot_callable_binding(callee),
             _ => None,
         };
         if binding.is_some_and(|binding| self.is_unsafe_binding(binding)) {
             self.diag(origin.span, DiagKind::UnsafeCallRequiresUnsafeBlock, "");
+        }
+    }
+
+    fn invalid_call_target(&mut self, callee: HirExprId, found: HirTyId) {
+        let subject = self.expr_subject(callee);
+        let found = self.render_ty(found);
+        let origin = self.expr(callee).origin;
+        self.diag_message(
+            origin.span,
+            DiagKind::InvalidCallTarget,
+            format!("callee `{subject}` lacks callable type `{found}`"),
+            format!("callee `{subject}` has type `{found}` here"),
+        );
+    }
+
+    fn call_arity_mismatch(
+        &mut self,
+        origin: HirOrigin,
+        callee: HirExprId,
+        expected: usize,
+        found: usize,
+    ) {
+        let subject = self.expr_subject(callee);
+        self.diag_message(
+            origin.span,
+            DiagKind::CallArityMismatch,
+            format!("call `{subject}` expected `{expected}` arguments, found `{found}`"),
+            format!("call `{subject}` has `{found}` arguments here"),
+        );
+    }
+
+    fn expr_subject(&self, expr: HirExprId) -> String {
+        match &self.expr(expr).kind {
+            HirExprKind::Name { name } | HirExprKind::Field { name, .. } => {
+                self.resolve_symbol(name.name).to_owned()
+            }
+            HirExprKind::Lit { .. } => "literal".to_owned(),
+            HirExprKind::Call { .. } => "call result".to_owned(),
+            HirExprKind::Index { .. } => "index result".to_owned(),
+            _ => "expression".to_owned(),
         }
     }
 
@@ -392,7 +502,7 @@ impl CheckPass<'_, '_, '_> {
 
     fn check_named_call_arg(
         &mut self,
-        _name: Ident,
+        name: Ident,
         expr: HirExprId,
         expected: Option<HirTyId>,
         is_comptime: bool,
@@ -405,7 +515,13 @@ impl CheckPass<'_, '_, '_> {
         let _ = self.pop_expected_ty();
         effects.union_with(&facts.effects);
         let origin = self.expr(expr).origin;
-        self.type_mismatch(origin, expected, facts.ty);
+        let name = self.resolve_symbol(name.name).to_owned();
+        self.type_mismatch_for(
+            &format!("call argument `{name}`"),
+            origin,
+            expected,
+            facts.ty,
+        );
         if is_comptime {
             if let Some(value) = try_comptime_value(self, expr) {
                 self.set_expr_comptime_value(expr, value);
@@ -436,10 +552,10 @@ impl CheckPass<'_, '_, '_> {
 
     fn callable_scheme_for_expr(&mut self, expr: HirExprId) -> Option<BindingScheme> {
         let expr = self.peel_call_type_application(expr);
-        if let Some(binding) = self.expr_attached_binding(expr)
+        if let Some(binding) = self.expr_dot_callable_binding(expr)
             && let Some(scheme) = self.binding_scheme(binding).cloned()
         {
-            return self.strip_attached_receiver_scheme(scheme);
+            return self.strip_dot_callable_scheme(scheme);
         }
         match self.expr(expr).kind {
             HirExprKind::Name { name } => self
@@ -494,10 +610,7 @@ impl CheckPass<'_, '_, '_> {
         self.std_ffi_ptr_field_scheme(base, name).is_some()
     }
 
-    fn strip_attached_receiver_scheme(
-        &mut self,
-        mut scheme: BindingScheme,
-    ) -> Option<BindingScheme> {
+    fn strip_dot_callable_scheme(&mut self, mut scheme: BindingScheme) -> Option<BindingScheme> {
         let HirTyKind::Arrow {
             params,
             ret,
@@ -548,7 +661,7 @@ impl CheckPass<'_, '_, '_> {
             .map(|op| op.param_names().to_vec().into_boxed_slice())
     }
 
-    pub(super) fn attached_method_requires_mut(&self, binding: NameBindingId) -> bool {
+    pub(super) fn dot_callable_requires_mut(&self, binding: NameBindingId) -> bool {
         let Some(scheme) = self.binding_scheme(binding) else {
             return false;
         };

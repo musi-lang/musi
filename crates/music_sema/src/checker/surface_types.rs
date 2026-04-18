@@ -74,43 +74,27 @@ pub fn canonical_surface_ty(surface: &ModuleSurface, ty: SurfaceTyId) -> String 
         SurfaceTyKind::Tuple { items } => canonical_surface_tuple(surface, items),
         SurfaceTyKind::Seq { item } => format!("[]{}", canonical_surface_ty(surface, *item)),
         SurfaceTyKind::Array { dims, item } => canonical_surface_array(surface, dims, *item),
-        SurfaceTyKind::Range { bound } => {
-            format!("Range[{}]", canonical_surface_ty(surface, *bound))
-        }
+        SurfaceTyKind::Range { bound } => canonical_surface_wrapped(surface, "Range", *bound),
         SurfaceTyKind::ClosedRange { bound } => {
-            format!("ClosedRange[{}]", canonical_surface_ty(surface, *bound))
+            canonical_surface_wrapped(surface, "ClosedRange", *bound)
         }
         SurfaceTyKind::PartialRangeFrom { bound } => {
-            format!(
-                "PartialRangeFrom[{}]",
-                canonical_surface_ty(surface, *bound)
-            )
+            canonical_surface_wrapped(surface, "PartialRangeFrom", *bound)
         }
         SurfaceTyKind::PartialRangeUpTo { bound } => {
-            format!(
-                "PartialRangeUpTo[{}]",
-                canonical_surface_ty(surface, *bound)
-            )
+            canonical_surface_wrapped(surface, "PartialRangeUpTo", *bound)
         }
         SurfaceTyKind::PartialRangeThru { bound } => {
-            format!(
-                "PartialRangeThru[{}]",
-                canonical_surface_ty(surface, *bound)
-            )
+            canonical_surface_wrapped(surface, "PartialRangeThru", *bound)
         }
         SurfaceTyKind::Handler {
             effect,
             input,
             output,
-        } => format!(
-            "using {} ({} -> {})",
-            canonical_surface_ty(surface, *effect),
-            canonical_surface_ty(surface, *input),
-            canonical_surface_ty(surface, *output)
-        ),
-        SurfaceTyKind::Mut { inner } => {
-            format!("mut {}", canonical_surface_ty(surface, *inner))
-        }
+        } => canonical_surface_handler(surface, *effect, *input, *output),
+        SurfaceTyKind::Mut { inner } => canonical_surface_prefixed(surface, "mut", *inner),
+        SurfaceTyKind::AnyClass { class } => canonical_surface_prefixed(surface, "any", *class),
+        SurfaceTyKind::SomeClass { class } => canonical_surface_prefixed(surface, "some", *class),
         SurfaceTyKind::Record { fields } => canonical_surface_record(surface, fields),
         SurfaceTyKind::Error
         | SurfaceTyKind::Unknown
@@ -142,6 +126,28 @@ pub fn canonical_surface_ty(surface: &ModuleSurface, ty: SurfaceTyId) -> String 
             canonical_simple_surface_ty(kind).expect("simple surface type should render")
         }
     }
+}
+
+fn canonical_surface_wrapped(surface: &ModuleSurface, name: &str, inner: SurfaceTyId) -> String {
+    format!("{name}[{}]", canonical_surface_ty(surface, inner))
+}
+
+fn canonical_surface_handler(
+    surface: &ModuleSurface,
+    effect: SurfaceTyId,
+    input: SurfaceTyId,
+    output: SurfaceTyId,
+) -> String {
+    format!(
+        "using {} ({} -> {})",
+        canonical_surface_ty(surface, effect),
+        canonical_surface_ty(surface, input),
+        canonical_surface_ty(surface, output)
+    )
+}
+
+fn canonical_surface_prefixed(surface: &ModuleSurface, prefix: &str, inner: SurfaceTyId) -> String {
+    format!("{prefix} {}", canonical_surface_ty(surface, inner))
 }
 
 fn canonical_simple_surface_ty(kind: &SurfaceTyKind) -> Option<String> {
@@ -345,6 +351,12 @@ impl<'a> SurfaceTyBuilder<'a> {
             HirTyKind::Mut { inner } => SurfaceTyKind::Mut {
                 inner: self.lower(*inner),
             },
+            HirTyKind::AnyClass { class } => SurfaceTyKind::AnyClass {
+                class: self.lower(*class),
+            },
+            HirTyKind::SomeClass { class } => SurfaceTyKind::SomeClass {
+                class: self.lower(*class),
+            },
             HirTyKind::Record { fields } => SurfaceTyKind::Record {
                 fields: self.lower_fields(fields.clone()),
             },
@@ -501,6 +513,12 @@ impl<'ctx, 'ctx_state, 'interner, 'env> SurfaceTyImporter<'ctx, 'ctx_state, 'int
             },
             SurfaceTyKind::Mut { inner } => HirTyKind::Mut {
                 inner: self.import(*inner),
+            },
+            SurfaceTyKind::AnyClass { class } => HirTyKind::AnyClass {
+                class: self.import(*class),
+            },
+            SurfaceTyKind::SomeClass { class } => HirTyKind::SomeClass {
+                class: self.import(*class),
             },
             SurfaceTyKind::Record { fields } => HirTyKind::Record {
                 fields: self.import_fields(fields),

@@ -63,6 +63,7 @@ impl CheckPass<'_, '_, '_> {
                 mods,
                 pat,
                 type_params,
+                receiver,
                 has_param_clause,
                 params,
                 constraints,
@@ -76,6 +77,7 @@ impl CheckPass<'_, '_, '_> {
                 mods,
                 pat,
                 type_params,
+                receiver,
                 has_param_clause,
                 params,
                 constraints,
@@ -503,6 +505,10 @@ impl CheckPass<'_, '_, '_> {
                 inner: inner_facts.ty,
             }),
             HirPrefixOp::Comptime => inner_facts.ty,
+            HirPrefixOp::Any | HirPrefixOp::Some => {
+                ctx.diag(origin.span, DiagKind::InvalidTypeExpression, "");
+                ctx.builtins().error
+            }
         };
         ExprFacts::new(ty, inner_facts.effects)
     }
@@ -639,6 +645,9 @@ impl CheckPass<'_, '_, '_> {
                 ctx.contains_mut_ty(*effect)
                     || ctx.contains_mut_ty(*input)
                     || ctx.contains_mut_ty(*output)
+            }
+            HirTyKind::AnyClass { class } | HirTyKind::SomeClass { class } => {
+                ctx.contains_mut_ty(*class)
             }
             HirTyKind::Record { fields } => ctx
                 .ty_fields(fields.clone())

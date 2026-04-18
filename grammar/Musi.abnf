@@ -59,6 +59,9 @@ not-star                           = %x00-29
 not-slash                          = %x00-2E
                                      / %x30-FF  ; OCTET except "/"
 
+not-minus                          = %x00-2C
+                                     / %x2E-FF  ; OCTET except "-"
+
 not-dquote-or-backslash            = %x00-21
                                      / %x23-5B
                                      / %x5D-FF
@@ -89,6 +92,8 @@ not-backtick-or-backslash          = %x00-5B
 kw-and      = %x61.6E.64
 
 kw-as       = %x61.73
+
+kw-any      = %x61.6E.79
 
 kw-match    = %x6D.61.74.63.68
 
@@ -149,6 +154,8 @@ kw-resume   = %x72.65.73.75.6D.65
 kw-shl      = %x73.68.6C
 
 kw-shr      = %x73.68.72
+
+kw-some     = %x73.6F.6D.65
 
 kw-where    = %x77.68.65.72.65
 
@@ -332,22 +339,38 @@ newline           = lf
 
 ws                = 1*(sp / htab / cr)
 
-line-doc-comment  = "///" *(not-cr-or-lf)
+line-module-doc-comment = "--!" *(not-cr-or-lf)
 
-line-comment      = "//" *(not-cr-or-lf)
+line-doc-comment        = "---" *(not-cr-or-lf)
 
-block-body        = *(not-star / (star not-slash))
+line-comment            = "--" *(not-cr-or-lf)
 
-block-doc-comment = "/**" block-body "*/"
+block-open              = "/-"
 
-block-comment     = "/*" block-body "*/"
+block-doc-open          = "/--"
 
-trivia            = ws
-                    / newline
-                    / line-doc-comment
-                    / line-comment
-                    / block-doc-comment
-                    / block-comment
+block-module-doc-open   = "/-!"
+
+block-close             = "-/"
+
+block-content           = *(block-comment / block-doc-comment / block-module-doc-comment / not-block-delim)
+
+not-block-delim         = not-slash / (slash not-minus) / (minus not-slash)
+
+block-module-doc-comment = block-module-doc-open block-content block-close
+
+block-doc-comment       = block-doc-open block-content block-close
+
+block-comment           = block-open block-content block-close
+
+trivia                  = ws
+                          / newline
+                          / line-module-doc-comment
+                          / line-doc-comment
+                          / line-comment
+                          / block-module-doc-comment
+                          / block-doc-comment
+                          / block-comment
 ; ---------------------------------------------------------------------------
 ; 2. Parser grammar (over the token stream, trivia-skipped)
 ; ---------------------------------------------------------------------------
@@ -389,9 +412,11 @@ infix-op         = colon-eq
 infix-expr       = prefix-expr *(infix-op prefix-expr)
 
 prefix-op        = minus
+                   / kw-any
                    / kw-comptime
                    / kw-not
                    / kw-mut
+                   / kw-some
 
 prefix-expr      = prefix-op prefix-expr
                    / postfix-expr
@@ -497,10 +522,8 @@ let-modifier          = kw-rec
 let-expr              = kw-let [let-modifier] let-head [bracket-params] [params]
                         [type-annot] [where-clause] [using-clause] colon-eq expr
 
-let-head              = receiver-let-head
-                        / pattern
-
-receiver-let-head     = lparen [kw-mut] ident colon expr rparen dot ident
+let-head              = receiver-method-head / pattern
+receiver-method-head  = lparen ident type-annot rparen dot ident
 
 bracket-params        = lbracket bracket-param *(comma bracket-param) [comma] rbracket
 bracket-param         = ident [type-annot]

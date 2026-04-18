@@ -69,7 +69,7 @@ impl Parser<'_> {
 
     pub(crate) fn expect_ident_element(&mut self) -> SyntaxElementParseResult {
         match self.peek_kind() {
-            TokenKind::Ident => Ok(self.advance_element()),
+            TokenKind::Ident | TokenKind::KwAny | TokenKind::KwSome => Ok(self.advance_element()),
             _ => Err(ParseError::new(
                 ParseErrorKind::ExpectedIdentifier {
                     found: self.found_token(),
@@ -81,7 +81,9 @@ impl Parser<'_> {
 
     pub(crate) fn expect_name_element(&mut self) -> SyntaxElementParseResult {
         match self.peek_kind() {
-            TokenKind::Ident | TokenKind::OpIdent => Ok(self.advance_element()),
+            TokenKind::Ident | TokenKind::OpIdent | TokenKind::KwAny | TokenKind::KwSome => {
+                Ok(self.advance_element())
+            }
             _ => Err(ParseError::new(
                 ParseErrorKind::ExpectedIdentifier {
                     found: self.found_token(),

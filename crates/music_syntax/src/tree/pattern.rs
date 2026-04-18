@@ -53,10 +53,17 @@ impl<'tree, 'src> PatternBinderCollector<'tree, 'src> {
     fn push_bind_pat_token(&mut self, node: SyntaxNode<'tree, 'src>) {
         if let Some(token) = node
             .child_tokens()
-            .find(|token| token.kind() == TokenKind::Ident)
+            .find(|token| Self::is_bind_name_token(token.kind()))
         {
             self.out.push(token);
         }
+    }
+
+    const fn is_bind_name_token(kind: TokenKind) -> bool {
+        matches!(
+            kind,
+            TokenKind::Ident | TokenKind::KwAny | TokenKind::KwSome
+        )
     }
 
     fn collect_record_pattern_binder_tokens(&mut self, node: SyntaxNode<'tree, 'src>) {
@@ -67,7 +74,7 @@ impl<'tree, 'src> PatternBinderCollector<'tree, 'src> {
                 .get(index)
                 .copied()
                 .and_then(SyntaxElement::into_token)
-                .filter(|token| token.kind() == TokenKind::Ident)
+                .filter(|token| Self::is_bind_name_token(token.kind()))
             else {
                 index += 1;
                 continue;

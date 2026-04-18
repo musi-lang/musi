@@ -1,5 +1,12 @@
 use super::*;
 
+const fn is_receiver_ident(kind: TokenKind) -> bool {
+    matches!(
+        kind,
+        TokenKind::Ident | TokenKind::KwAny | TokenKind::KwSome
+    )
+}
+
 impl Parser<'_> {
     pub(crate) fn parse_let_expr(
         &mut self,
@@ -9,8 +16,8 @@ impl Parser<'_> {
         if self.at(TokenKind::KwRec) {
             attrs.push(self.advance_element());
         }
-        if self.is_receiver_prefixed_let_head() {
-            attrs.push(SyntaxElementId::Node(self.parse_receiver_let_head()?));
+        if self.at_receiver_method_head() {
+            attrs.push(SyntaxElementId::Node(self.parse_receiver_method_head()?));
         } else {
             attrs.push(SyntaxElementId::Node(self.parse_pattern()?));
         }
@@ -25,50 +32,48 @@ impl Parser<'_> {
             .builder
             .push_node_from_children(SyntaxNodeKind::LetExpr, attrs))
     }
+}
 
-    fn is_receiver_prefixed_let_head(&self) -> bool {
-        if !self.at(TokenKind::LParen) {
+impl Parser<'_> {
+    fn at_receiver_method_head(&self) -> bool {
+        if self.peek_kind() != TokenKind::LParen || !is_receiver_ident(self.nth_kind(1)) {
             return false;
         }
-        let mut index = 1usize;
-        if self.nth_kind(index) == TokenKind::KwMut {
-            index += 1;
-        }
-        if self.nth_kind(index) != TokenKind::Ident {
+        if self.nth_kind(2) != TokenKind::Colon {
             return false;
         }
-        if self.nth_kind(index + 1) != TokenKind::Colon {
-            return false;
+        let mut depth = 0usize;
+        let mut offset = 0usize;
+        loop {
+            match self.nth_kind(offset) {
+                TokenKind::LParen => depth += 1,
+                TokenKind::RParen => {
+                    depth = depth.saturating_sub(1);
+                    if depth == 0 {
+                        return self.nth_kind(offset + 1) == TokenKind::Dot
+                            && is_receiver_ident(self.nth_kind(offset + 2));
+                    }
+                }
+                TokenKind::Eof => return false,
+                _ => {}
+            }
+            offset += 1;
         }
-        let Some(close) = self.lparen_match.get(self.pos).copied().flatten() else {
-            return false;
-        };
-        matches!(
-            self.tokens.get(close + 1).map(|token| token.kind),
-            Some(TokenKind::Dot)
-        ) && matches!(
-            self.tokens.get(close + 2).map(|token| token.kind),
-            Some(TokenKind::Ident)
-        )
     }
 
-    fn parse_receiver_let_head(&mut self) -> ParseResult<SyntaxNodeId> {
+    fn parse_receiver_method_head(&mut self) -> ParseResult<SyntaxNodeId> {
         let mut children = vec![self.expect_token(TokenKind::LParen)?];
-        if self.at(TokenKind::KwMut) {
-            children.push(self.advance_element());
-        }
         children.push(self.expect_ident_element()?);
-        self.parse_required_typed_expr(&mut children)?;
+        children.push(self.expect_token(TokenKind::Colon)?);
+        children.push(SyntaxElementId::Node(self.parse_type_expr(0)?));
         children.push(self.expect_token(TokenKind::RParen)?);
         children.push(self.expect_token(TokenKind::Dot)?);
         children.push(self.expect_ident_element()?);
         Ok(self
             .builder
-            .push_node_from_children(SyntaxNodeKind::ReceiverSpec, children))
+            .push_node_from_children(SyntaxNodeKind::ReceiverMethodHead, children))
     }
-}
 
-impl Parser<'_> {
     pub(crate) fn parse_data_expr(&mut self) -> ParseResult<SyntaxNodeId> {
         let data = self.expect_token(TokenKind::KwData)?;
         let open = self.expect_token(TokenKind::LBrace)?;
@@ -341,6 +346,7 @@ impl Parser<'_> {
     pub(crate) fn parse_with_mods_expr(&mut self) -> ParseResult<SyntaxNodeId> {
         let mut children = Vec::new();
         let mut has_export_mod = false;
+        let mut has_partial_mod = false;
         while self.at(TokenKind::At)
             || self.at(TokenKind::KwExport)
             || self.at(TokenKind::KwPartial)
@@ -349,10 +355,14 @@ impl Parser<'_> {
                 children.push(SyntaxElementId::Node(self.parse_attr()?));
             } else if self.at(TokenKind::KwPartial) {
                 children.push(self.advance_element());
+                has_partial_mod = true;
             } else {
                 children.push(SyntaxElementId::Node(self.parse_export_mod()?));
                 has_export_mod = true;
             }
+        }
+        if has_partial_mod && !self.at(TokenKind::KwLet) {
+            return Err(self.expected_token(TokenKind::KwLet));
         }
         let expr = match self.peek_kind() {
             TokenKind::KwLet => self.parse_let_expr(Vec::new())?,

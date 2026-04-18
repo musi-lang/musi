@@ -16,7 +16,7 @@ where
             .filter_map(|n| {
                 let name = n
                     .child_tokens()
-                    .find(|t| t.kind() == TokenKind::Ident)
+                    .find(|t| Self::is_ident_token_kind(t.kind()))
                     .and_then(|t| self.intern_ident_token(t))?;
                 let mut exprs = n.child_nodes().filter(|child| is_expr_or_ty(child.kind()));
                 let ty = self.lower_optional_expr_clause(n, TokenKind::Colon, &mut exprs);
@@ -45,7 +45,9 @@ where
         let is_comptime = node
             .child_tokens()
             .any(|token| token.kind() == TokenKind::KwComptime);
-        let name_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
+        let name_tok = node
+            .child_tokens()
+            .find(|t| Self::is_ident_token_kind(t.kind()));
         let name = self.intern_ident_token_or_placeholder(name_tok, node.span());
         let _ = self.insert_binding(name, NameBindingKind::Param);
 
@@ -71,7 +73,9 @@ where
     }
 
     fn lower_constraint(&mut self, node: SyntaxNode<'tree, 'src>) -> HirConstraint {
-        let name_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
+        let name_tok = node
+            .child_tokens()
+            .find(|t| Self::is_ident_token_kind(t.kind()));
         let name = self.intern_ident_token_or_placeholder(name_tok, node.span());
         self.record_use(name);
 
@@ -117,7 +121,9 @@ where
     }
 
     fn lower_effect_item(&mut self, node: SyntaxNode<'tree, 'src>) -> HirEffectItem {
-        let name_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
+        let name_tok = node
+            .child_tokens()
+            .find(|t| Self::is_ident_token_kind(t.kind()));
         let name = self.intern_ident_token_or_placeholder(name_tok, node.span());
         self.record_use(name);
 

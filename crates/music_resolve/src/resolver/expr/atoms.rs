@@ -27,7 +27,7 @@ where
         let origin = self.origin_node(node);
         let Some(tok) = node
             .child_tokens()
-            .find(|t| matches!(t.kind(), TokenKind::Ident | TokenKind::OpIdent))
+            .find(|t| Self::is_name_token_kind(t.kind()))
         else {
             self.diags.push(
                 Diag::error(ResolveDiagKind::ExpectedName.message())

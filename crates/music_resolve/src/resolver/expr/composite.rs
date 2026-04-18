@@ -102,7 +102,9 @@ where
             return HirRecordItem::new(true, None, value);
         }
 
-        let name_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
+        let name_tok = node
+            .child_tokens()
+            .find(|t| Self::is_ident_token_kind(t.kind()));
         let name = self.intern_ident_token_or_placeholder(name_tok, node.span());
 
         let has_bind = node.child_tokens().any(|t| t.kind() == TokenKind::ColonEq);
@@ -119,7 +121,9 @@ where
 
     pub(super) fn lower_variant_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
-        let tag_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
+        let tag_tok = node
+            .child_tokens()
+            .find(|t| Self::is_ident_token_kind(t.kind()));
         let tag = self.intern_ident_token_or_placeholder(tag_tok, node.span());
         let args = node
             .child_nodes()
@@ -135,7 +139,9 @@ where
             .child_nodes()
             .filter(|inner| inner.kind() == SyntaxNodeKind::VariantArg)
         {
-            let name_tok = child.child_tokens().find(|t| t.kind() == TokenKind::Ident);
+            let name_tok = child
+                .child_tokens()
+                .find(|t| Self::is_ident_token_kind(t.kind()));
             let name = if child.child_tokens().any(|t| t.kind() == TokenKind::ColonEq) {
                 name_tok.and_then(|tok| self.intern_ident_token(tok))
             } else {

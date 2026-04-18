@@ -10,6 +10,7 @@ lexer grammar MusiLexer;
 // Keywords.
 KW_AND: 'and';
 KW_AS: 'as';
+KW_ANY: 'any';
 KW_MATCH: 'match';
 KW_CLASS: 'class';
 KW_COMPTIME: 'comptime';
@@ -40,6 +41,7 @@ KW_RESUME: 'resume';
 KW_UNSAFE: 'unsafe';
 KW_SHL: 'shl';
 KW_SHR: 'shr';
+KW_SOME: 'some';
 KW_USING: 'using';
 KW_WHERE: 'where';
 KW_XOR: 'xor';
@@ -119,13 +121,17 @@ IDENT: LETTER (LETTER | DIGIT | UNDERSCORE)*;
 SYMBOLIC_OP: SYM_CHAR SYM_CHAR+;
 
 // Trivia (hidden channel).
-LINE_DOC_COMMENT: '///' ~[\r\n]* -> channel(HIDDEN);
+LINE_MODULE_DOC_COMMENT: '--!' ~[\r\n]* -> channel(HIDDEN);
 
-LINE_COMMENT: '//' ~[\r\n]* -> channel(HIDDEN);
+LINE_DOC_COMMENT: '---' ~[\r\n]* -> channel(HIDDEN);
 
-BLOCK_DOC_COMMENT: '/**' .*? '*/' -> channel(HIDDEN);
+LINE_COMMENT: '--' ~[\r\n]* -> channel(HIDDEN);
 
-BLOCK_COMMENT: '/*' .*? '*/' -> channel(HIDDEN);
+BLOCK_MODULE_DOC_COMMENT: '/-!' .*? '-/' -> channel(HIDDEN);
+
+BLOCK_DOC_COMMENT: '/--' .*? '-/' -> channel(HIDDEN);
+
+BLOCK_COMMENT: '/-' .*? '-/' -> channel(HIDDEN);
 
 NEWLINE: '\n' -> channel(HIDDEN);
 
@@ -153,6 +159,7 @@ INTERP_LBRACE: '{' -> type(LBRACE), pushMode(INTERP_NESTED);
 // Keywords.
 I_KW_AND: 'and' -> type(KW_AND);
 I_KW_AS: 'as' -> type(KW_AS);
+I_KW_ANY: 'any' -> type(KW_ANY);
 I_KW_MATCH: 'match' -> type(KW_MATCH);
 I_KW_CLASS: 'class' -> type(KW_CLASS);
 I_KW_COMPTIME: 'comptime' -> type(KW_COMPTIME);
@@ -183,6 +190,7 @@ I_KW_RESUME: 'resume' -> type(KW_RESUME);
 I_KW_UNSAFE: 'unsafe' -> type(KW_UNSAFE);
 I_KW_SHL: 'shl' -> type(KW_SHL);
 I_KW_SHR: 'shr' -> type(KW_SHR);
+I_KW_SOME: 'some' -> type(KW_SOME);
 I_KW_USING: 'using' -> type(KW_USING);
 I_KW_WHERE: 'where' -> type(KW_WHERE);
 I_KW_XOR: 'xor' -> type(KW_XOR);
@@ -259,17 +267,23 @@ I_IDENT: LETTER (LETTER | DIGIT | UNDERSCORE)* -> type(IDENT);
 I_SYMBOLIC_OP: SYM_CHAR SYM_CHAR+ -> type(SYMBOLIC_OP);
 
 // Trivia (hidden channel).
+I_LINE_MODULE_DOC_COMMENT:
+	'--!' ~[\r\n]* -> type(LINE_MODULE_DOC_COMMENT), channel(HIDDEN);
+
 I_LINE_DOC_COMMENT:
-	'///' ~[\r\n]* -> type(LINE_DOC_COMMENT), channel(HIDDEN);
+	'---' ~[\r\n]* -> type(LINE_DOC_COMMENT), channel(HIDDEN);
 
 I_LINE_COMMENT:
-	'//' ~[\r\n]* -> type(LINE_COMMENT), channel(HIDDEN);
+	'--' ~[\r\n]* -> type(LINE_COMMENT), channel(HIDDEN);
+
+I_BLOCK_MODULE_DOC_COMMENT:
+	'/-!' .*? '-/' -> type(BLOCK_MODULE_DOC_COMMENT), channel(HIDDEN);
 
 I_BLOCK_DOC_COMMENT:
-	'/**' .*? '*/' -> type(BLOCK_DOC_COMMENT), channel(HIDDEN);
+	'/--' .*? '-/' -> type(BLOCK_DOC_COMMENT), channel(HIDDEN);
 
 I_BLOCK_COMMENT:
-	'/*' .*? '*/' -> type(BLOCK_COMMENT), channel(HIDDEN);
+	'/-' .*? '-/' -> type(BLOCK_COMMENT), channel(HIDDEN);
 
 I_NEWLINE: '\n' -> type(NEWLINE), channel(HIDDEN);
 
@@ -291,6 +305,7 @@ N_INTERP_RBRACE: '}' -> type(RBRACE), popMode;
 // Keywords.
 N_KW_AND: 'and' -> type(KW_AND);
 N_KW_AS: 'as' -> type(KW_AS);
+N_KW_ANY: 'any' -> type(KW_ANY);
 N_KW_MATCH: 'match' -> type(KW_MATCH);
 N_KW_CLASS: 'class' -> type(KW_CLASS);
 N_KW_COMPTIME: 'comptime' -> type(KW_COMPTIME);
@@ -321,6 +336,7 @@ N_KW_RESUME: 'resume' -> type(KW_RESUME);
 N_KW_UNSAFE: 'unsafe' -> type(KW_UNSAFE);
 N_KW_SHL: 'shl' -> type(KW_SHL);
 N_KW_SHR: 'shr' -> type(KW_SHR);
+N_KW_SOME: 'some' -> type(KW_SOME);
 N_KW_USING: 'using' -> type(KW_USING);
 N_KW_WHERE: 'where' -> type(KW_WHERE);
 N_KW_XOR: 'xor' -> type(KW_XOR);
@@ -397,17 +413,23 @@ N_IDENT: LETTER (LETTER | DIGIT | UNDERSCORE)* -> type(IDENT);
 N_SYMBOLIC_OP: SYM_CHAR SYM_CHAR+ -> type(SYMBOLIC_OP);
 
 // Trivia (hidden channel).
+N_LINE_MODULE_DOC_COMMENT:
+	'--!' ~[\r\n]* -> type(LINE_MODULE_DOC_COMMENT), channel(HIDDEN);
+
 N_LINE_DOC_COMMENT:
-	'///' ~[\r\n]* -> type(LINE_DOC_COMMENT), channel(HIDDEN);
+	'---' ~[\r\n]* -> type(LINE_DOC_COMMENT), channel(HIDDEN);
 
 N_LINE_COMMENT:
-	'//' ~[\r\n]* -> type(LINE_COMMENT), channel(HIDDEN);
+	'--' ~[\r\n]* -> type(LINE_COMMENT), channel(HIDDEN);
+
+N_BLOCK_MODULE_DOC_COMMENT:
+	'/-!' .*? '-/' -> type(BLOCK_MODULE_DOC_COMMENT), channel(HIDDEN);
 
 N_BLOCK_DOC_COMMENT:
-	'/**' .*? '*/' -> type(BLOCK_DOC_COMMENT), channel(HIDDEN);
+	'/--' .*? '-/' -> type(BLOCK_DOC_COMMENT), channel(HIDDEN);
 
 N_BLOCK_COMMENT:
-	'/*' .*? '*/' -> type(BLOCK_COMMENT), channel(HIDDEN);
+	'/-' .*? '-/' -> type(BLOCK_COMMENT), channel(HIDDEN);
 
 N_NEWLINE: '\n' -> type(NEWLINE), channel(HIDDEN);
 

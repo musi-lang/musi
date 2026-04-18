@@ -1,3 +1,5 @@
+#![allow(unused_imports)]
+
 use crate::{Lexer, ParseErrorKind, Program, SyntaxNodeKind, parse};
 
 fn parse_kinds(text: &str) -> Vec<SyntaxNodeKind> {
@@ -23,94 +25,103 @@ fn assert_has_parse_error(text: &str, predicate: impl Fn(ParseErrorKind) -> bool
     );
 }
 
-#[test]
-fn parses_simple_let_statement() {
-    let parsed = parse(Lexer::new("let x := 1;").lex());
-    assert!(
-        parsed.errors().is_empty(),
-        "unexpected errors: {:?}",
-        parsed.errors()
-    );
-    let program = Program::cast(parsed.tree().root()).expect("root should cast");
-    let stmt = program.statements().next().expect("statement expected");
-    let expr = stmt.expression().expect("expression expected");
-    assert_eq!(expr.syntax().kind(), SyntaxNodeKind::LetExpr);
-}
+mod success {
+    use super::*;
 
-#[test]
-fn parses_receiver_prefixed_let_statement() {
-    let parsed = parse(Lexer::new("let (self : Int).abs () : Int := self;").lex());
-    assert!(
-        parsed.errors().is_empty(),
-        "unexpected errors: {:?}",
-        parsed.errors()
-    );
-}
+    #[test]
+    fn parses_simple_let_statement() {
+        let parsed = parse(Lexer::new("let x := 1;").lex());
+        assert!(
+            parsed.errors().is_empty(),
+            "unexpected errors: {:?}",
+            parsed.errors()
+        );
+        let program = Program::cast(parsed.tree().root()).expect("root should cast");
+        let stmt = program.statements().next().expect("statement expected");
+        let expr = stmt.expression().expect("expression expected");
+        assert_eq!(expr.syntax().kind(), SyntaxNodeKind::LetExpr);
+    }
 
-#[test]
-fn parses_mut_receiver_prefixed_let_statement() {
-    let parsed = parse(Lexer::new("let (mut self : Buffer).push (value : Int) := self;").lex());
-    assert!(
-        parsed.errors().is_empty(),
-        "unexpected errors: {:?}",
-        parsed.errors()
-    );
-}
+    #[test]
+    fn parses_comptime_prefix_expr() {
+        let parsed = parse(Lexer::new("let x := comptime (1 + 2);").lex());
+        assert!(
+            parsed.errors().is_empty(),
+            "unexpected errors: {:?}",
+            parsed.errors()
+        );
+    }
 
-#[test]
-fn parses_comptime_prefix_expr() {
-    let parsed = parse(Lexer::new("let x := comptime (1 + 2);").lex());
-    assert!(
-        parsed.errors().is_empty(),
-        "unexpected errors: {:?}",
-        parsed.errors()
-    );
-}
+    #[test]
+    fn parses_comptime_value_param() {
+        let parsed =
+            parse(Lexer::new("let scale (comptime n : Int, x : Int) : Int := x * n;").lex());
+        assert!(
+            parsed.errors().is_empty(),
+            "unexpected errors: {:?}",
+            parsed.errors()
+        );
+    }
 
-#[test]
-fn parses_comptime_value_param() {
-    let parsed = parse(Lexer::new("let scale (comptime n : Int, x : Int) : Int := x * n;").lex());
-    assert!(
-        parsed.errors().is_empty(),
-        "unexpected errors: {:?}",
-        parsed.errors()
-    );
-}
+    #[test]
+    fn parses_existential_and_opaque_class_types() {
+        let parsed = parse(
+            Lexer::new(
+                "let writeAny (writer : any Writer) : Int := 0; let writeSome (writer : some Writer) : Int := 0;",
+            )
+            .lex(),
+        );
+        assert!(
+            parsed.errors().is_empty(),
+            "unexpected errors: {:?}",
+            parsed.errors()
+        );
+    }
 
-#[test]
-fn parses_apply_and_index_chain() {
-    let parsed = parse(Lexer::new("foo[Bar].[0];").lex());
-    assert!(
-        parsed.errors().is_empty(),
-        "unexpected errors: {:?}",
-        parsed.errors()
-    );
-}
+    #[test]
+    fn parses_receiver_method_let_head() {
+        let parsed = parse(Lexer::new("let (self : Int).abs () : Int := self;").lex());
+        assert!(
+            parsed.errors().is_empty(),
+            "unexpected errors: {:?}",
+            parsed.errors()
+        );
+    }
 
-#[test]
-fn parses_instance_expr() {
-    let parsed = parse(Lexer::new("instance Eq[Int] { };").lex());
-    assert!(
-        parsed.errors().is_empty(),
-        "unexpected errors: {:?}",
-        parsed.errors()
-    );
-}
+    #[test]
+    fn parses_apply_and_index_chain() {
+        let parsed = parse(Lexer::new("foo[Bar].[0];").lex());
+        assert!(
+            parsed.errors().is_empty(),
+            "unexpected errors: {:?}",
+            parsed.errors()
+        );
+    }
 
-#[test]
-fn parses_instance_expr_with_target_then_where() {
-    let parsed = parse(Lexer::new("instance Eq[Int] where Int : Show { };").lex());
-    assert!(
-        parsed.errors().is_empty(),
-        "unexpected errors: {:?}",
-        parsed.errors()
-    );
-}
+    #[test]
+    fn parses_instance_expr() {
+        let parsed = parse(Lexer::new("instance Eq[Int] { };").lex());
+        assert!(
+            parsed.errors().is_empty(),
+            "unexpected errors: {:?}",
+            parsed.errors()
+        );
+    }
 
-#[test]
-fn parses_all_atom_forms_smoke() {
-    let kinds = parse_kinds(
-        r#"
+    #[test]
+    fn parses_instance_expr_with_target_then_where() {
+        let parsed = parse(Lexer::new("instance Eq[Int] where Int : Show { };").lex());
+        assert!(
+            parsed.errors().is_empty(),
+            "unexpected errors: {:?}",
+            parsed.errors()
+        );
+    }
+
+    #[test]
+    fn parses_all_atom_forms_smoke() {
+        let kinds = parse_kinds(
+            r#"
 	let x := 1;
 	import "std/io";
 	resume x;
@@ -133,28 +144,21 @@ fn parses_all_atom_forms_smoke() {
 	(x);
 	(x; y;);
 	"#,
-    );
-    assert!(!kinds.is_empty());
-}
+        );
+        assert!(!kinds.is_empty());
+    }
 
-#[test]
-fn parses_backslash_lambda_expr() {
-    let kinds = parse_kinds(r"\(x : Int) : Int => x;");
-    assert_eq!(kinds, vec![SyntaxNodeKind::LambdaExpr]);
-}
+    #[test]
+    fn parses_backslash_lambda_expr() {
+        let kinds = parse_kinds(r"\(x : Int) : Int => x;");
+        assert_eq!(kinds, vec![SyntaxNodeKind::LambdaExpr]);
+    }
 
-#[test]
-fn rejects_bare_paren_lambda_expr() {
-    assert_has_parse_error("(x : Int) => x;", |kind| {
-        matches!(kind, ParseErrorKind::ExpectedToken { .. })
-    });
-}
-
-#[test]
-fn parses_named_variant_payload_definitions_and_uses() {
-    let parsed = parse(
-        Lexer::new(
-            r"
+    #[test]
+    fn parses_named_variant_payload_definitions_and_uses() {
+        let parsed = parse(
+            Lexer::new(
+                r"
             let Port := data {
               | Configured(port : Int, secure : Bool)
               | Default
@@ -165,180 +169,86 @@ fn parses_named_variant_payload_definitions_and_uses() {
               | .Default => 0
             );
         ",
-        )
-        .lex(),
-    );
-    assert!(
-        parsed.errors().is_empty(),
-        "unexpected errors: {:?}",
-        parsed.errors()
-    );
-}
+            )
+            .lex(),
+        );
+        assert!(
+            parsed.errors().is_empty(),
+            "unexpected errors: {:?}",
+            parsed.errors()
+        );
+    }
 
-#[test]
-fn parses_named_call_arguments() {
-    let parsed = parse(
-        Lexer::new(
-            r"
+    #[test]
+    fn parses_named_call_arguments() {
+        let parsed = parse(
+            Lexer::new(
+                r"
             let render (port : Int, secure : Bool) : Int := port;
             render(port := 8080, secure := 0 = 0);
         ",
-        )
-        .lex(),
-    );
-    assert!(
-        parsed.errors().is_empty(),
-        "unexpected errors: {:?}",
-        parsed.errors()
-    );
-}
+            )
+            .lex(),
+        );
+        assert!(
+            parsed.errors().is_empty(),
+            "unexpected errors: {:?}",
+            parsed.errors()
+        );
+    }
 
-#[test]
-fn error_expected_token_semicolon() {
-    assert_has_parse_error("let x := 1", |k| {
-        matches!(
-            k,
-            ParseErrorKind::ExpectedToken {
-                expected: crate::TokenKind::Semicolon,
-                ..
-            }
-        )
-    });
-}
+    #[test]
+    fn parses_in_membership_expr() {
+        let parsed = parse(Lexer::new("a in b;").lex());
+        assert!(
+            parsed.errors().is_empty(),
+            "unexpected errors: {:?}",
+            parsed.errors()
+        );
+    }
 
-#[test]
-fn error_expected_expression() {
-    assert_has_parse_error(";", |k| {
-        matches!(k, ParseErrorKind::ExpectedExpression { .. })
-    });
-}
+    #[test]
+    fn parses_case_and_handle_with_trailing_pipe() {
+        let parsed =
+            parse(Lexer::new("match x (| _ => 0 |); handle x using h { op(a, b) => a; };").lex());
+        assert!(
+            parsed.errors().is_empty(),
+            "unexpected errors: {:?}",
+            parsed.errors()
+        );
+    }
 
-#[test]
-fn error_expected_pattern() {
-    assert_has_parse_error("let := 1;", |k| {
-        matches!(k, ParseErrorKind::ExpectedPattern { .. })
-    });
-}
+    #[test]
+    fn parses_new_signature_order_and_array_type_syntax() {
+        let parsed = parse(
+            Lexer::new("let f[T] (xs : []Int) : [2]Int where T : Eq using { Console } := xs;")
+                .lex(),
+        );
+        assert!(
+            parsed.errors().is_empty(),
+            "unexpected errors: {:?}",
+            parsed.errors()
+        );
+    }
 
-#[test]
-fn error_expected_member() {
-    assert_has_parse_error("effect { 1 };", |k| {
-        matches!(k, ParseErrorKind::ExpectedMember { .. })
-    });
-}
+    #[test]
+    fn parses_tuple_and_array_destructuring_let_patterns() {
+        let parsed = parse(
+            Lexer::new(
+                "let pair := (1, 2); let items := [3, 4]; let (a, b) := pair; let [c, d] := items;",
+            )
+            .lex(),
+        );
+        assert!(
+            parsed.errors().is_empty(),
+            "unexpected errors: {:?}",
+            parsed.errors()
+        );
+    }
 
-#[test]
-fn error_expected_identifier() {
-    assert_has_parse_error("@; 1;", |k| {
-        matches!(k, ParseErrorKind::ExpectedIdentifier { .. })
-    });
-}
-
-#[test]
-fn error_expected_splice_target() {
-    assert_has_parse_error("quote (#);", |k| {
-        matches!(k, ParseErrorKind::ExpectedSpliceTarget { .. })
-    });
-}
-
-#[test]
-fn error_expected_operator_member_name() {
-    assert_has_parse_error("effect { let 1; };", |k| {
-        matches!(k, ParseErrorKind::ExpectedOperatorMemberName { .. })
-    });
-}
-
-#[test]
-fn error_expected_field_target() {
-    assert_has_parse_error("x.;", |k| {
-        matches!(k, ParseErrorKind::ExpectedFieldTarget { .. })
-    });
-}
-
-#[test]
-fn error_expected_constraint_operator() {
-    assert_has_parse_error("let x where Eq = Int = 1;", |k| {
-        matches!(k, ParseErrorKind::ExpectedConstraintOperator { .. })
-    });
-}
-
-#[test]
-fn error_expected_attr_value() {
-    assert_has_parse_error("@a(; ) 1;", |k| {
-        matches!(k, ParseErrorKind::ExpectedAttrValue { .. })
-    });
-}
-
-#[test]
-fn error_splice_outside_quote_is_reported() {
-    assert_has_parse_error("#x;", |k| matches!(k, ParseErrorKind::SpliceOutsideQuote));
-}
-
-#[test]
-fn error_non_associative_chain_is_reported() {
-    assert_has_parse_error("a < b < c;", |k| {
-        matches!(k, ParseErrorKind::NonAssociativeChain)
-    });
-}
-
-#[test]
-fn parses_in_membership_expr() {
-    let parsed = parse(Lexer::new("a in b;").lex());
-    assert!(
-        parsed.errors().is_empty(),
-        "unexpected errors: {:?}",
-        parsed.errors()
-    );
-}
-
-#[test]
-fn error_non_associative_chain_with_in_is_reported() {
-    assert_has_parse_error("a in b in c;", |k| {
-        matches!(k, ParseErrorKind::NonAssociativeChain)
-    });
-}
-
-#[test]
-fn parses_case_and_handle_with_trailing_pipe() {
-    let parsed =
-        parse(Lexer::new("match x (| _ => 0 |); handle x using h { op(a, b) => a; };").lex());
-    assert!(
-        parsed.errors().is_empty(),
-        "unexpected errors: {:?}",
-        parsed.errors()
-    );
-}
-
-#[test]
-fn parses_new_signature_order_and_array_type_syntax() {
-    let parsed = parse(
-        Lexer::new("let f[T] (xs : []Int) : [2]Int where T : Eq using { Console } := xs;").lex(),
-    );
-    assert!(
-        parsed.errors().is_empty(),
-        "unexpected errors: {:?}",
-        parsed.errors()
-    );
-}
-
-#[test]
-fn parses_tuple_and_array_destructuring_let_patterns() {
-    let parsed = parse(
-        Lexer::new(
-            "let pair := (1, 2); let items := [3, 4]; let (a, b) := pair; let [c, d] := items;",
-        )
-        .lex(),
-    );
-    assert!(
-        parsed.errors().is_empty(),
-        "unexpected errors: {:?}",
-        parsed.errors()
-    );
-}
-
-#[test]
-fn parses_handler_type_annotation() {
-    let parsed = parse(
+    #[test]
+    fn parses_handler_type_annotation() {
+        let parsed = parse(
         Lexer::new(
             r"
             let Console := effect { let readLine () : Int; };
@@ -347,92 +257,223 @@ fn parses_handler_type_annotation() {
         )
         .lex(),
     );
-    assert!(
-        parsed.errors().is_empty(),
-        "unexpected errors: {:?}",
-        parsed.errors()
-    );
-}
+        assert!(
+            parsed.errors().is_empty(),
+            "unexpected errors: {:?}",
+            parsed.errors()
+        );
+    }
 
-#[test]
-fn parses_attr_values_and_patterns_with_trailing_commas() {
-    let parsed =
-        parse(Lexer::new("@a(.Tag(1,), [1,], {x := 1,}) let (.Some(x,), [y,]) := z;").lex());
-    assert!(
-        parsed.errors().is_empty(),
-        "unexpected errors: {:?}",
-        parsed.errors()
-    );
-}
+    #[test]
+    fn parses_attr_values_and_patterns_with_trailing_commas() {
+        let parsed =
+            parse(Lexer::new("@a(.Tag(1,), [1,], {x := 1,}) let (.Some(x,), [y,]) := z;").lex());
+        assert!(
+            parsed.errors().is_empty(),
+            "unexpected errors: {:?}",
+            parsed.errors()
+        );
+    }
 
-#[test]
-fn parses_attr_record_with_repeated_trailing_commas() {
-    let parsed = parse(Lexer::new("@a({x := 1,,}) let y := z;").lex());
-    assert!(
-        parsed.errors().is_empty(),
-        "unexpected errors: {:?}",
-        parsed.errors()
-    );
-}
+    #[test]
+    fn parses_attr_record_with_repeated_trailing_commas() {
+        let parsed = parse(Lexer::new("@a({x := 1,,}) let y := z;").lex());
+        assert!(
+            parsed.errors().is_empty(),
+            "unexpected errors: {:?}",
+            parsed.errors()
+        );
+    }
 
-#[test]
-fn parses_unsafe_block_expr() {
-    let parsed = parse(
-        Lexer::new(
-            r#"
+    #[test]
+    fn parses_unsafe_block_expr() {
+        let parsed = parse(
+            Lexer::new(
+                r#"
             foreign "c" let clock () : Int;
             let value := unsafe { clock(); };
         "#,
-        )
-        .lex(),
-    );
-    assert!(
-        parsed.errors().is_empty(),
-        "unexpected errors: {:?}",
-        parsed.errors()
-    );
+            )
+            .lex(),
+        );
+        assert!(
+            parsed.errors().is_empty(),
+            "unexpected errors: {:?}",
+            parsed.errors()
+        );
+    }
+
+    #[test]
+    fn parses_partial_modifier_on_let() {
+        let parsed = parse(Lexer::new("partial let parseInt(text : String) : Int := 0;").lex());
+        assert!(
+            parsed.errors().is_empty(),
+            "unexpected errors: {:?}",
+            parsed.errors()
+        );
+        assert_eq!(
+            parse_kinds("partial let x := 1;"),
+            vec![SyntaxNodeKind::AttributedExpr]
+        );
+    }
+
+    #[test]
+    fn parses_type_equality_operator() {
+        let parsed = parse(Lexer::new("let ok : Bool := T ~= U;").lex());
+        assert!(
+            parsed.errors().is_empty(),
+            "unexpected errors: {:?}",
+            parsed.errors()
+        );
+    }
+
+    #[test]
+    fn parses_indexed_variant_result_clause() {
+        let parsed = parse(Lexer::new("let Vec[T, n] := data { | Nil() -> Vec[T, 0] | Cons(head : T, tail : Vec[T, n]) -> Vec[T, n + 1] };").lex());
+        assert!(
+            parsed.errors().is_empty(),
+            "unexpected errors: {:?}",
+            parsed.errors()
+        );
+    }
+
+    #[test]
+    fn parses_type_equality_constraint() {
+        let parsed =
+            parse(Lexer::new("let same[A, B] (value : A) : A where A ~= B := value;").lex());
+        assert!(
+            parsed.errors().is_empty(),
+            "unexpected errors: {:?}",
+            parsed.errors()
+        );
+    }
 }
 
-#[test]
-fn parses_partial_modifier_on_let() {
-    let parsed = parse(Lexer::new("partial let parseInt(text : String) : Int := 0;").lex());
-    assert!(
-        parsed.errors().is_empty(),
-        "unexpected errors: {:?}",
-        parsed.errors()
-    );
-    assert_eq!(
-        parse_kinds("partial let x := 1;"),
-        vec![SyntaxNodeKind::AttributedExpr]
-    );
-}
+mod failure {
+    use super::*;
 
-#[test]
-fn parses_type_equality_operator() {
-    let parsed = parse(Lexer::new("let ok : Bool := T ~= U;").lex());
-    assert!(
-        parsed.errors().is_empty(),
-        "unexpected errors: {:?}",
-        parsed.errors()
-    );
-}
+    #[test]
+    fn rejects_bare_paren_lambda_expr() {
+        assert_has_parse_error("(x : Int) => x;", |kind| {
+            matches!(kind, ParseErrorKind::ExpectedToken { .. })
+        });
+    }
 
-#[test]
-fn parses_indexed_variant_result_clause() {
-    let parsed = parse(Lexer::new("let Vec[T, n] := data { | Nil() -> Vec[T, 0] | Cons(head : T, tail : Vec[T, n]) -> Vec[T, n + 1] };").lex());
-    assert!(
-        parsed.errors().is_empty(),
-        "unexpected errors: {:?}",
-        parsed.errors()
-    );
-}
+    #[test]
+    fn error_expected_token_semicolon() {
+        assert_has_parse_error("let x := 1", |k| {
+            matches!(
+                k,
+                ParseErrorKind::ExpectedToken {
+                    expected: crate::TokenKind::Semicolon,
+                    ..
+                }
+            )
+        });
+    }
 
-#[test]
-fn parses_type_equality_constraint() {
-    let parsed = parse(Lexer::new("let same[A, B] (value : A) : A where A ~= B := value;").lex());
-    assert!(
-        parsed.errors().is_empty(),
-        "unexpected errors: {:?}",
-        parsed.errors()
-    );
+    #[test]
+    fn error_expected_expression() {
+        assert_has_parse_error(";", |k| {
+            matches!(k, ParseErrorKind::ExpectedExpression { .. })
+        });
+    }
+
+    #[test]
+    fn error_expected_pattern() {
+        assert_has_parse_error("let := 1;", |k| {
+            matches!(k, ParseErrorKind::ExpectedPattern { .. })
+        });
+    }
+
+    #[test]
+    fn error_expected_member() {
+        assert_has_parse_error("effect { 1 };", |k| {
+            matches!(k, ParseErrorKind::ExpectedMember { .. })
+        });
+    }
+
+    #[test]
+    fn error_expected_identifier() {
+        assert_has_parse_error("@; 1;", |k| {
+            matches!(k, ParseErrorKind::ExpectedIdentifier { .. })
+        });
+    }
+
+    #[test]
+    fn error_expected_splice_target() {
+        assert_has_parse_error("quote (#);", |k| {
+            matches!(k, ParseErrorKind::ExpectedSpliceTarget { .. })
+        });
+    }
+
+    #[test]
+    fn error_expected_operator_member_name() {
+        assert_has_parse_error("effect { let 1; };", |k| {
+            matches!(k, ParseErrorKind::ExpectedOperatorMemberName { .. })
+        });
+    }
+
+    #[test]
+    fn error_expected_field_target() {
+        assert_has_parse_error("x.;", |k| {
+            matches!(k, ParseErrorKind::ExpectedFieldTarget { .. })
+        });
+    }
+
+    #[test]
+    fn error_expected_constraint_operator() {
+        assert_has_parse_error("let x where Eq = Int = 1;", |k| {
+            matches!(k, ParseErrorKind::ExpectedConstraintOperator { .. })
+        });
+    }
+
+    #[test]
+    fn error_expected_attr_value() {
+        assert_has_parse_error("@a(; ) 1;", |k| {
+            matches!(k, ParseErrorKind::ExpectedAttrValue { .. })
+        });
+    }
+
+    #[test]
+    fn error_splice_outside_quote_is_reported() {
+        assert_has_parse_error("#x;", |k| matches!(k, ParseErrorKind::SpliceOutsideQuote));
+    }
+
+    #[test]
+    fn error_non_associative_chain_is_reported() {
+        assert_has_parse_error("a < b < c;", |k| {
+            matches!(k, ParseErrorKind::NonAssociativeChain)
+        });
+    }
+
+    #[test]
+    fn error_non_associative_chain_with_in_is_reported() {
+        assert_has_parse_error("a in b in c;", |k| {
+            matches!(k, ParseErrorKind::NonAssociativeChain)
+        });
+    }
+
+    #[test]
+    fn error_mut_parenthesized_dot_let_head_is_rejected() {
+        assert_has_parse_error("let (mut self : Buffer).push (value : Int) := self;", |k| {
+            matches!(
+                k,
+                ParseErrorKind::ExpectedToken { .. } | ParseErrorKind::ExpectedPattern { .. }
+            )
+        });
+    }
+
+    #[test]
+    fn error_partial_modifier_requires_let() {
+        assert_has_parse_error("partial x;", |k| {
+            matches!(
+                k,
+                ParseErrorKind::ExpectedToken {
+                    expected: crate::TokenKind::KwLet,
+                    ..
+                }
+            )
+        });
+    }
 }

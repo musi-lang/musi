@@ -1,0 +1,11 @@
+[package]
+name = "music_builtin"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Central registry for Musi builtin types, intrinsics, and runtime lowering contracts"
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

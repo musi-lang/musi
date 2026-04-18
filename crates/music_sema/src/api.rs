@@ -430,6 +430,12 @@ pub enum SurfaceTyKind {
     Mut {
         inner: SurfaceTyId,
     },
+    AnyClass {
+        class: SurfaceTyId,
+    },
+    SomeClass {
+        class: SurfaceTyId,
+    },
     Record {
         fields: Box<[SurfaceTyField]>,
     },
@@ -465,8 +471,6 @@ impl SurfaceTyField {
 pub struct ExportedValue {
     pub name: Box<str>,
     pub ty: SurfaceTyId,
-    pub receiver_ty: Option<SurfaceTyId>,
-    pub receiver_mut: bool,
     pub type_params: NameList,
     pub type_param_kinds: SurfaceTyIdList,
     pub param_names: NameList,
@@ -478,6 +482,7 @@ pub struct ExportedValue {
     pub class_key: Option<DefinitionKey>,
     pub effect_key: Option<DefinitionKey>,
     pub data_key: Option<DefinitionKey>,
+    pub is_attached_method: bool,
     pub const_int: Option<i64>,
     pub comptime_value: Option<ComptimeValue>,
     pub inert_attrs: AttrList,
@@ -493,8 +498,6 @@ impl ExportedValue {
         Self {
             name: name.into(),
             ty,
-            receiver_ty: None,
-            receiver_mut: false,
             type_params: Box::default(),
             type_param_kinds: Box::default(),
             param_names: Box::default(),
@@ -506,6 +509,7 @@ impl ExportedValue {
             class_key: None,
             effect_key: None,
             data_key: None,
+            is_attached_method: false,
             const_int: None,
             comptime_value: None,
             inert_attrs: Box::default(),
@@ -537,13 +541,6 @@ impl ExportedValue {
     #[must_use]
     pub fn with_comptime_params(mut self, params: impl Into<ComptimeParamList>) -> Self {
         self.comptime_params = params.into();
-        self
-    }
-
-    #[must_use]
-    pub const fn with_receiver(mut self, receiver_ty: SurfaceTyId, receiver_mut: bool) -> Self {
-        self.receiver_ty = Some(receiver_ty);
-        self.receiver_mut = receiver_mut;
         self
     }
 
@@ -586,6 +583,12 @@ impl ExportedValue {
     #[must_use]
     pub fn with_data_key(mut self, data_key: DefinitionKey) -> Self {
         self.data_key = Some(data_key);
+        self
+    }
+
+    #[must_use]
+    pub const fn with_attached_method(mut self) -> Self {
+        self.is_attached_method = true;
         self
     }
 
@@ -1299,6 +1302,70 @@ impl ExprFacts {
     }
 }
 
+/// Semantic class for a resolved member access expression.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExprMemberKind {
+    /// Field provided by a record-like value.
+    RecordField,
+    /// Value exported by a module.
+    ModuleExport,
+    /// Callable resolved from receiver-first visible binding lookup.
+    DotCallable,
+    /// Callable declared with receiver-pattern method syntax.
+    AttachedMethod,
+    /// Attached method reached through receiver type namespace.
+    AttachedMethodNamespace,
+    /// Member projected from typeclass evidence.
+    ClassMember,
+    /// Export reached through std FFI pointer namespace support.
+    FfiPointerExport,
+    /// Operation exposed by an effect value.
+    EffectOperation,
+}
+
+/// Resolved target information for a member access expression.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExprMemberFact {
+    pub kind: ExprMemberKind,
+    pub name: Symbol,
+    pub ty: HirTyId,
+    pub binding: Option<NameBindingId>,
+    pub module_target: Option<ModuleKey>,
+    pub index: Option<u16>,
+}
+
+impl ExprMemberFact {
+    #[must_use]
+    pub const fn new(kind: ExprMemberKind, name: Symbol, ty: HirTyId) -> Self {
+        Self {
+            kind,
+            name,
+            ty,
+            binding: None,
+            module_target: None,
+            index: None,
+        }
+    }
+
+    #[must_use]
+    pub const fn with_binding(mut self, binding: NameBindingId) -> Self {
+        self.binding = Some(binding);
+        self
+    }
+
+    #[must_use]
+    pub fn with_module_target(mut self, target: ModuleKey) -> Self {
+        self.module_target = Some(target);
+        self
+    }
+
+    #[must_use]
+    pub const fn with_index(mut self, index: u16) -> Self {
+        self.index = Some(index);
+        self
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SemaEffectOpDef {
     params: HirTyIdList,
@@ -1832,7 +1899,8 @@ pub struct SemaModule {
     expr_module_targets: HashMap<HirExprId, ModuleKey>,
     type_test_targets: HashMap<HirExprId, HirTyId>,
     expr_evidence: HashMap<HirExprId, Box<[ConstraintEvidence]>>,
-    expr_attached_bindings: HashMap<HirExprId, NameBindingId>,
+    expr_dot_callable_bindings: HashMap<HirExprId, NameBindingId>,
+    expr_member_facts: HashMap<HirExprId, ExprMemberFact>,
     expr_comptime_values: HashMap<HirExprId, ComptimeValue>,
     effect_defs: HashMap<Box<str>, SemaEffectDef>,
     data_defs: HashMap<Box<str>, SemaDataDef>,
@@ -1859,7 +1927,8 @@ struct SemaFactTables {
     expr_module_targets: HashMap<HirExprId, ModuleKey>,
     type_test_targets: HashMap<HirExprId, HirTyId>,
     expr_evidence: HashMap<HirExprId, Box<[ConstraintEvidence]>>,
-    expr_attached_bindings: HashMap<HirExprId, NameBindingId>,
+    expr_dot_callable_bindings: HashMap<HirExprId, NameBindingId>,
+    expr_member_facts: HashMap<HirExprId, ExprMemberFact>,
     expr_comptime_values: HashMap<HirExprId, ComptimeValue>,
 }
 
@@ -1886,7 +1955,8 @@ impl From<SemaModuleBuild> for SemaModule {
             expr_module_targets,
             type_test_targets,
             expr_evidence,
-            expr_attached_bindings,
+            expr_dot_callable_bindings,
+            expr_member_facts,
             expr_comptime_values,
         } = build_facts;
         let context = SemaContextTables {
@@ -1905,7 +1975,8 @@ impl From<SemaModuleBuild> for SemaModule {
             expr_module_targets,
             type_test_targets,
             expr_evidence,
-            expr_attached_bindings,
+            expr_dot_callable_bindings,
+            expr_member_facts,
             expr_comptime_values,
         };
         let decls = SemaDeclTables {
@@ -1967,8 +2038,13 @@ impl SemaModule {
     }
 
     #[must_use]
-    pub fn expr_attached_binding(&self, id: HirExprId) -> Option<NameBindingId> {
-        self.expr_attached_bindings.get(&id).copied()
+    pub fn expr_dot_callable_binding(&self, id: HirExprId) -> Option<NameBindingId> {
+        self.expr_dot_callable_bindings.get(&id).copied()
+    }
+
+    #[must_use]
+    pub fn expr_member_fact(&self, id: HirExprId) -> Option<&ExprMemberFact> {
+        self.expr_member_facts.get(&id)
     }
 
     #[must_use]
@@ -2087,7 +2163,8 @@ impl SemaModule {
             expr_module_targets: facts.expr_module_targets,
             type_test_targets: facts.type_test_targets,
             expr_evidence: facts.expr_evidence,
-            expr_attached_bindings: facts.expr_attached_bindings,
+            expr_dot_callable_bindings: facts.expr_dot_callable_bindings,
+            expr_member_facts: facts.expr_member_facts,
             expr_comptime_values: facts.expr_comptime_values,
             effect_defs: decls.effect_defs,
             data_defs: decls.data_defs,

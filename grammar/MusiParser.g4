@@ -51,7 +51,14 @@ infix_op:
 	| PERCENT
 	| SYMBOLIC_OP;
 
-prefix_expr: (MINUS | KW_COMPTIME | KW_NOT | KW_MUT) prefix_expr
+prefix_expr: (
+		MINUS
+		| KW_ANY
+		| KW_COMPTIME
+		| KW_NOT
+		| KW_MUT
+		| KW_SOME
+	) prefix_expr
 	| postfix_expr;
 
 postfix_expr: atom postfix_op*;
@@ -174,12 +181,12 @@ let_expr:
 	KW_LET let_modifier? let_head bracket_params? params? type_annot? where_clause? using_clause?
 		COLON_EQ expr;
 
-let_head: receiver_let_head | pattern;
+let_head: receiver_method_head | pattern;
 
-receiver_let_head:
-	LPAREN KW_MUT? ident COLON expr RPAREN DOT ident;
+receiver_method_head: LPAREN ident type_annot RPAREN DOT ident;
 
-bracket_params: LBRACKET bracket_param (COMMA bracket_param)* COMMA? RBRACKET;
+bracket_params:
+	LBRACKET bracket_param (COMMA bracket_param)* COMMA? RBRACKET;
 
 bracket_param: ident type_annot?;
 
@@ -191,7 +198,10 @@ data_body: variant_list | rec_def_fields | PIPE | SEMICOLON;
 
 variant_list: PIPE? variant (PIPE variant)* PIPE?;
 
-variant: attrs? ident variant_payload_defs? (MINUS_GT expr)? (COLON_EQ expr)?;
+variant:
+	attrs? ident variant_payload_defs? (MINUS_GT expr)? (
+		COLON_EQ expr
+	)?;
 
 variant_payload_defs:
 	LPAREN variant_payload_def (COMMA variant_payload_def)* COMMA? RPAREN;
@@ -240,16 +250,8 @@ splice:
 	| HASH LBRACKET expr_list? RBRACKET;
 
 with_mods_expr:
-	attrs modifier* (
-		expr
-		| foreign_let_group
-		| let_expr
-	)
-	| modifier+ (
-		expr
-		| foreign_let_group
-		| let_expr
-	);
+	attrs modifier* (expr | foreign_let_group | let_expr)
+	| modifier+ ( expr | foreign_let_group | let_expr);
 
 modifier: attr | export_mod | foreign_mod | partial_mod;
 
@@ -296,7 +298,10 @@ effect_item: ident (LBRACKET expr RBRACKET)?;
 
 where_clause: KW_WHERE constraint (COMMA constraint)* COMMA?;
 
-constraint: ident LT_COLON expr | ident COLON expr | ident TILDE_EQ expr;
+constraint:
+	ident LT_COLON expr
+	| ident COLON expr
+	| ident TILDE_EQ expr;
 
 // --- Patterns ---
 

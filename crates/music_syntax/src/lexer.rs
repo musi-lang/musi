@@ -116,9 +116,17 @@ impl<'src> Lexer<'src> {
                 push(TriviaKind::Newline, self.cursor.pos());
                 return true;
             }
-            b'/' if self.cursor.peek_byte_n(1) == Some(b'/') => {
-                let doc = self.cursor.peek_byte_n(2) == Some(b'/');
-                self.cursor.bump_bytes(if doc { 3 } else { 2 });
+            b'-' if self.cursor.peek_byte_n(1) == Some(b'-') => {
+                let kind = match self.cursor.peek_byte_n(2) {
+                    Some(b'-') => TriviaKind::LineDocComment,
+                    Some(b'!') => TriviaKind::LineModuleDocComment,
+                    _ => TriviaKind::LineComment,
+                };
+                self.cursor.bump_bytes(if kind == TriviaKind::LineComment {
+                    2
+                } else {
+                    3
+                });
                 let rest = self.cursor.slice();
                 let nl = rest.find('\n');
                 let cr = rest.find('\r');
@@ -129,21 +137,17 @@ impl<'src> Lexer<'src> {
                     (None, None) => rest.len(),
                 };
                 self.cursor.bump_bytes(end);
-                push(TriviaKind::LineComment { doc }, self.cursor.pos());
+                push(kind, self.cursor.pos());
                 return true;
             }
-            b'/' if self.cursor.peek_byte_n(1) == Some(b'*') => {
-                let doc = self.cursor.peek_byte_n(2) == Some(b'*');
-                self.cursor.bump_bytes(if doc { 3 } else { 2 });
-                let rest = self.cursor.slice();
-                if let Some(i) = rest.find("*/") {
-                    self.cursor.bump_bytes(i + 2);
-                } else {
-                    self.cursor.bump_bytes(rest.len());
-                    let kind = LexErrorKind::UnterminatedBlockComment;
-                    Self::push_error(errors, kind, start, self.cursor.pos());
-                }
-                push(TriviaKind::BlockComment { doc }, self.cursor.pos());
+            b'/' if self.cursor.peek_byte_n(1) == Some(b'-') => {
+                let kind = match self.cursor.peek_byte_n(2) {
+                    Some(b'-') => TriviaKind::BlockDocComment,
+                    Some(b'!') => TriviaKind::BlockModuleDocComment,
+                    _ => TriviaKind::BlockComment,
+                };
+                self.lex_block_comment(errors, start);
+                push(kind, self.cursor.pos());
                 return true;
             }
             b if b.is_ascii_whitespace() => {
@@ -165,6 +169,41 @@ impl<'src> Lexer<'src> {
         }
 
         false
+    }
+
+    fn lex_block_comment(&mut self, errors: &mut LexErrorList, start: usize) {
+        self.cursor.bump_bytes(self.block_comment_open_len());
+        let mut depth = 1_u32;
+
+        while !self.cursor.is_eof() {
+            if self.cursor.starts_with_bytes(b"-/") {
+                self.cursor.bump_bytes(2);
+                depth -= 1;
+                if depth == 0 {
+                    return;
+                }
+                continue;
+            }
+
+            if self.cursor.starts_with_bytes(b"/-") {
+                self.cursor.bump_bytes(self.block_comment_open_len());
+                depth = depth.saturating_add(1);
+                continue;
+            }
+
+            self.cursor.bump();
+        }
+
+        let kind = LexErrorKind::UnterminatedBlockComment;
+        Self::push_error(errors, kind, start, self.cursor.pos());
+    }
+
+    fn block_comment_open_len(&self) -> usize {
+        if matches!(self.cursor.peek_byte_n(2), Some(b'-' | b'!')) {
+            3
+        } else {
+            2
+        }
     }
 
     fn lex_token_kind(&mut self, errors: &mut LexErrorList) -> TokenKind {

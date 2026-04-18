@@ -256,7 +256,7 @@ impl CheckPass<'_, '_, '_> {
             .collect()
     }
 
-    fn instantiate_binding_with_subst(
+    pub(super) fn instantiate_binding_with_subst(
         &mut self,
         scheme: &BindingScheme,
         subst: &TypeSubstMap,
@@ -376,6 +376,14 @@ impl PassBase<'_, '_, '_> {
                 output,
             } => ctx.substitute_handler_ty(effect, input, output, subst),
             HirTyKind::Mut { inner } => ctx.substitute_mut_ty(inner, subst),
+            HirTyKind::AnyClass { class } => {
+                let class = ctx.substitute_ty(class, subst);
+                ctx.alloc_ty(HirTyKind::AnyClass { class })
+            }
+            HirTyKind::SomeClass { class } => {
+                let class = ctx.substitute_ty(class, subst);
+                ctx.alloc_ty(HirTyKind::SomeClass { class })
+            }
             HirTyKind::Record { fields } => {
                 let fields = ctx
                     .ty_fields(fields)
@@ -545,6 +553,16 @@ impl PassBase<'_, '_, '_> {
 }
 
 impl CheckPass<'_, '_, '_> {
+    pub(super) fn unify_ty_for_type_params(
+        &mut self,
+        type_params: &[Symbol],
+        pattern: HirTyId,
+        actual: HirTyId,
+        subst: &mut HashMap<Symbol, HirTyId>,
+    ) -> bool {
+        self.unify_ty(type_params, pattern, actual, subst)
+    }
+
     fn solve_obligation(
         &mut self,
         origin: HirOrigin,
@@ -684,6 +702,9 @@ impl CheckPass<'_, '_, '_> {
         if let Some(evidence) = self.resolve_in_scope_evidence(&key) {
             return Some(evidence);
         }
+        if let Some(evidence) = self.resolve_equivalent_in_scope_evidence(&key) {
+            return Some(evidence);
+        }
         let Some((class_key, class_args)) = self.obligation_class_target(obligation) else {
             self.diag(origin.span, DiagKind::UnsatisfiedConstraint, "");
             return None;
@@ -762,6 +783,21 @@ impl CheckPass<'_, '_, '_> {
                 None
             }
         }
+    }
+
+    fn resolve_equivalent_in_scope_evidence(
+        &self,
+        key: &ConstraintKey,
+    ) -> Option<ConstraintEvidence> {
+        self.evidence_entries_in_scope()
+            .into_iter()
+            .find_map(|(candidate, evidence)| {
+                (candidate.kind == key.kind
+                    && candidate.class_key == key.class_key
+                    && self.ty_matches(candidate.subject, key.subject)
+                    && self.ty_matches(candidate.value, key.value))
+                .then_some(evidence)
+            })
     }
 
     fn obligation_class_target(
@@ -927,6 +963,24 @@ impl CheckPass<'_, '_, '_> {
                     return false;
                 };
                 ctx.unify_ty(type_params, inner, actual_inner, subst)
+            }
+            HirTyKind::AnyClass { class } => {
+                let HirTyKind::AnyClass {
+                    class: actual_class,
+                } = ctx.ty(actual).kind
+                else {
+                    return false;
+                };
+                ctx.unify_ty(type_params, class, actual_class, subst)
+            }
+            HirTyKind::SomeClass { class } => {
+                let HirTyKind::SomeClass {
+                    class: actual_class,
+                } = ctx.ty(actual).kind
+                else {
+                    return false;
+                };
+                ctx.unify_ty(type_params, class, actual_class, subst)
             }
             HirTyKind::Record { fields } => ctx.unify_record_ty(type_params, actual, subst, fields),
             _ => ctx.ty_matches(pattern, actual),

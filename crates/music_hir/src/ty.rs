@@ -98,6 +98,12 @@ pub enum HirTyKind {
     Mut {
         inner: HirTyId,
     },
+    AnyClass {
+        class: HirTyId,
+    },
+    SomeClass {
+        class: HirTyId,
+    },
     Record {
         fields: SliceRange<HirTyField>,
     },

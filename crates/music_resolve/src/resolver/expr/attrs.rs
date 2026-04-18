@@ -74,7 +74,7 @@ where
         let origin = self.origin_node(node);
         let path: Vec<_> = node
             .child_tokens()
-            .filter(|t| t.kind() == TokenKind::Ident)
+            .filter(|t| Self::is_ident_token_kind(t.kind()))
             .filter_map(|t| self.intern_ident_token(t))
             .collect();
         let path = self.store.idents.alloc_from_iter(path);
@@ -92,7 +92,7 @@ where
     pub(super) fn lower_attr_arg(&mut self, node: SyntaxNode<'tree, 'src>) -> HirAttrArg {
         let name = if node.child_tokens().any(|t| t.kind() == TokenKind::ColonEq) {
             node.child_tokens()
-                .find(|t| t.kind() == TokenKind::Ident)
+                .find(|t| Self::is_ident_token_kind(t.kind()))
                 .and_then(|t| self.intern_ident_token(t))
         } else {
             None

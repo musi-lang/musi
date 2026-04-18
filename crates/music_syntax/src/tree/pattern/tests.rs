@@ -1,3 +1,5 @@
+#![allow(unused_imports)]
+
 use crate::{Lexer, SyntaxNodeKind, canonical_name_text, parse};
 
 use super::pattern_binder_tokens;
@@ -27,25 +29,31 @@ fn binders_in(text: &str) -> Vec<String> {
         .collect()
 }
 
-#[test]
-fn record_pattern_without_colon_yields_field_names() {
-    assert_eq!(binders_in("let {x, y} := value;"), ["x", "y"]);
+mod success {
+    use super::*;
+
+    #[test]
+    fn record_pattern_without_colon_yields_field_names() {
+        assert_eq!(binders_in("let {x, y} := value;"), ["x", "y"]);
+    }
+
+    #[test]
+    fn record_pattern_with_colon_yields_inner_pattern_binders() {
+        assert_eq!(binders_in("let {x: y, z: .Some(a)} := value;"), ["y", "a"]);
+    }
+
+    #[test]
+    fn as_and_or_patterns_preserve_source_order() {
+        assert_eq!(
+            binders_in("let (.Some(x) as y) or {z} := value;"),
+            ["x", "y", "z"]
+        );
+    }
+
+    #[test]
+    fn variant_patterns_yield_payload_binders() {
+        assert_eq!(binders_in("let .Some(x) := value;"), ["x"]);
+    }
 }
 
-#[test]
-fn record_pattern_with_colon_yields_inner_pattern_binders() {
-    assert_eq!(binders_in("let {x: y, z: .Some(a)} := value;"), ["y", "a"]);
-}
-
-#[test]
-fn as_and_or_patterns_preserve_source_order() {
-    assert_eq!(
-        binders_in("let (.Some(x) as y) or {z} := value;"),
-        ["x", "y", "z"]
-    );
-}
-
-#[test]
-fn variant_patterns_yield_payload_binders() {
-    assert_eq!(binders_in("let .Some(x) := value;"), ["x"]);
-}
+mod failure {}

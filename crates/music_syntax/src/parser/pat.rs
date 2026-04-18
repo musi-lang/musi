@@ -49,7 +49,7 @@ impl Parser<'_> {
                     .builder
                     .push_node_from_children(SyntaxNodeKind::LiteralPat, vec![token]))
             }
-            TokenKind::Ident => {
+            TokenKind::Ident | TokenKind::KwAny | TokenKind::KwSome => {
                 let ident = self.advance_element();
                 Ok(self
                     .builder
