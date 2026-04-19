@@ -47,10 +47,12 @@
 		"entity.name.function.musi",
 		"entity.name.function.call.musi",
 		"entity.name.type.musi",
-		"entity.name.type.constructor.musi",
+		"variable.other.enummember.musi",
+		"variable.other.constant.musi",
+		"constant.character.musi",
 		"entity.name.function.dot-callable.musi",
 		"entity.name.function.dot-callable.call.musi",
-		"entity.other.attribute-name.musi",
+		"entity.name.tag.attribute.musi",
 		"entity.name.function.operator.fixity.musi",
 		"entity.name.function.operator.musi",
 		"variable.parameter.receiver.musi",
@@ -184,7 +186,7 @@
 			]
 		},
 		{
-			"name": "dot call and constructor literal",
+			"name": "dot-call and constructor literal",
 			"source": "let out := one.inc(2); let ctor := .Some(1);",
 			"checks": [
 				{
@@ -201,7 +203,7 @@
 				{
 					"line": 0,
 					"lexeme": "Some",
-					"scope": "entity.name.type.constructor.musi"
+					"scope": "variable.other.enummember.musi"
 				}
 			]
 		},
@@ -238,7 +240,7 @@
 				{
 					"line": 0,
 					"lexeme": "Configured",
-					"scope": "entity.name.type.constructor.musi"
+					"scope": "variable.other.enummember.musi"
 				},
 				{
 					"line": 0,
@@ -307,12 +309,12 @@
 				{
 					"line": 1,
 					"lexeme": "known",
-					"scope": "entity.other.attribute-name.musi"
+					"scope": "entity.name.tag.attribute.musi"
 				},
 				{
 					"line": 3,
 					"lexeme": "comptimeSafe",
-					"scope": "entity.other.attribute-name.musi"
+					"scope": "entity.name.tag.attribute.musi"
 				}
 			]
 		},
@@ -375,7 +377,7 @@
 			]
 		},
 		{
-			"name": "generic dot callable call head",
+			"name": "generic dot-callable call head",
 			"source": "let out := xs.map[T](f);",
 			"checks": [
 				{
@@ -591,7 +593,7 @@
 					"line": 0,
 					"lexeme": "Box1",
 					"occurrence": 2,
-					"scope": "entity.name.type.constructor.musi"
+					"scope": "variable.other.enummember.musi"
 				},
 				{
 					"line": 0,
@@ -813,6 +815,105 @@
 			]
 		},
 		{
+			"name": "exported generic functions and effect members",
+			"source": "export let abort () : Empty := request Abort.abort();\nexport opaque let Rangeable[T] := class {\n  let compare (left : T, right : T) : Int;\n  let next (value : T) : Option[T];\n};\nexport opaque let Runtime := effect {\n  let envGet (name : String) : String;\n  let envHas (name : String) : Int;\n  let envSet (name : String, value : String) : Int;\n  let processCwd () : String;\n};",
+			"checks": [
+				{
+					"line": 0,
+					"lexeme": "abort",
+					"scope": "entity.name.function.musi",
+					"forbiddenScopes": [
+						"entity.name.type.musi"
+					]
+				},
+				{
+					"line": 1,
+					"lexeme": "Rangeable",
+					"scope": "entity.name.type.musi"
+				},
+				{
+					"line": 2,
+					"lexeme": "compare",
+					"scope": "entity.name.function.musi",
+					"forbiddenScopes": [
+						"entity.name.type.musi"
+					]
+				},
+				{
+					"line": 3,
+					"lexeme": "next",
+					"scope": "entity.name.function.musi",
+					"forbiddenScopes": [
+						"entity.name.type.musi"
+					]
+				},
+				{
+					"line": 5,
+					"lexeme": "Runtime",
+					"scope": "entity.name.type.musi"
+				},
+				{
+					"line": 6,
+					"lexeme": "envGet",
+					"scope": "entity.name.function.musi",
+					"forbiddenScopes": [
+						"entity.name.type.musi"
+					]
+				},
+				{
+					"line": 7,
+					"lexeme": "envHas",
+					"scope": "entity.name.function.musi",
+					"forbiddenScopes": [
+						"entity.name.type.musi"
+					]
+				},
+				{
+					"line": 7,
+					"lexeme": "name",
+					"scope": "variable.parameter.musi",
+					"forbiddenScopes": [
+						"entity.name.type.musi",
+						"entity.name.type.parameter.musi"
+					]
+				},
+				{
+					"line": 8,
+					"lexeme": "envSet",
+					"scope": "entity.name.function.musi",
+					"forbiddenScopes": [
+						"entity.name.type.musi"
+					]
+				},
+				{
+					"line": 8,
+					"lexeme": "name",
+					"scope": "variable.parameter.musi",
+					"forbiddenScopes": [
+						"entity.name.type.musi",
+						"entity.name.type.parameter.musi"
+					]
+				},
+				{
+					"line": 8,
+					"lexeme": "value",
+					"scope": "variable.parameter.musi",
+					"forbiddenScopes": [
+						"entity.name.type.musi",
+						"entity.name.type.parameter.musi"
+					]
+				},
+				{
+					"line": 9,
+					"lexeme": "processCwd",
+					"scope": "entity.name.function.musi",
+					"forbiddenScopes": [
+						"entity.name.type.musi"
+					]
+				}
+			]
+		},
+		{
 			"name": "pattern and existential syntax",
 			"source": "let writer : any Writer := make();\nlet impl : some Writer := writer;\nmatch maybe ( | .Some(value) => value | _ => 0 );",
 			"checks": [
@@ -829,12 +930,38 @@
 				{
 					"line": 2,
 					"lexeme": "Some",
-					"scope": "entity.name.type.constructor.musi"
+					"scope": "variable.other.enummember.musi"
 				},
 				{
 					"line": 2,
 					"lexeme": "_",
-					"scope": "constant.language.wildcard.musi"
+					"scope": "variable.language.wildcard.musi"
+				}
+			]
+		},
+		{
+			"name": "constants and law parameter syntax",
+			"source": "let MAX_COUNT := 3;\nlet letter := 'a';\nlet escaped := '\\n';\nlet Eq := class { law reflexive(value : T) := eq(value, value); };",
+			"checks": [
+				{
+					"line": 0,
+					"lexeme": "MAX_COUNT",
+					"scope": "variable.other.constant.musi"
+				},
+				{
+					"line": 1,
+					"lexeme": "'a'",
+					"scope": "constant.character.musi"
+				},
+				{
+					"line": 2,
+					"lexeme": "\\n",
+					"scope": "constant.character.escape.musi"
+				},
+				{
+					"line": 3,
+					"lexeme": "reflexive",
+					"scope": "entity.name.function.law.musi"
 				}
 			]
 		}

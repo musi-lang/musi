@@ -118,31 +118,26 @@ mod success {
     }
 
     #[test]
-    fn semantic_tokens_include_lexical_and_resolved_symbols() {
+    fn semantic_tokens_complete_textmate_without_lexical_overrides() {
         let temp = TempDir::new();
         write_file(temp.path(), "musi.json", APP_MANIFEST);
-        write_file(
-            temp.path(),
-            "index.ms",
-            "--- greeting value\nlet message : String := \"Hello\";\nmessage;\n",
-        );
+        let source = "--- greeting value\nlet message : String := \"Hello\";\nmessage;\n";
+        write_file(temp.path(), "index.ms", source);
 
         let tokens = semantic_tokens_for_project_file_with_overlay(
             &temp.path().join("index.ms"),
-            Some("--- greeting value\nlet message : String := \"Hello\";\nmessage;\n"),
+            Some(source),
         );
 
-        assert!(tokens.iter().any(|token| {
-            token.kind == ToolSemanticTokenKind::Comment
-                && token
-                    .modifiers
-                    .contains(&ToolSemanticModifier::Documentation)
-        }));
-        assert!(
-            tokens
-                .iter()
-                .any(|token| token.kind == ToolSemanticTokenKind::Keyword)
-        );
+        assert!(!tokens.iter().any(|token| matches!(
+            token.kind,
+            ToolSemanticTokenKind::Keyword
+                | ToolSemanticTokenKind::Modifier
+                | ToolSemanticTokenKind::Comment
+                | ToolSemanticTokenKind::String
+                | ToolSemanticTokenKind::Number
+                | ToolSemanticTokenKind::Operator
+        )));
         assert!(
             tokens
                 .iter()
@@ -160,11 +155,10 @@ mod success {
     }
 
     #[test]
-    fn semantic_tokens_mark_module_doc_comments() {
+    fn semantic_tokens_mark_attribute_names_as_decorators() {
         let temp = TempDir::new();
         write_file(temp.path(), "musi.json", APP_MANIFEST);
-        let source =
-            "--! module docs\n/-! block module docs -/\nlet message : String := \"Hello\";\n";
+        let source = "@link(symbol := \"data.tag\")\nlet message : String := \"Hello\";\n";
         write_file(temp.path(), "index.ms", source);
 
         let tokens = semantic_tokens_for_project_file_with_overlay(
@@ -173,11 +167,66 @@ mod success {
         );
 
         assert!(tokens.iter().any(|token| {
-            token.kind == ToolSemanticTokenKind::Comment
-                && token
-                    .modifiers
-                    .contains(&ToolSemanticModifier::Documentation)
-                && token.modifiers.contains(&ToolSemanticModifier::Module)
+            token.kind == ToolSemanticTokenKind::Decorator
+                && token.range.start_line == 1
+                && token.range.start_col == 2
+        }));
+    }
+
+    #[test]
+    fn semantic_tokens_mark_law_names_as_functions() {
+        let temp = TempDir::new();
+        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let source = "let Eq[T] := class { law reflexive(value : T) := eq(value, value); };\n";
+        write_file(temp.path(), "index.ms", source);
+
+        let tokens = semantic_tokens_for_project_file_with_overlay(
+            &temp.path().join("index.ms"),
+            Some(source),
+        );
+
+        assert!(tokens.iter().any(|token| {
+            token.kind == ToolSemanticTokenKind::Function
+                && token.range.start_line == 1
+                && token.range.start_col == 26
+        }));
+        assert!(!tokens.iter().any(|token| {
+            token.kind == ToolSemanticTokenKind::Variable
+                && token.range.start_line == 1
+                && token.range.start_col == 26
+        }));
+    }
+
+    #[test]
+    fn semantic_tokens_mark_variants_as_enum_members() {
+        let temp = TempDir::new();
+        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let source = "\
+let Option := data { | Some(value : Int) | None };
+let value := .Some(value := 1);
+match value (| .Some(inner) => inner | .None => 0);
+";
+        write_file(temp.path(), "index.ms", source);
+
+        let tokens = semantic_tokens_for_project_file_with_overlay(
+            &temp.path().join("index.ms"),
+            Some(source),
+        );
+
+        assert!(tokens.iter().any(|token| {
+            token.kind == ToolSemanticTokenKind::EnumMember
+                && token.range.start_line == 1
+                && token.range.start_col == 24
+        }));
+        assert!(tokens.iter().any(|token| {
+            token.kind == ToolSemanticTokenKind::EnumMember
+                && token.range.start_line == 2
+                && token.range.start_col == 15
+        }));
+        assert!(tokens.iter().any(|token| {
+            token.kind == ToolSemanticTokenKind::EnumMember
+                && token.range.start_line == 3
+                && token.range.start_col == 17
         }));
     }
 
@@ -260,7 +309,7 @@ one.inc(2);
 
         let hover =
             hover_for_project_file_with_overlay(&temp.path().join("index.ms"), Some(source), 3, 6)
-                .expect("dot callable hover should resolve");
+                .expect("dot-callable hover should resolve");
 
         assert_eq!(hover.range.start_line, 3);
         assert_eq!(hover.range.start_col, 5);
@@ -355,9 +404,14 @@ one.inc(2);
     }
 
     #[test]
-    fn semantic_tokens_work_for_direct_file_outside_package() {
+    fn semantic_tokens_classify_generic_apply_args_as_types() {
         let temp = TempDir::new();
-        let source = "let message : String := \"Hello\";\nmessage;\n";
+        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let source = "\
+let ptr := import \"@std/ffi\";
+let pointer := ptr.null[Int]();
+let samePointer := ptr.offset[Int](pointer, 0);
+";
         write_file(temp.path(), "index.ms", source);
 
         let tokens = semantic_tokens_for_project_file_with_overlay(
@@ -365,11 +419,61 @@ one.inc(2);
             Some(source),
         );
 
+        assert!(tokens.iter().any(|token| {
+            token.kind == ToolSemanticTokenKind::Type
+                && token.range.start_line == 2
+                && token.range.start_col == 25
+        }));
+        assert!(tokens.iter().any(|token| {
+            token.kind == ToolSemanticTokenKind::Type
+                && token.range.start_line == 3
+                && token.range.start_col == 31
+        }));
+        assert!(!tokens.iter().any(|token| {
+            token.kind == ToolSemanticTokenKind::Variable
+                && token.range.start_line == 2
+                && token.range.start_col == 25
+        }));
+    }
+
+    #[test]
+    fn hover_classifies_generic_apply_args_as_types() {
+        let temp = TempDir::new();
+        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let source = "\
+let ptr := import \"@std/ffi\";
+let pointer := ptr.null[Int]();
+";
+        write_file(temp.path(), "index.ms", source);
+
+        let hover =
+            hover_for_project_file_with_overlay(&temp.path().join("index.ms"), Some(source), 2, 25)
+                .expect("type arg should hover");
+
         assert!(
-            tokens
-                .iter()
-                .any(|token| token.kind == ToolSemanticTokenKind::Keyword)
+            hover.contents.starts_with("```musi\n(type) Int"),
+            "{}",
+            hover.contents
         );
+    }
+
+    #[test]
+    fn semantic_tokens_work_for_direct_file_outside_package() {
+        let temp = TempDir::new();
+        let source = "let id (value : String) : String := value;\nlet message : String := \"Hello\";\nmessage;\n";
+        write_file(temp.path(), "index.ms", source);
+
+        let tokens = semantic_tokens_for_project_file_with_overlay(
+            &temp.path().join("index.ms"),
+            Some(source),
+        );
+
+        assert!(!tokens.iter().any(|token| {
+            matches!(
+                token.kind,
+                ToolSemanticTokenKind::Keyword | ToolSemanticTokenKind::String
+            )
+        }));
         assert!(
             tokens
                 .iter()
@@ -380,6 +484,16 @@ one.inc(2);
                 .iter()
                 .any(|token| token.kind == ToolSemanticTokenKind::Variable)
         );
+        assert!(tokens.iter().any(|token| {
+            token.kind == ToolSemanticTokenKind::Parameter
+                && token.range.start_line == 1
+                && token.range.start_col == 9
+        }));
+        assert!(!tokens.iter().any(|token| {
+            token.kind == ToolSemanticTokenKind::Type
+                && token.range.start_line == 1
+                && token.range.start_col == 9
+        }));
     }
 
     #[test]
@@ -398,6 +512,230 @@ one.inc(2);
                 .file
                 .as_deref()
                 .is_some_and(|file| file.ends_with("index.ms"))
+        );
+    }
+
+    #[test]
+    fn foundation_core_path_uses_canonical_module_identity() {
+        let temp = TempDir::new();
+        let source = r#"
+let Intrinsics := import "musi:intrinsics";
+@known(name := "Type")
+export let Type := Type;
+"#;
+        write_file(
+            temp.path(),
+            "crates/musi_foundation/modules/core.ms",
+            source,
+        );
+        let path = temp.path().join("crates/musi_foundation/modules/core.ms");
+
+        let diagnostics = collect_project_diagnostics_with_overlay(&path, Some(source));
+
+        assert!(
+            diagnostics.iter().all(|diag| {
+                !diag.message.contains("`@known` requires `musi:*` module")
+                    && !diag.message.contains("unresolved import `musi:intrinsics`")
+            }),
+            "{diagnostics:?}"
+        );
+    }
+
+    #[test]
+    fn semantic_tokens_mark_foundation_effect_members_as_functions() {
+        let temp = TempDir::new();
+        let source = r#"
+let Core := import "musi:core";
+let Int := Core.Int;
+let String := Core.String;
+
+export opaque let Runtime := effect {
+  let envGet (name : String) : String;
+  let envHas (name : String) : Int;
+  let envSet (name : String, value : String) : Int;
+};
+"#;
+        write_file(
+            temp.path(),
+            "crates/musi_foundation/modules/runtime.ms",
+            source,
+        );
+        let path = temp
+            .path()
+            .join("crates/musi_foundation/modules/runtime.ms");
+
+        let tokens = semantic_tokens_for_project_file_with_overlay(&path, Some(source));
+
+        assert!(tokens.iter().any(|token| {
+            token.kind == ToolSemanticTokenKind::Function
+                && token.range.start_line == 7
+                && token.range.start_col == 7
+        }));
+        assert!(tokens.iter().any(|token| {
+            token.kind == ToolSemanticTokenKind::Function
+                && token.range.start_line == 8
+                && token.range.start_col == 7
+        }));
+        assert!(tokens.iter().any(|token| {
+            token.kind == ToolSemanticTokenKind::Function
+                && token.range.start_line == 9
+                && token.range.start_col == 7
+        }));
+        assert!(tokens.iter().any(|token| {
+            token.kind == ToolSemanticTokenKind::Parameter
+                && token.range.start_line == 8
+                && token.range.start_col == 15
+        }));
+        assert!(tokens.iter().any(|token| {
+            token.kind == ToolSemanticTokenKind::Parameter
+                && token.range.start_line == 9
+                && token.range.start_col == 15
+        }));
+        assert!(tokens.iter().any(|token| {
+            token.kind == ToolSemanticTokenKind::Parameter
+                && token.range.start_line == 9
+                && token.range.start_col == 30
+        }));
+        assert!(!tokens.iter().any(|token| {
+            token.kind == ToolSemanticTokenKind::Type
+                && matches!(token.range.start_line, 8 | 9)
+                && matches!(token.range.start_col, 15 | 30)
+        }));
+    }
+
+    #[test]
+    fn semantic_tokens_mark_foundation_builtin_return_annotations_as_types() {
+        let temp = TempDir::new();
+        let source = "\
+let Core := import \"musi:core\";
+let Int := Core.Int;
+let String := Core.String;
+let Unit := Core.Unit;
+
+export opaque let Runtime := effect {
+  let randomBool () : Int;
+  let randomFloat01 () : Float;
+};
+
+export let randomFloat01 () : Float := request Runtime.randomFloat01();
+";
+        write_file(
+            temp.path(),
+            "crates/musi_foundation/modules/runtime.ms",
+            source,
+        );
+        let path = temp
+            .path()
+            .join("crates/musi_foundation/modules/runtime.ms");
+
+        let tokens = semantic_tokens_for_project_file_with_overlay(&path, Some(source));
+
+        assert!(tokens.iter().any(|token| {
+            token.kind == ToolSemanticTokenKind::Type
+                && token.range.start_line == 8
+                && token.range.start_col == 26
+        }));
+        assert!(tokens.iter().any(|token| {
+            token.kind == ToolSemanticTokenKind::Type
+                && token.range.start_line == 11
+                && token.range.start_col == 31
+        }));
+        assert!(!tokens.iter().any(|token| {
+            token.kind == ToolSemanticTokenKind::Variable
+                && matches!(token.range.start_line, 8 | 11)
+                && matches!(token.range.start_col, 26 | 31)
+        }));
+    }
+
+    #[test]
+    fn semantic_tokens_mark_foundation_builtin_rhs_names_as_types() {
+        let temp = TempDir::new();
+        let source = "\
+let Intrinsics := import \"musi:intrinsics\";
+@known(name := \"Type\")
+export let Type := Type;
+@known(name := \"Float\")
+export let Float := Float;
+";
+        write_file(
+            temp.path(),
+            "crates/musi_foundation/modules/core.ms",
+            source,
+        );
+        let path = temp.path().join("crates/musi_foundation/modules/core.ms");
+
+        let tokens = semantic_tokens_for_project_file_with_overlay(&path, Some(source));
+
+        assert!(tokens.iter().any(|token| {
+            token.kind == ToolSemanticTokenKind::Type
+                && token.range.start_line == 3
+                && token.range.start_col == 20
+        }));
+        assert!(tokens.iter().any(|token| {
+            token.kind == ToolSemanticTokenKind::Type
+                && token.range.start_line == 5
+                && token.range.start_col == 21
+        }));
+        assert!(!tokens.iter().any(|token| {
+            token.kind == ToolSemanticTokenKind::Variable
+                && matches!(token.range.start_line, 3 | 5)
+                && matches!(token.range.start_col, 20 | 21)
+        }));
+    }
+
+    #[test]
+    fn hover_marks_foundation_builtin_type_references_as_types() {
+        let temp = TempDir::new();
+        let source = "\
+let Intrinsics := import \"musi:intrinsics\";
+@known(name := \"Type\")
+export let Type := Type;
+";
+        write_file(
+            temp.path(),
+            "crates/musi_foundation/modules/core.ms",
+            source,
+        );
+        let path = temp.path().join("crates/musi_foundation/modules/core.ms");
+
+        let hover = hover_for_project_file_with_overlay(&path, Some(source), 3, 20)
+            .expect("builtin type reference should hover");
+
+        assert!(
+            hover.contents.starts_with("```musi\n(type) Type"),
+            "{}",
+            hover.contents
+        );
+    }
+
+    #[test]
+    fn hover_marks_foundation_return_annotations_as_types() {
+        let temp = TempDir::new();
+        let source = "\
+let Core := import \"musi:core\";
+let Int := Core.Int;
+let String := Core.String;
+
+export opaque let Runtime := effect {
+  let randomFloat01 () : Float;
+};
+";
+        write_file(
+            temp.path(),
+            "crates/musi_foundation/modules/runtime.ms",
+            source,
+        );
+        let path = temp
+            .path()
+            .join("crates/musi_foundation/modules/runtime.ms");
+
+        let hover = hover_for_project_file_with_overlay(&path, Some(source), 6, 26)
+            .expect("return annotation should hover");
+
+        assert!(
+            hover.contents.starts_with("```musi\n(type) Float"),
+            "{}",
+            hover.contents
         );
     }
 

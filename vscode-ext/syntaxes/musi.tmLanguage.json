@@ -6,6 +6,7 @@
 		{ "include": "#lexical-all" },
 		{ "include": "#declaration-all" },
 		{ "include": "#declaration-variants" },
+		{ "include": "#signature-parameter-list" },
 		{ "include": "#expression-all" },
 		{ "include": "#type-annotation" },
 		{ "include": "#where-clause" },
@@ -261,7 +262,7 @@
 			]
 		},
 		"attribute-name": {
-			"name": "entity.other.attribute-name.musi",
+			"name": "entity.name.tag.attribute.musi",
 			"match": "[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*"
 		},
 		"attribute-arguments": {
@@ -307,8 +308,12 @@
 			"patterns": [ { "include": "#string-escape" } ]
 		},
 		"string-rune": {
-			"name": "string.quoted.single.musi",
-			"match": "'(?:[^'\\\\\\n]|\\\\.)*'"
+			"name": "constant.character.musi",
+			"begin": "'",
+			"end": "'",
+			"beginCaptures": { "0": { "name": "punctuation.definition.string.begin.musi" } },
+			"endCaptures": { "0": { "name": "punctuation.definition.string.end.musi" } },
+			"patterns": [ { "include": "#string-escape" } ]
 		},
 		"string-escape": {
 			"name": "constant.character.escape.musi",
@@ -399,7 +404,7 @@
 		},
 		"declaration-let-type": {
 			"name": "meta.declaration.type.musi",
-			"match": "\\b(let)\\b(?:\\s+(rec)\\b)?(?:\\s+(\\[[^\\]\\\\n]*\\]))?\\s+([A-Z][A-Za-z0-9_]*)\\b(?=\\s*:=\\s*(?:class|data|effect|instance)\\b)",
+			"match": "\\b(let)\\b(?:\\s+(rec)\\b)?(?:\\s+(\\[[^\\]\\\\n]*\\]))?\\s+([A-Z][A-Za-z0-9_]*)\\b(?=\\s*(?:\\[[^\\]\\\\n]*\\]\\s*)?:=\\s*(?:class|data|effect|instance)\\b)",
 			"captures": {
 				"1": { "name": "keyword.declaration.musi" },
 				"2": { "name": "storage.modifier.musi" },
@@ -430,8 +435,22 @@
 		},
 		"declaration-member-function": {
 			"name": "meta.declaration.member.function.musi",
-			"match": "(^|[;{]\\s*)([a-z_][A-Za-z0-9_]*)\\b(?=\\s*(?:\\[[^\\]\\\\n]*\\]\\s*)?\\([^)]*\\)\\s*(?::|:=|where\\b|using\\b))",
+			"match": "(^|[;{]\\s*)(?:let\\s+)?([a-z_][A-Za-z0-9_]*)\\b(?=\\s*(?:\\[[^\\]\\\\n]*\\]\\s*)?\\([^)]*\\)\\s*(?::|:=|where\\b|using\\b))",
 			"captures": { "2": { "name": "entity.name.function.musi" } }
+		},
+		"signature-parameter-list": {
+			"name": "meta.parameters.musi",
+			"begin": "\\((?=[^\\)\\n]*\\b(?:comptime\\s+)?(?:self|[a-z_][A-Za-z0-9_]*)\\s*:)",
+			"end": "\\)",
+			"beginCaptures": { "0": { "name": "punctuation.section.parens.begin.musi" } },
+			"endCaptures": { "0": { "name": "punctuation.section.parens.end.musi" } },
+			"patterns": [
+				{ "include": "#receiver-parameter" },
+				{ "include": "#parameter-name" },
+				{ "include": "#type-annotation" },
+				{ "include": "#keyword-all" },
+				{ "include": "#punctuation-all" }
+			]
 		},
 		"declaration-type-parameters": {
 			"patterns": [ { "include": "#type-parameter-list" } ]
@@ -447,7 +466,7 @@
 			"begin": "(\\|\\s*)([A-Z][A-Za-z0-9_]*)(\\s*)(\\()",
 			"end": "(\\))",
 			"beginCaptures": {
-				"2": { "name": "entity.name.type.constructor.musi" },
+				"2": { "name": "variable.other.enummember.musi" },
 				"4": { "name": "punctuation.section.parens.begin.musi" }
 			},
 			"endCaptures": { "1": { "name": "punctuation.section.parens.end.musi" } },
@@ -465,7 +484,7 @@
 		"declaration-variant-unit": {
 			"name": "meta.declaration.variant.musi",
 			"match": "(\\|\\s*)([A-Z][A-Za-z0-9_]*)\\b(?=\\s*(?:\\||\\}|;|$))",
-			"captures": { "2": { "name": "entity.name.type.constructor.musi" } }
+			"captures": { "2": { "name": "variable.other.enummember.musi" } }
 		},
 		"type-annotation": {
 			"name": "meta.type.annotation.musi",
@@ -537,7 +556,7 @@
 		},
 		"type-name": {
 			"name": "entity.name.type.musi",
-			"match": "\\b[A-Z][A-Za-z0-9_]*\\b"
+			"match": "\\b[A-Z][A-Za-z0-9]*\\b"
 		},
 		"where-clause": {
 			"name": "meta.where-clause.musi",
@@ -630,7 +649,7 @@
 			"match": "(\\.)([A-Z][A-Za-z0-9_]*)\\b",
 			"captures": {
 				"1": { "name": "punctuation.accessor.musi" },
-				"2": { "name": "entity.name.type.constructor.musi" }
+				"2": { "name": "variable.other.enummember.musi" }
 			}
 		},
 		"expression-function-call": {
@@ -918,8 +937,12 @@
 		"identifier-all": {
 			"patterns": [
 				{
-					"name": "constant.language.wildcard.musi",
+					"name": "variable.language.wildcard.musi",
 					"match": "\\b_\\b"
+				},
+				{
+					"name": "variable.other.constant.musi",
+					"match": "\\b[A-Z][A-Z0-9_]*_[A-Z0-9_]*\\b"
 				},
 				{
 					"name": "entity.name.function.operator.musi",
@@ -978,7 +1001,7 @@
 			"match": "(\\.)([A-Z][A-Za-z0-9_]*)\\b",
 			"captures": {
 				"1": { "name": "punctuation.accessor.musi" },
-				"2": { "name": "entity.name.type.constructor.musi" }
+				"2": { "name": "variable.other.enummember.musi" }
 			}
 		},
 		"pattern-record-field": {
@@ -986,7 +1009,7 @@
 			"match": "\\b[a-z_][A-Za-z0-9_]*\\b(?=\\s*:)"
 		},
 		"pattern-wildcard": {
-			"name": "constant.language.wildcard.musi",
+			"name": "variable.language.wildcard.musi",
 			"match": "\\b_\\b"
 		},
 		"type-bracket-list-body": {

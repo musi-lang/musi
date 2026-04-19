@@ -15,8 +15,10 @@ use music_session::Session;
 use crate::{
     CliDiagnostic,
     analysis_support::{
-        analysis_session, collect_direct_file_diagnostics, collect_loaded_project_diagnostics,
+        analysis_session, collect_direct_file_diagnostics, collect_foundation_diagnostics,
+        collect_loaded_project_diagnostics,
     },
+    semantic::{ToolSemanticTokenKind, semantic_syntax_tokens_for_source},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -147,6 +149,9 @@ pub fn collect_project_diagnostics_with_overlay(
     path: &Path,
     overlay_text: Option<&str>,
 ) -> Vec<CliDiagnostic> {
+    if let Some(diagnostics) = collect_foundation_diagnostics(path, overlay_text) {
+        return diagnostics;
+    }
     if let Ok(project) = load_project_ancestor(path, ProjectOptions::default())
         && let Some(module_key) = project.module_key_for_path(path)
     {
@@ -213,10 +218,11 @@ pub fn hover_for_project_file_with_overlay(
             .map(|(binding_id, binding)| (binding.site, binding_id))?,
     };
     let binding = resolved.names.bindings.get(binding_id);
+    let kind_override = syntax_hover_kind_at_offset(source, offset);
     Some(ToolHover::new(
         site.span,
         tool_range(source, site.span),
-        hover_contents(&session, binding_id, binding, sema),
+        hover_contents(&session, binding_id, binding, sema, kind_override),
     ))
 }
 
@@ -302,9 +308,10 @@ fn hover_contents(
     binding_id: NameBindingId,
     binding: &NameBinding,
     sema: Option<&SemaModule>,
+    kind_override: Option<ToolSymbolKind>,
 ) -> String {
     let name = session.resolve_symbol(binding.name);
-    let kind = binding_symbol_kind(binding_id, binding, sema);
+    let kind = kind_override.unwrap_or_else(|| binding_symbol_kind(binding_id, binding, sema));
     let kind_label = kind.label();
     let mut lines = Vec::new();
     if let Some(sema) = sema.and_then(|module| {
@@ -324,6 +331,24 @@ fn hover_contents(
         lines.push(docs);
     }
     lines.join("\n")
+}
+
+fn syntax_hover_kind_at_offset(source: &Source, offset: u32) -> Option<ToolSymbolKind> {
+    semantic_syntax_tokens_for_source(source)
+        .into_iter()
+        .find(|token| {
+            matches!(
+                token.kind,
+                ToolSemanticTokenKind::Type | ToolSemanticTokenKind::TypeParameter
+            ) && source
+                .offset(token.range.start_line, token.range.start_col)
+                .zip(source.offset(token.range.end_line, token.range.end_col))
+                .is_some_and(|(start, end)| start <= offset && offset < end)
+        })
+        .map(|token| match token.kind {
+            ToolSemanticTokenKind::TypeParameter => ToolSymbolKind::TypeParameter,
+            _ => ToolSymbolKind::Type,
+        })
 }
 
 fn member_hover_contents(session: &Session, sema: &SemaModule, fact: &ExprMemberFact) -> String {

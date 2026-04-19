@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
@@ -7,7 +7,7 @@ use music_hir::{HirExprKind, HirTyKind};
 use music_names::{NameBindingId, NameBindingKind};
 use music_sema::{ExprMemberFact, SemaModule};
 use music_syntax::{
-    LexedSource, Lexer, SyntaxElement, SyntaxNode, SyntaxNodeKind, TokenKind, TriviaKind, parse,
+    Lexer, SyntaxElement, SyntaxNode, SyntaxNodeKind, SyntaxToken, TokenKind, parse,
 };
 
 use crate::{
@@ -96,15 +96,32 @@ pub fn semantic_tokens_for_project_file_with_overlay(
     let Some(source) = session.source(parsed.source_id) else {
         return lexical_and_syntax_tokens(path, overlay_text);
     };
-    let mut tokens = lexical_tokens(source);
-    let syntax_tokens = syntax_type_tokens(source);
-    let syntax_type_ranges = token_ranges(&syntax_tokens);
-    tokens.extend(syntax_tokens);
+    let mut tokens = Vec::new();
+    let mut syntax_tokens = syntax_type_tokens(source);
     if let Some(resolved) = session.resolved_module_cached(&module_key).ok().flatten() {
         let sema = session.sema_module_cached(&module_key).ok().flatten();
+        let callable_binding_ranges = resolved
+            .names
+            .bindings
+            .iter()
+            .filter_map(|(binding_id, binding)| {
+                (binding.site.source_id == parsed.source_id
+                    && binding_token_kind(binding_id, binding.kind, sema).is_callable())
+                .then(|| range_key(source, binding.site.span))
+            })
+            .collect::<BTreeSet<_>>();
+        syntax_tokens
+            .retain(|token| !callable_binding_ranges.contains(&tool_range_key(token.range)));
+        let syntax_priorities = token_range_priorities(&syntax_tokens);
+        tokens.extend(syntax_tokens);
         for (binding_id, binding) in &resolved.names.bindings {
-            if binding.site.source_id != parsed.source_id
-                || syntax_type_ranges.contains(&range_key(source, binding.site.span))
+            if binding.site.source_id != parsed.source_id {
+                continue;
+            }
+            let token_kind = binding_token_kind(binding_id, binding.kind, sema);
+            if syntax_priorities
+                .get(&range_key(source, binding.site.span))
+                .is_some_and(|priority| *priority >= token_priority(token_kind))
             {
                 continue;
             }
@@ -118,12 +135,17 @@ pub fn semantic_tokens_for_project_file_with_overlay(
             ));
         }
         for (site, binding_id) in &resolved.names.refs {
-            if site.source_id != parsed.source_id
-                || syntax_type_ranges.contains(&range_key(source, site.span))
-            {
+            if site.source_id != parsed.source_id {
                 continue;
             }
             let binding = resolved.names.bindings.get(*binding_id);
+            let token_kind = binding_token_kind(*binding_id, binding.kind, sema);
+            if syntax_priorities
+                .get(&range_key(source, site.span))
+                .is_some_and(|priority| *priority >= token_priority(token_kind))
+            {
+                continue;
+            }
             tokens.push(binding_token(
                 source,
                 site.span,
@@ -136,6 +158,8 @@ pub fn semantic_tokens_for_project_file_with_overlay(
         if let Some(sema) = sema {
             tokens.extend(member_tokens(source, sema));
         }
+    } else {
+        tokens.extend(syntax_tokens);
     }
     normalize_tokens(tokens)
 }
@@ -171,71 +195,25 @@ fn lexical_and_syntax_tokens(path: &Path, overlay_text: Option<&str>) -> ToolSem
     let Some(source) = sources.get(source_id) else {
         return Vec::new();
     };
-    let mut tokens = lexical_tokens(source);
+    let mut tokens = Vec::new();
     tokens.extend(syntax_type_tokens(source));
     normalize_tokens(tokens)
 }
 
-fn lexical_tokens(source: &Source) -> ToolSemanticTokenList {
+#[must_use]
+pub fn semantic_syntax_tokens_for_source(source: &Source) -> ToolSemanticTokenList {
     let lexed = Lexer::new(source.text()).lex();
+    let parsed = parse(lexed);
     let mut tokens = Vec::new();
-    for token_index in 0..lexed.tokens().len() {
-        for trivia in lexed.token_trivia(token_index) {
-            let Some(kind) = trivia_token_kind(trivia.kind) else {
-                continue;
-            };
-            push_span_tokens(
-                source,
-                &mut tokens,
-                trivia.span,
-                kind,
-                trivia_modifiers(trivia.kind),
-            );
-        }
-        let token = lexed.tokens()[token_index];
-        let Some(kind) = lexical_token_kind(token.kind) else {
-            continue;
-        };
-        push_span_tokens(source, &mut tokens, token.span, kind, Vec::new());
-    }
+    collect_syntax_type_tokens(source, parsed.tree().root(), false, &mut tokens);
+    collect_apply_type_arg_tokens(source, parsed.tree().root(), &mut tokens);
+    collect_attribute_name_tokens(source, parsed.tree().root(), &mut tokens);
+    collect_variant_and_law_tokens(source, parsed.tree().root(), &mut tokens);
     tokens
 }
 
 fn syntax_type_tokens(source: &Source) -> ToolSemanticTokenList {
-    let lexed = Lexer::new(source.text()).lex();
-    let parsed = parse(lexed.clone());
-    let mut tokens = Vec::new();
-    collect_syntax_type_tokens(source, parsed.tree().root(), false, &mut tokens);
-    collect_annotation_type_tokens(source, &lexed, &mut tokens);
-    tokens
-}
-
-fn collect_annotation_type_tokens(
-    source: &Source,
-    lexed: &LexedSource,
-    out: SemanticTokenSink<'_>,
-) {
-    let mut in_annotation_type = false;
-    for token in lexed.tokens() {
-        match token.kind {
-            TokenKind::Colon => {
-                in_annotation_type = true;
-            }
-            TokenKind::Ident | TokenKind::KwAny | TokenKind::KwSome if in_annotation_type => {
-                push_span_tokens(
-                    source,
-                    out,
-                    token.span,
-                    ToolSemanticTokenKind::Type,
-                    Vec::new(),
-                );
-            }
-            TokenKind::Comma | TokenKind::RParen | TokenKind::RBracket | TokenKind::ColonEq => {
-                in_annotation_type = false;
-            }
-            _ => {}
-        }
-    }
+    semantic_syntax_tokens_for_source(source)
 }
 
 fn collect_syntax_type_tokens(
@@ -245,17 +223,26 @@ fn collect_syntax_type_tokens(
     out: SemanticTokenSink<'_>,
 ) {
     let node_kind = node.kind();
+    if node_kind == SyntaxNodeKind::Param {
+        collect_param_tokens(source, node, out);
+        return;
+    }
+    if node_kind == SyntaxNodeKind::TypeParam {
+        collect_type_param_tokens(source, node, out);
+        return;
+    }
+    if is_typed_context_node(node_kind) {
+        collect_typed_context_tokens(source, node, out);
+        return;
+    }
     let type_context = is_type_context || node_kind.is_ty();
-    let type_param_context = node_kind == SyntaxNodeKind::TypeParam;
     for child in node.children() {
         match child {
             SyntaxElement::Node(child_node) => {
                 collect_syntax_type_tokens(source, child_node, type_context, out);
             }
             SyntaxElement::Token(token) => {
-                let Some(kind) =
-                    syntax_type_token_kind(token.kind(), type_context, type_param_context)
-                else {
+                let Some(kind) = syntax_type_token_kind(token, type_context) else {
                     continue;
                 };
                 push_span_tokens(source, out, token.span(), kind, Vec::new());
@@ -264,14 +251,257 @@ fn collect_syntax_type_tokens(
     }
 }
 
-const fn syntax_type_token_kind(
-    kind: TokenKind,
-    is_type_context: bool,
-    is_type_param_context: bool,
-) -> Option<ToolSemanticTokenKind> {
-    if is_type_param_context && matches!(kind, TokenKind::Ident) {
-        return Some(ToolSemanticTokenKind::TypeParameter);
+fn collect_typed_context_tokens(
+    source: &Source,
+    node: SyntaxNode<'_, '_>,
+    out: SemanticTokenSink<'_>,
+) {
+    let mut after_colon = false;
+    for child in node.children() {
+        match child {
+            SyntaxElement::Token(token) => match token.kind() {
+                TokenKind::Colon | TokenKind::LtColon | TokenKind::TildeEq => after_colon = true,
+                TokenKind::ColonEq | TokenKind::EqGt | TokenKind::KwWhere | TokenKind::KwUsing => {
+                    after_colon = false;
+                }
+                _ => {}
+            },
+            SyntaxElement::Node(child_node) if after_colon => {
+                collect_type_like_tokens(source, child_node, out);
+            }
+            SyntaxElement::Node(child_node) => {
+                collect_syntax_type_tokens(source, child_node, false, out);
+            }
+        }
     }
+}
+
+const fn is_typed_context_node(kind: SyntaxNodeKind) -> bool {
+    matches!(
+        kind,
+        SyntaxNodeKind::LetExpr
+            | SyntaxNodeKind::Member
+            | SyntaxNodeKind::LambdaExpr
+            | SyntaxNodeKind::Constraint
+            | SyntaxNodeKind::EffectItem
+    )
+}
+
+fn collect_param_tokens(source: &Source, node: SyntaxNode<'_, '_>, out: SemanticTokenSink<'_>) {
+    let mut after_colon = false;
+    let mut after_bound = false;
+    for child in node.children() {
+        match child {
+            SyntaxElement::Token(token) => match token.kind() {
+                TokenKind::Ident if !after_colon && !after_bound => {
+                    push_span_tokens(
+                        source,
+                        out,
+                        token.span(),
+                        ToolSemanticTokenKind::Parameter,
+                        Vec::new(),
+                    );
+                }
+                TokenKind::Colon => after_colon = true,
+                TokenKind::ColonEq => after_bound = true,
+                _ => {}
+            },
+            SyntaxElement::Node(child_node) if after_colon && !after_bound => {
+                collect_type_like_tokens(source, child_node, out);
+            }
+            SyntaxElement::Node(child_node) if !after_bound => {
+                collect_syntax_type_tokens(source, child_node, false, out);
+            }
+            SyntaxElement::Node(_) => {}
+        }
+    }
+}
+
+fn collect_type_param_tokens(
+    source: &Source,
+    node: SyntaxNode<'_, '_>,
+    out: SemanticTokenSink<'_>,
+) {
+    let mut after_colon = false;
+    let mut saw_name = false;
+    for child in node.children() {
+        match child {
+            SyntaxElement::Token(token) => match token.kind() {
+                TokenKind::Ident if !saw_name => {
+                    saw_name = true;
+                    push_span_tokens(
+                        source,
+                        out,
+                        token.span(),
+                        ToolSemanticTokenKind::TypeParameter,
+                        Vec::new(),
+                    );
+                }
+                TokenKind::Colon => after_colon = true,
+                _ => {}
+            },
+            SyntaxElement::Node(child_node) if after_colon => {
+                collect_type_like_tokens(source, child_node, out);
+            }
+            SyntaxElement::Node(child_node) => {
+                collect_syntax_type_tokens(source, child_node, false, out);
+            }
+        }
+    }
+}
+
+fn collect_apply_type_arg_tokens(
+    source: &Source,
+    node: SyntaxNode<'_, '_>,
+    out: SemanticTokenSink<'_>,
+) {
+    if node.kind() == SyntaxNodeKind::ApplyExpr {
+        let mut in_type_args = false;
+        for child in node.children() {
+            match child {
+                SyntaxElement::Token(token) => match token.kind() {
+                    TokenKind::LBracket => in_type_args = true,
+                    TokenKind::RBracket => in_type_args = false,
+                    _ => {}
+                },
+                SyntaxElement::Node(child_node) if in_type_args => {
+                    collect_type_like_tokens(source, child_node, out);
+                }
+                SyntaxElement::Node(child_node) => {
+                    collect_apply_type_arg_tokens(source, child_node, out);
+                }
+            }
+        }
+        return;
+    }
+    for child in node.children() {
+        if let SyntaxElement::Node(child_node) = child {
+            collect_apply_type_arg_tokens(source, child_node, out);
+        }
+    }
+}
+
+fn collect_type_like_tokens(source: &Source, node: SyntaxNode<'_, '_>, out: SemanticTokenSink<'_>) {
+    for child in node.children() {
+        match child {
+            SyntaxElement::Node(child_node) => collect_type_like_tokens(source, child_node, out),
+            SyntaxElement::Token(token)
+                if matches!(
+                    token.kind(),
+                    TokenKind::Ident | TokenKind::KwAny | TokenKind::KwSome
+                ) =>
+            {
+                push_span_tokens(
+                    source,
+                    out,
+                    token.span(),
+                    ToolSemanticTokenKind::Type,
+                    Vec::new(),
+                );
+            }
+            SyntaxElement::Token(_) => {}
+        }
+    }
+}
+
+fn collect_attribute_name_tokens(
+    source: &Source,
+    node: SyntaxNode<'_, '_>,
+    out: SemanticTokenSink<'_>,
+) {
+    if node.kind() == SyntaxNodeKind::Attr {
+        let mut in_name = false;
+        for child in node.children() {
+            match child {
+                SyntaxElement::Token(token) => match token.kind() {
+                    TokenKind::At => in_name = true,
+                    TokenKind::Ident if in_name => push_span_tokens(
+                        source,
+                        out,
+                        token.span(),
+                        ToolSemanticTokenKind::Decorator,
+                        Vec::new(),
+                    ),
+                    TokenKind::Dot if in_name => {}
+                    _ => in_name = false,
+                },
+                SyntaxElement::Node(_) => in_name = false,
+            }
+        }
+        return;
+    }
+    for child in node.children() {
+        if let SyntaxElement::Node(child_node) = child {
+            collect_attribute_name_tokens(source, child_node, out);
+        }
+    }
+}
+
+fn collect_variant_and_law_tokens(
+    source: &Source,
+    node: SyntaxNode<'_, '_>,
+    out: SemanticTokenSink<'_>,
+) {
+    match node.kind() {
+        SyntaxNodeKind::Variant | SyntaxNodeKind::VariantExpr | SyntaxNodeKind::VariantPat => {
+            push_first_direct_ident(source, node, out, ToolSemanticTokenKind::EnumMember);
+            return;
+        }
+        SyntaxNodeKind::Member => {
+            push_law_name(source, node, out);
+        }
+        _ => {}
+    }
+    for child in node.children() {
+        if let SyntaxElement::Node(child_node) = child {
+            collect_variant_and_law_tokens(source, child_node, out);
+        }
+    }
+}
+
+fn push_first_direct_ident(
+    source: &Source,
+    node: SyntaxNode<'_, '_>,
+    out: SemanticTokenSink<'_>,
+    kind: ToolSemanticTokenKind,
+) {
+    for child in node.children() {
+        if let SyntaxElement::Token(token) = child
+            && token.kind() == TokenKind::Ident
+        {
+            push_span_tokens(source, out, token.span(), kind, Vec::new());
+            return;
+        }
+    }
+}
+
+fn push_law_name(source: &Source, node: SyntaxNode<'_, '_>, out: SemanticTokenSink<'_>) {
+    let mut after_law = false;
+    for child in node.children() {
+        if let SyntaxElement::Token(token) = child {
+            match token.kind() {
+                TokenKind::KwLaw => after_law = true,
+                TokenKind::Ident if after_law => {
+                    push_span_tokens(
+                        source,
+                        out,
+                        token.span(),
+                        ToolSemanticTokenKind::Function,
+                        Vec::new(),
+                    );
+                    return;
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+fn syntax_type_token_kind(
+    token: SyntaxToken<'_, '_>,
+    is_type_context: bool,
+) -> Option<ToolSemanticTokenKind> {
+    let kind = token.kind();
     if is_type_context
         && matches!(
             kind,
@@ -280,16 +510,75 @@ const fn syntax_type_token_kind(
     {
         return Some(ToolSemanticTokenKind::Type);
     }
+    if kind == TokenKind::Ident
+        && token
+            .text()
+            .is_some_and(|text| builtin_type_name_token_kind(text).is_some())
+    {
+        return Some(ToolSemanticTokenKind::Type);
+    }
     None
+}
+
+pub(crate) fn builtin_type_name_token_kind(text: &str) -> Option<ToolSemanticTokenKind> {
+    if is_builtin_type_name(text) {
+        Some(ToolSemanticTokenKind::Type)
+    } else {
+        None
+    }
+}
+
+fn is_builtin_type_name(text: &str) -> bool {
+    matches!(
+        text,
+        "Type"
+            | "Array"
+            | "Any"
+            | "Unknown"
+            | "Syntax"
+            | "Empty"
+            | "Unit"
+            | "Bool"
+            | "Nat"
+            | "Int"
+            | "Int8"
+            | "Int16"
+            | "Int32"
+            | "Int64"
+            | "Nat8"
+            | "Nat16"
+            | "Nat32"
+            | "Nat64"
+            | "Float"
+            | "Float32"
+            | "Float64"
+            | "String"
+            | "Rune"
+            | "Range"
+            | "ClosedRange"
+            | "PartialRangeFrom"
+            | "PartialRangeUpTo"
+            | "PartialRangeThru"
+            | "CString"
+            | "CPtr"
+            | "Rangeable"
+            | "RangeBounds"
+    )
 }
 
 type SemanticRangeKey = (usize, usize, usize, usize);
 
-fn token_ranges(tokens: &[ToolSemanticToken]) -> BTreeSet<SemanticRangeKey> {
-    tokens
-        .iter()
-        .map(|token| tool_range_key(token.range))
-        .collect()
+fn token_range_priorities(tokens: &[ToolSemanticToken]) -> BTreeMap<SemanticRangeKey, u8> {
+    let mut priorities: BTreeMap<SemanticRangeKey, u8> = BTreeMap::new();
+    for token in tokens {
+        let key = tool_range_key(token.range);
+        let priority = token_priority(token.kind);
+        let _ = priorities
+            .entry(key)
+            .and_modify(|stored| *stored = (*stored).max(priority))
+            .or_insert(priority);
+    }
+    priorities
 }
 
 fn range_key(source: &Source, span: Span) -> SemanticRangeKey {
@@ -340,114 +629,6 @@ fn push_span_tokens(
                 modifiers.clone(),
             ));
         }
-    }
-}
-
-fn trivia_token_kind(kind: TriviaKind) -> Option<ToolSemanticTokenKind> {
-    kind.is_comment().then_some(ToolSemanticTokenKind::Comment)
-}
-
-fn trivia_modifiers(kind: TriviaKind) -> ToolSemanticModifierList {
-    let mut modifiers = Vec::new();
-    if kind.is_doc_comment() {
-        modifiers.push(ToolSemanticModifier::Documentation);
-    }
-    if kind.is_module_doc_comment() {
-        modifiers.push(ToolSemanticModifier::Module);
-    }
-    modifiers
-}
-
-const fn lexical_token_kind(kind: TokenKind) -> Option<ToolSemanticTokenKind> {
-    match kind {
-        TokenKind::Int | TokenKind::Float => Some(ToolSemanticTokenKind::Number),
-        TokenKind::String
-        | TokenKind::Rune
-        | TokenKind::TemplateNoSubst
-        | TokenKind::TemplateHead
-        | TokenKind::TemplateMiddle
-        | TokenKind::TemplateTail => Some(ToolSemanticTokenKind::String),
-        TokenKind::At => Some(ToolSemanticTokenKind::Decorator),
-        TokenKind::OpIdent
-        | TokenKind::SymbolicOp
-        | TokenKind::Plus
-        | TokenKind::Minus
-        | TokenKind::Star
-        | TokenKind::Slash
-        | TokenKind::Percent
-        | TokenKind::Eq
-        | TokenKind::Lt
-        | TokenKind::Gt
-        | TokenKind::ColonEq
-        | TokenKind::MinusGt
-        | TokenKind::TildeGt
-        | TokenKind::TildeEq
-        | TokenKind::EqGt
-        | TokenKind::SlashEq
-        | TokenKind::LtEq
-        | TokenKind::GtEq
-        | TokenKind::LtColon
-        | TokenKind::DotDot
-        | TokenKind::DotDotLt
-        | TokenKind::DotDotDot
-        | TokenKind::ColonQuestion
-        | TokenKind::ColonQuestionGt
-        | TokenKind::PipeGt => Some(ToolSemanticTokenKind::Operator),
-        TokenKind::KwComptime
-        | TokenKind::KwExport
-        | TokenKind::KwForeign
-        | TokenKind::KwMut
-        | TokenKind::KwOpaque
-        | TokenKind::KwPartial
-        | TokenKind::KwRec
-        | TokenKind::KwUnsafe => Some(ToolSemanticTokenKind::Modifier),
-        TokenKind::KwAnd
-        | TokenKind::KwAny
-        | TokenKind::KwAs
-        | TokenKind::KwMatch
-        | TokenKind::KwClass
-        | TokenKind::KwData
-        | TokenKind::KwEffect
-        | TokenKind::KwForall
-        | TokenKind::KwHandle
-        | TokenKind::KwIf
-        | TokenKind::KwImport
-        | TokenKind::KwIn
-        | TokenKind::KwInfix
-        | TokenKind::KwInfixl
-        | TokenKind::KwInfixr
-        | TokenKind::KwInstance
-        | TokenKind::KwLaw
-        | TokenKind::KwLet
-        | TokenKind::KwRequest
-        | TokenKind::KwNot
-        | TokenKind::KwOr
-        | TokenKind::KwQuote
-        | TokenKind::KwResume
-        | TokenKind::KwShl
-        | TokenKind::KwShr
-        | TokenKind::KwSome
-        | TokenKind::KwUsing
-        | TokenKind::KwWhere
-        | TokenKind::KwXor => Some(ToolSemanticTokenKind::Keyword),
-        TokenKind::Eof
-        | TokenKind::Error
-        | TokenKind::Ident
-        | TokenKind::Hash
-        | TokenKind::Backslash
-        | TokenKind::LParen
-        | TokenKind::RParen
-        | TokenKind::LBracket
-        | TokenKind::RBracket
-        | TokenKind::LBrace
-        | TokenKind::RBrace
-        | TokenKind::Comma
-        | TokenKind::Semicolon
-        | TokenKind::Dot
-        | TokenKind::Colon
-        | TokenKind::Pipe
-        | TokenKind::Underscore
-        | TokenKind::DotLBracket => None,
     }
 }
 
@@ -513,6 +694,25 @@ fn member_token_kind(sema: &SemaModule, fact: &ExprMemberFact) -> ToolSemanticTo
     }
 }
 
+impl ToolSemanticTokenKind {
+    const fn is_callable(self) -> bool {
+        matches!(self, Self::Function | Self::Procedure)
+    }
+}
+
+const fn token_priority(kind: ToolSemanticTokenKind) -> u8 {
+    match kind {
+        ToolSemanticTokenKind::Function | ToolSemanticTokenKind::Procedure => 80,
+        ToolSemanticTokenKind::Parameter => 70,
+        ToolSemanticTokenKind::EnumMember | ToolSemanticTokenKind::Decorator => 60,
+        ToolSemanticTokenKind::TypeParameter => 50,
+        ToolSemanticTokenKind::Type => 40,
+        ToolSemanticTokenKind::Namespace | ToolSemanticTokenKind::Property => 30,
+        ToolSemanticTokenKind::Variable => 10,
+        _ => 0,
+    }
+}
+
 fn normalize_tokens(mut tokens: ToolSemanticTokenList) -> ToolSemanticTokenList {
     tokens.sort_by_key(|token| {
         (
@@ -520,6 +720,7 @@ fn normalize_tokens(mut tokens: ToolSemanticTokenList) -> ToolSemanticTokenList 
             token.range.start_col,
             token.range.end_line,
             token.range.end_col,
+            std::cmp::Reverse(token_priority(token.kind)),
         )
     });
     let mut out = Vec::new();
