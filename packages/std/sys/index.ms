@@ -60,20 +60,30 @@ export let endian : String := unsafe {
 };
 
 --- Raw JIT support facts.
-export let jit := {
-  supported := unsafe {
+export let jit :=
+  {
+    supported := unsafe {
     jitSupportedIntrinsic();
-  } > 0, backend := unsafe {
+  } > 0,
+    backend := unsafe {
     jitBackendIntrinsic();
-  }, isa := unsafe {
+  },
+    isa := unsafe {
     jitIsaIntrinsic();
-  }
-};
+  },
+  };
 
 --- Raw target fact record.
-export let target := {
-  os := os, arch := arch, archFamily := archFamily, family := family, pointerWidth := pointerWidth, endian := endian, jit := jit
-};
+export let target :=
+  {
+    os := os,
+    arch := arch,
+    archFamily := archFamily,
+    family := family,
+    pointerWidth := pointerWidth,
+    endian := endian,
+    jit := jit,
+  };
 
 --- Returns true when value names current OS.
 export let matchesOs (value : String) : Bool := unsafe {

@@ -18,13 +18,15 @@ export let readTrimmedLine () : String := io.readLine().trim();
 export let promptTrimmed (message : String) : String := prompt(message).trim();
 
 --- Read a non-empty trimmed line.
-export let readNonEmptyLine () : Option[String] := match readTrimmedLine() (
-  | value if value.isEmpty() => option.none[String]()
-  | value => option.some[String](value)
-);
+export let readNonEmptyLine () : Option[String] :=
+  match readTrimmedLine() (
+  | value if value.isEmpty() => option.makeNone[String]()
+  | value => option.makeSome[String](value)
+  );
 
 --- Prompt for a non-empty trimmed line.
-export let promptNonEmpty (message : String) : Option[String] := match promptTrimmed(message) (
-  | value if value.isEmpty() => option.none[String]()
-  | value => option.some[String](value)
-);
+export let promptNonEmpty (message : String) : Option[String] :=
+  match promptTrimmed(message) (
+  | value if value.isEmpty() => option.makeNone[String]()
+  | value => option.makeSome[String](value)
+  );

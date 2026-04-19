@@ -24,6 +24,5 @@ export let suiteStart (name : String) : Unit := request Test.suiteStart(name);
 
 export let suiteEnd () : Unit := request Test.suiteEnd();
 
-export let testCase (name : String, passed : Bool) : Unit := request Test.testCase(name,
-  passed
-);
+export let testCase (name : String, passed : Bool) : Unit :=
+  request Test.testCase(name, passed);

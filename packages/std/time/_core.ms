@@ -35,34 +35,43 @@ export let minutes (value : Int) : Duration := millis(value * millisPerMinute);
 export let hours (value : Int) : Duration := millis(value * millisPerHour);
 
 --- Internal implementation for `durationMillis`.
-export let durationMillis (target : Duration) : Int := match target (
+export let durationMillis (target : Duration) : Int :=
+  match target (
   | .Duration(millis := value) => value
-);
+  );
 
 --- Internal implementation for `durationSeconds`.
-export let durationSeconds (target : Duration) : Int := durationMillis(target) / millisPerSecond;
+export let durationSeconds (target : Duration) : Int :=
+  durationMillis(target) / millisPerSecond;
 
 --- Internal implementation for `durationMinutes`.
-export let durationMinutes (target : Duration) : Int := durationMillis(target) / millisPerMinute;
+export let durationMinutes (target : Duration) : Int :=
+  durationMillis(target) / millisPerMinute;
 
 --- Unix wall time now.
-export let nowUnix () : UnixTime := .UnixTime(millis := runtime.timeNowUnixMs());
+export let nowUnix () : UnixTime :=
+  .UnixTime(millis := runtime.timeNowUnixMs());
 
 --- Internal implementation for `unixTimeMillis`.
-export let unixTimeMillis (target : UnixTime) : Int := match target (
+export let unixTimeMillis (target : UnixTime) : Int :=
+  match target (
   | .UnixTime(millis := value) => value
-);
+  );
 
 --- Internal implementation for `unixTimeSeconds`.
-export let unixTimeSeconds (target : UnixTime) : Int := unixTimeMillis(target) / millisPerSecond;
+export let unixTimeSeconds (target : UnixTime) : Int :=
+  unixTimeMillis(target) / millisPerSecond;
 
 --- Monotonic instant now.
-export let monotonic () : Instant := .Instant(millis := runtime.timeMonotonicMs());
+export let monotonic () : Instant :=
+  .Instant(millis := runtime.timeMonotonicMs());
 
 --- Internal implementation for `instantMillis`.
-export let instantMillis (target : Instant) : Int := match target (
+export let instantMillis (target : Instant) : Int :=
+  match target (
   | .Instant(millis := value) => value
-);
+  );
 
 --- Sleep for a duration.
-export let sleep (target : Duration) : Unit := runtime.timeSleepMs(durationMillis(target));
+export let sleep (target : Duration) : Unit :=
+  runtime.timeSleepMs(durationMillis(target));

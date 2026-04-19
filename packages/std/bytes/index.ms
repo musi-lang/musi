@@ -16,29 +16,24 @@ export let(self : Bytes).toArray () : []Int := core.toArray(self);
 export let(self : Bytes).copy () : Bytes := core.copy(self);
 
 --- Concatenate two byte buffers.
-export let(self : Bytes).concat (other : Bytes) : Bytes := core.concat(self,
-    other
-);
+export let(self : Bytes).concat (other : Bytes) : Bytes :=
+    core.concat(self, other);
 
 --- Append one byte.
-export let(self : Bytes).append (value : Int) : Bytes := core.append(self,
-    value
-);
+export let(self : Bytes).append (value : Int) : Bytes :=
+    core.append(self, value);
 
 --- Prepend one byte.
-export let(self : Bytes).prepend (value : Int) : Bytes := core.prepend(self,
-    value
-);
+export let(self : Bytes).prepend (value : Int) : Bytes :=
+    core.prepend(self, value);
 
 --- Compare byte buffers.
-export let(self : Bytes).equals (other : Bytes) : Bool := core.equals(self,
-    other
-);
+export let(self : Bytes).equals (other : Bytes) : Bool :=
+    core.equals(self, other);
 
 --- Compare byte buffers for inequality.
-export let(self : Bytes).notEquals (other : Bytes) : Bool := core.notEquals(self,
-    other
-);
+export let(self : Bytes).notEquals (other : Bytes) : Bool :=
+    core.notEquals(self, other);
 
 --- Returns true when byte buffer is empty.
 export let(self : Bytes).isEmpty () : Bool := core.isEmpty(self);

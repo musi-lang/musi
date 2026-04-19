@@ -16,16 +16,13 @@ export let(self : String).toLowerCase () : String := string.toLowerCase(self);
 export let(self : String).toUpperCase () : String := string.toUpperCase(self);
 
 --- Returns true when string contains substring.
-export let(self : String).contains (needle : String) : Bool := string.contains(self,
-    needle
-);
+export let(self : String).contains (needle : String) : Bool :=
+    string.contains(self, needle);
 
 --- Returns true when string starts with prefix.
-export let(self : String).startsWith (prefix : String) : Bool := string.startsWith(self,
-    prefix
-);
+export let(self : String).startsWith (prefix : String) : Bool :=
+    string.startsWith(self, prefix);
 
 --- Returns true when string ends with suffix.
-export let(self : String).endsWith (suffix : String) : Bool := string.endsWith(self,
-    suffix
-);
+export let(self : String).endsWith (suffix : String) : Bool :=
+    string.endsWith(self, suffix);

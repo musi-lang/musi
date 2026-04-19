@@ -82,7 +82,8 @@ export let(self : Target).arch () : Arch := core.targetArch(self);
 export let(self : Target).family () : Family := core.targetFamily(self);
 
 --- Target pointer width.
-export let(self : Target).pointerWidth () : Int := core.targetPointerWidth(self);
+export let(self : Target).pointerWidth () : Int :=
+    core.targetPointerWidth(self);
 
 --- Target endian value.
 export let(self : Target).endian () : Endian := core.targetEndian(self);

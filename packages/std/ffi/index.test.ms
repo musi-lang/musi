@@ -12,14 +12,17 @@ export let test () :=
     let aliasedPointer := unsafe {
       offset[Int](pointer, 0);
     };
-    testing.it("'ptr.null' creates null pointer",
-      testing.toBeTruthy(ffi.ptr.isNull[Int](pointer))
+    testing.it(
+      "'ptr.null' creates null pointer",
+      testing.toBeTruthy(ffi.ptr.isNull[Int](pointer)),
     );
-    testing.it("'ptr.offset' preserves null pointer at zero offset",
-      testing.toBeTruthy(ffi.ptr.isNull[Int](samePointer))
+    testing.it(
+      "'ptr.offset' preserves null pointer at zero offset",
+      testing.toBeTruthy(ffi.ptr.isNull[Int](samePointer)),
     );
-    testing.it("'ptr.offset' works as first-class field",
-      testing.toBeTruthy(ffi.ptr.isNull[Int](aliasedPointer))
+    testing.it(
+      "'ptr.offset' works as first-class field",
+      testing.toBeTruthy(ffi.ptr.isNull[Int](aliasedPointer)),
     );
     testing.endDescribe()
   );

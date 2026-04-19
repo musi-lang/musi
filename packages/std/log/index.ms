@@ -29,17 +29,17 @@ export let(self : Level).value () : Int := unsafe {
 };
 
 --- Lower-case level name.
-export let(self : Level).name () : String := match self (
+export let(self : Level).name () : String :=
+  match self (
   | .Debug => "debug"
   | .Info => "info"
   | .Warn => "warn"
   | .Error => "error"
-);
+  );
 
 --- Write a log message.
-export let write (level : Level, message : String) : Unit := runtime.logWrite(level.value(),
-  message
-);
+export let write (level : Level, message : String) : Unit :=
+  runtime.logWrite(level.value(), message);
 
 --- Write a debug message.
 export let debug (message : String) : Unit := write(debugLevel, message);

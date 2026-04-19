@@ -9,7 +9,8 @@ export let encode (source : String) : String := runtime.utf8Encode(source);
 export let isValid (bytes : String) : Bool := runtime.utf8IsValid(bytes) > 0;
 
 --- Decode a value from this format.
-export let decode (bytes : String) : Option[String] := match isValid(bytes) (
-  | valid if valid => option.some[String](runtime.utf8Decode(bytes))
-  | _ => option.none[String]()
-);
+export let decode (bytes : String) : Option[String] :=
+  match isValid(bytes) (
+  | valid if valid => option.makeSome[String](runtime.utf8Decode(bytes))
+  | _ => option.makeNone[String]()
+  );

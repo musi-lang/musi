@@ -19,17 +19,19 @@ export let key (value : String) : Key := .Key(value := value);
 export let var (value : String) : Var := .Var(value := value);
 
 --- Return raw key text.
-let keyText (target : Key) : String := match target (
+let keyText (target : Key) : String :=
+  match target (
   | .Key(value := value) => value
-);
+  );
 
 --- Convert value to string.
 export let(self : Key).toString () : String := keyText(self);
 
 --- Return raw variable text.
-let varText (target : Var) : String := match target (
+let varText (target : Var) : String :=
+  match target (
   | .Var(value := value) => value
-);
+  );
 
 --- Convert value to string.
 export let(self : Var).toString () : String := varText(self);
@@ -38,15 +40,16 @@ export let(self : Var).toString () : String := varText(self);
 export let has (target : Key) : Bool := runtime.envHas(keyText(target)) > 0;
 
 --- Read an environment variable.
-export let get (target : Key) : Option[Var] := match has(target) (
-  | ok if ok => option.some[Var](var(runtime.envGet(keyText(target))))
-  | _ => option.none[Var]()
-);
+export let get (target : Key) : Option[Var] :=
+  match has(target) (
+  | ok if ok => option.makeSome[Var](var(runtime.envGet(keyText(target))))
+  | _ => option.makeNone[Var]()
+  );
 
 --- Set an environment variable.
-export let set (target : Key, value : Var) : Bool := runtime.envSet(keyText(target),
-  varText(value)
-) > 0;
+export let set (target : Key, value : Var) : Bool :=
+  runtime.envSet(keyText(target), varText(value)) > 0;
 
 --- Remove an environment variable.
-export let remove (target : Key) : Bool := runtime.envRemove(keyText(target)) > 0;
+export let remove (target : Key) : Bool :=
+  runtime.envRemove(keyText(target)) > 0;

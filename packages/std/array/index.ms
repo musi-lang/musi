@@ -19,9 +19,8 @@ export let concat := core.concat;
 export let append := core.append;
 
 --- Prepend a leading value.
-export let prepend [T] (value : T, values : []T) : []T := core.prepend[T](values,
-    value
-);
+export let prepend [T] (value : T, values : []T) : []T :=
+    core.prepend[T](values, value);
 
 --- Compare integer sequences for equality.
 export let equalsInt := core.equalsInt;

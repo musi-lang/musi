@@ -9,23 +9,26 @@ export let test () :=
           io.write("std-io");
           0 = 0
         ));
-    testing.it("'writeLine' returns without failure",
+    testing.it(
+      "'writeLine' returns without failure",
         (
           io.writeLine("std-io");
           0 = 0
-        )
+        ),
     );
-    testing.it("'writeErr' returns without failure",
+    testing.it(
+      "'writeErr' returns without failure",
         (
           io.writeErr("std-io");
           0 = 0
-        )
+        ),
     );
-    testing.it("'writeErrLine' returns without failure",
+    testing.it(
+      "'writeErrLine' returns without failure",
         (
           io.writeErrLine("std-io");
           0 = 0
-        )
+        ),
     );
     testing.endDescribe()
   );

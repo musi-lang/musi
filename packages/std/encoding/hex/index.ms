@@ -9,7 +9,8 @@ export let encode (source : String) : String := runtime.hexEncode(source);
 export let isValid (source : String) : Bool := runtime.hexIsValid(source) > 0;
 
 --- Decode a value from this format.
-export let decode (source : String) : Option[String] := match isValid(source) (
-  | valid if valid => option.some[String](runtime.hexDecode(source))
-  | _ => option.none[String]()
-);
+export let decode (source : String) : Option[String] :=
+  match isValid(source) (
+  | valid if valid => option.makeSome[String](runtime.hexDecode(source))
+  | _ => option.makeNone[String]()
+  );

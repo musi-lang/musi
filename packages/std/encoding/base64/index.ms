@@ -6,10 +6,12 @@ let Option := option.Option;
 export let encode (source : String) : String := runtime.base64Encode(source);
 
 --- Returns true when source is valid for this format.
-export let isValid (source : String) : Bool := runtime.base64IsValid(source) > 0;
+export let isValid (source : String) : Bool :=
+  runtime.base64IsValid(source) > 0;
 
 --- Decode a value from this format.
-export let decode (source : String) : Option[String] := match isValid(source) (
-  | valid if valid => option.some[String](runtime.base64Decode(source))
-  | _ => option.none[String]()
-);
+export let decode (source : String) : Option[String] :=
+  match isValid(source) (
+  | valid if valid => option.makeSome[String](runtime.base64Decode(source))
+  | _ => option.makeNone[String]()
+  );

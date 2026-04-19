@@ -29,8 +29,13 @@ export opaque let Jit := data {
 
 --- Current compilation/runtime target facts.
 export opaque let Target := data {
-  | Target(os : Os, arch : Arch, family : Family, pointerWidth : Int,
-    endian : Endian, jit : Jit
+  | Target(
+    os : Os,
+    arch : Arch,
+    family : Family,
+    pointerWidth : Int,
+    endian : Endian,
+    jit : Jit,
   )
 };
 
@@ -42,94 +47,144 @@ export let arch (value : String) : Arch := .Arch(value := value);
 export let family (value : String) : Family := .Family(value := value);
 
 --- Internal implementation for `osText`.
-export let osText (target : Os) : String := match target (
+export let osText (target : Os) : String :=
+  match target (
   | .Os(value := value) => value
-);
+  );
 
 --- Internal implementation for `archText`.
-export let archText (target : Arch) : String := match target (
+export let archText (target : Arch) : String :=
+  match target (
   | .Arch(value := value) => value
-);
+  );
 
 --- Internal implementation for `familyText`.
-export let familyText (target : Family) : String := match target (
+export let familyText (target : Family) : String :=
+  match target (
   | .Family(value := value) => value
-);
+  );
 
 --- Internal implementation for `endianFromString`.
-export let endianFromString (value : String) : Endian := match value (
+export let endianFromString (value : String) : Endian :=
+  match value (
   | "big" =>.Big
   | _ =>.Little
-);
+  );
 
 --- Internal implementation for `isSupported`.
-export let isSupported (target : Jit) : Bool := match target (
+export let isSupported (target : Jit) : Bool :=
+  match target (
   | .Supported(backend := _, isa := _) => 0 = 0
   | .Unsupported => 0 = 1
-);
+  );
 
 --- Internal implementation for `currentJit`.
-export let currentJit : Jit := match sys.jit.supported (
-  | supported if supported =>.Supported(backend := sys.jit.backend,
-    isa := sys.jit.isa
+export let currentJit : Jit :=
+  match sys.jit.supported (
+  | supported if supported =>.Supported(
+    backend := sys.jit.backend,
+    isa := sys.jit.isa,
   )
   | _ =>.Unsupported
-);
+  );
 
 --- Internal implementation for `current`.
-export let current : Target := .Target(os := os(sys.os), arch := arch(sys.arch),
-  family := family(sys.family), pointerWidth := sys.pointerWidth,
-  endian := endianFromString(sys.endian), jit := currentJit
-);
+export let current : Target :=
+  .Target(
+    os := os(sys.os),
+    arch := arch(sys.arch),
+    family := family(sys.family),
+    pointerWidth := sys.pointerWidth,
+    endian := endianFromString(sys.endian),
+    jit := currentJit,
+  );
 
 --- Internal implementation for `targetOs`.
-export let targetOs (target : Target) : Os := match target (
-  | .Target(os := value, arch := _, family := _, pointerWidth := _, endian := _,
-    jit := _
+export let targetOs (target : Target) : Os :=
+  match target (
+  | .Target(
+    os := value,
+    arch := _,
+    family := _,
+    pointerWidth := _,
+    endian := _,
+    jit := _,
   ) => value
-);
+  );
 
 --- Internal implementation for `targetArch`.
-export let targetArch (target : Target) : Arch := match target (
-  | .Target(os := _, arch := value, family := _, pointerWidth := _, endian := _,
-    jit := _
+export let targetArch (target : Target) : Arch :=
+  match target (
+  | .Target(
+    os := _,
+    arch := value,
+    family := _,
+    pointerWidth := _,
+    endian := _,
+    jit := _,
   ) => value
-);
+  );
 
 --- Internal implementation for `targetFamily`.
-export let targetFamily (target : Target) : Family := match target (
-  | .Target(os := _, arch := _, family := value, pointerWidth := _, endian := _,
-    jit := _
+export let targetFamily (target : Target) : Family :=
+  match target (
+  | .Target(
+    os := _,
+    arch := _,
+    family := value,
+    pointerWidth := _,
+    endian := _,
+    jit := _,
   ) => value
-);
+  );
 
 --- Internal implementation for `targetPointerWidth`.
-export let targetPointerWidth (target : Target) : Int := match target (
-  | .Target(os := _, arch := _, family := _, pointerWidth := value, endian := _,
-    jit := _
+export let targetPointerWidth (target : Target) : Int :=
+  match target (
+  | .Target(
+    os := _,
+    arch := _,
+    family := _,
+    pointerWidth := value,
+    endian := _,
+    jit := _,
   ) => value
-);
+  );
 
 --- Internal implementation for `targetEndian`.
-export let targetEndian (target : Target) : Endian := match target (
-  | .Target(os := _, arch := _, family := _, pointerWidth := _, endian := value,
-    jit := _
+export let targetEndian (target : Target) : Endian :=
+  match target (
+  | .Target(
+    os := _,
+    arch := _,
+    family := _,
+    pointerWidth := _,
+    endian := value,
+    jit := _,
   ) => value
-);
+  );
 
 --- Internal implementation for `targetJit`.
-export let targetJit (target : Target) : Jit := match target (
-  | .Target(os := _, arch := _, family := _, pointerWidth := _, endian := _,
-    jit := value
+export let targetJit (target : Target) : Jit :=
+  match target (
+  | .Target(
+    os := _,
+    arch := _,
+    family := _,
+    pointerWidth := _,
+    endian := _,
+    jit := value,
   ) => value
-);
+  );
 
 --- Internal implementation for `matchesOs`.
 export let matchesOs (value : Os) : Bool := sys.matchesOs(osText(value));
 --- Internal implementation for `matchesArch`.
-export let matchesArch (value : Arch) : Bool := sys.matchesArch(archText(value));
+export let matchesArch (value : Arch) : Bool :=
+  sys.matchesArch(archText(value));
 --- Internal implementation for `matchesFamily`.
-export let matchesFamily (value : Family) : Bool := sys.matchesFamily(familyText(value));
+export let matchesFamily (value : Family) : Bool :=
+  sys.matchesFamily(familyText(value));
 --- Internal implementation for `isUnix`.
 export let isUnix () : Bool := matchesFamily(family("unix"));
 --- Internal implementation for `isDarwin`.

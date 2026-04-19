@@ -10,9 +10,12 @@ export let bytes := import "@std/bytes";
 --- Comparison helpers module.
 export let cmp := import "@std/cmp";
 --- Text and byte encoding module namespace.
-export let encoding := {
-  base64 := import "@std/encoding/base64", hex := import "@std/encoding/hex", utf8 := import "@std/encoding/utf8"
-};
+export let encoding :=
+  {
+    base64 := import "@std/encoding/base64",
+    hex := import "@std/encoding/hex",
+    utf8 := import "@std/encoding/utf8",
+  };
 --- Environment variable helpers module.
 export let env := import "@std/env";
 --- Filesystem helpers module.

@@ -13,4 +13,5 @@ export let writeLine (value : String) : Unit := runtime.ioPrintLine(value);
 export let writeErr (value : String) : Unit := runtime.ioPrintError(value);
 
 --- Write text plus newline to stderr.
-export let writeErrLine (value : String) : Unit := runtime.ioPrintErrorLine(value);
+export let writeErrLine (value : String) : Unit :=
+    runtime.ioPrintErrorLine(value);

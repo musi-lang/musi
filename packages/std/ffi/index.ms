@@ -54,9 +54,10 @@ export let null [T] () : Ptr[T] := .Ptr(raw := unsafe {
   });
 
 --- Return raw pointer value.
-export let raw [T] (pointer : Ptr[T]) : CPtr := match pointer (
+export let raw [T] (pointer : Ptr[T]) : CPtr :=
+  match pointer (
   | .Ptr(raw := raw) => raw
-);
+  );
 
 --- Returns true when pointer is null.
 export let isNull [T] (pointer : Ptr[T]) : Bool := unsafe {
@@ -71,6 +72,13 @@ export foreign "musi" (
 );
 
 --- Pointer helper namespace.
-export let ptr := {
-  cast := cast, isNull := isNull, null := null, offset := offset, raw := raw, read := read, write := write
-};
+export let ptr :=
+  {
+    cast := cast,
+    isNull := isNull,
+    null := null,
+    offset := offset,
+    raw := raw,
+    read := read,
+    write := write,
+  };
