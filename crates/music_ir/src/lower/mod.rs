@@ -1051,7 +1051,7 @@ fn lower_field_expr(
 
     if let Some(module_target) = sema.expr_module_target(expr_id).cloned() {
         let expr_ty = sema.try_expr_ty(expr_id).unwrap_or_else(|| {
-            invalid_lowering_path("expr type missing for dot callable field ref")
+            invalid_lowering_path("expr type missing for dot-callable field ref")
         });
         if matches!(sema.ty(expr_ty).kind, HirTyKind::Arrow { .. }) {
             return IrExprKind::ClosureNew {

@@ -195,7 +195,7 @@ impl CheckPass<'_, '_, '_> {
             self.diag(
                 origin.span,
                 DiagKind::InvalidFieldTarget,
-                "field access target must be record, module, or dot callable target",
+                "field access target must be record, module, or dot-callable target",
             );
         } else {
             self.diag(

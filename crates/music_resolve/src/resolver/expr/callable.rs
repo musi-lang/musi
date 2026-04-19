@@ -147,12 +147,9 @@ where
 
         let access = HirAccessKind::Direct;
 
-        let name_tok = node.child_tokens().find(|t| {
-            matches!(
-                t.kind(),
-                TokenKind::Ident | TokenKind::KwAny | TokenKind::KwSome | TokenKind::Int
-            )
-        });
+        let name_tok = node
+            .child_tokens()
+            .find(|t| matches!(t.kind(), TokenKind::Ident | TokenKind::Int));
         let name = name_tok
             .and_then(|tok| {
                 tok.text()

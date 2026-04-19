@@ -129,6 +129,11 @@ diag NonAssociativeChain 1311
   primary "chain continues here"
   help "parenthesize comparison"
 
+diag ReservedKeywordIdentifier 1312
+  message "reserved keyword {keyword} cannot name identifier"
+  primary "{keyword} found where identifier required"
+  help "choose non-keyword identifier"
+
 map lex_error_kind copy:super::LexErrorKind required
   case "InvalidChar { .. }" InvalidChar
   case "UnterminatedStringLiteral" UnterminatedStringLiteral
@@ -158,6 +163,7 @@ map parse_error_kind copy:super::ParseErrorKind required
   case "ExpectedPattern { .. }" ExpectedPattern
   case "ExpectedMember { .. }" ExpectedMember
   case "ExpectedIdentifier { .. }" ExpectedIdentifier
+  case "ReservedKeywordIdentifier { .. }" ReservedKeywordIdentifier
   case "ExpectedSpliceTarget { .. }" ExpectedSpliceTarget
   case "ExpectedOperatorMemberName { .. }" ExpectedOperatorMemberName
   case "ExpectedFieldTarget { .. }" ExpectedFieldTarget

@@ -81,9 +81,13 @@ pub fn from_code(raw: u16) -> Option<ToolingDiagKind> {
 pub const fn tooling_error_kind(source: &crate::ToolingError) -> ToolingDiagKind {
     match source {
         crate::ToolingError::MissingEntrySource { .. } => ToolingDiagKind::MissingEntrySource,
-        crate::ToolingError::PackageImportRequiresMusi { .. } => ToolingDiagKind::PackageImportRequiresMusi,
+        crate::ToolingError::PackageImportRequiresMusi { .. } => {
+            ToolingDiagKind::PackageImportRequiresMusi
+        }
         crate::ToolingError::MissingImport { .. } => ToolingDiagKind::MissingImport,
         crate::ToolingError::ToolingIoFailed { .. } => ToolingDiagKind::ToolingIoFailed,
-        crate::ToolingError::SessionCompilationFailed(_) => ToolingDiagKind::SessionCompilationFailed,
+        crate::ToolingError::SessionCompilationFailed(_) => {
+            ToolingDiagKind::SessionCompilationFailed
+        }
     }
 }

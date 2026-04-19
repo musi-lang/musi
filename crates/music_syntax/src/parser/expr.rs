@@ -188,8 +188,6 @@ impl Parser<'_> {
                 | TokenKind::TemplateHead
                 | TokenKind::Ident
                 | TokenKind::OpIdent
-                | TokenKind::KwAny
-                | TokenKind::KwSome
                 | TokenKind::Hash
                 | TokenKind::LParen
                 | TokenKind::LBracket
@@ -284,9 +282,7 @@ impl Parser<'_> {
     fn parse_field_expr(&mut self, base: SyntaxNodeId) -> SyntaxNodeParseResult {
         let access = self.advance_element();
         let target = match self.peek_kind() {
-            TokenKind::Ident | TokenKind::Int | TokenKind::KwAny | TokenKind::KwSome => {
-                self.advance_element()
-            }
+            TokenKind::Ident | TokenKind::Int => self.advance_element(),
             _ => return Err(self.expected_field_target()),
         };
         Ok(self.builder.push_node_from_children(

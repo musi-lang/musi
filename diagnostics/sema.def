@@ -406,12 +406,12 @@ diag UnknownField 3078
   primary "unknown record field"
 
 diag AmbiguousDotCallable 3102
-  message "ambiguous dot callable match"
-  primary "ambiguous dot callable match"
+  message "ambiguous dot-callable match"
+  primary "ambiguous dot-callable match"
 
 diag DotCallableRequiresMutableReceiver 3103
-  message "dot callable requires mutable receiver"
-  primary "dot callable requires mutable receiver"
+  message "dot-callable requires mutable receiver"
+  primary "dot-callable requires mutable receiver"
 
 diag InvalidFieldTarget 3079
   message "invalid field target"

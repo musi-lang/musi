@@ -126,17 +126,25 @@ pub const fn session_error_kind(source: &crate::SessionError) -> SessionDiagKind
         crate::SessionError::SourceMapUpdateFailed { .. } => SessionDiagKind::SourceMapUpdateFailed,
         crate::SessionError::ModuleParseFailed { .. } => SessionDiagKind::ModuleParseFailed,
         crate::SessionError::ModuleResolveFailed { .. } => SessionDiagKind::ModuleResolveFailed,
-        crate::SessionError::ModuleSemanticCheckFailed { .. } => SessionDiagKind::ModuleSemanticCheckFailed,
+        crate::SessionError::ModuleSemanticCheckFailed { .. } => {
+            SessionDiagKind::ModuleSemanticCheckFailed
+        }
         crate::SessionError::ModuleLoweringFailed { .. } => SessionDiagKind::ModuleLoweringFailed,
         crate::SessionError::ModuleEmissionFailed { .. } => SessionDiagKind::ModuleEmissionFailed,
-        crate::SessionError::LawSuiteSynthesisFailed { .. } => SessionDiagKind::LawSuiteSynthesisFailed,
+        crate::SessionError::LawSuiteSynthesisFailed { .. } => {
+            SessionDiagKind::LawSuiteSynthesisFailed
+        }
         crate::SessionError::ArtifactTransportFailed(_) => SessionDiagKind::ArtifactTransportFailed,
     }
 }
 
-pub const fn session_source_map_error_kind(source: &crate::SessionSourceMapError) -> SessionDiagKind {
+pub const fn session_source_map_error_kind(
+    source: &crate::SessionSourceMapError,
+) -> SessionDiagKind {
     match source {
-        crate::SessionSourceMapError::SourceRegistryOverflow => SessionDiagKind::SourceRegistryOverflow,
+        crate::SessionSourceMapError::SourceRegistryOverflow => {
+            SessionDiagKind::SourceRegistryOverflow
+        }
         crate::SessionSourceMapError::SourceTooLarge { .. } => SessionDiagKind::SourceTooLarge,
     }
 }

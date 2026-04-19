@@ -1,10 +1,7 @@
 use super::*;
 
 const fn is_receiver_ident(kind: TokenKind) -> bool {
-    matches!(
-        kind,
-        TokenKind::Ident | TokenKind::KwAny | TokenKind::KwSome
-    )
+    matches!(kind, TokenKind::Ident)
 }
 
 impl Parser<'_> {

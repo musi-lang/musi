@@ -43,12 +43,9 @@ fn find_nth_name_site(
     let mut stack = vec![tree.root()];
     while let Some(node) = stack.pop() {
         if node.kind() == SyntaxNodeKind::NameExpr {
-            let tok = node.child_tokens().find(|t| {
-                matches!(
-                    t.kind(),
-                    TokenKind::Ident | TokenKind::OpIdent | TokenKind::KwAny | TokenKind::KwSome
-                )
-            });
+            let tok = node
+                .child_tokens()
+                .find(|t| matches!(t.kind(), TokenKind::Ident | TokenKind::OpIdent));
             if let Some(tok) = tok {
                 if let Some(raw) = tok.text() {
                     let canon = canonical_name_text(tok.kind(), raw);

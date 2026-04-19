@@ -718,7 +718,7 @@ fn lower_dot_callable_call_expr(
                 .collect::<Option<Vec<_>>>()
                 .map(Vec::into_boxed_slice);
             let Some(args) = args else {
-                return Err("dot callable spread lowering invariant".into());
+                return Err("dot-callable spread lowering invariant".into());
             };
             IrExprKind::Call {
                 callee: Box::new(callee_expr),

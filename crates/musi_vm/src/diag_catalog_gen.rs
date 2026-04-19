@@ -352,10 +352,14 @@ pub const fn vm_error_kind(source: &crate::VmErrorKind) -> VmDiagKind {
         crate::VmErrorKind::MissingModuleSource { .. } => VmDiagKind::MissingModuleSource,
         crate::VmErrorKind::CallArityMismatch { .. } => VmDiagKind::CallArityMismatch,
         crate::VmErrorKind::HandlerFrameMissing { .. } => VmDiagKind::HandlerFrameMissing,
-        crate::VmErrorKind::MissingMatchingHandlerPop { .. } => VmDiagKind::MissingMatchingHandlerPop,
+        crate::VmErrorKind::MissingMatchingHandlerPop { .. } => {
+            VmDiagKind::MissingMatchingHandlerPop
+        }
         crate::VmErrorKind::HeapLimitExceeded { .. } => VmDiagKind::HeapLimitExceeded,
         crate::VmErrorKind::HeapObjectTooLarge { .. } => VmDiagKind::HeapObjectTooLarge,
         crate::VmErrorKind::StackFrameLimitExceeded { .. } => VmDiagKind::StackFrameLimitExceeded,
-        crate::VmErrorKind::InstructionBudgetExhausted { .. } => VmDiagKind::InstructionBudgetExhausted,
+        crate::VmErrorKind::InstructionBudgetExhausted { .. } => {
+            VmDiagKind::InstructionBudgetExhausted
+        }
     }
 }

@@ -242,33 +242,71 @@ pub fn from_code(raw: u16) -> Option<ProjectDiagKind> {
 pub const fn project_error_kind(source: &crate::ProjectError) -> Option<ProjectDiagKind> {
     match source {
         crate::ProjectError::MissingManifest { .. } => Some(ProjectDiagKind::MissingManifest),
-        crate::ProjectError::MissingManifestAncestor { .. } => Some(ProjectDiagKind::MissingManifestAncestor),
+        crate::ProjectError::MissingManifestAncestor { .. } => {
+            Some(ProjectDiagKind::MissingManifestAncestor)
+        }
         crate::ProjectError::MissingPackageRoot { .. } => Some(ProjectDiagKind::MissingPackageRoot),
         crate::ProjectError::MissingModule { .. } => Some(ProjectDiagKind::MissingModule),
-        crate::ProjectError::InvalidManifestJson { .. } => Some(ProjectDiagKind::InvalidManifestJson),
+        crate::ProjectError::InvalidManifestJson { .. } => {
+            Some(ProjectDiagKind::InvalidManifestJson)
+        }
         crate::ProjectError::SourceDiagnostic(_) => None,
         crate::ProjectError::ProjectIoFailed { .. } => Some(ProjectDiagKind::ProjectIoFailed),
-        crate::ProjectError::ManifestValidationFailed { .. } => Some(ProjectDiagKind::ManifestValidationFailed),
-        crate::ProjectError::DuplicateWorkspaceMember { .. } => Some(ProjectDiagKind::DuplicateWorkspaceMember),
-        crate::ProjectError::DuplicatePackageName { .. } => Some(ProjectDiagKind::DuplicatePackageName),
-        crate::ProjectError::MissingPackageVersion { .. } => Some(ProjectDiagKind::MissingPackageVersion),
+        crate::ProjectError::ManifestValidationFailed { .. } => {
+            Some(ProjectDiagKind::ManifestValidationFailed)
+        }
+        crate::ProjectError::DuplicateWorkspaceMember { .. } => {
+            Some(ProjectDiagKind::DuplicateWorkspaceMember)
+        }
+        crate::ProjectError::DuplicatePackageName { .. } => {
+            Some(ProjectDiagKind::DuplicatePackageName)
+        }
+        crate::ProjectError::MissingPackageVersion { .. } => {
+            Some(ProjectDiagKind::MissingPackageVersion)
+        }
         crate::ProjectError::NoRootPackage => Some(ProjectDiagKind::NoRootPackage),
-        crate::ProjectError::MissingPackageEntryModule { .. } => Some(ProjectDiagKind::MissingPackageEntryModule),
+        crate::ProjectError::MissingPackageEntryModule { .. } => {
+            Some(ProjectDiagKind::MissingPackageEntryModule)
+        }
         crate::ProjectError::UnknownTask { .. } => Some(ProjectDiagKind::UnknownTask),
-        crate::ProjectError::TaskDependencyCycle { .. } => Some(ProjectDiagKind::TaskDependencyCycle),
-        crate::ProjectError::PackageDependencyCycle { .. } => Some(ProjectDiagKind::PackageDependencyCycle),
+        crate::ProjectError::TaskDependencyCycle { .. } => {
+            Some(ProjectDiagKind::TaskDependencyCycle)
+        }
+        crate::ProjectError::PackageDependencyCycle { .. } => {
+            Some(ProjectDiagKind::PackageDependencyCycle)
+        }
         crate::ProjectError::UnresolvedImport { .. } => Some(ProjectDiagKind::UnresolvedImport),
         crate::ProjectError::UnknownPackage { .. } => Some(ProjectDiagKind::UnknownPackage),
-        crate::ProjectError::PackageGraphEntryMissing { .. } => Some(ProjectDiagKind::PackageGraphEntryMissing),
-        crate::ProjectError::MissingRegistryRoot { .. } => Some(ProjectDiagKind::MissingRegistryRoot),
-        crate::ProjectError::MissingGlobalCacheRoot => Some(ProjectDiagKind::MissingGlobalCacheRoot),
-        crate::ProjectError::RegistryVersionNotFound { .. } => Some(ProjectDiagKind::RegistryVersionNotFound),
-        crate::ProjectError::InvalidVersionRequirement { .. } => Some(ProjectDiagKind::InvalidVersionRequirement),
-        crate::ProjectError::InvalidGitDependency { .. } => Some(ProjectDiagKind::InvalidGitDependency),
+        crate::ProjectError::PackageGraphEntryMissing { .. } => {
+            Some(ProjectDiagKind::PackageGraphEntryMissing)
+        }
+        crate::ProjectError::MissingRegistryRoot { .. } => {
+            Some(ProjectDiagKind::MissingRegistryRoot)
+        }
+        crate::ProjectError::MissingGlobalCacheRoot => {
+            Some(ProjectDiagKind::MissingGlobalCacheRoot)
+        }
+        crate::ProjectError::RegistryVersionNotFound { .. } => {
+            Some(ProjectDiagKind::RegistryVersionNotFound)
+        }
+        crate::ProjectError::InvalidVersionRequirement { .. } => {
+            Some(ProjectDiagKind::InvalidVersionRequirement)
+        }
+        crate::ProjectError::InvalidGitDependency { .. } => {
+            Some(ProjectDiagKind::InvalidGitDependency)
+        }
         crate::ProjectError::GitCommandFailed { .. } => Some(ProjectDiagKind::GitCommandFailed),
-        crate::ProjectError::GitReferenceNotFound { .. } => Some(ProjectDiagKind::GitReferenceNotFound),
-        crate::ProjectError::MissingFrozenLockfile { .. } => Some(ProjectDiagKind::MissingFrozenLockfile),
-        crate::ProjectError::FrozenLockfileOutOfDate { .. } => Some(ProjectDiagKind::FrozenLockfileOutOfDate),
-        crate::ProjectError::SessionCompilationFailed(_) => Some(ProjectDiagKind::SessionCompilationFailed),
+        crate::ProjectError::GitReferenceNotFound { .. } => {
+            Some(ProjectDiagKind::GitReferenceNotFound)
+        }
+        crate::ProjectError::MissingFrozenLockfile { .. } => {
+            Some(ProjectDiagKind::MissingFrozenLockfile)
+        }
+        crate::ProjectError::FrozenLockfileOutOfDate { .. } => {
+            Some(ProjectDiagKind::FrozenLockfileOutOfDate)
+        }
+        crate::ProjectError::SessionCompilationFailed(_) => {
+            Some(ProjectDiagKind::SessionCompilationFailed)
+        }
     }
 }

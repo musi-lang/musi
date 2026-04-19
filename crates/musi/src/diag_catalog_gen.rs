@@ -124,12 +124,16 @@ pub const fn cli_error_kind(source: &crate::MusiError) -> Option<CliDiagKind> {
         crate::MusiError::MissingCurrentDirectory => Some(CliDiagKind::MissingCurrentDirectory),
         crate::MusiError::TaskFailed { .. } => Some(CliDiagKind::TaskFailed),
         crate::MusiError::UnsupportedRunArgs { .. } => Some(CliDiagKind::UnsupportedRunArgs),
-        crate::MusiError::PackageAlreadyInitialized { .. } => Some(CliDiagKind::PackageAlreadyInitialized),
+        crate::MusiError::PackageAlreadyInitialized { .. } => {
+            Some(CliDiagKind::PackageAlreadyInitialized)
+        }
         crate::MusiError::MissingPackageName { .. } => Some(CliDiagKind::MissingPackageName),
         crate::MusiError::UnknownTarget { .. } => Some(CliDiagKind::UnknownTarget),
         crate::MusiError::CheckCommandFailed => Some(CliDiagKind::CheckCommandFailed),
         crate::MusiError::CommandUnavailable { .. } => Some(CliDiagKind::CommandUnavailable),
         crate::MusiError::LspServerFailed { .. } => Some(CliDiagKind::LspServerFailed),
-        crate::MusiError::IncompatibleCommandArgs { .. } => Some(CliDiagKind::IncompatibleCommandArgs),
+        crate::MusiError::IncompatibleCommandArgs { .. } => {
+            Some(CliDiagKind::IncompatibleCommandArgs)
+        }
     }
 }

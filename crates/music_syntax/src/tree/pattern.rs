@@ -60,10 +60,7 @@ impl<'tree, 'src> PatternBinderCollector<'tree, 'src> {
     }
 
     const fn is_bind_name_token(kind: TokenKind) -> bool {
-        matches!(
-            kind,
-            TokenKind::Ident | TokenKind::KwAny | TokenKind::KwSome
-        )
+        matches!(kind, TokenKind::Ident)
     }
 
     fn collect_record_pattern_binder_tokens(&mut self, node: SyntaxNode<'tree, 'src>) {

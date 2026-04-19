@@ -155,6 +155,21 @@ mod success {
     }
 
     #[test]
+    fn parses_some_and_any_as_type_modifiers_only() {
+        let parsed = parse(
+            Lexer::new(
+                "let writeAny (writer : any Writer) : Int := 0; let writeSome (writer : some Writer) : Int := 0;",
+            )
+            .lex(),
+        );
+        assert!(
+            parsed.errors().is_empty(),
+            "unexpected errors: {:?}",
+            parsed.errors()
+        );
+    }
+
+    #[test]
     fn parses_named_variant_payload_definitions_and_uses() {
         let parsed = parse(
             Lexer::new(
@@ -360,6 +375,34 @@ mod failure {
     }
 
     #[test]
+    fn rejects_reserved_keyword_binding_names() {
+        assert_has_parse_error("let some [T] (value : T) : T := value;", |kind| {
+            matches!(
+                kind,
+                ParseErrorKind::ReservedKeywordIdentifier {
+                    keyword: crate::TokenKind::KwSome
+                }
+            )
+        });
+        assert_has_parse_error("let any := 1;", |kind| {
+            matches!(
+                kind,
+                ParseErrorKind::ReservedKeywordIdentifier {
+                    keyword: crate::TokenKind::KwAny
+                }
+            )
+        });
+        assert_has_parse_error("let value := { some := 1 };", |kind| {
+            matches!(
+                kind,
+                ParseErrorKind::ReservedKeywordIdentifier {
+                    keyword: crate::TokenKind::KwSome
+                }
+            )
+        });
+    }
+
+    #[test]
     fn error_expected_token_semicolon() {
         assert_has_parse_error("let x := 1", |k| {
             matches!(
@@ -459,7 +502,9 @@ mod failure {
         assert_has_parse_error("let (mut self : Buffer).push (value : Int) := self;", |k| {
             matches!(
                 k,
-                ParseErrorKind::ExpectedToken { .. } | ParseErrorKind::ExpectedPattern { .. }
+                ParseErrorKind::ExpectedToken { .. }
+                    | ParseErrorKind::ExpectedPattern { .. }
+                    | ParseErrorKind::ReservedKeywordIdentifier { .. }
             )
         });
     }

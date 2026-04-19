@@ -616,10 +616,10 @@ mod success {
     ",
         );
         let field_expr = find_expr(&sema, |kind| matches!(kind, HirExprKind::Field { .. }))
-            .expect("dot callable field expr");
+            .expect("dot-callable field expr");
         let fact = sema
             .expr_member_fact(field_expr)
-            .expect("dot callable fact missing");
+            .expect("dot-callable fact missing");
         assert_eq!(fact.kind, ExprMemberKind::DotCallable);
         assert!(fact.binding.is_some());
     }

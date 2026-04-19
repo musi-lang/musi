@@ -69,7 +69,8 @@ impl Parser<'_> {
 
     pub(crate) fn expect_ident_element(&mut self) -> SyntaxElementParseResult {
         match self.peek_kind() {
-            TokenKind::Ident | TokenKind::KwAny | TokenKind::KwSome => Ok(self.advance_element()),
+            TokenKind::Ident => Ok(self.advance_element()),
+            kind if kind.is_keyword() => Err(self.reserved_keyword_identifier()),
             _ => Err(ParseError::new(
                 ParseErrorKind::ExpectedIdentifier {
                     found: self.found_token(),
@@ -81,9 +82,8 @@ impl Parser<'_> {
 
     pub(crate) fn expect_name_element(&mut self) -> SyntaxElementParseResult {
         match self.peek_kind() {
-            TokenKind::Ident | TokenKind::OpIdent | TokenKind::KwAny | TokenKind::KwSome => {
-                Ok(self.advance_element())
-            }
+            TokenKind::Ident | TokenKind::OpIdent => Ok(self.advance_element()),
+            kind if kind.is_keyword() => Err(self.reserved_keyword_identifier()),
             _ => Err(ParseError::new(
                 ParseErrorKind::ExpectedIdentifier {
                     found: self.found_token(),
@@ -91,6 +91,15 @@ impl Parser<'_> {
                 self.span(),
             )),
         }
+    }
+
+    pub(crate) fn reserved_keyword_identifier(&self) -> ParseError {
+        ParseError::new(
+            ParseErrorKind::ReservedKeywordIdentifier {
+                keyword: self.found_token(),
+            },
+            self.span(),
+        )
     }
 
     pub(crate) fn span(&self) -> Span {

@@ -707,15 +707,15 @@ const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: SemaDiagKind::AmbiguousDotCallable,
         code: 3102,
-        message: "ambiguous dot callable match",
-        primary: "ambiguous dot callable match",
+        message: "ambiguous dot-callable match",
+        primary: "ambiguous dot-callable match",
         help: None,
     },
     CatalogEntry {
         kind: SemaDiagKind::DotCallableRequiresMutableReceiver,
         code: 3103,
-        message: "dot callable requires mutable receiver",
-        primary: "dot callable requires mutable receiver",
+        message: "dot-callable requires mutable receiver",
+        primary: "dot-callable requires mutable receiver",
         help: None,
     },
     CatalogEntry {

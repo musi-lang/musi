@@ -35,6 +35,7 @@ pub enum SyntaxDiagKind {
     ExpectedPattern,
     ExpectedMember,
     ExpectedIdentifier,
+    ReservedKeywordIdentifier,
     ExpectedSpliceTarget,
     ExpectedOperatorMemberName,
     ExpectedFieldTarget,
@@ -202,6 +203,9 @@ pub enum ParseErrorKind {
     #[error("expected identifier, found {found}")]
     ExpectedIdentifier { found: TokenKind },
 
+    #[error("reserved keyword {keyword} cannot name identifier")]
+    ReservedKeywordIdentifier { keyword: TokenKind },
+
     #[error("expected splice target, found {found}")]
     ExpectedSpliceTarget { found: TokenKind },
 
@@ -360,6 +364,9 @@ impl ParseErrorKind {
             | Self::ExpectedFieldTarget { found }
             | Self::ExpectedConstraintOperator { found }
             | Self::ExpectedAttrValue { found } => DiagContext::new().with("found", found),
+            Self::ReservedKeywordIdentifier { keyword } => {
+                DiagContext::new().with("keyword", keyword)
+            }
             Self::SpliceOutsideQuote | Self::NonAssociativeChain => DiagContext::new(),
         }
     }
@@ -379,6 +386,9 @@ impl ParseErrorKind {
             | Self::ExpectedConstraintOperator { found }
             | Self::ExpectedAttrValue { found } => {
                 format!("found {}", describe_found(source_text, span, found))
+            }
+            Self::ReservedKeywordIdentifier { keyword } => {
+                format!("{keyword} found where identifier required")
             }
             Self::SpliceOutsideQuote => {
                 format!("found {}", describe_span(source_text, span, "`#`"))

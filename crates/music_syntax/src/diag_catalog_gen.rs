@@ -235,6 +235,13 @@ const ENTRIES: &[CatalogEntry] = &[
         primary: "chain continues here",
         help: Some("parenthesize comparison"),
     },
+    CatalogEntry {
+        kind: SyntaxDiagKind::ReservedKeywordIdentifier,
+        code: 1312,
+        message: "reserved keyword {keyword} cannot name identifier",
+        primary: "{keyword} found where identifier required",
+        help: Some("choose non-keyword identifier"),
+    },
 ];
 
 fn entry(kind: SyntaxDiagKind) -> &'static CatalogEntry {
@@ -275,19 +282,37 @@ pub const fn lex_error_kind(source: super::LexErrorKind) -> SyntaxDiagKind {
         super::LexErrorKind::EmptyRuneLiteral => SyntaxDiagKind::EmptyRuneLiteral,
         super::LexErrorKind::RuneLiteralTooLong => SyntaxDiagKind::RuneLiteralTooLong,
         super::LexErrorKind::UnterminatedBlockComment => SyntaxDiagKind::UnterminatedBlockComment,
-        super::LexErrorKind::UnterminatedTemplateLiteral => SyntaxDiagKind::UnterminatedTemplateLiteral,
-        super::LexErrorKind::MissingDigitsAfterBasePrefix { .. } => SyntaxDiagKind::MissingDigitsAfterBasePrefix,
+        super::LexErrorKind::UnterminatedTemplateLiteral => {
+            SyntaxDiagKind::UnterminatedTemplateLiteral
+        }
+        super::LexErrorKind::MissingDigitsAfterBasePrefix { .. } => {
+            SyntaxDiagKind::MissingDigitsAfterBasePrefix
+        }
         super::LexErrorKind::InvalidDigitForBase { .. } => SyntaxDiagKind::InvalidDigitForBase,
-        super::LexErrorKind::UnexpectedUnderscoreInNumberLiteral => SyntaxDiagKind::UnexpectedUnderscoreInNumberLiteral,
-        super::LexErrorKind::MissingDigitAfterUnderscoreInNumberLiteral => SyntaxDiagKind::MissingDigitAfterUnderscoreInNumberLiteral,
+        super::LexErrorKind::UnexpectedUnderscoreInNumberLiteral => {
+            SyntaxDiagKind::UnexpectedUnderscoreInNumberLiteral
+        }
+        super::LexErrorKind::MissingDigitAfterUnderscoreInNumberLiteral => {
+            SyntaxDiagKind::MissingDigitAfterUnderscoreInNumberLiteral
+        }
         super::LexErrorKind::MissingExponentDigits => SyntaxDiagKind::MissingExponentDigits,
         super::LexErrorKind::MissingEscapeCode => SyntaxDiagKind::MissingEscapeCode,
         super::LexErrorKind::UnexpectedEscape { .. } => SyntaxDiagKind::UnexpectedEscape,
-        super::LexErrorKind::MissingHexDigitsInByteEscape => SyntaxDiagKind::MissingHexDigitsInByteEscape,
-        super::LexErrorKind::InvalidHexDigitInByteEscape { .. } => SyntaxDiagKind::InvalidHexDigitInByteEscape,
-        super::LexErrorKind::MissingHexDigitsInUnicodeEscape => SyntaxDiagKind::MissingHexDigitsInUnicodeEscape,
-        super::LexErrorKind::InvalidHexDigitInUnicodeEscape { .. } => SyntaxDiagKind::InvalidHexDigitInUnicodeEscape,
-        super::LexErrorKind::ExpectedFourOrSixHexDigitsInUnicodeEscape => SyntaxDiagKind::ExpectedFourOrSixHexDigitsInUnicodeEscape,
+        super::LexErrorKind::MissingHexDigitsInByteEscape => {
+            SyntaxDiagKind::MissingHexDigitsInByteEscape
+        }
+        super::LexErrorKind::InvalidHexDigitInByteEscape { .. } => {
+            SyntaxDiagKind::InvalidHexDigitInByteEscape
+        }
+        super::LexErrorKind::MissingHexDigitsInUnicodeEscape => {
+            SyntaxDiagKind::MissingHexDigitsInUnicodeEscape
+        }
+        super::LexErrorKind::InvalidHexDigitInUnicodeEscape { .. } => {
+            SyntaxDiagKind::InvalidHexDigitInUnicodeEscape
+        }
+        super::LexErrorKind::ExpectedFourOrSixHexDigitsInUnicodeEscape => {
+            SyntaxDiagKind::ExpectedFourOrSixHexDigitsInUnicodeEscape
+        }
         super::LexErrorKind::InvalidUnicodeScalar { .. } => SyntaxDiagKind::InvalidUnicodeScalar,
     }
 }
@@ -299,10 +324,17 @@ pub const fn parse_error_kind(source: super::ParseErrorKind) -> SyntaxDiagKind {
         super::ParseErrorKind::ExpectedPattern { .. } => SyntaxDiagKind::ExpectedPattern,
         super::ParseErrorKind::ExpectedMember { .. } => SyntaxDiagKind::ExpectedMember,
         super::ParseErrorKind::ExpectedIdentifier { .. } => SyntaxDiagKind::ExpectedIdentifier,
+        super::ParseErrorKind::ReservedKeywordIdentifier { .. } => {
+            SyntaxDiagKind::ReservedKeywordIdentifier
+        }
         super::ParseErrorKind::ExpectedSpliceTarget { .. } => SyntaxDiagKind::ExpectedSpliceTarget,
-        super::ParseErrorKind::ExpectedOperatorMemberName { .. } => SyntaxDiagKind::ExpectedOperatorMemberName,
+        super::ParseErrorKind::ExpectedOperatorMemberName { .. } => {
+            SyntaxDiagKind::ExpectedOperatorMemberName
+        }
         super::ParseErrorKind::ExpectedFieldTarget { .. } => SyntaxDiagKind::ExpectedFieldTarget,
-        super::ParseErrorKind::ExpectedConstraintOperator { .. } => SyntaxDiagKind::ExpectedConstraintOperator,
+        super::ParseErrorKind::ExpectedConstraintOperator { .. } => {
+            SyntaxDiagKind::ExpectedConstraintOperator
+        }
         super::ParseErrorKind::ExpectedAttrValue { .. } => SyntaxDiagKind::ExpectedAttrValue,
         super::ParseErrorKind::SpliceOutsideQuote => SyntaxDiagKind::SpliceOutsideQuote,
         super::ParseErrorKind::NonAssociativeChain => SyntaxDiagKind::NonAssociativeChain,

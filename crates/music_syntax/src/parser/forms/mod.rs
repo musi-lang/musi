@@ -19,9 +19,7 @@ impl Parser<'_> {
                 Ok(self.parse_literal_expr())
             }
             TokenKind::TemplateNoSubst | TokenKind::TemplateHead => self.parse_template_expr(),
-            TokenKind::Ident | TokenKind::OpIdent | TokenKind::KwAny | TokenKind::KwSome => {
-                self.parse_name_expr()
-            }
+            TokenKind::Ident | TokenKind::OpIdent => self.parse_name_expr(),
             TokenKind::Hash => self.parse_splice_expr(),
             TokenKind::KwQuote => self.parse_quote_expr(),
             _ => return None,

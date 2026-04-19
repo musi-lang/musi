@@ -49,4 +49,26 @@ mod failure {
         assert_eq!(diag.message(), "comparison chain requires grouping");
         assert_eq!(diag.hint(), Some("parenthesize comparison"));
     }
+
+    #[test]
+    fn parse_diag_reports_reserved_keyword_identifier() {
+        let text = "let some := 1;";
+        let diag = ParseError::new(
+            ParseErrorKind::ReservedKeywordIdentifier {
+                keyword: TokenKind::KwSome,
+            },
+            Span::new(4, 8),
+        )
+        .to_diag(source_id(text), text);
+
+        assert_eq!(
+            diag.message(),
+            "reserved keyword `some` cannot name identifier"
+        );
+        assert_eq!(
+            diag.labels()[0].message(),
+            "`some` found where identifier required"
+        );
+        assert_eq!(diag.hint(), Some("choose non-keyword identifier"));
+    }
 }
