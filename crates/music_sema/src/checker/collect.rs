@@ -293,6 +293,7 @@ impl CollectPass<'_, '_, '_> {
         let mut variant_map = BTreeMap::<Box<str>, DataVariantDef>::new();
         let mut seen_variants = HashMap::<Box<str>, HirOrigin>::new();
         let mut seen_tags = HashSet::<i64>::new();
+        let is_record_shape = variants.is_empty() && !fields.is_empty();
         for (variant_index, variant) in self.variants(variants).into_iter().enumerate() {
             let tag: Box<str> = self.resolve_symbol(variant.name.name).into();
             let tag_value = data_variant_tag(
@@ -330,8 +331,13 @@ impl CollectPass<'_, '_, '_> {
             );
         }
         if variant_map.is_empty() {
-            let field_tys = self
-                .fields(fields)
+            let record_fields = self.fields(fields);
+            let field_names = record_fields
+                .iter()
+                .map(|field| Some(self.resolve_symbol(field.name.name).into()))
+                .collect::<Vec<Option<Box<str>>>>()
+                .into_boxed_slice();
+            let field_tys = record_fields
                 .into_iter()
                 .map(|field| {
                     let origin = self.expr(field.ty).origin;
@@ -342,7 +348,7 @@ impl CollectPass<'_, '_, '_> {
             if !field_tys.is_empty() {
                 let _ = variant_map.insert(
                     data_name.clone(),
-                    DataVariantDef::new(0, None, None, field_tys, Box::default()),
+                    DataVariantDef::new(0, None, None, field_tys, field_names),
                 );
             }
         }
@@ -358,7 +364,8 @@ impl CollectPass<'_, '_, '_> {
                 layout_pack,
                 frozen,
             )
-            .with_type_params(type_param_names, type_param_kind_tys),
+            .with_type_params(type_param_names, type_param_kind_tys)
+            .with_record_shape(is_record_shape),
         );
     }
 

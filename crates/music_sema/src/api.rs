@@ -756,6 +756,7 @@ pub struct DataSurface {
     pub type_params: NameList,
     pub type_param_kinds: SurfaceTyIdList,
     pub variants: Box<[DataVariantSurface]>,
+    pub is_record_shape: bool,
     pub repr_kind: Option<Box<str>>,
     pub layout_align: Option<u32>,
     pub layout_pack: Option<u32>,
@@ -772,6 +773,7 @@ impl DataSurface {
             type_params: Box::default(),
             type_param_kinds: Box::default(),
             variants: variants.into(),
+            is_record_shape: false,
             repr_kind: None,
             layout_align: None,
             layout_pack: None,
@@ -820,6 +822,12 @@ impl DataSurface {
     #[must_use]
     pub const fn with_frozen(mut self, frozen: bool) -> Self {
         self.frozen = frozen;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_record_shape(mut self, is_record_shape: bool) -> Self {
+        self.is_record_shape = is_record_shape;
         self
     }
 
@@ -1396,6 +1404,7 @@ pub struct SemaDataDef {
     type_params: Box<[Symbol]>,
     type_param_kinds: HirTyIdList,
     variants: BTreeMap<Box<str>, SemaDataVariantDef>,
+    is_record_shape: bool,
     repr_kind: Option<Box<str>>,
     layout_align: Option<u32>,
     layout_pack: Option<u32>,
@@ -1553,6 +1562,7 @@ impl SemaDataDef {
             type_params: Box::default(),
             type_param_kinds: Box::default(),
             variants: variants.into(),
+            is_record_shape: false,
             repr_kind,
             layout_align,
             layout_pack,
@@ -1572,6 +1582,12 @@ impl SemaDataDef {
     {
         self.type_params = type_params.into();
         self.type_param_kinds = type_param_kinds.into();
+        self
+    }
+
+    #[must_use]
+    pub const fn with_record_shape(mut self, is_record_shape: bool) -> Self {
+        self.is_record_shape = is_record_shape;
         self
     }
 
@@ -1610,6 +1626,18 @@ impl SemaDataDef {
 
     pub fn variants(&self) -> impl Iterator<Item = (&str, &SemaDataVariantDef)> {
         self.variants.iter().map(|(name, def)| (name.as_ref(), def))
+    }
+
+    #[must_use]
+    pub const fn is_record_shape(&self) -> bool {
+        self.is_record_shape
+    }
+
+    #[must_use]
+    pub fn record_shape_variant(&self) -> Option<&SemaDataVariantDef> {
+        self.is_record_shape
+            .then(|| self.variants.get(self.key.name.as_ref()))
+            .flatten()
     }
 
     #[must_use]

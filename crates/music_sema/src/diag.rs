@@ -74,6 +74,7 @@ pub enum SemaDiagKind {
     ArraySpreadRequiresOneDimensionalArray,
     InvalidSpreadSource,
     DuplicateRecordField,
+    MissingRecordField,
     VariantMissingDataContext,
     VariantConstructorArityMismatch,
     VariantNamedFieldsRequired,

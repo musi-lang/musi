@@ -681,6 +681,23 @@ mod success {
     }
 
     #[test]
+    fn compiles_record_shaped_data_with_projection_and_update() {
+        let _ = assert_main_entry_compiles_with!(
+            r#"
+            let Box[T] := data {
+              value : T;
+            };
+            export let answer () : String := (
+              let boxed : Box[String] := { value := "Nora" };
+              let renamed := { ...boxed, value := "Miso" };
+              renamed.value
+            );
+        "#,
+            &["data.get", "data.new", ".type $main::Box"],
+        );
+    }
+
+    #[test]
     fn compiles_record_field_assignment() {
         let output = assert_main_entry_compiles_with!(
             r"

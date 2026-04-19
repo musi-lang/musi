@@ -490,7 +490,8 @@ impl CheckPass<'_, '_, '_> {
                 surface.layout_pack,
                 surface.frozen,
             )
-            .with_type_params(type_params, type_param_kinds),
+            .with_type_params(type_params, type_param_kinds)
+            .with_record_shape(surface.is_record_shape),
         );
     }
 

@@ -1,7 +1,8 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use music_arena::SliceRange;
 use music_hir::{HirExprId, HirOrigin, HirRecordItem, HirTyField, HirTyId, HirTyKind};
+use music_names::Symbol;
 
 use crate::api::ExprFacts;
 use crate::effects::EffectRow;
@@ -12,31 +13,36 @@ use super::{CheckPass, DiagKind};
 impl CheckPass<'_, '_, '_> {
     pub(super) fn check_record_expr(&mut self, items: SliceRange<HirRecordItem>) -> ExprFacts {
         let mut effects = EffectRow::empty();
-        let expected_record = self.expected_ty().and_then(|expected| {
+        let expected_ty = self
+            .expected_ty()
+            .map(|expected| peel_mut_ty(self, expected));
+        let expected_record = expected_ty.and_then(|expected| {
             let expected_inner = peel_mut_ty(self, expected);
             match self.ty(expected_inner).kind {
                 HirTyKind::Record { fields } => Some(
                     self.ty_fields(fields)
                         .into_iter()
-                        .map(|field| (field.name, field.ty))
+                        .map(|field| (self.resolve_symbol(field.name).into(), field.ty))
                         .collect::<BTreeMap<_, _>>(),
                 ),
+                HirTyKind::Named { name, args } => self.data_record_fields(name, args),
                 _ => None,
             }
         });
 
         let mut seen_explicit = BTreeSet::<Box<str>>::new();
         let mut fields = BTreeMap::<Box<str>, HirTyField>::new();
+        let mut inferred_record_ty = None;
         for record_item in self.record_items(items) {
             if record_item.spread {
                 let facts = super::exprs::check_expr(self, record_item.value);
                 effects.union_with(&facts.effects);
                 let origin = self.expr(record_item.value).origin;
                 let spread_ty = peel_mut_ty(self, facts.ty);
-                let HirTyKind::Record {
-                    fields: spread_fields,
-                } = self.ty(spread_ty).kind
-                else {
+                if matches!(self.ty(spread_ty).kind, HirTyKind::Named { .. }) {
+                    inferred_record_ty = Some(spread_ty);
+                }
+                let Some(spread_fields) = self.record_like_fields(spread_ty) else {
                     self.diag(
                         origin.span,
                         DiagKind::InvalidSpreadSource,
@@ -44,9 +50,9 @@ impl CheckPass<'_, '_, '_> {
                     );
                     continue;
                 };
-                for spread_field in self.ty_fields(spread_fields) {
-                    let key: Box<str> = self.resolve_symbol(spread_field.name).into();
-                    let _ = fields.insert(key, spread_field);
+                for (key, spread_ty) in spread_fields {
+                    let name = self.intern(key.as_ref());
+                    let _ = fields.insert(key, HirTyField::new(name, spread_ty));
                 }
                 continue;
             }
@@ -58,12 +64,31 @@ impl CheckPass<'_, '_, '_> {
             };
             let expected_field_ty = expected_record
                 .as_ref()
-                .and_then(|map| map.get(&name.name).copied())
+                .and_then(|map| map.get(self.resolve_symbol(name.name)).copied())
+                .or_else(|| {
+                    fields
+                        .get(self.resolve_symbol(name.name))
+                        .map(|field| field.ty)
+                })
                 .unwrap_or_else(|| self.builtins().unknown);
+            if expected_record
+                .as_ref()
+                .is_some_and(|map| !map.contains_key(self.resolve_symbol(name.name)))
+            {
+                let field_name = self.resolve_symbol(name.name).to_owned();
+                self.diag_message(
+                    name.span,
+                    DiagKind::UnknownField,
+                    format!("unknown field `{field_name}`"),
+                    format!("unknown field `{field_name}`"),
+                );
+            }
             self.push_expected_ty(expected_field_ty);
             let facts = super::exprs::check_expr(self, record_item.value);
             let _ = self.pop_expected_ty();
             effects.union_with(&facts.effects);
+            let value_origin = self.expr(record_item.value).origin;
+            self.type_mismatch(value_origin, expected_field_ty, facts.ty);
 
             let key: Box<str> = self.resolve_symbol(name.name).into();
             if !seen_explicit.insert(key.clone()) {
@@ -71,6 +96,37 @@ impl CheckPass<'_, '_, '_> {
                 self.diag(span, DiagKind::DuplicateRecordField, "");
             }
             let _ = fields.insert(key, HirTyField::new(name.name, facts.ty));
+        }
+        if let Some(expected) = &expected_record {
+            for field_name in expected.keys() {
+                if !fields.contains_key(field_name) {
+                    let span = self.expr(self.root_expr_id()).origin.span;
+                    self.diag_message(
+                        span,
+                        DiagKind::MissingRecordField,
+                        format!("missing field `{field_name}`"),
+                        format!("field `{field_name}` required here"),
+                    );
+                }
+            }
+        }
+        if let Some(expected_ty) = expected_ty
+            && expected_record.is_some()
+            && matches!(self.ty(expected_ty).kind, HirTyKind::Named { .. })
+        {
+            return ExprFacts::new(expected_ty, effects);
+        }
+        if let Some(inferred_record_ty) = inferred_record_ty {
+            if let Some(expected) = self.record_like_fields(inferred_record_ty)
+                && expected
+                    .keys()
+                    .all(|field_name| fields.contains_key(field_name))
+                && fields
+                    .keys()
+                    .all(|field_name| expected.contains_key(field_name))
+            {
+                return ExprFacts::new(inferred_record_ty, effects);
+            }
         }
         let fields = self.alloc_ty_fields(fields.into_values());
         let ty = self.alloc_ty(HirTyKind::Record { fields });
@@ -172,6 +228,7 @@ impl CheckPass<'_, '_, '_> {
                 }
                 Some(self.alloc_ty(HirTyKind::PartialRangeThru { bound }))
             }
+            HirTyKind::Named { .. } if self.record_like_fields(base_ty).is_some() => Some(base_ty),
             _ => None,
         })
         .unwrap_or_else(|| {
@@ -184,7 +241,10 @@ impl CheckPass<'_, '_, '_> {
         })
     }
 
-    pub(super) fn record_like_fields(&self, ty: HirTyId) -> Option<BTreeMap<Box<str>, HirTyId>> {
+    pub(super) fn record_like_fields(
+        &mut self,
+        ty: HirTyId,
+    ) -> Option<BTreeMap<Box<str>, HirTyId>> {
         match self.ty(ty).kind {
             HirTyKind::Record { fields } => Some(
                 self.ty_fields(fields)
@@ -204,12 +264,45 @@ impl CheckPass<'_, '_, '_> {
             HirTyKind::PartialRangeUpTo { bound } | HirTyKind::PartialRangeThru { bound } => {
                 Some(BTreeMap::from([("upperBound".into(), bound)]))
             }
+            HirTyKind::Named { name, args } => self.data_record_fields(name, args),
             _ => None,
         }
     }
 
-    pub(super) fn record_like_field_ty(&self, ty: HirTyId, field_name: &str) -> Option<HirTyId> {
+    pub(super) fn record_like_field_ty(
+        &mut self,
+        ty: HirTyId,
+        field_name: &str,
+    ) -> Option<HirTyId> {
         self.record_like_fields(ty)
             .and_then(|fields| fields.get(field_name).copied())
+    }
+
+    fn data_record_fields(
+        &mut self,
+        name: Symbol,
+        args: SliceRange<HirTyId>,
+    ) -> Option<BTreeMap<Box<str>, HirTyId>> {
+        let data = self.data_def(self.resolve_symbol(name))?.clone();
+        let variant = data.record_shape_variant()?;
+        let ty_args = self.ty_ids(args);
+        let subst = data
+            .type_params()
+            .iter()
+            .copied()
+            .zip(ty_args)
+            .collect::<HashMap<_, _>>();
+        Some(
+            variant
+                .field_names()
+                .iter()
+                .zip(variant.field_tys())
+                .filter_map(|(field_name, field_ty)| {
+                    field_name.as_ref().map(|field_name| {
+                        (field_name.clone(), self.substitute_ty(*field_ty, &subst))
+                    })
+                })
+                .collect(),
+        )
     }
 }

@@ -54,9 +54,8 @@ impl CheckPass<'_, '_, '_> {
 
         let base_is_mut = self.is_mut_ty(base_facts.ty);
         let base_ty = peel_mut_ty(self, base_facts.ty);
-        let ty = if let Some(field_ty) =
-            self.record_like_field_ty(base_ty, self.resolve_symbol(name.name))
-        {
+        let field_name = self.resolve_symbol(name.name).to_owned();
+        let ty = if let Some(field_ty) = self.record_like_field_ty(base_ty, &field_name) {
             self.set_expr_member_fact(
                 expr_id,
                 ExprMemberFact::new(ExprMemberKind::RecordField, name.name, field_ty),

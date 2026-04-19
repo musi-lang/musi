@@ -497,6 +497,9 @@ impl ExportSurfaceCollector<'_, '_> {
             if data.frozen() {
                 surface = surface.with_frozen(true);
             }
+            if data.is_record_shape() {
+                surface = surface.with_record_shape(true);
+            }
             Some(surface)
         })
     }

@@ -481,6 +481,13 @@ const ENTRIES: &[CatalogEntry] = &[
         help: None,
     },
     CatalogEntry {
+        kind: SemaDiagKind::MissingRecordField,
+        code: 3123,
+        message: "record field missing",
+        primary: "record field missing",
+        help: None,
+    },
+    CatalogEntry {
         kind: SemaDiagKind::VariantMissingDataContext,
         code: 3059,
         message: "variant constructor requires data type context",

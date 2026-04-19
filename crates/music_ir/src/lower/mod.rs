@@ -91,6 +91,22 @@ type LoweredMatchArmList = Box<[IrLoweredMatchArm]>;
 type EvidenceBindingMap = HashMap<ConstraintKey, Box<str>>;
 type EvidenceBindingStack = Vec<EvidenceBindingMap>;
 
+fn qualified_name(module: &ModuleKey, name: &str) -> Box<str> {
+    format!("{}::{name}", module.as_str()).into_boxed_str()
+}
+
+fn record_storage_ty_name(sema: &SemaModule, ty: HirTyId, interner: &Interner) -> Box<str> {
+    if let HirTyKind::Named { name, .. } = sema.ty(ty).kind {
+        let data_name = interner.resolve(name);
+        if let Some(data) = sema.data_def(data_name)
+            && data.is_record_shape()
+        {
+            return qualified_name(&data.key().module, data.key().name.as_ref());
+        }
+    }
+    render_ty_name(sema, ty, interner)
+}
+
 struct LowerCtx<'a> {
     sema: &'a SemaModule,
     interner: &'a Interner,
@@ -782,6 +798,19 @@ fn record_layout_for_ty(
             items.sort();
             items
         }
+        HirTyKind::Named { name, .. } => {
+            let data_name = interner.resolve(*name);
+            let data = sema.data_def(data_name)?;
+            let variant = data.record_shape_variant()?;
+            let mut items = variant
+                .field_names()
+                .iter()
+                .flatten()
+                .cloned()
+                .collect::<Vec<_>>();
+            items.sort();
+            items
+        }
         HirTyKind::Range { .. } | HirTyKind::ClosedRange { .. } => {
             vec!["lowerBound".into(), "upperBound".into()]
         }
@@ -1008,12 +1037,8 @@ fn lower_field_expr(
         HirTyKind::Mut { inner } => inner,
         _ => base_ty,
     };
-    if matches!(sema.ty(record_ty).kind, HirTyKind::Record { .. }) {
-        let Some((indices, _layout, _field_count)) =
-            record_layout_for_ty(sema, record_ty, interner)
-        else {
-            invalid_lowering_path("record field access without record layout");
-        };
+    if let Some((indices, _layout, _field_count)) = record_layout_for_ty(sema, record_ty, interner)
+    {
         let Some(index) = indices.get(interner.resolve(symbol)).copied() else {
             invalid_lowering_path("record field access missing field");
         };

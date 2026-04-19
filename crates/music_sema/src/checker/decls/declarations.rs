@@ -453,8 +453,13 @@ impl CheckPass<'_, '_, '_> {
                 );
             }
             if variant_map.is_empty() {
-                let field_tys = self
-                    .fields(fields.clone())
+                let record_fields = self.fields(fields.clone());
+                let field_names = record_fields
+                    .iter()
+                    .map(|field| Some(self.resolve_symbol(field.name.name).into()))
+                    .collect::<Vec<Option<Box<str>>>>()
+                    .into_boxed_slice();
+                let field_tys = record_fields
                     .into_iter()
                     .map(|field| {
                         let origin = self.expr(field.ty).origin;
@@ -465,14 +470,15 @@ impl CheckPass<'_, '_, '_> {
                 if !field_tys.is_empty() {
                     let _ = variant_map.insert(
                         data_name.clone(),
-                        super::super::DataVariantDef::new(0, None, None, field_tys, Box::default()),
+                        super::super::DataVariantDef::new(0, None, None, field_tys, field_names),
                     );
                 }
             }
             let key = surface_key(self.module_key(), self.interner(), name.name);
             self.insert_data_def(
                 data_name,
-                super::super::DataDef::new(key, variant_map, None, None, None, false),
+                super::super::DataDef::new(key, variant_map, None, None, None, false)
+                    .with_record_shape(variants.is_empty() && !fields.is_empty()),
             );
         }
         self.check_data_expr(variants, fields)

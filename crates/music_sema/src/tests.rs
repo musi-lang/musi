@@ -658,6 +658,88 @@ mod success {
     }
 
     #[test]
+    fn record_shaped_data_accepts_record_literal_and_field_access() {
+        let sema = check(
+            r#"
+        let Box[T] := data {
+          value : T;
+        };
+        let boxedName : Box[String] := {
+          value := "Nora"
+        };
+        boxedName.value;
+    "#,
+        );
+        assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+        let root = sema.module().root;
+        assert!(matches!(
+            sema.ty(sema.try_expr_ty(root).expect("root expr type missing"))
+                .kind,
+            HirTyKind::String
+        ));
+    }
+
+    #[test]
+    fn record_shaped_data_reports_bad_record_literals() {
+        let wrong_type = check(
+            r#"
+        let Box[T] := data { value : T; };
+        let boxedName : Box[String] := { value := 42 };
+    "#,
+        );
+        assert!(
+            has_diag(&wrong_type, SemaDiagKind::TypeMismatch),
+            "{:?}",
+            wrong_type.diags()
+        );
+
+        let unknown_field = check(
+            r#"
+        let Box[T] := data { value : T; };
+        let boxedName : Box[String] := { other := "Nora" };
+    "#,
+        );
+        assert!(
+            has_diag(&unknown_field, SemaDiagKind::UnknownField),
+            "{:?}",
+            unknown_field.diags()
+        );
+        assert!(
+            has_diag(&unknown_field, SemaDiagKind::MissingRecordField),
+            "{:?}",
+            unknown_field.diags()
+        );
+    }
+
+    #[test]
+    fn imported_record_shaped_data_preserves_field_types() {
+        let (_module_a, module_b) = check_with_imported_surface(
+            70,
+            r"
+        export let Box[T] := data {
+          value : T;
+        };
+    ",
+            r#"
+        let Types := import "a";
+        let Box := Types.Box;
+        let boxedName : Box[String] := {
+          value := "Nora"
+        };
+        boxedName.value;
+    "#,
+        );
+        assert!(module_b.diags().is_empty(), "{:?}", module_b.diags());
+        let root = module_b.module().root;
+        assert!(matches!(
+            module_b
+                .ty(module_b.try_expr_ty(root).expect("root expr type missing"))
+                .kind,
+            HirTyKind::String
+        ));
+    }
+
+    #[test]
     fn rune_literal_has_rune_type() {
         let sema = check("'a';");
         let root = sema.module().root;

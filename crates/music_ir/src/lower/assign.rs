@@ -42,12 +42,9 @@ fn lower_assign_target(
                 HirTyKind::Mut { inner } => inner,
                 _ => base_ty,
             };
-            if matches!(sema.ty(record_ty).kind, HirTyKind::Record { .. }) {
-                let Some((indices, _layout, _count)) =
-                    record_layout_for_ty(sema, record_ty, interner)
-                else {
-                    return Err("assignment field base type missing".into());
-                };
+            if let Some((indices, _layout, _count)) =
+                record_layout_for_ty(sema, record_ty, interner)
+            {
                 let Some(index) = indices.get(interner.resolve(name.name)).copied() else {
                     return Err("unsupported assignment target".into());
                 };
