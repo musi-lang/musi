@@ -152,6 +152,9 @@ Recommended Pages environment variables:
 - `BUN_VERSION=1.3.12`
 - `SKIP_DEPENDENCY_INSTALL=1`
 
+These values are committed in root `wrangler.toml`. Keep dashboard values unset
+unless overriding them for a deployment environment.
+
 Recommended Cloudflare dashboard settings:
 
 - disable managed `robots.txt` augmentation that injects directives such as `Content-Signal`
