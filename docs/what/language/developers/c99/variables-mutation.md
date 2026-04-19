@@ -1,35 +1,31 @@
 ---
 title: "Variables and Mutation"
-description: "Translate C99 mutable locals into Musi stable bindings and explicit mut values."
+description: "Read Variables and Mutation as a C99 habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "C Developers"
 order: 4
 slug: "variables-mutation"
-summary: "C mutable locals map to explicit Musi mut values or fresh derived names."
+summary: "Translate the C99 habit, then use the Musi Book for the full rule."
 ---
 
-# Variables and Mutation
+A C reader brings habits from headers, translation units, pointers, arrays, `errno`, sentinel returns, and small functions that trust callers. That helps with cost, layout, and the exact boundary where bytes cross into code, but the Musi page asks a narrower question: what contract should this fresh values and mutation example make visible?
 
-C locals are mutable ordinary variables:
+{{compare:c99-variables-mutation}}
 
-```c
-int visits = 0;
-visits = visits + 1;
+## Reading Variables and Mutation from C99
 
-int next_visits = visits + 1;
-```
+On the Musi side, Musi makes mutation explicit with `mut` and assignment; ordinary `let` names read as stable facts. Read the shared example through C99 eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-Musi makes the changing value explicit.
+## False friend
 
-{{snippet:c99-variables-mutation}}
+Do not translate every rebinding habit into mutation. A new receipt, label, or counter snapshot can be a fresh name. For a C reader, the trap is treating convention as a contract; Musi `class` is not a C struct with function pointers; records/data carry shape, classes name behavior a type can provide.
 
-When a value is only a derived step, C often still names another local:
+## When this pays off
 
-```c
-int base_price = 1200;
-int total = base_price + 45;
-```
+Use mutation when the domain really changes over time, such as queue depth or a buffer cursor. The C99 instinct still helps here: Keep the C habit of asking where memory, symbols, and failures come from.
 
-Musi uses the same fresh-name style without marking either binding mutable.
+## Keep close
 
-{{snippet:c99-fresh-value}}
+- [Mutation](/learn/book/start/mutation)
+- [Values and let](/learn/book/start/values-and-let)
+- [Blocks and expressions](/learn/book/start/blocks-and-expressions)

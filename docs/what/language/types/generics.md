@@ -7,15 +7,20 @@ order: 20
 slug: "generics"
 summary: "Write reusable functions over many types without losing clarity."
 ---
-
-Generics let one definition work for many types. Start with the direct case: `identityFn[T]` names a type parameter, and `identityFn[Int](8080)` chooses `Int` for that call.
+Generics let one definition work with many types. A box can hold a book, a toy, or a receipt; the rules for storing and returning the item may not care which one it is.
 
 {{snippet:chapter-generics}}
 
-`tools` shows that a generic function can be stored in an ordinary record and called through a field. The type argument still belongs at the call site, so `tools.identity[Int](port)` reads the same way as the direct call.
+Use generics when the structure is the same and only the contained type changes. Do not make code generic just because it feels flexible; generic code should still have a clear job.
 
-`Box1` and `Keeps` show the larger shape. `Box1` is not a single finished type; it is a type constructor that becomes `Box1[Int]` when given `Int`. That is why `Keeps` accepts `F : Type -> Type`: the class needs something that can build a concrete type from another type.
+## Real reusable shapes
 
-Use generics when the operation is truly the same across several types. Keep the first examples concrete, then add type-constructor parameters only when the abstraction needs to talk about containers, wrappers, or other type families.
+Lists, options, results, boxes, and identity helpers are natural generic shapes. They talk about how values move, not about one particular domain.
 
-Continue to [Callable Types](/learn/book/types/foundations/callable-types).
+## Type parameters need meaning
+
+Short names such as `T` are fine when the role is obvious. When there are several type parameters, choose names that explain the relationship: `Key`, `Value`, `Input`, `Output`, or a domain-specific name.
+
+Types are labels that prevent later guesswork. A ticket number, room name, function value, and generic box can all be written as values, but type notes say which promises the code expects to keep.
+
+Do not add type detail as decoration. Add it when it helps a reader, fixes an edge, explains a public surface, or lets generic code say exactly which kind of value it can accept.

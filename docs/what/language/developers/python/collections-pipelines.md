@@ -1,27 +1,31 @@
 ---
 title: "Collections and Pipelines"
-description: "Translate Python list operations into Musi arrays, stdlib helpers, and pipelines."
+description: "Read Collections and Pipelines as a Python habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Python Developers"
 order: 6
 slug: "collections-pipelines"
-summary: "Use arrays and pipeline-first stdlib helpers for visible collection flow."
+summary: "Translate the Python habit, then use the Musi Book for the full rule."
 ---
 
-Python list code often grows by applying one collection operation after another:
+A Python reader brings habits from names, dictionaries, classes, protocols, exceptions, None, imports, and duck typing. That helps with code around domain words before machinery, but the Musi page asks a narrower question: what contract should this lists, slices, maps, and pipelines example make visible?
 
-```python
-ports = [3000, 8080]
-visible = [*ports, 9000]
-visible
-```
+{{compare:python-collections-pipelines}}
 
-Musi arrays use `[]`. The pipeline operator puts the value being transformed on the left and the operation on the right.
+## Reading Collections and Pipelines from Python
 
-{{snippet:python-collections-pipelines}}
+On the Musi side, Musi collection examples keep indexing, field access, and pipelines explicit so a reader can see where each value comes from. Read the shared example through Python eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-Read the pipeline like a conveyor belt: `ports` enters, `iter.append` adds a port, and `iter.collect` leaves an array for the next step.
+## False friend
 
-## Why this matters for Python readers
+Do not import lazy iterators, stream chains, table conventions, or pointer arithmetic unless the Musi example needs that behavior. For a Python reader, the trap is trusting runtime convention where Musi expects a visible type or effect; Musi `class` is closer to an explicit protocol/typeclass than a Python class with attributes and methods.
 
-Python list comprehensions are compact. Musi favors a visible chain when multiple steps matter. That keeps later additions easy to review.
+## When this pays off
+
+Use this shape for prices, stops, animals, files, and other small batches where each step has a name. The Python instinct still helps here: Keep the Python habit of naming the real-world thing first.
+
+## Keep close
+
+- [Arrays and slices](/learn/book/data/arrays-and-slices)
+- [Records](/learn/book/data/records)
+- [Dot calls](/learn/book/core/dot-calls)

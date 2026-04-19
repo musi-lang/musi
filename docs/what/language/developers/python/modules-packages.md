@@ -1,36 +1,31 @@
 ---
 title: "Modules and Packages"
-description: "Translate Python imports and package files into Musi exports, imports, and package paths."
+description: "Read Modules and Packages as a Python habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Python Developers"
 order: 11
 slug: "modules-packages"
-summary: "Use export for public names and import for package or relative module boundaries."
+summary: "Translate the Python habit, then use the Musi Book for the full rule."
 ---
 
-Python modules export names by making them available at module scope:
+A Python reader brings habits from names, dictionaries, classes, protocols, exceptions, None, imports, and duck typing. That helps with code around domain words before machinery, but the Musi page asks a narrower question: what contract should this module and package boundaries example make visible?
 
-```python
-# ports.py
-def default_port() -> int:
-    return 8080
-```
+{{compare:python-modules-packages}}
 
-Musi marks public names with `export`.
+## Reading Modules and Packages from Python
 
-{{snippet:python-module-export}}
+On the Musi side, Musi imports bring named module values into scope, so package boundaries stay visible where code uses them. Read the shared example through Python eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-Another file imports the module and calls the exported function:
+## False friend
 
-```python
-import ports
+Do not rebuild a source-language global namespace, header include pile, or barrel file when one import names the owner. For a Python reader, the trap is trusting runtime convention where Musi expects a visible type or effect; Musi `class` is closer to an explicit protocol/typeclass than a Python class with attributes and methods.
 
-port = ports.default_port()
-port
-```
+## When this pays off
 
-Musi imports the module value and reads exported names from it.
+Use modules when billing, routing, text, option, runtime, or encoding code has an owner worth naming. The Python instinct still helps here: Keep the Python habit of naming the real-world thing first.
 
-{{snippet:python-module-import}}
+## Keep close
 
-Package imports such as `@std/io` are for shared packages. Relative imports such as `./ports` are for nearby project files.
+- [Imports and exports](/learn/book/organization/imports-and-exports)
+- [Packages](/learn/book/organization/packages)
+- [Foreign](/learn/book/advanced/foreign)

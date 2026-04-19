@@ -7,19 +7,20 @@ order: 10
 slug: "calls"
 summary: "Call functions directly and follow argument flow left to right."
 ---
-
-A call applies a callable value to arguments. Positional calls are compact; named calls are clearer when labels carry meaning.
+A call is where a named action receives its inputs. The shape is simple: the function name says what will happen, and the arguments say what it happens to.
 
 {{snippet:chapter-calls}}
 
-{{snippet:chapter-functions}}
+Calls are easiest to read when the arguments are already named. `sendInvoice(customer, invoice)` tells a clearer story than a call filled with nested construction. When an argument needs work, consider giving that work a name first.
 
-## Reading Model
+## Call sites are part of the design
 
-Read the example from top to bottom. The first visible name gives the reader a handle, the following expressions show how values move, and the final expression shows what leaves the example.
+The caller is often where an API succeeds or fails. A function that is technically correct but awkward to call will spread awkward code through the package. Prefer argument order that reads like an everyday sentence: actor, object, detail.
 
-## Practical Rule
+## Nested calls
 
-Use this form when it makes value movement clearer than copying habits from another language. Prefer the smallest form that still tells the reader where names, types, effects, and boundaries live.
+Nested calls are fine when each layer is short. They become hard when the reader has to count parentheses to understand the job. If a line starts to look like a stack of boxes, put one box on the table and name it.
 
-Continue to [Dot Calls](/learn/book/core/functions-and-calls/dot-calls).
+Core forms are the small hand tools of the language. Literals are raw materials, calls ask for work, operators join values, ranges mark spans, and lambdas carry a small action around. Each form should feel boring before you rely on it inside larger data or effect code.
+
+When a core form feels hard, place it in a plain story. A ticket price plus a fee, a room number in a range, a message sent through a callable, or a small action saved as a lambda is enough. The syntax matters because it keeps that story exact.

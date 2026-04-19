@@ -1,32 +1,31 @@
 ---
 title: "Structs, Records, and Field Updates"
-description: "Translate Go structs and struct literals into Musi records and field updates."
+description: "Read Structs, Records, and Field Updates as a Go habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Go Developers"
 order: 5
 slug: "structs-records-field-updates"
-summary: "Keep field names visible when constructing and updating data."
+summary: "Translate the Go habit, then use the Musi Book for the full rule."
 ---
 
-# Structs, Records, and Field Updates
+A Go reader brings habits from packages, structs, slices, nil, multiple returns, interfaces, goroutines, channels, and explicit errors. That helps with small named operations and direct data flow, but the Musi page asks a narrower question: what contract should this field-shaped data example make visible?
 
-Go structs make compact named data:
+{{compare:go-structs-records-field-updates}}
 
-```go
-type Endpoint struct {
-    Host   string
-    Port   int
-    Secure bool
-}
+## Reading Structs, Records, and Field Updates from Go
 
-local := Endpoint{Host: "localhost", Port: 8080, Secure: false}
-publicEndpoint := local
-publicEndpoint.Host = "api.example.com"
-publicEndpoint.Secure = true
-```
+On the Musi side, Musi records and data variants describe stored shape. Behavior belongs in functions or classes/instances, not inside an object by default. Read the shared example through Go eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-Musi record-style data keeps field names visible at construction and update sites.
+## False friend
 
-{{snippet:go-structs-records}}
+Do not read `class` as object shape. If the page is about a pet, invoice, room, or vehicle, start with fields or variants. For a Go reader, the trap is using absence or failure as a side channel because Go makes that cheap; Musi `class` is closer to an explicit interface constraint with instances; it is not a struct and not a method set attached by package convention.
 
-Use record updates when the new value is mostly the old value with a few changed fields.
+## When this pays off
+
+Use records when names like `owner`, `age`, `amount`, or `route` are the point of the value. The Go instinct still helps here: Keep the Go habit of writing the small thing first and naming package boundaries clearly.
+
+## Keep close
+
+- [Records](/learn/book/data/records)
+- [Classes](/learn/book/abstractions/classes)
+- [Patterns](/learn/book/data/patterns)

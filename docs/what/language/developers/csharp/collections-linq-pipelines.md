@@ -1,27 +1,31 @@
 ---
 title: "Collections, LINQ, and Pipelines"
-description: "Translate C# collection and LINQ habits into Musi arrays, stdlib helpers, and pipelines."
+description: "Read Collections, LINQ, and Pipelines as a C# habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "C# Developers"
 order: 6
 slug: "collections-linq-pipelines"
-summary: "Use arrays and pipeline-first stdlib helpers for visible collection flow."
+summary: "Translate the C# habit, then use the Musi Book for the full rule."
 ---
 
-C# 12.0 collection expressions make small arrays direct:
+LINQ can make a pipeline read like a sentence, but it can also hide where the shape changes. Musi examples name each domain value so the pipeline does not become the explanation.
 
-```csharp
-int[] ports = [3000, 8080];
-int[] visible = [.. ports, 9000];
-visible;
-```
+{{compare:csharp-collections-linq-pipelines}}
 
-Musi arrays use `[]`, and pipelines keep transformations left to right.
+## Reading Collections, LINQ, and Pipelines from C#
 
-{{snippet:csharp-collections-linq-pipelines}}
+On the Musi side, Musi collection examples keep indexing, field access, and pipelines explicit so a reader can see where each value comes from. Read the shared example through C# eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-Read the pipeline like a conveyor: the collection enters on the left, each helper does one step, and the final value leaves on the right.
+## False friend
 
-## LINQ habit
+Do not import lazy iterators, stream chains, table conventions, or pointer arithmetic unless the Musi example needs that behavior. For a C# reader, the trap is mapping Musi classes to object classes or service containers; Musi `class` is a typeclass-style behavior contract, not a CLR class with fields, constructors, and inheritance.
 
-LINQ chains are useful because readers can follow each operation. Musi pipelines keep that same shape, with the data flow visible at the beginning of each line.
+## When this pays off
+
+Use this shape for prices, stops, animals, files, and other small batches where each step has a name. The C# instinct still helps here: Keep the C# habit of making api shape readable at the call site.
+
+## Keep close
+
+- [Arrays and slices](/learn/book/data/arrays-and-slices)
+- [Records](/learn/book/data/records)
+- [Dot calls](/learn/book/core/dot-calls)

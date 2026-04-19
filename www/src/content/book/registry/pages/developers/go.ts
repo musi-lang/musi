@@ -4,9 +4,8 @@ export const goDeveloperPages = [
 	{
 		id: "go-overview",
 		partId: "developers",
-		path: "/docs/book/developers/go/overview",
+		path: "/docs/guides/go/overview",
 		aliases: [
-			"/docs/book/developers/guides/go/overview",
 			"/docs/language/developers/go/overview",
 			"/learn/language/developers/go/overview",
 		],
@@ -16,9 +15,8 @@ export const goDeveloperPages = [
 	{
 		id: "go-values-functions-expressions",
 		partId: "developers",
-		path: "/docs/book/developers/go/values-functions-expressions",
+		path: "/docs/guides/go/values-functions-expressions",
 		aliases: [
-			"/docs/book/developers/guides/go/values-functions-expressions",
 			"/docs/language/developers/go/values-functions-expressions",
 			"/learn/language/developers/go/values-functions-expressions",
 		],
@@ -29,9 +27,8 @@ export const goDeveloperPages = [
 	{
 		id: "go-blocks-branching-loops",
 		partId: "developers",
-		path: "/docs/book/developers/go/blocks-branching-loops",
+		path: "/docs/guides/go/blocks-branching-loops",
 		aliases: [
-			"/docs/book/developers/guides/go/blocks-branching-loops",
 			"/docs/language/developers/go/blocks-branching-loops",
 			"/learn/language/developers/go/blocks-branching-loops",
 		],
@@ -41,9 +38,8 @@ export const goDeveloperPages = [
 	{
 		id: "go-variables-short-declarations-mutation",
 		partId: "developers",
-		path: "/docs/book/developers/go/variables-short-declarations-mutation",
+		path: "/docs/guides/go/variables-short-declarations-mutation",
 		aliases: [
-			"/docs/book/developers/guides/go/variables-short-declarations-mutation",
 			"/docs/language/developers/go/variables-short-declarations-mutation",
 			"/learn/language/developers/go/variables-short-declarations-mutation",
 		],
@@ -54,9 +50,8 @@ export const goDeveloperPages = [
 	{
 		id: "go-structs-records-field-updates",
 		partId: "developers",
-		path: "/docs/book/developers/go/structs-records-field-updates",
+		path: "/docs/guides/go/structs-records-field-updates",
 		aliases: [
-			"/docs/book/developers/guides/go/structs-records-field-updates",
 			"/docs/language/developers/go/structs-records-field-updates",
 			"/learn/language/developers/go/structs-records-field-updates",
 		],
@@ -67,9 +62,8 @@ export const goDeveloperPages = [
 	{
 		id: "go-slices-arrays-maps-pipelines",
 		partId: "developers",
-		path: "/docs/book/developers/go/slices-arrays-maps-pipelines",
+		path: "/docs/guides/go/slices-arrays-maps-pipelines",
 		aliases: [
-			"/docs/book/developers/guides/go/slices-arrays-maps-pipelines",
 			"/docs/language/developers/go/slices-arrays-maps-pipelines",
 			"/learn/language/developers/go/slices-arrays-maps-pipelines",
 		],
@@ -80,9 +74,8 @@ export const goDeveloperPages = [
 	{
 		id: "go-nil-option-result",
 		partId: "developers",
-		path: "/docs/book/developers/go/nil-option-result",
+		path: "/docs/guides/go/nil-option-result",
 		aliases: [
-			"/docs/book/developers/guides/go/nil-option-result",
 			"/docs/language/developers/go/nil-option-result",
 			"/learn/language/developers/go/nil-option-result",
 		],
@@ -92,9 +85,8 @@ export const goDeveloperPages = [
 	{
 		id: "go-errors-results-effects",
 		partId: "developers",
-		path: "/docs/book/developers/go/errors-results-effects",
+		path: "/docs/guides/go/errors-results-effects",
 		aliases: [
-			"/docs/book/developers/guides/go/errors-results-effects",
 			"/docs/language/developers/go/errors-results-effects",
 			"/learn/language/developers/go/errors-results-effects",
 		],
@@ -104,9 +96,8 @@ export const goDeveloperPages = [
 	{
 		id: "go-goroutines-channels-context-effects",
 		partId: "developers",
-		path: "/docs/book/developers/go/goroutines-channels-context-effects",
+		path: "/docs/guides/go/goroutines-channels-context-effects",
 		aliases: [
-			"/docs/book/developers/guides/go/goroutines-channels-context-effects",
 			"/docs/language/developers/go/goroutines-channels-context-effects",
 			"/learn/language/developers/go/goroutines-channels-context-effects",
 		],
@@ -117,9 +108,8 @@ export const goDeveloperPages = [
 	{
 		id: "go-interfaces-classes-laws",
 		partId: "developers",
-		path: "/docs/book/developers/go/interfaces-classes-laws",
+		path: "/docs/guides/go/interfaces-classes-laws",
 		aliases: [
-			"/docs/book/developers/guides/go/interfaces-classes-laws",
 			"/docs/language/developers/go/interfaces-classes-laws",
 			"/learn/language/developers/go/interfaces-classes-laws",
 		],
@@ -129,9 +119,8 @@ export const goDeveloperPages = [
 	{
 		id: "go-generics-type-constructors",
 		partId: "developers",
-		path: "/docs/book/developers/go/generics-type-constructors",
+		path: "/docs/guides/go/generics-type-constructors",
 		aliases: [
-			"/docs/book/developers/guides/go/generics-type-constructors",
 			"/docs/language/developers/go/generics-type-constructors",
 			"/learn/language/developers/go/generics-type-constructors",
 		],
@@ -142,9 +131,8 @@ export const goDeveloperPages = [
 	{
 		id: "go-methods-receiver-calls",
 		partId: "developers",
-		path: "/docs/book/developers/go/methods-receiver-calls",
+		path: "/docs/guides/go/methods-receiver-calls",
 		aliases: [
-			"/docs/book/developers/guides/go/methods-receiver-calls",
 			"/docs/language/developers/go/methods-receiver-calls",
 			"/learn/language/developers/go/methods-receiver-calls",
 		],
@@ -154,9 +142,8 @@ export const goDeveloperPages = [
 	{
 		id: "go-packages-imports-exports",
 		partId: "developers",
-		path: "/docs/book/developers/go/packages-imports-exports",
+		path: "/docs/guides/go/packages-imports-exports",
 		aliases: [
-			"/docs/book/developers/guides/go/packages-imports-exports",
 			"/docs/language/developers/go/packages-imports-exports",
 			"/learn/language/developers/go/packages-imports-exports",
 		],
@@ -166,9 +153,8 @@ export const goDeveloperPages = [
 	{
 		id: "go-testing-tooling",
 		partId: "developers",
-		path: "/docs/book/developers/go/testing-tooling",
+		path: "/docs/guides/go/testing-tooling",
 		aliases: [
-			"/docs/book/developers/guides/go/testing-tooling",
 			"/docs/language/developers/go/testing-tooling",
 			"/learn/language/developers/go/testing-tooling",
 		],
@@ -178,9 +164,8 @@ export const goDeveloperPages = [
 	{
 		id: "go-unsafe-cgo-ffi",
 		partId: "developers",
-		path: "/docs/book/developers/go/unsafe-cgo-ffi",
+		path: "/docs/guides/go/unsafe-cgo-ffi",
 		aliases: [
-			"/docs/book/developers/guides/go/unsafe-cgo-ffi",
 			"/docs/language/developers/go/unsafe-cgo-ffi",
 			"/learn/language/developers/go/unsafe-cgo-ffi",
 		],

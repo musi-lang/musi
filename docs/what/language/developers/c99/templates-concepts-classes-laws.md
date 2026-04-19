@@ -1,37 +1,31 @@
 ---
 title: "Macros, Generics, Classes, and Laws"
-description: "Translate C99 macro-style generic helpers and behavior conventions into Musi type parameters and classes."
+description: "Read Macros, Generics, Classes, and Laws as a C99 habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "C Developers"
 order: 10
 slug: "templates-concepts-classes-laws"
-summary: "Use type parameters for reusable values and classes for reusable behavior."
+summary: "Translate the C99 habit, then use the Musi Book for the full rule."
 ---
 
-# Macros, Generics, Classes, and Laws
+A C reader brings habits from headers, translation units, pointers, arrays, `errno`, sentinel returns, and small functions that trust callers. That helps with cost, layout, and the exact boundary where bytes cross into code, but the Musi page asks a narrower question: what contract should this generic behavior contracts example make visible?
 
-C99 reaches for macros when one operation should work across repeated shapes:
+{{compare:c99-templates-concepts-classes-laws}}
 
-```c
-#define IDENTITY_INT(input) (input)
+## Reading Macros, Generics, Classes, and Laws from C99
 
-int answer = IDENTITY_INT(21);
-```
+On the Musi side, Musi classes name behavior a type can provide, instances provide it, and laws document promises callers rely on. Read the shared example through C99 eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-Musi uses type parameters instead of macro expansion for reusable values.
+## False friend
 
-{{snippet:c99-generic-function}}
+Do not confuse a Musi class with stored object state, inheritance, or a metatable. Shape and behavior are separate. For a C reader, the trap is treating convention as a contract; Musi `class` is not a C struct with function pointers; records/data carry shape, classes name behavior a type can provide.
 
-C libraries often describe required behavior by convention and documentation:
+## When this pays off
 
-```c
-typedef struct Vehicle Vehicle;
+Use classes when many types share an operation such as compare, show, step, encode, or measure. The C99 instinct still helps here: Keep the C habit of asking where memory, symbols, and failures come from.
 
-typedef struct {
-    int (*wheels)(const Vehicle *self);
-} VehicleOps;
-```
+## Keep close
 
-Musi classes state the required operations and laws directly.
-
-{{snippet:c99-concept-class-law}}
+- [Generics](/learn/book/types/generics)
+- [Classes](/learn/book/abstractions/classes)
+- [Laws](/learn/book/abstractions/laws)

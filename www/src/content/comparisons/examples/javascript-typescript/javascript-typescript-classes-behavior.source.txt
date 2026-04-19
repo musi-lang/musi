@@ -1,0 +1,3 @@
+interface Show<T> {
+  show(value: T): string;
+}

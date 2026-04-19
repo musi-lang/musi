@@ -4,10 +4,10 @@ export const pythonDeveloperSnippets = [
 	{
 		id: "python-values-functions",
 		language: "musi",
-		sourceText: `let total (base : Int, fee : Int) : Int := base + fee;
+		sourceText: `let total (orderTotal : Int, serviceFee : Int) : Int := orderTotal + serviceFee;
 
-let answer := total(1200, 45);
-answer;`,
+let invoiceTotal := total(1200, 45);
+invoiceTotal;`,
 		evidence: {
 			path: "docs/what/language/developers/python/values-functions.md",
 			line: 1,
@@ -125,8 +125,8 @@ visible;`,
 
 let lookupPort (name : String) : option.Option[Int] :=
   match name (
-  | "admin" => option.some[Int](9000)
-  | _ => option.none[Int]()
+  | "admin" => option.someOf[Int](9000)
+  | _ => option.noneOf[Int]()
   );
 
 let port := lookupPort("web")

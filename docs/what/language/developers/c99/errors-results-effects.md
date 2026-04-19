@@ -1,45 +1,31 @@
 ---
 title: "Errors, Results, and Effects"
-description: "Translate C99 status codes, out-parameters, and host interaction into Musi Result values and effect boundaries."
+description: "Read Errors, Results, and Effects as a C99 habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "C Developers"
 order: 8
 slug: "errors-results-effects"
-summary: "Keep expected failure as data and outside work behind effectful APIs."
+summary: "Translate the C99 habit, then use the Musi Book for the full rule."
 ---
 
-# Errors, Results, and Effects
+A null pointer or `-1` return in C depends on everyone remembering the convention. Musi moves that convention into `Option` so the empty ticket or missing badge cannot be ignored accidentally.
 
-C99 commonly returns a status and writes successful output through a pointer:
+{{compare:c99-errors-results-effects}}
 
-```c
-typedef enum {
-    PARSE_OK,
-    PARSE_ERROR
-} ParseStatus;
+## Reading Errors, Results, and Effects from C99
 
-ParseStatus parse_port(const char *text, int *out_port) {
-    if (text[0] == '8') {
-        *out_port = 8080;
-        return PARSE_OK;
-    }
-    return PARSE_ERROR;
-}
-```
+On the Musi side, Musi uses `option.someOf` and `option.noneOf` when absence is expected, so callers handle the empty branch deliberately. Read the shared example through C99 eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-Musi keeps expected failure in the returned value.
+## False friend
 
-{{snippet:c99-errors-results}}
+Do not translate null, nil, None, or undefined as a quiet ordinary value. For a C reader, the trap is treating convention as a contract; Musi `class` is not a C struct with function pointers; records/data carry shape, classes name behavior a type can provide.
 
-C host interaction usually calls library APIs directly:
+## When this pays off
 
-```c
-char name[64];
-printf("name> ");
-fgets(name, sizeof name, stdin);
-printf("%s", name);
-```
+Use Option when a badge, ticket, receipt, search result, or lookup may honestly be missing. The C99 instinct still helps here: Keep the C habit of asking where memory, symbols, and failures come from.
 
-Musi keeps console work at effectful boundaries.
+## Keep close
 
-{{snippet:c99-effect-boundary}}
+- [Effects](/learn/book/effects-runtime/effects)
+- [Using](/learn/book/effects-runtime/using)
+- [Handlers](/learn/book/effects-runtime/handlers)

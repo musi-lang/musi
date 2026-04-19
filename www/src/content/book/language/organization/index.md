@@ -8,23 +8,12 @@ slug: "organization"
 summary: "Grow from one file to packages without changing the mental model of code flow."
 ---
 
-This part explains how Musi code grows past one scratch file.
-Files stay important, but packages, imports, and exports become necessary once code needs boundaries, reuse, and repeatable commands.
-The goal is to grow code organization without breaking the simple mental model from start chapters.
+Organization begins when one file stops being enough. The language does not change at that moment, but the reading problem does. A reader now needs to know which file owns which idea, which names cross file boundaries, and which settings make the project repeatable.
 
-## Path Through This Part
+Files are the first boundary. A file should have one main reason to exist: invoices, addresses, animal records, command-line entry, or runtime helpers. Packages are the larger boundary. A package says these files ship together, share configuration, and form one project.
 
-This section teaches file-level thinking, package structure, and explicit module boundaries.
-You will see where code lives, how projects are created, and how names move across file edges.
+Imports and exports are the hallway between rooms. Imports show what a file needs from outside. Exports show what the file promises to other files. That promise matters. Once a helper is exported, it stops being private craft and becomes part of the package's public face.
 
-## What This Part Solves
+This part is intentionally practical. It is about keeping a codebase navigable when examples turn into projects. A small recipe app may start as one file; later it may split ingredients, lists, and meal plans. A payment tool may split card validation, receipt format, and audit logging. The split should help readers find the right room.
 
-Many guides overload readers by mixing package ceremony into first syntax lesson.
-That is wrong direction.
-Users should first understand one file well, then learn how to organize many files without losing track of what each boundary is for.
-
-## How to Read It
-
-Read these pages as scaling story.
-First stabilize one-file flow, then move to package commands, then add imports and exports where code genuinely needs boundaries.
-At each step, ask whether the new structure solves a real organization problem instead of adding ceremony for its own sake.
+By the end, you should know when to add a file, when to keep a helper private, and when a package setting belongs in `musi.json` instead of one person's editor.

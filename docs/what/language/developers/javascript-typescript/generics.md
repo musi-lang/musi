@@ -1,37 +1,31 @@
 ---
 title: "Generics and Type Parameters"
-description: "Translate TypeScript generic functions and generic objects into Musi type parameters."
+description: "Read Generics and Type Parameters as a JavaScript and TypeScript habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "JavaScript and TypeScript Developers"
 order: 8
 slug: "generics"
-summary: "TypeScript type parameters map to Musi bracketed type parameters."
+summary: "Translate the JavaScript and TypeScript habit, then use the Musi Book for the full rule."
 ---
 
-TypeScript generic functions keep one implementation for many input types:
+A TypeScript reader brings habits from objects, structural types, unions, undefined, promises, imports, npm packages, and prototype-shaped history. That helps with flexible shapes and fast feedback from type tooling, but the Musi page asks a narrower question: what contract should this generic behavior contracts example make visible?
 
-```typescript
-function identity<T>(input: T): T {
-  return input;
-}
+{{compare:javascript-typescript-generics}}
 
-const port = identity<number>(8080);
-port;
-```
+## Reading Generics and Type Parameters from JavaScript/TypeScript
 
-Musi uses bracketed type parameters on the function name.
+On the Musi side, Musi classes name behavior a type can provide, instances provide it, and laws document promises callers rely on. Read the shared example through JavaScript/TypeScript eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-{{snippet:js-ts-generic-function}}
+## False friend
 
-Generic data uses the same bracketed type parameter shape.
+Do not confuse a Musi class with stored object state, inheritance, or a metatable. Shape and behavior are separate. For a TypeScript reader, the trap is assuming runtime object shape and compile-time behavior contract are the same thing; Musi `class` is not a JS constructor or TS class; it is a behavior contract implemented separately from record/data shape.
 
-```typescript
-type Box<T> = {
-  value: T;
-};
+## When this pays off
 
-const boxed: Box<number> = { value: 8080 };
-boxed.value;
-```
+Use classes when many types share an operation such as compare, show, step, encode, or measure. The JavaScript/TypeScript instinct still helps here: Keep the TypeScript habit of reading the shape before reading implementation details.
 
-{{snippet:js-ts-generic-data}}
+## Keep close
+
+- [Generics](/learn/book/types/generics)
+- [Classes](/learn/book/abstractions/classes)
+- [Laws](/learn/book/abstractions/laws)

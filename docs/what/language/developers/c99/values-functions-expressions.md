@@ -1,39 +1,31 @@
 ---
 title: "Values, Functions, and Expressions"
-description: "Translate C99 declarations, functions, and named arguments into Musi expression-oriented bindings."
+description: "Read Values, Functions, and Expressions as a C99 habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "C Developers"
 order: 2
 slug: "values-functions-expressions"
-summary: "C functions and call sites map to Musi let functions, expression bodies, and named calls."
+summary: "Translate the C99 habit, then use the Musi Book for the full rule."
 ---
 
-# Values, Functions, and Expressions
+C often splits a tiny calculation across declarations because headers and prototypes shape the file. In Musi, the receipt total can be the function body itself when no pointer or status channel is involved.
 
-C99 separates declarations, statements, and expressions. A value usually leaves a function through `return`:
+{{compare:c99-values-functions-expressions}}
 
-```c
-int total(int base_price, int fee) {
-    return base_price + fee;
-}
+## Reading Values, Functions, and Expressions from C99
 
-int answer = total(1200, 45);
-```
+On the Musi side, Musi lets a calculation be a `let`, a function, or a final expression without wrapping it in an object or framework first. Read the shared example through C99 eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-Musi keeps the same input and output types, but the body is the produced value.
+## False friend
 
-{{snippet:c99-values-functions}}
+Do not preserve call ceremony just because the source language needs it for methods, receivers, overloads, or closures. For a C reader, the trap is treating convention as a contract; Musi `class` is not a C struct with function pointers; records/data carry shape, classes name behavior a type can provide.
 
-C call sites depend on parameter order:
+## When this pays off
 
-```c
-int render(int port, int secure) {
-    return port;
-}
+Use this shape when a receipt total, label, distance, or score is pure data moving through named calls. The C99 instinct still helps here: Keep the C habit of asking where memory, symbols, and failures come from.
 
-int selected = render(8080, 1);
-```
+## Keep close
 
-Musi can name arguments where the call benefits from visible roles.
-
-{{snippet:c99-named-calls}}
+- [Values and let](/learn/book/start/values-and-let)
+- [Functions](/learn/book/core/functions)
+- [Calls](/learn/book/core/calls)

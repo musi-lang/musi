@@ -8,26 +8,12 @@ slug: "start"
 summary: "Begin with setup, one file, one binding model, one expression model, then explicit mutation."
 ---
 
-Start here if Musi is new, but expect more than a checklist.
-This part gives you the first working model of the language: files read top to bottom, `let` names values, blocks produce results, and mutation stays explicit instead of ambient.
-The goal is quick traction without burying you under package structure or advanced abstractions.
+The Start part is the front door of Musi Book. It does not try to teach every feature at once. It teaches the first reading habit: a file contains named declarations, and each declaration gives the next reader a stable thing to talk about.
 
-Think of it like setting up a small workbench before you build the rest of the room.
-You need one file, one binding model, and one expression model first, because the later chapters assume those habits already feel normal.
+Begin here even if you already know another language. Musi uses familiar words such as `let`, function, block, and mutation, but the way those pieces fit together is easier to learn in this order. The first few chapters keep the program small enough that you can run the example, read the result, and still remember every name in the file.
 
-## Path Through This Part
+A good first pass through this part feels like walking through a small workshop. Getting Started shows the tools on the bench. First Program gives you one useful object to make. Reading Musi Code teaches how to scan the labels before worrying about every symbol. Values and Let teaches how to name the pieces. Blocks and Expressions show how several steps become one result. Mutation comes last because changing state is easier to understand after stable values feel ordinary.
 
-This part teaches first Musi habits you will reuse everywhere: install the toolchain, write one file, bind values, read expressions, and recognize when state changes are explicit.
-Each chapter stays narrow, but each one should answer a real beginner question instead of only naming a topic.
+Use modest examples: a grocery list, receipt line, pet profile, or appointment reminder. The point is not the domain. The point is learning how a Musi file explains itself.
 
-## What This Part Solves
-
-Too little detail creates immediate "how do I actually do this?" gaps.
-Too much detail creates wall-of-text fatigue before the core reading model even lands.
-This section aims for middle ground: enough examples to make first files feel practical, but small enough that every page still unlocks one new idea at a time.
-
-## How to Read It
-
-Read these chapters in order.
-Try each example in a scratch file, keep names concrete, and stop to restate what value a file or block produces before moving on.
-If one page still feels fuzzy, repeat its tiny example before piling on the next concept.
+After this part, you should be comfortable with three questions: what names are introduced, which names are public, and what value each expression returns. That is enough structure to move into the rest of the book.

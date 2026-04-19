@@ -7,38 +7,22 @@ order: 34
 slug: "templates-and-splices"
 summary: "Use template literals for interpolated text and splice forms when building syntax."
 ---
+Templates and splices help generate repeated code from a smaller pattern. They are useful when many declarations share the same structure but differ in a few names or types.
 
 {{snippet:chapter-templates-and-splices}}
 
-## Boundary Tool
+Think of a template like a form letter. It saves time only if the shared shape is real. If every filled-in copy needs special exceptions, write the declarations directly.
 
-Template literals use backticks and `${...}` interpolation.
-They are useful when surrounding text and computed values belong together.
-Splice forms such as `#x`, `#(expr)`, and `#[items]` appear in syntax-building contexts where existing values contribute pieces to quoted code.
+## Repetition versus regularity
 
-## When to Reach for It
+Repeated code is not always a problem. Regular repeated code can be generated safely. Irregular repeated code is often clearer when written out.
 
-String assembly and syntax assembly look similar from far away, but they answer different questions.
-Templates produce text-like values.
-Splices feed existing values into quoted syntax.
-Keeping both forms named helps readers avoid treating every interpolation as a macro.
+## Review the result
 
-## Read the Boundary
+Generated declarations should be easy to inspect. If the splice makes formatter output, diagnostics, or semantic highlighting confusing, the template is doing too much.
 
-Read `` `port ${port}` `` as text with one embedded expression.
-Read `#(delta)` inside a quote as a syntax splice, not as string interpolation.
-Use templates for user-facing text and splices for code-as-data work.
+Templates work best for regular families: one operation per field, one wrapper per foreign symbol, or one test case per known example. They work poorly when each generated piece immediately needs hand-written exceptions. In that case the repetition is telling you about missing design, not missing automation.
 
-## Small Exercise
+Advanced chapters are tools for edges: metadata, native calls, compile-time work, syntax values, and command-line use. They matter most when ordinary declarations are no longer enough to describe a boundary.
 
-- Build one template value with a named binding inside it.
-- Compare it with a quoted expression that uses `#(...)`.
-- Explain which one produces text and which one produces syntax.
-
-## Mistake to Avoid
-
-Do not use syntax splices to build ordinary strings. Use templates for text.
-
-## Next Page
-
-Continue to [Testing](/learn/book/advanced/testing) to return to everyday project workflow.
+Use advanced forms like locked cabinets, not like kitchen drawers. Reach for them when a tool, runtime, foreign library, or build step truly needs the extra signal. Keep normal program logic in normal declarations.

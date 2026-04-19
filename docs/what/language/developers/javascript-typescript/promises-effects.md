@@ -1,33 +1,31 @@
 ---
 title: "Promises, Async, and I/O Boundaries"
-description: "Translate JavaScript promises and TypeScript async boundaries into Musi stdlib I/O."
+description: "Read Promises, Async, and I/O Boundaries as a JavaScript and TypeScript habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "JavaScript and TypeScript Developers"
 order: 9
 slug: "promises-effects"
-summary: "Boundary work that JavaScript models with promises usually starts at `@std/io` in Musi."
+summary: "Translate the JavaScript and TypeScript habit, then use the Musi Book for the full rule."
 ---
 
-JavaScript uses promises for input that arrives from outside the current stack:
+Promises make time and outside work composable in TypeScript. Musi uses effects to name the outside request first, then lets handlers or runtime code decide how it runs.
 
-```javascript
-async function readName(consoleApi) {
-  const name = await consoleApi.readLine("name> ");
-  console.log(name.trim());
-}
-```
+{{compare:javascript-typescript-promises-effects}}
 
-TypeScript adds the promised result type:
+## Reading Promises, Async, and I/O Boundaries from JavaScript/TypeScript
 
-```typescript
-async function readName(consoleApi: ConsoleApi): Promise<void> {
-  const name: string = await consoleApi.readLine("name> ");
-  console.log(name.trim());
-}
-```
+On the Musi side, Musi names outside work with effects and `request`, instead of hiding time, files, console work, or services inside an ordinary-looking call. Read the shared example through JavaScript/TypeScript eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-Musi code normally reaches for the standard library wrapper. `@std/io` sits above the runtime request and gives user code stable names.
+## False friend
 
-{{snippet:js-ts-promise-effect}}
+Do not make an effect look pure. A clock, process, network service, or console changes the trust boundary. For a TypeScript reader, the trap is assuming runtime object shape and compile-time behavior contract are the same thing; Musi `class` is not a JS constructor or TS class; it is a behavior contract implemented separately from record/data shape.
 
-Use stdlib modules when they exist. Define custom effects when you are designing a capability that the standard library does not already name.
+## When this pays off
+
+Use effects when the program asks the runtime, OS, user, or another service for an answer. The JavaScript/TypeScript instinct still helps here: Keep the TypeScript habit of reading the shape before reading implementation details.
+
+## Keep close
+
+- [Effects](/learn/book/effects-runtime/effects)
+- [Using](/learn/book/effects-runtime/using)
+- [Handlers](/learn/book/effects-runtime/handlers)

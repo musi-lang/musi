@@ -7,17 +7,16 @@ order: 2
 slug: "first-program"
 summary: "Write one file, bind one value, and run it end to end."
 ---
-
-A Musi program can be small enough to read in one breath: bind a value, end with a value, and let the tool check the file.
+A first Musi program should show the shape of a real file: import what it needs, name a value, and export the part another file or tool can call. The goal is not to memorize every form. The goal is to see that a Musi file is mostly a list of declarations that can be read from top to bottom.
 
 {{snippet:chapter-first-program}}
 
-Read the semicolon after `let answer := 42;` as "this statement is done." Read the final `answer;` as the value the file leaves behind. That final-expression habit appears everywhere in Musi.
+The example is small on purpose. It has the same bones as a larger program that prints a shipping label, prepares a pet feeding schedule, or checks whether a meeting room is free. There are names for data, there are expressions that make new values, and there is one exported entry point.
 
-C-like languages often teach a program as a function that returns. Musi starts smaller: an expression can already be the result. Functions come next, once naming a reusable action matters.
+## What to notice first
 
-## Reading a File
+Look for `let` before looking for clever syntax. `let` introduces a name, and the rest of the line tells you what value that name receives. When a declaration is exported, it becomes part of the file's public face. When it is not exported, it is a helper for this file.
 
-Read top to bottom. Names become available after their `let`. Later expressions use earlier names. There is no hidden global setup in this example, and there is no ordinary `return` keyword at the end.
+## Growing without losing the thread
 
-Continue to [Values and Let](/learn/book/start/foundations/values-and-let).
+The next useful change is usually another named helper, not a larger expression. If a line starts to describe three ideas at once, give one idea a name. A receipt formatter might split `subtotal`, `tax`, and `message`; a game rule might split `canMove`, `nextSquare`, and `winner`.

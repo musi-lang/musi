@@ -4,10 +4,10 @@ export const cpp17DeveloperSnippets = [
 	{
 		id: "cpp17-values-functions",
 		language: "musi",
-		sourceText: `let total (basePrice : Int, fee : Int) : Int := basePrice + fee;
+		sourceText: `let orderTotal (basePrice : Int, rushFee : Int) : Int := basePrice + rushFee;
 
-let answer := total(1200, 45);
-answer;`,
+let charge := orderTotal(2400, 150);
+charge;`,
 		evidence: {
 			path: "docs/what/language/developers/cpp17/values-functions-expressions.md",
 			line: 1,
@@ -16,10 +16,10 @@ answer;`,
 	{
 		id: "cpp17-named-calls",
 		language: "musi",
-		sourceText: `let render (port : Int, secure : Bool) : Int := port;
+		sourceText: `let renderBadge (port : Int, secure : Bool) : Int := port;
 
-let selected := render(port := 8080, secure := 0 = 0);
-selected;`,
+let selectedPort := renderBadge(port := 8080, secure := 1 = 1);
+selectedPort;`,
 		evidence: {
 			path: "docs/what/language/developers/cpp17/values-functions-expressions.md",
 			line: 1,
@@ -28,14 +28,14 @@ selected;`,
 	{
 		id: "cpp17-block-expression",
 		language: "musi",
-		sourceText: `let invoiceTotal () : Int :=
+		sourceText: `let receiptTotal () : Int :=
   (
-    let basePrice := 1200;
-    let fee := 45;
-    basePrice + fee
+    let subtotal := 1200;
+    let handling := 45;
+    subtotal + handling
   );
 
-invoiceTotal();`,
+receiptTotal();`,
 		evidence: {
 			path: "docs/what/language/developers/cpp17/blocks-control-flow.md",
 			line: 1,
@@ -44,13 +44,13 @@ invoiceTotal();`,
 	{
 		id: "cpp17-recursive-control-flow",
 		language: "musi",
-		sourceText: `let rec totalSeats (remaining : Int, seats : Int) : Int :=
+		sourceText: `let rec countSeats (remaining : Int, seats : Int) : Int :=
   match remaining (
   | 0 => seats
-  | _ => totalSeats(remaining - 1, seats + 4)
+  | _ => countSeats(remaining - 1, seats + 4)
   );
 
-totalSeats(3, 0);`,
+countSeats(3, 0);`,
 		evidence: {
 			path: "docs/what/language/developers/cpp17/blocks-control-flow.md",
 			line: 1,
@@ -59,11 +59,11 @@ totalSeats(3, 0);`,
 	{
 		id: "cpp17-variables-mutation",
 		language: "musi",
-		sourceText: `let visits := mut 0;
-visits := visits + 1;
+		sourceText: `let queueDepth := mut 0;
+queueDepth := queueDepth + 1;
 
-let nextVisits := visits + 1;
-nextVisits;`,
+let nextDepth := queueDepth + 1;
+nextDepth;`,
 		evidence: {
 			path: "docs/what/language/developers/cpp17/variables-mutation.md",
 			line: 1,
@@ -124,8 +124,8 @@ visible;`,
 
 let lookupPort (name : String) : option.Option[Int] :=
   match name (
-  | "admin" => option.some[Int](9000)
-  | _ => option.none[Int]()
+  | "admin" => option.someOf[Int](9000)
+  | _ => option.noneOf[Int]()
   );
 
 let port := lookupPort("web")

@@ -1,37 +1,31 @@
 ---
 title: "None, Option, and Result"
-description: "Translate Python None and ordinary failure values into Musi Option and Result."
+description: "Read None, Option, and Result as a Python habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Python Developers"
 order: 7
 slug: "none-option-result"
-summary: "Use Option for maybe-present values and Result for ordinary success-or-error data."
+summary: "Translate the Python habit, then use the Musi Book for the full rule."
 ---
 
-Python commonly uses `None` when a value might be missing:
+Python None is useful but quiet. Musi Option makes absence a branch the caller sees before touching the value.
 
-```python
-def lookup_port(name: str) -> int | None:
-    match name:
-        case "admin":
-            return 9000
-        case _:
-            return None
+{{compare:python-none-option-result}}
 
-port = lookup_port("web") or 8080
-port
-```
+## Reading None, Option, and Result from Python
 
-Musi uses `Option` so absence is visible in the type and at the call site.
+On the Musi side, Musi uses `option.someOf` and `option.noneOf` when absence is expected, so callers handle the empty branch deliberately. Read the shared example through Python eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-{{snippet:python-none-option}}
+## False friend
 
-The caller decides the fallback. The function only reports whether it found a value.
+Do not translate null, nil, None, or undefined as a quiet ordinary value. For a Python reader, the trap is trusting runtime convention where Musi expects a visible type or effect; Musi `class` is closer to an explicit protocol/typeclass than a Python class with attributes and methods.
 
-## Result for ordinary failure
+## When this pays off
 
-When Python returns a value or raises for ordinary input failure, Musi can model that as data.
+Use Option when a badge, ticket, receipt, search result, or lookup may honestly be missing. The Python instinct still helps here: Keep the Python habit of naming the real-world thing first.
 
-{{snippet:python-result-value}}
+## Keep close
 
-Use `Option` for missing value. Use `Result` when the error carries information a caller may read.
+- [Data definitions](/learn/book/data/data-definitions)
+- [Patterns](/learn/book/data/patterns)
+- [Effects](/learn/book/effects-runtime/effects)

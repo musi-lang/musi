@@ -7,17 +7,20 @@ order: 12
 slug: "records"
 summary: "Build named-field values and access fields directly."
 ---
-
-Records group named fields. Use them when names matter more than position. Spread updates start from an existing record and replace the named fields shown.
+Records gather named fields into one value. They are the right tool when the parts matter independently: a person has a name and age, a package has a weight and destination, and a car has a make and mileage.
 
 {{snippet:chapter-records}}
 
-## Reading Model
+Field names let code stay readable as the value grows. A record with three fields can become a record with five fields without asking every reader to remember positions.
 
-Read the example from top to bottom. The first visible name gives the reader a handle, the following expressions show how values move, and the final expression shows what leaves the example.
+## Records describe ordinary objects
 
-## Practical Rule
+Use records for things people would describe with a form or label. A shipping address, animal profile, payment receipt, and recipe ingredient all have named pieces that can be checked separately.
 
-Use this form when it makes value movement clearer than copying habits from another language. Prefer the smallest form that still tells the reader where names, types, effects, and boundaries live.
+## Updating without losing meaning
 
-Continue to [Indexing and Fields](/learn/book/data/modeling/indexing-and-fields).
+When creating a changed copy, keep the unchanged fields visible through the record update form. This reads like changing the phone number on a contact card rather than rebuilding the whole person from memory.
+
+Data chapters teach the shape of a room before anyone moves through it. A record is a labeled card, an array is an ordered row, a variant is a set of named doors, and a pattern is a safe way to open one door at a time.
+
+Most data bugs start when one shape is asked to mean too many things. If a value can be absent, use an absent-value shape. If a value has named parts, use a record. If a value can be one of several cases, use data variants.

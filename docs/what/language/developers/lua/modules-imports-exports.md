@@ -1,38 +1,31 @@
 ---
 title: "Modules, Imports, and Exports"
-description: "Translate Lua require-return modules into Musi imports and exports."
+description: "Read Modules, Imports, and Exports as a Lua habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Lua Developers"
 order: 12
 slug: "modules-imports-exports"
-summary: "Use import and export directly to describe package-facing boundaries."
+summary: "Translate the Lua habit, then use the Musi Book for the full rule."
 ---
 
-# Modules, Imports, and Exports
+A Lua reader brings habits from tables, metatables, nil, coroutines, embedding, modules, and small runtime boundaries. That helps with simple data and host/runtime edges without much ceremony, but the Musi page asks a narrower question: what contract should this module and package boundaries example make visible?
 
-Lua modules commonly return a table:
+{{compare:lua-modules-imports-exports}}
 
-```lua
-local Ports = {}
+## Reading Modules, Imports, and Exports from Lua
 
-function Ports.defaultPort()
-  return 8080
-end
+On the Musi side, Musi imports bring named module values into scope, so package boundaries stay visible where code uses them. Read the shared example through Lua eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-return Ports
-```
+## False friend
 
-Musi exports the package-facing value directly.
+Do not rebuild a source-language global namespace, header include pile, or barrel file when one import names the owner. For a Lua reader, the trap is letting table shape, missing fields, and behavior conventions blur together; Musi `class` is not a metatable pattern; records/data hold table-like shape, classes/instances name promised behavior.
 
-{{snippet:lua-module-export}}
+## When this pays off
 
-Lua imports another module with `require`:
+Use modules when billing, routing, text, option, runtime, or encoding code has an owner worth naming. The Lua instinct still helps here: Keep the Lua habit of using small names and simple values.
 
-```lua
-local Ports = require("ports")
-local port = Ports.defaultPort()
-```
+## Keep close
 
-Musi imports a module value and calls through it.
-
-{{snippet:lua-module-import}}
+- [Imports and exports](/learn/book/organization/imports-and-exports)
+- [Packages](/learn/book/organization/packages)
+- [Foreign](/learn/book/advanced/foreign)

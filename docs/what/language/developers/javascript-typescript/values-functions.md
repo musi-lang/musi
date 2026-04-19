@@ -1,65 +1,31 @@
 ---
 title: "Values, Functions, and Final Expressions"
-description: "Translate JavaScript and TypeScript functions into Musi `let` functions."
+description: "Read Values, Functions, and Final Expressions as a JavaScript and TypeScript habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "JavaScript and TypeScript Developers"
 order: 2
 slug: "values-functions"
-summary: "Use `let` for values and functions, and use final expressions instead of `return`."
+summary: "Translate the JavaScript and TypeScript habit, then use the Musi Book for the full rule."
 ---
 
-JavaScript can declare a function directly:
+A TypeScript reader brings habits from objects, structural types, unions, undefined, promises, imports, npm packages, and prototype-shaped history. That helps with flexible shapes and fast feedback from type tooling, but the Musi page asks a narrower question: what contract should this local values and calls example make visible?
 
-```javascript
-function total(base, fee) {
-  return base + fee;
-}
+{{compare:javascript-typescript-values-functions}}
 
-const answer = total(1200, 45);
-answer;
-```
+## Reading Values, Functions, and Final Expressions from JavaScript/TypeScript
 
-JavaScript can also bind a function value to a name. That shape is closer to Musi:
+On the Musi side, Musi lets a calculation be a `let`, a function, or a final expression without wrapping it in an object or framework first. Read the shared example through JavaScript/TypeScript eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-```javascript
-const total = function (base, fee) {
-  return base + fee;
-};
+## False friend
 
-const answer = total(1200, 45);
-answer;
-```
+Do not preserve call ceremony just because the source language needs it for methods, receivers, overloads, or closures. For a TypeScript reader, the trap is assuming runtime object shape and compile-time behavior contract are the same thing; Musi `class` is not a JS constructor or TS class; it is a behavior contract implemented separately from record/data shape.
 
-TypeScript adds parameter and result types to either form:
+## When this pays off
 
-```typescript
-const total = function (base: number, fee: number): number {
-  return base + fee;
-};
+Use this shape when a receipt total, label, distance, or score is pure data moving through named calls. The JavaScript/TypeScript instinct still helps here: Keep the TypeScript habit of reading the shape before reading implementation details.
 
-const answer = total(1200, 45);
-answer;
-```
+## Keep close
 
-Musi puts the function in a `let` binding and writes the result type after the parameters.
-
-{{snippet:js-ts-values-functions}}
-
-The last expression leaves the value. There is no `return` keyword in ordinary Musi function bodies.
-
-## Named calls
-
-JavaScript and TypeScript often use an options object when a call has several values:
-
-```typescript
-function render(input: { port: number; secure: boolean }): number {
-  return input.port;
-}
-
-const selected = render({ port: 8080, secure: true });
-selected;
-```
-
-Musi can name arguments at the call site without wrapping them in an object.
-
-{{snippet:js-ts-named-calls}}
+- [Values and let](/learn/book/start/values-and-let)
+- [Functions](/learn/book/core/functions)
+- [Calls](/learn/book/core/calls)

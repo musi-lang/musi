@@ -4,10 +4,10 @@ export const goDeveloperSnippets = [
 	{
 		id: "go-values-functions",
 		language: "musi",
-		sourceText: `let total (basePrice : Int, fee : Int) : Int := basePrice + fee;
+		sourceText: `let total (orderTotal : Int, serviceFee : Int) : Int := orderTotal + serviceFee;
 
-let answer := total(1200, 45);
-answer;`,
+let invoiceTotal := total(1200, 45);
+invoiceTotal;`,
 		evidence: {
 			path: "docs/what/language/developers/go/overview.md",
 			line: 27,
@@ -124,9 +124,9 @@ visible;`,
 
 let lookupPort (name : String) : option.Option[Int] :=
   match name (
-  | "admin" => option.some[Int](9000)
-  | "web" => option.some[Int](8080)
-  | _ => option.none[Int]()
+  | "admin" => option.someOf[Int](9000)
+  | "web" => option.someOf[Int](8080)
+  | _ => option.noneOf[Int]()
   );
 
 lookupPort("web")
@@ -143,8 +143,8 @@ lookupPort("web")
 
 let lookupPort (name : String) : option.Option[Int] :=
   match name (
-  | "admin" => option.some[Int](9000)
-  | _ => option.none[Int]()
+  | "admin" => option.someOf[Int](9000)
+  | _ => option.noneOf[Int]()
   );
 
 let port := lookupPort("web")

@@ -1,42 +1,31 @@
 ---
 title: "Nil, Option, and Result"
-description: "Translate Go nil checks and comma-ok patterns into Musi Option and Result values."
+description: "Read Nil, Option, and Result as a Go habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Go Developers"
 order: 7
 slug: "nil-option-result"
-summary: "Use Option for absence and Result for failure that carries information."
+summary: "Translate the Go habit, then use the Musi Book for the full rule."
 ---
 
-# Nil, Option, and Result
+Go readers are used to checking nil and a second return value. Musi turns the ordinary missing branch into Option so the caller cannot forget the check after a lookup.
 
-Go has `nil` for pointers, slices, maps, channels, functions, and interfaces. Map lookup also has a comma-ok form:
+{{compare:go-nil-option-result}}
 
-```go
-ports := map[string]int{"admin": 9000}
-port, ok := ports["web"]
-if !ok {
-    port = 8080
-}
-```
+## Reading Nil, Option, and Result from Go
 
-Musi uses the stdlib `Option` shape when a value may be absent.
+On the Musi side, Musi uses `option.someOf` and `option.noneOf` when absence is expected, so callers handle the empty branch deliberately. Read the shared example through Go eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-{{snippet:go-nil-option}}
+## False friend
 
-## Failure with information
+Do not translate null, nil, None, or undefined as a quiet ordinary value. For a Go reader, the trap is using absence or failure as a side channel because Go makes that cheap; Musi `class` is closer to an explicit interface constraint with instances; it is not a struct and not a method set attached by package convention.
 
-Go commonly returns `(value, error)`:
+## When this pays off
 
-```go
-func parsePort(text string) (int, error) {
-    if text == "8080" {
-        return 8080, nil
-    }
-    return 0, errors.New("invalid port")
-}
-```
+Use Option when a badge, ticket, receipt, search result, or lookup may honestly be missing. The Go instinct still helps here: Keep the Go habit of writing the small thing first and naming package boundaries clearly.
 
-Musi uses `Result` when callers should receive either a value or an error.
+## Keep close
 
-{{snippet:go-result-value}}
+- [Data definitions](/learn/book/data/data-definitions)
+- [Patterns](/learn/book/data/patterns)
+- [Effects](/learn/book/effects-runtime/effects)

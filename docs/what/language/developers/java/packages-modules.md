@@ -1,40 +1,31 @@
 ---
 title: "Packages and Modules"
-description: "Translate Java packages and modules into Musi imports, exports, and package boundaries."
+description: "Read Packages and Modules as a Java habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Java Developers"
 order: 12
 slug: "packages-modules"
-summary: "Use import and export directly to describe package-facing boundaries."
+summary: "Translate the Java habit, then use the Musi Book for the full rule."
 ---
 
-# Packages and Modules
+A Java reader brings habits from packages, classes, records, interfaces, exceptions, annotations, streams, and long-lived APIs. That helps with contracts, visibility, and maintainable names, but the Musi page asks a narrower question: what contract should this module and package boundaries example make visible?
 
-Java package-facing code often starts with a package declaration and public type:
+{{compare:java-packages-modules}}
 
-```java
-package ports;
+## Reading Packages and Modules from Java
 
-public final class Ports {
-    public static int defaultPort() {
-        return 8080;
-    }
-}
-```
+On the Musi side, Musi imports bring named module values into scope, so package boundaries stay visible where code uses them. Read the shared example through Java eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-Musi exports the package-facing value directly.
+## False friend
 
-{{snippet:java-module-export}}
+Do not rebuild a source-language global namespace, header include pile, or barrel file when one import names the owner. For a Java reader, the trap is reading Musi `class` as a nominal object type with constructors and fields; Musi `class` is a behavior contract supplied by instances; records and data model object shape.
 
-Java imports another package member by name:
+## When this pays off
 
-```java
-import ports.Ports;
+Use modules when billing, routing, text, option, runtime, or encoding code has an owner worth naming. The Java instinct still helps here: Keep the Java habit of naming APIs for future readers.
 
-int port = Ports.defaultPort();
-```
+## Keep close
 
-Musi imports a module value and calls through it.
-
-{{snippet:java-module-import}}
-
+- [Imports and exports](/learn/book/organization/imports-and-exports)
+- [Packages](/learn/book/organization/packages)
+- [Foreign](/learn/book/advanced/foreign)

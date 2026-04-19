@@ -1,0 +1,5 @@
+function receiptTotal(latteCents: number, croissantCents: number): number {
+  return latteCents + croissantCents;
+}
+
+const total = receiptTotal(450, 120);

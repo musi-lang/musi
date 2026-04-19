@@ -7,17 +7,20 @@ order: 12
 slug: "lambdas"
 summary: "Use lambda expressions when a short function value reads better in place."
 ---
-
-A lambda is an unnamed function value. Use it when the calculation is small and travels directly to another value or helper.
+A lambda is a small function written where it is used. It is useful when the action is local to one operation, like choosing the display name for each person in a list or deciding whether an order should be kept.
 
 {{snippet:chapter-lambdas}}
 
-## Reading Model
+Use a lambda when naming a separate function would add distance without adding understanding. If the same lambda appears twice, it has earned a real name.
 
-Read the example from top to bottom. The first visible name gives the reader a handle, the following expressions show how values move, and the final expression shows what leaves the example.
+## Local behavior
 
-## Practical Rule
+The best lambdas are brief and specific. A map over animals might turn each animal into a tag label. A filter over payments might keep only successful payments. The surrounding expression already explains the larger task.
 
-Use this form when it makes value movement clearer than copying habits from another language. Prefer the smallest form that still tells the reader where names, types, effects, and boundaries live.
+## When to promote one
 
-Continue to [Calls](/learn/book/core/functions-and-calls/calls).
+If a lambda needs comments, multiple branches, or several local declarations, it is no longer just a small inline action. Move it to a function so the name can carry the idea.
+
+Core forms are the small hand tools of the language. Literals are raw materials, calls ask for work, operators join values, ranges mark spans, and lambdas carry a small action around. Each form should feel boring before you rely on it inside larger data or effect code.
+
+When a core form feels hard, place it in a plain story. A ticket price plus a fee, a room number in a range, a message sent through a callable, or a small action saved as a lambda is enough. The syntax matters because it keeps that story exact.

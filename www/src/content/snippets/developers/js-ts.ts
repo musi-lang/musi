@@ -4,9 +4,9 @@ export const javascriptTypeScriptDeveloperSnippets = [
 	{
 		id: "js-ts-values-functions",
 		language: "musi",
-		sourceText: `let total (base : Int, fee : Int) : Int := base + fee;
+		sourceText: `let receiptTotal (latteCents : Int, croissantCents : Int) : Int := latteCents + croissantCents;
 
-let answer := total(1200, 45);
+let answer := receiptTotal(450, 120);
 answer;`,
 		evidence: {
 			path: "docs/what/language/developers/javascript-typescript/values-functions.md",
@@ -18,7 +18,7 @@ answer;`,
 		language: "musi",
 		sourceText: `let render (port : Int, secure : Bool) : Int := port;
 
-let selected := render(port := 8080, secure := 0 = 0);
+let selected := render(port := 8080, secure := 1 = 1);
 selected;`,
 		evidence: {
 			path: "docs/what/language/developers/javascript-typescript/values-functions.md",
@@ -28,9 +28,9 @@ selected;`,
 	{
 		id: "js-ts-mutable-state",
 		language: "musi",
-		sourceText: `let visits := mut 0;
-visits := visits + 1;
-visits;`,
+		sourceText: `let pageViews := mut 0;
+pageViews := pageViews + 1;
+pageViews;`,
 		evidence: {
 			path: "docs/what/language/developers/javascript-typescript/state.md",
 			line: 1,
@@ -74,9 +74,10 @@ secure.port;`,
 		language: "musi",
 		sourceText: `let iter := import "@std/iter";
 
-let ports := [3000, 8080, 9000];
-let visible := ports
-  |> iter.map[Int, Int](\\(port : Int) : Int => port + 1);
+let prices := [19, 29, 45];
+let visible := prices
+  |> iter.append[Int](60)
+  |> iter.collect[Int]();
 visible;`,
 		evidence: {
 			path: "docs/what/language/developers/javascript-typescript/arrays-pipelines.md",
@@ -88,7 +89,7 @@ visible;`,
 		language: "musi",
 		sourceText: `let option := import "@std/option";
 
-let findPort (name : String) : option.Option[Int] := option.some[Int](8080);
+let findPort (name : String) : option.Option[Int] := option.someOf[Int](8080);
 
 let port := findPort("local")
   |> option.unwrapOr[Int](3000);
@@ -138,8 +139,8 @@ match state (
 		language: "musi",
 		sourceText: `let identity[T] (input : T) : T := input;
 
-let port := identity[Int](8080);
-port;`,
+let dock := identity[Int](8080);
+dock;`,
 		evidence: {
 			path: "docs/what/language/developers/javascript-typescript/generics.md",
 			line: 1,
@@ -176,7 +177,7 @@ io.writeLine(name);`,
 	{
 		id: "js-ts-module-export",
 		language: "musi",
-		sourceText: "export let defaultPort () : Int := 8080;",
+		sourceText: "export let defaultDock () : Int := 8080;",
 		evidence: {
 			path: "docs/what/language/developers/javascript-typescript/modules-packages.md",
 			line: 1,
@@ -185,10 +186,10 @@ io.writeLine(name);`,
 	{
 		id: "js-ts-module-import",
 		language: "musi",
-		sourceText: `let Ports := import "./ports";
+		sourceText: `let Shipping := import "./shipping";
 
-let port := Ports.defaultPort();
-port;`,
+let dock := Shipping.defaultDock();
+dock;`,
 		evidence: {
 			path: "docs/what/language/developers/javascript-typescript/modules-packages.md",
 			line: 1,
@@ -218,12 +219,12 @@ let carVehicle := instance Vehicle[Car] {
 		language: "musi",
 		sourceText: `let testing := import "@std/testing";
 
-let defaultPort () : Int := 8080;
+let defaultDock () : Int := 8080;
 
 export let test () :=
   (
-    testing.describe("ports");
-    testing.it("default port is http alt", testing.toBe(defaultPort(), 8080));
+    testing.describe("shipping defaults");
+    testing.it("default dock is http alt", testing.toBe(defaultDock(), 8080));
     testing.endDescribe()
   );`,
 		evidence: {

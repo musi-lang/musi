@@ -1,25 +1,31 @@
 ---
 title: "Unsafe and FFI"
-description: "Translate Rust unsafe and extern C habits into Musi foreign declarations and unsafe blocks."
+description: "Read Unsafe and FFI as a Rust habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Rust Developers"
 order: 10
 slug: "unsafe-ffi"
-summary: "Rust `extern` and raw pointer work maps to Musi `foreign`, `CPtr`, `@std/ffi`, and `unsafe`."
+summary: "Translate the Rust habit, then use the Musi Book for the full rule."
 ---
 
-Rust marks C ABI declarations and raw pointer calls explicitly:
+Rust unsafe marks code the compiler cannot fully protect. Musi uses the same warning shape: declare foreign symbols, then keep calls inside `unsafe { ... }`.
 
-```rust
-unsafe extern "C" {
-    fn get_counter() -> *mut i32;
-}
+{{compare:rust-unsafe-ffi}}
 
-let counter = unsafe { get_counter() };
-```
+## Reading Unsafe and FFI from Rust
 
-Musi keeps the same boundary visible with `foreign` and `unsafe`.
+On the Musi side, Musi foreign declarations use `foreign "c" let ...` or a parenthesized foreign group, and unsafe calls stay inside `unsafe { ... }`. Read the shared example through Rust eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-{{snippet:rust-unsafe-ffi}}
+## False friend
 
-Use `foreign` for the ABI declaration. Use `unsafe` for the block where raw native assumptions matter. Use `@std/ffi` helpers when pointer views need typed reads, writes, offsets, or casts.
+Do not invent a C-like foreign block or spread unsafe assumptions through ordinary Musi code. For a Rust reader, the trap is expecting Musi syntax to mirror Rust even when the ideas are separated differently; Musi `class` is closest to a Rust trait plus law text; instances play the role of implementations for behavior.
+
+## When this pays off
+
+Use this shape when a clock, driver, C library, host VM, or platform handle must cross into Musi. The Rust instinct still helps here: Keep the Rust habit of asking which type carries the invariant.
+
+## Keep close
+
+- [Unsafe and FFI](/learn/book/advanced/unsafe-and-ffi)
+- [Foreign](/learn/book/advanced/foreign)
+- [Runtime](/learn/book/effects-runtime/runtime)

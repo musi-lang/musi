@@ -7,19 +7,20 @@ order: 9
 slug: "functions"
 summary: "Functions are ordinary `let` bindings with parameters, result types, and expression bodies."
 ---
-
-A function is a named calculation. It receives parameters, uses them in a body, and produces the final expression. Named arguments keep calls readable when values could be confused.
+Functions turn a question into a reusable action. Instead of writing the same price calculation in three checkout screens, name it once and call it wherever a cart needs a total.
 
 {{snippet:chapter-functions}}
 
-{{snippet:named-callable-values}}
+Parameters describe what the function needs from the outside world. The return type describes what it promises to give back. That promise matters more than the function body when another file calls it.
 
-## Reading Model
+## Choosing a function boundary
 
-Read the example from top to bottom. The first visible name gives the reader a handle, the following expressions show how values move, and the final expression shows what leaves the example.
+Make a function when a few lines have a name in ordinary speech. `totalInvoice`, `isWeekend`, and `formatAnimalTag` are good signals. If the best name is vague, the function probably contains more than one idea.
 
-## Practical Rule
+## Small promises compose
 
-Use this form when it makes value movement clearer than copying habits from another language. Prefer the smallest form that still tells the reader where names, types, effects, and boundaries live.
+A large process becomes readable when each function keeps a small promise. A booking flow can check the date, choose a room, compute the price, and build a confirmation. Each function can be tested and replaced without rewriting the whole flow.
 
-Continue to [Lambdas](/learn/book/core/functions-and-calls/lambdas).
+Core forms are the small hand tools of the language. Literals are raw materials, calls ask for work, operators join values, ranges mark spans, and lambdas carry a small action around. Each form should feel boring before you rely on it inside larger data or effect code.
+
+When a core form feels hard, place it in a plain story. A ticket price plus a fee, a room number in a range, a message sent through a callable, or a small action saved as a lambda is enough. The syntax matters because it keeps that story exact.

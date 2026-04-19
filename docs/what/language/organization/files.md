@@ -7,17 +7,20 @@ order: 15
 slug: "files"
 summary: "Know what a single file means before building a package."
 ---
-
-A file is the first module boundary most readers see. It gives names a place to live and gives imports something concrete to point at.
+Files are the first boundary a reader sees. A good file has one main reason to exist: payment totals, animal records, calendar rules, or command-line entry points.
 
 {{snippet:chapter-files}}
 
-## Reading Model
+Keep related declarations together and move unrelated ones apart. A file that contains car maintenance rules and user-login code will confuse both readers and tooling.
 
-Read the example from top to bottom. The first visible name gives the reader a handle, the following expressions show how values move, and the final expression shows what leaves the example.
+## File names as signs
 
-## Practical Rule
+Name files like signs in a building. A person should know which door to open before reading every declaration inside. `invoice.ms`, `address.ms`, and `runtime.ms` each promise a different topic.
 
-Use this form when it makes value movement clearer than copying habits from another language. Prefer the smallest form that still tells the reader where names, types, effects, and boundaries live.
+## Private helpers stay nearby
 
-Continue to [Packages](/learn/book/organization/modules/packages).
+If a helper only serves one exported declaration, keep it close. If several files need it, move it behind a small exported API instead of copying the helper around the package.
+
+Organization chapters are about where code lives. A package is like a small shop, files are shelves, imports are items brought in from another shelf, and exports are items placed at the counter for other code to use.
+
+Messy organization usually starts when every file reaches for every name. Keep imports narrow, export only the names another file needs, and let file names explain the job before a reader opens them.

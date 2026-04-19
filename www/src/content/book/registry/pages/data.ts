@@ -50,4 +50,15 @@ export const dataPages = [
 		sourcePath: "docs/what/language/data/patterns.md",
 		questions: [],
 	},
+	{
+		id: "option-and-result",
+		partId: "data",
+		path: "/docs/book/data/option-and-result",
+		aliases: [
+			"/docs/language/data/option-and-result",
+			"/learn/language/data/option-and-result",
+		],
+		sourcePath: "docs/what/language/data/option-and-result.md",
+		questions: [],
+	},
 ] satisfies readonly RawBookPageDefinition[];

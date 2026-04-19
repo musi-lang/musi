@@ -8,6 +8,8 @@
 	],
 	"scripts": {
 		"generate:content": "bun run --cwd www generate:content",
+		"generate:content:check": "bun run --cwd www generate:content:check",
+		"validate:language-docs": "bun run --cwd www validate:language-docs",
 		"dev": "bun run --cwd www dev",
 		"docs:studio": "bun run --cwd www docs:studio",
 		"dev:prod": "bun run build:prod && bun run preview:prod",

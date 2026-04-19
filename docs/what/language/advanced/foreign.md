@@ -7,41 +7,22 @@ order: 31
 slug: "foreign"
 summary: "Declare foreign bindings at the runtime boundary, not inside ordinary domain code."
 ---
+Foreign declarations describe things that live outside normal Musi source. They are useful when code must call into a host library, runtime symbol, or external system boundary.
 
 {{snippet:chapter-foreign}}
 
-## Boundary Tool
+Treat foreign boundaries with care. The compiler has less information there, so names, types, and attributes need to be especially honest.
 
-Foreign declarations describe bindings implemented outside Musi.
-The example names a C function and its Musi-facing type so code on Musi side can call across boundary with explicit contract.
-This is advanced because it is about integration, not about core language flow.
+## Adapters protect the rest of the program
 
-## When to Reach for It
+Put foreign calls behind small Musi wrappers. A weather app might call a native API at the edge, then return a normal record to the rest of the package.
 
-Users working near system boundaries need to know how Musi reaches native code without pretending that boundary is ordinary function definition.
-If docs bury foreign declarations under attribute notes or runtime pages, the integration story stays fuzzy.
-A dedicated page keeps the riskier cross-language surface explicit.
+## Keep uncertainty contained
 
-## Read the Boundary
+If the foreign side can fail, return a shape that says so. Do not let low-level uncertainty leak through every business function.
 
-Read `foreign "c"` as declaration of external implementation source.
-Then read remainder of line as ordinary Musi-facing name and type surface that callers will see on Musi side.
-When adding foreign bindings, keep signatures minimal, verify types carefully, and isolate these declarations near integration boundaries instead of scattering them through domain code.
-Calls to foreign bindings belong inside `unsafe { ... }` because Musi cannot prove what native code does with raw pointers, strings, global state, or process state.
+Foreign names also deserve extra care because editor tooling cannot infer intent from the other language. A short wrapper can turn `native_read_file` into a Musi function that returns text or a typed failure. After that point, the rest of the program reads like ordinary Musi again.
 
-Wrap a foreign call in a small `unsafe` block, then expose a safe wrapper when ordinary callers should not see the native boundary.
+Advanced chapters are tools for edges: metadata, native calls, compile-time work, syntax values, and command-line use. They matter most when ordinary declarations are no longer enough to describe a boundary.
 
-## Small Exercise
-
-- Declare one foreign binding.
-- Identify language/runtime boundary it crosses.
-- Wrap the call in a small `unsafe` block.
-- Explain what Musi side promises about arguments and result.
-
-## Mistake to Avoid
-
-Do not treat foreign declarations as casual shortcut for code that could stay inside normal Musi modules.
-
-## Next Page
-
-Continue to [Unsafe and FFI](/learn/book/advanced/unsafe-and-ffi) for raw pointer and native-call boundaries.
+Use advanced forms like locked cabinets, not like kitchen drawers. Reach for them when a tool, runtime, foreign library, or build step truly needs the extra signal. Keep normal program logic in normal declarations.

@@ -500,6 +500,24 @@ musi init hello`,
 		},
 	},
 	{
+		id: "chapter-reading-musi-code",
+		language: "musi",
+		sourceText: `let Option := import "@std/option";
+
+let Receipt := data {
+  | Receipt(table : Int, total : Int)
+};
+
+let emptyReceipt := Option.noneOf[Receipt]();
+
+export let receiptForTable (table : Int) : Option.Option[Receipt] :=
+  Option.someOf[Receipt](.Receipt(table := table, total := 0));`,
+		evidence: {
+			path: "docs/what/language/start/reading-musi-code.md",
+			line: 11,
+		},
+	},
+	{
 		id: "chapter-first-program",
 		language: "musi",
 		sourceText: `let answer := 42;
@@ -672,6 +690,24 @@ match port (
 		},
 	},
 	{
+		id: "chapter-option-and-result",
+		language: "musi",
+		sourceText: `let Option := import "@std/option";
+let Result := import "@std/result";
+
+let badge := Option.someOf[Int](42);
+let emptyBadge := Option.noneOf[Int]();
+
+let paid := Result.ok[Int, String](1200);
+let declined := Result.err[Int, String]("card declined");
+
+paid;`,
+		evidence: {
+			path: "docs/what/language/data/option-and-result.md",
+			line: 11,
+		},
+	},
+	{
 		id: "chapter-files",
 		language: "musi",
 		sourceText: `let answer := 42;
@@ -822,6 +858,24 @@ request Clock.tick();`,
 		evidence: {
 			path: "crates/music_sema/src/tests.rs",
 			line: 1444,
+		},
+	},
+	{
+		id: "chapter-errors-and-recovery",
+		language: "musi",
+		sourceText: `let Option := import "@std/option";
+let Result := import "@std/result";
+
+let Printer := effect {
+  let printReceipt (text : String) : Unit;
+};
+
+let coupon := Option.noneOf[Int]();
+let charge := Result.err[Int, String]("card declined");
+request Printer.printReceipt("receipt");`,
+		evidence: {
+			path: "docs/what/language/effects-runtime/errors-and-recovery.md",
+			line: 11,
 		},
 	},
 	{

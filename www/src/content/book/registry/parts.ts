@@ -48,7 +48,7 @@ export const bookParts = [
 	},
 	{
 		id: "developers",
-		path: "/docs/book/developers",
+		path: "/docs/guides",
 		aliases: [
 			"/docs/language/developers",
 			"/learn/language/developers",

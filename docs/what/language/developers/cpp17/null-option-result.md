@@ -1,42 +1,31 @@
 ---
 title: "Null, Option, and Result"
-description: "Translate C++17 null pointers, optional values, and fallible returns into Musi Option and Result values."
+description: "Read Null, Option, and Result as a C++17 habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "C++ Developers"
 order: 7
 slug: "null-option-result"
-summary: "Use Option for expected absence and Result for fallible values."
+summary: "Translate the C++17 habit, then use the Musi Book for the full rule."
 ---
 
-# Null, Option, and Result
+Optional values, nullable pointers, and exceptions solve different C++ problems. Musi keeps expected absence in Option and leaves effects or results for work that can fail for a reason.
 
-C++17 uses `std::optional` when absence is expected:
+{{compare:cpp17-null-option-result}}
 
-```cpp
-auto lookup_port(const std::string_view name) -> std::optional<int> {
-    if (name == "admin") {
-        return 9000;
-    }
-    return std::nullopt;
-}
+## Reading Null, Option, and Result from C++17
 
-const auto port = lookup_port("web").value_or(8080);
-```
+On the Musi side, Musi uses `option.someOf` and `option.noneOf` when absence is expected, so callers handle the empty branch deliberately. Read the shared example through C++17 eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-Musi uses `Option` when absence is part of the value.
+## False friend
 
-{{snippet:cpp17-null-option}}
+Do not translate null, nil, None, or undefined as a quiet ordinary value. For a C++ reader, the trap is turning every Musi value into a class-shaped design; Musi `class` is closer to a concept or trait than a C++ class; records/data store shape, instances satisfy behavior.
 
-C++17 projects often define a small result object when exceptions are not the right fit:
+## When this pays off
 
-```cpp
-struct ParseResult {
-    bool ok;
-    int port;
-    std::string error;
-};
-```
+Use Option when a badge, ticket, receipt, search result, or lookup may honestly be missing. The C++17 instinct still helps here: Keep the C++ habit of asking which operation is generic and which value owns shape.
 
-Musi uses `Result` when failure is part of the returned value.
+## Keep close
 
-{{snippet:cpp17-result-value}}
+- [Data definitions](/learn/book/data/data-definitions)
+- [Patterns](/learn/book/data/patterns)
+- [Effects](/learn/book/effects-runtime/effects)

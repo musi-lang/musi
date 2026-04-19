@@ -1,44 +1,31 @@
 ---
 title: "Goroutines, Channels, Context, and Effects"
-description: "Translate Go concurrency habits into Musi effect boundaries and handlers."
+description: "Read Goroutines, Channels, Context, and Effects as a Go habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Go Developers"
 order: 9
 slug: "goroutines-channels-context-effects"
-summary: "Use effects to name outside work and handler boundaries to decide how it runs."
+summary: "Translate the Go habit, then use the Musi Book for the full rule."
 ---
 
-# Goroutines, Channels, Context, and Effects
+Go makes concurrency explicit with goroutines, channels, and contexts. Musi effect pages are about a different explicitness: naming the request for runtime work before deciding how it is handled.
 
-Go concurrency often starts a goroutine, sends through a channel, and waits for a value:
+{{compare:go-goroutines-channels-context-effects}}
 
-```go
-func loadPort() int {
-    done := make(chan int, 1)
-    go func() {
-        done <- 8080
-    }()
-    return <-done
-}
-```
+## Reading Goroutines, Channels, Context, and Effects from Go
 
-Musi does not hide outside work behind a goroutine marker in ordinary expressions. Name the operation as an effect request, then decide how it is interpreted at the boundary.
+On the Musi side, Musi names outside work with effects and `request`, instead of hiding time, files, console work, or services inside an ordinary-looking call. Read the shared example through Go eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-{{snippet:go-effect-request}}
+## False friend
 
-Go `context.Context` carries cancellation and deadlines through call chains:
+Do not make an effect look pure. A clock, process, network service, or console changes the trust boundary. For a Go reader, the trap is using absence or failure as a side channel because Go makes that cheap; Musi `class` is closer to an explicit interface constraint with instances; it is not a struct and not a method set attached by package convention.
 
-```go
-func readPort(ctx context.Context) (int, error) {
-    select {
-    case <-ctx.Done():
-        return 0, ctx.Err()
-    default:
-        return 8080, nil
-    }
-}
-```
+## When this pays off
 
-In Musi, pass ordinary data as data and keep cancellation, scheduling, or host interaction in the effect surface that the handler owns.
+Use effects when the program asks the runtime, OS, user, or another service for an answer. The Go instinct still helps here: Keep the Go habit of writing the small thing first and naming package boundaries clearly.
 
-{{snippet:go-handler-boundary}}
+## Keep close
+
+- [Effects](/learn/book/effects-runtime/effects)
+- [Using](/learn/book/effects-runtime/using)
+- [Handlers](/learn/book/effects-runtime/handlers)

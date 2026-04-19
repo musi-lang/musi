@@ -16,7 +16,9 @@ export { bookParts, bookSections };
 
 type BookSectionId = (typeof bookSections)[number]["id"];
 
-function developerSectionIdForPage(page: RawBookPageDefinition): BookSectionId {
+function developerSectionIdForPage(
+	page: RawBookPageDefinition,
+): BookSectionId | null {
 	if (page.id === "musi-for-rust-developers" || page.id.startsWith("rust-")) {
 		return "developers-rust";
 	}
@@ -47,48 +49,26 @@ function developerSectionIdForPage(page: RawBookPageDefinition): BookSectionId {
 	return "developers-guides";
 }
 
-function sectionIdForPage(page: RawBookPageDefinition): BookSectionId {
+function sectionIdForPage(page: RawBookPageDefinition): BookSectionId | null {
 	switch (page.partId) {
 		case "start":
-			return "start-foundations";
+			return null;
 		case "core":
-			if (
-				page.id === "functions" ||
-				page.id === "lambdas" ||
-				page.id === "calls" ||
-				page.id === "dot-calls"
-			) {
-				return "core-functions";
-			}
-			return "core-expressions";
+			return null;
 		case "data":
-			return "data-modeling";
+			return null;
 		case "organization":
-			return "organization-modules";
+			return null;
 		case "types":
-			return "types-foundations";
+			return null;
 		case "abstractions":
-			return "abstractions-laws";
+			return null;
 		case "effects-runtime":
-			if (
-				page.id === "foundation" ||
-				page.id === "runtime" ||
-				page.id === "stdlib"
-			) {
-				return "effects-runtime-model";
-			}
-			return "effects-handling";
+			return null;
 		case "developers":
 			return developerSectionIdForPage(page);
 		case "advanced":
-			if (
-				page.id === "attributes" ||
-				page.id === "foreign" ||
-				page.id === "unsafe-and-ffi"
-			) {
-				return "advanced-interop";
-			}
-			return "advanced-meta-tooling";
+			return null;
 		default:
 			throw new Error(`unknown part ${page.partId} for page ${page.id}`);
 	}

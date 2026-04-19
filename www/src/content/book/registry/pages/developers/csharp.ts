@@ -4,10 +4,10 @@ export const csharpDeveloperPages = [
 	{
 		id: "csharp-overview",
 		partId: "developers",
-		path: "/docs/book/developers/csharp/overview",
+		path: "/docs/guides/csharp/overview",
 		aliases: [
-			"/docs/book/developers/c-sharp/overview",
 			"/docs/language/developers/csharp/overview",
+			"/docs/guides/c-sharp/overview",
 			"/docs/language/developers/c-sharp/overview",
 			"/learn/language/developers/csharp/overview",
 			"/learn/language/developers/c-sharp/overview",
@@ -18,10 +18,10 @@ export const csharpDeveloperPages = [
 	{
 		id: "csharp-values-methods-expressions",
 		partId: "developers",
-		path: "/docs/book/developers/csharp/values-methods-expressions",
+		path: "/docs/guides/csharp/values-methods-expressions",
 		aliases: [
-			"/docs/book/developers/c-sharp/values-methods-expressions",
 			"/docs/language/developers/csharp/values-methods-expressions",
+			"/docs/guides/c-sharp/values-methods-expressions",
 			"/docs/language/developers/c-sharp/values-methods-expressions",
 			"/learn/language/developers/csharp/values-methods-expressions",
 			"/learn/language/developers/c-sharp/values-methods-expressions",
@@ -33,10 +33,10 @@ export const csharpDeveloperPages = [
 	{
 		id: "csharp-blocks-control-flow",
 		partId: "developers",
-		path: "/docs/book/developers/csharp/blocks-control-flow",
+		path: "/docs/guides/csharp/blocks-control-flow",
 		aliases: [
-			"/docs/book/developers/c-sharp/blocks-control-flow",
 			"/docs/language/developers/csharp/blocks-control-flow",
+			"/docs/guides/c-sharp/blocks-control-flow",
 			"/docs/language/developers/c-sharp/blocks-control-flow",
 			"/learn/language/developers/csharp/blocks-control-flow",
 			"/learn/language/developers/c-sharp/blocks-control-flow",
@@ -47,10 +47,10 @@ export const csharpDeveloperPages = [
 	{
 		id: "csharp-variables-mutation",
 		partId: "developers",
-		path: "/docs/book/developers/csharp/variables-mutation",
+		path: "/docs/guides/csharp/variables-mutation",
 		aliases: [
-			"/docs/book/developers/c-sharp/variables-mutation",
 			"/docs/language/developers/csharp/variables-mutation",
+			"/docs/guides/c-sharp/variables-mutation",
 			"/docs/language/developers/c-sharp/variables-mutation",
 			"/learn/language/developers/csharp/variables-mutation",
 			"/learn/language/developers/c-sharp/variables-mutation",
@@ -61,10 +61,10 @@ export const csharpDeveloperPages = [
 	{
 		id: "csharp-records-classes-objects",
 		partId: "developers",
-		path: "/docs/book/developers/csharp/records-classes-objects",
+		path: "/docs/guides/csharp/records-classes-objects",
 		aliases: [
-			"/docs/book/developers/c-sharp/records-classes-objects",
 			"/docs/language/developers/csharp/records-classes-objects",
+			"/docs/guides/c-sharp/records-classes-objects",
 			"/docs/language/developers/c-sharp/records-classes-objects",
 			"/learn/language/developers/csharp/records-classes-objects",
 			"/learn/language/developers/c-sharp/records-classes-objects",
@@ -76,10 +76,10 @@ export const csharpDeveloperPages = [
 	{
 		id: "csharp-collections-linq-pipelines",
 		partId: "developers",
-		path: "/docs/book/developers/csharp/collections-linq-pipelines",
+		path: "/docs/guides/csharp/collections-linq-pipelines",
 		aliases: [
-			"/docs/book/developers/c-sharp/collections-linq-pipelines",
 			"/docs/language/developers/csharp/collections-linq-pipelines",
+			"/docs/guides/c-sharp/collections-linq-pipelines",
 			"/docs/language/developers/c-sharp/collections-linq-pipelines",
 			"/learn/language/developers/csharp/collections-linq-pipelines",
 			"/learn/language/developers/c-sharp/collections-linq-pipelines",
@@ -91,10 +91,10 @@ export const csharpDeveloperPages = [
 	{
 		id: "csharp-null-option-result",
 		partId: "developers",
-		path: "/docs/book/developers/csharp/null-option-result",
+		path: "/docs/guides/csharp/null-option-result",
 		aliases: [
-			"/docs/book/developers/c-sharp/null-option-result",
 			"/docs/language/developers/csharp/null-option-result",
+			"/docs/guides/c-sharp/null-option-result",
 			"/docs/language/developers/c-sharp/null-option-result",
 			"/learn/language/developers/csharp/null-option-result",
 			"/learn/language/developers/c-sharp/null-option-result",
@@ -105,10 +105,10 @@ export const csharpDeveloperPages = [
 	{
 		id: "csharp-exceptions-effects",
 		partId: "developers",
-		path: "/docs/book/developers/csharp/exceptions-effects",
+		path: "/docs/guides/csharp/exceptions-effects",
 		aliases: [
-			"/docs/book/developers/c-sharp/exceptions-effects",
 			"/docs/language/developers/csharp/exceptions-effects",
+			"/docs/guides/c-sharp/exceptions-effects",
 			"/docs/language/developers/c-sharp/exceptions-effects",
 			"/learn/language/developers/csharp/exceptions-effects",
 			"/learn/language/developers/c-sharp/exceptions-effects",
@@ -119,10 +119,10 @@ export const csharpDeveloperPages = [
 	{
 		id: "csharp-unions-pattern-matching",
 		partId: "developers",
-		path: "/docs/book/developers/csharp/unions-pattern-matching",
+		path: "/docs/guides/csharp/unions-pattern-matching",
 		aliases: [
-			"/docs/book/developers/c-sharp/unions-pattern-matching",
 			"/docs/language/developers/csharp/unions-pattern-matching",
+			"/docs/guides/c-sharp/unions-pattern-matching",
 			"/docs/language/developers/c-sharp/unions-pattern-matching",
 			"/learn/language/developers/csharp/unions-pattern-matching",
 			"/learn/language/developers/c-sharp/unions-pattern-matching",
@@ -134,10 +134,10 @@ export const csharpDeveloperPages = [
 	{
 		id: "csharp-generics-interfaces-laws",
 		partId: "developers",
-		path: "/docs/book/developers/csharp/generics-interfaces-laws",
+		path: "/docs/guides/csharp/generics-interfaces-laws",
 		aliases: [
-			"/docs/book/developers/c-sharp/generics-interfaces-laws",
 			"/docs/language/developers/csharp/generics-interfaces-laws",
+			"/docs/guides/c-sharp/generics-interfaces-laws",
 			"/docs/language/developers/c-sharp/generics-interfaces-laws",
 			"/learn/language/developers/csharp/generics-interfaces-laws",
 			"/learn/language/developers/c-sharp/generics-interfaces-laws",
@@ -149,10 +149,10 @@ export const csharpDeveloperPages = [
 	{
 		id: "csharp-extension-methods-and-calls",
 		partId: "developers",
-		path: "/docs/book/developers/csharp/extension-methods-and-calls",
+		path: "/docs/guides/csharp/extension-methods-and-calls",
 		aliases: [
-			"/docs/book/developers/c-sharp/extension-methods-and-calls",
 			"/docs/language/developers/csharp/extension-methods-and-calls",
+			"/docs/guides/c-sharp/extension-methods-and-calls",
 			"/docs/language/developers/c-sharp/extension-methods-and-calls",
 			"/learn/language/developers/csharp/extension-methods-and-calls",
 			"/learn/language/developers/c-sharp/extension-methods-and-calls",
@@ -164,10 +164,10 @@ export const csharpDeveloperPages = [
 	{
 		id: "csharp-namespaces-modules-packages",
 		partId: "developers",
-		path: "/docs/book/developers/csharp/namespaces-modules-packages",
+		path: "/docs/guides/csharp/namespaces-modules-packages",
 		aliases: [
-			"/docs/book/developers/c-sharp/namespaces-modules-packages",
 			"/docs/language/developers/csharp/namespaces-modules-packages",
+			"/docs/guides/c-sharp/namespaces-modules-packages",
 			"/docs/language/developers/c-sharp/namespaces-modules-packages",
 			"/learn/language/developers/csharp/namespaces-modules-packages",
 			"/learn/language/developers/c-sharp/namespaces-modules-packages",
@@ -179,10 +179,10 @@ export const csharpDeveloperPages = [
 	{
 		id: "csharp-testing-tooling",
 		partId: "developers",
-		path: "/docs/book/developers/csharp/testing-tooling",
+		path: "/docs/guides/csharp/testing-tooling",
 		aliases: [
-			"/docs/book/developers/c-sharp/testing-tooling",
 			"/docs/language/developers/csharp/testing-tooling",
+			"/docs/guides/c-sharp/testing-tooling",
 			"/docs/language/developers/c-sharp/testing-tooling",
 			"/learn/language/developers/csharp/testing-tooling",
 			"/learn/language/developers/c-sharp/testing-tooling",
@@ -193,10 +193,10 @@ export const csharpDeveloperPages = [
 	{
 		id: "csharp-unsafe-interop-ffi",
 		partId: "developers",
-		path: "/docs/book/developers/csharp/unsafe-interop-ffi",
+		path: "/docs/guides/csharp/unsafe-interop-ffi",
 		aliases: [
-			"/docs/book/developers/c-sharp/unsafe-interop-ffi",
 			"/docs/language/developers/csharp/unsafe-interop-ffi",
+			"/docs/guides/c-sharp/unsafe-interop-ffi",
 			"/docs/language/developers/c-sharp/unsafe-interop-ffi",
 			"/learn/language/developers/csharp/unsafe-interop-ffi",
 			"/learn/language/developers/c-sharp/unsafe-interop-ffi",

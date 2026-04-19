@@ -1,38 +1,31 @@
 ---
 title: "Objects, Records, and Field Updates"
-description: "Translate object literals, structural types, and object spread into Musi records."
+description: "Read Objects, Records, and Field Updates as a JavaScript and TypeScript habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "JavaScript and TypeScript Developers"
 order: 4
 slug: "objects-records"
-summary: "Object literals map to record values, and object spread maps to record spread updates."
+summary: "Translate the JavaScript and TypeScript habit, then use the Musi Book for the full rule."
 ---
 
-JavaScript object literals carry named fields:
+TypeScript structural objects make shape feel lightweight. Musi keeps that benefit, but record shape does not also imply methods, prototype behavior, or package identity.
 
-```javascript
-const local = {
-  host: "localhost",
-  port: 8080,
-  secure: false,
-};
+{{compare:javascript-typescript-objects-records}}
 
-const secure = { ...local, secure: true };
-secure.port;
-```
+## Reading Objects, Records, and Field Updates from JavaScript/TypeScript
 
-TypeScript usually gives that object a named shape:
+On the Musi side, Musi records and data variants describe stored shape. Behavior belongs in functions or classes/instances, not inside an object by default. Read the shared example through JavaScript/TypeScript eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-```typescript
-type Endpoint = {
-  host: string;
-  port: number;
-  secure: boolean;
-};
-```
+## False friend
 
-Musi can name the record-shaped data and use record spread for updates.
+Do not read `class` as object shape. If the page is about a pet, invoice, room, or vehicle, start with fields or variants. For a TypeScript reader, the trap is assuming runtime object shape and compile-time behavior contract are the same thing; Musi `class` is not a JS constructor or TS class; it is a behavior contract implemented separately from record/data shape.
 
-{{snippet:js-ts-object-record}}
+## When this pays off
 
-Read `{ ...local, secure := 0 = 0 }` as "copy the fields from `local`, then replace `secure`."
+Use records when names like `owner`, `age`, `amount`, or `route` are the point of the value. The JavaScript/TypeScript instinct still helps here: Keep the TypeScript habit of reading the shape before reading implementation details.
+
+## Keep close
+
+- [Records](/learn/book/data/records)
+- [Classes](/learn/book/abstractions/classes)
+- [Patterns](/learn/book/data/patterns)

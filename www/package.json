@@ -3,7 +3,9 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"generate:content": "echo generated content already checked in",
+		"generate:content": "bun run scripts/generate-content.ts",
+		"generate:content:check": "bun run scripts/generate-content.ts --check",
+		"validate:language-docs": "bun run scripts/validate-language-docs.ts",
 		"dev": "ASTRO_TELEMETRY_DISABLED=1 astro dev",
 		"dev:prod": "bun run build:prod && bun run preview:prod",
 		"build": "ASTRO_TELEMETRY_DISABLED=1 astro build",

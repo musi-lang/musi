@@ -4,9 +4,8 @@ export const luaDeveloperPages = [
 	{
 		id: "lua-overview",
 		partId: "developers",
-		path: "/docs/book/developers/lua/overview",
+		path: "/docs/guides/lua/overview",
 		aliases: [
-			"/docs/book/developers/guides/lua/overview",
 			"/docs/language/developers/lua/overview",
 			"/learn/language/developers/lua/overview",
 		],
@@ -16,9 +15,8 @@ export const luaDeveloperPages = [
 	{
 		id: "lua-values-locals-expressions",
 		partId: "developers",
-		path: "/docs/book/developers/lua/values-locals-expressions",
+		path: "/docs/guides/lua/values-locals-expressions",
 		aliases: [
-			"/docs/book/developers/guides/lua/values-locals-expressions",
 			"/docs/language/developers/lua/values-locals-expressions",
 			"/learn/language/developers/lua/values-locals-expressions",
 		],
@@ -29,9 +27,8 @@ export const luaDeveloperPages = [
 	{
 		id: "lua-functions-closures-named-calls",
 		partId: "developers",
-		path: "/docs/book/developers/lua/functions-closures-named-calls",
+		path: "/docs/guides/lua/functions-closures-named-calls",
 		aliases: [
-			"/docs/book/developers/guides/lua/functions-closures-named-calls",
 			"/docs/language/developers/lua/functions-closures-named-calls",
 			"/learn/language/developers/lua/functions-closures-named-calls",
 		],
@@ -42,9 +39,8 @@ export const luaDeveloperPages = [
 	{
 		id: "lua-blocks-branching-repetition",
 		partId: "developers",
-		path: "/docs/book/developers/lua/blocks-branching-repetition",
+		path: "/docs/guides/lua/blocks-branching-repetition",
 		aliases: [
-			"/docs/book/developers/guides/lua/blocks-branching-repetition",
 			"/docs/language/developers/lua/blocks-branching-repetition",
 			"/learn/language/developers/lua/blocks-branching-repetition",
 		],
@@ -55,9 +51,8 @@ export const luaDeveloperPages = [
 	{
 		id: "lua-tables-records-field-updates",
 		partId: "developers",
-		path: "/docs/book/developers/lua/tables-records-field-updates",
+		path: "/docs/guides/lua/tables-records-field-updates",
 		aliases: [
-			"/docs/book/developers/guides/lua/tables-records-field-updates",
 			"/docs/language/developers/lua/tables-records-field-updates",
 			"/learn/language/developers/lua/tables-records-field-updates",
 		],
@@ -68,9 +63,8 @@ export const luaDeveloperPages = [
 	{
 		id: "lua-arrays-sequences-maps-pipelines",
 		partId: "developers",
-		path: "/docs/book/developers/lua/arrays-sequences-maps-pipelines",
+		path: "/docs/guides/lua/arrays-sequences-maps-pipelines",
 		aliases: [
-			"/docs/book/developers/guides/lua/arrays-sequences-maps-pipelines",
 			"/docs/language/developers/lua/arrays-sequences-maps-pipelines",
 			"/learn/language/developers/lua/arrays-sequences-maps-pipelines",
 		],
@@ -81,9 +75,8 @@ export const luaDeveloperPages = [
 	{
 		id: "lua-nil-option-result",
 		partId: "developers",
-		path: "/docs/book/developers/lua/nil-option-result",
+		path: "/docs/guides/lua/nil-option-result",
 		aliases: [
-			"/docs/book/developers/guides/lua/nil-option-result",
 			"/docs/language/developers/lua/nil-option-result",
 			"/learn/language/developers/lua/nil-option-result",
 		],
@@ -93,9 +86,8 @@ export const luaDeveloperPages = [
 	{
 		id: "lua-errors-pcall-effects",
 		partId: "developers",
-		path: "/docs/book/developers/lua/errors-pcall-effects",
+		path: "/docs/guides/lua/errors-pcall-effects",
 		aliases: [
-			"/docs/book/developers/guides/lua/errors-pcall-effects",
 			"/docs/language/developers/lua/errors-pcall-effects",
 			"/learn/language/developers/lua/errors-pcall-effects",
 		],
@@ -105,9 +97,8 @@ export const luaDeveloperPages = [
 	{
 		id: "lua-coroutines-effect-boundaries",
 		partId: "developers",
-		path: "/docs/book/developers/lua/coroutines-effect-boundaries",
+		path: "/docs/guides/lua/coroutines-effect-boundaries",
 		aliases: [
-			"/docs/book/developers/guides/lua/coroutines-effect-boundaries",
 			"/docs/language/developers/lua/coroutines-effect-boundaries",
 			"/learn/language/developers/lua/coroutines-effect-boundaries",
 		],
@@ -118,9 +109,8 @@ export const luaDeveloperPages = [
 	{
 		id: "lua-metatables-classes-instances-laws",
 		partId: "developers",
-		path: "/docs/book/developers/lua/metatables-classes-instances-laws",
+		path: "/docs/guides/lua/metatables-classes-instances-laws",
 		aliases: [
-			"/docs/book/developers/guides/lua/metatables-classes-instances-laws",
 			"/docs/language/developers/lua/metatables-classes-instances-laws",
 			"/learn/language/developers/lua/metatables-classes-instances-laws",
 		],
@@ -131,9 +121,8 @@ export const luaDeveloperPages = [
 	{
 		id: "lua-pattern-matching-data-variants",
 		partId: "developers",
-		path: "/docs/book/developers/lua/pattern-matching-data-variants",
+		path: "/docs/guides/lua/pattern-matching-data-variants",
 		aliases: [
-			"/docs/book/developers/guides/lua/pattern-matching-data-variants",
 			"/docs/language/developers/lua/pattern-matching-data-variants",
 			"/learn/language/developers/lua/pattern-matching-data-variants",
 		],
@@ -144,9 +133,8 @@ export const luaDeveloperPages = [
 	{
 		id: "lua-modules-imports-exports",
 		partId: "developers",
-		path: "/docs/book/developers/lua/modules-imports-exports",
+		path: "/docs/guides/lua/modules-imports-exports",
 		aliases: [
-			"/docs/book/developers/guides/lua/modules-imports-exports",
 			"/docs/language/developers/lua/modules-imports-exports",
 			"/learn/language/developers/lua/modules-imports-exports",
 		],
@@ -156,9 +144,8 @@ export const luaDeveloperPages = [
 	{
 		id: "lua-testing-tooling",
 		partId: "developers",
-		path: "/docs/book/developers/lua/testing-tooling",
+		path: "/docs/guides/lua/testing-tooling",
 		aliases: [
-			"/docs/book/developers/guides/lua/testing-tooling",
 			"/docs/language/developers/lua/testing-tooling",
 			"/learn/language/developers/lua/testing-tooling",
 		],
@@ -168,9 +155,8 @@ export const luaDeveloperPages = [
 	{
 		id: "lua-embedding-c-api-ffi",
 		partId: "developers",
-		path: "/docs/book/developers/lua/embedding-c-api-ffi",
+		path: "/docs/guides/lua/embedding-c-api-ffi",
 		aliases: [
-			"/docs/book/developers/guides/lua/embedding-c-api-ffi",
 			"/docs/language/developers/lua/embedding-c-api-ffi",
 			"/learn/language/developers/lua/embedding-c-api-ffi",
 		],

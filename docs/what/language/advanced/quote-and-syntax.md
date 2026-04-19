@@ -7,38 +7,22 @@ order: 32
 slug: "quote-and-syntax"
 summary: "Treat code as data only after ordinary code reading feels natural."
 ---
+Quote and syntax features let code talk about code as data. They are useful for tools, templates, generated declarations, and compile-time transformations.
 
 {{snippet:chapter-quote-and-syntax}}
 
-## Boundary Tool
+This is powerful because the program can inspect or build structure that normally belongs to source text. It is also easy to overuse.
 
-`quote` turns code shape into syntax data you can inspect, build, or reuse.
-The first snippet shows simplest quoted expression, and the second shows interpolation with `#(...)` inside quoted form.
-This chapter belongs late because it asks you to reason about code as data rather than just running code.
+## Use syntax values for tooling-shaped work
 
-## When to Reach for It
+Code generation, lint-like checks, and declaration templates are good fits. A normal receipt calculation or animal-name formatter should stay ordinary code.
 
-Metaprogramming questions show up after ordinary code already feels familiar.
-At that point users need examples that explain both power and boundary: quoting is useful, but it is not default way to write everyday logic.
-A focused page keeps this tool available without overwhelming readers who are still stabilizing basic syntax.
+## Generated code should still feel authored
 
-## Read the Boundary
+If a template produces declarations, those declarations should be names a person would have written. Tooling should help the reader, not bury intent behind syntax tricks.
 
-Read `quote (x + 1);` as syntax value representing expression shape.
-Then read `#(delta)` or `#(x)` inside quoted form as splice points where surrounding values contribute pieces to generated syntax.
-Use `comptime quote { ... }` when quoted module items should expand before normal checking continues.
-When experimenting, start with very small quoted expressions and ask what syntax object each quote should represent before building larger templates.
+A good test for quoted syntax is whether the generated shape could be explained to a teammate without mentioning the generator first. If the useful result is “a handler for each payment event,” the generated declarations should show those handlers plainly. The quote is the workshop; the resulting code is what people maintain.
 
-## Small Exercise
+Advanced chapters are tools for edges: metadata, native calls, compile-time work, syntax values, and command-line use. They matter most when ordinary declarations are no longer enough to describe a boundary.
 
-- Quote one simple expression.
-- Add one splice inside a quoted template.
-- Compare quoted template with handwritten equivalent shape.
-
-## Mistake to Avoid
-
-Do not reach for quote when an ordinary function or data value already solves the problem more directly.
-
-## Next Page
-
-Continue to [Comptime](/learn/book/advanced/comptime) to run code during compilation and expand generated syntax.
+Use advanced forms like locked cabinets, not like kitchen drawers. Reach for them when a tool, runtime, foreign library, or build step truly needs the extra signal. Keep normal program logic in normal declarations.

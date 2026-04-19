@@ -1,0 +1,1 @@
+const nativeClockMs = native.bind("clock_ms");

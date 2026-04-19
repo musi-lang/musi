@@ -1,36 +1,31 @@
 ---
 title: "Enums, Variants, and Patterns"
-description: "Translate C++17 enum class and std::variant habits into Musi data variants and match."
+description: "Read Enums, Variants, and Patterns as a C++17 habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "C++ Developers"
 order: 9
 slug: "enums-variants-patterns"
-summary: "Use data variants when alternatives carry distinct shapes."
+summary: "Translate the C++17 habit, then use the Musi Book for the full rule."
 ---
 
-# Enums, Variants, and Patterns
+A C++ reader brings habits from RAII, overload sets, templates, references, optional values, exceptions, and object hierarchies. That helps with ownership stories, value categories, and compile-time abstractions, but the Musi page asks a narrower question: what contract should this named cases and pattern matching example make visible?
 
-C++17 can model alternatives with `std::variant` and a visitor:
+{{compare:cpp17-enums-variants-patterns}}
 
-```cpp
-struct Configured {
-    int port;
-};
+## Reading Enums, Variants, and Patterns from C++17
 
-struct Default {};
+On the Musi side, Musi data variants name the cases directly, and `match` reads the case split at the point where the answer is chosen. Read the shared example through C++17 eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-using Port = std::variant<Configured, Default>;
+## False friend
 
-const auto selected = Port{Configured{8080}};
-const auto port = std::visit([](const auto& state) -> int {
-    using State = std::decay_t<decltype(state)>;
-    if constexpr (std::is_same_v<State, Configured>) {
-        return state.port;
-    }
-    return 3000;
-}, selected);
-```
+Do not keep integer tags, string unions, subclass checks, or table marker fields when a data variant is the real shape. For a C++ reader, the trap is turning every Musi value into a class-shaped design; Musi `class` is closer to a concept or trait than a C++ class; records/data store shape, instances satisfy behavior.
 
-Musi makes alternatives data variants and matches them directly.
+## When this pays off
 
-{{snippet:cpp17-enums-variants-patterns}}
+Use data variants when an order, animal, traffic light, payment state, or parser result has a closed set of cases. The C++17 instinct still helps here: Keep the C++ habit of asking which operation is generic and which value owns shape.
+
+## Keep close
+
+- [Data definitions](/learn/book/data/data-definitions)
+- [Patterns](/learn/book/data/patterns)
+- [Records](/learn/book/data/records)

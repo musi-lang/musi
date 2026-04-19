@@ -7,21 +7,20 @@ order: 24
 slug: "effects"
 summary: "Understand effects as requests for work, not immediate hidden side effects."
 ---
-
-An effect describes operations code may request from an outside capability. A request is visible in source so the boundary stays clear.
+Effects describe work that reaches outside plain value calculation. Reading the clock, asking the environment for a variable, printing a line, or requesting randomness all depend on something beyond the current expression.
 
 {{snippet:chapter-effects}}
 
-## Request Model
+Think of an effect as a service desk. A function can fill out a request, but some handler or runtime must actually answer it. That separation lets ordinary code stay clear about what it wants without pretending that outside work is the same as arithmetic.
 
-Read the `effect` block as a menu of operations. Read `request Clock.tick();` as code asking for one operation from that menu. Something else must eventually provide the answer.
+## Why requests are named
 
-Compile-time evaluation follows the same boundary.
-Handled effects can run inside `comptime`.
-Unhandled host effects need `@comptimeSafe` on the effect operation and a compile-time host supplied by the session.
+Named operations make boundaries visible. `Clock.tick` tells the reader that time is involved. `Runtime.envGet` tells the reader that the process environment is involved. That is much clearer than hiding those facts behind a helper that looks pure.
 
-## Service Boundary
+## Keeping business rules separate
 
-A request is like a service bell at a counter: code asks, handler or host answers.
+A shipping estimate may need the current date, but the rule for choosing the delivery window should not be tangled with the mechanism that reads the clock. Ask for the outside value at the edge, then pass ordinary values into ordinary functions.
 
-Continue to [Using](/learn/book/effects-runtime/handling/using).
+## Reading declarations inside an effect
+
+Each `let` inside an effect body describes one operation that may be requested. A large runtime effect can list many operations, just like a city office lists many counters: permits, tax forms, records, and payments. The list is not the implementation; it is the menu of requests.

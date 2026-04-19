@@ -1,33 +1,31 @@
 ---
 title: "Arrays, Sequences, Maps, and Pipelines"
-description: "Translate Lua sequence and table-map habits into Musi collection pipelines and Option values."
+description: "Read Arrays, Sequences, Maps, and Pipelines as a Lua habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Lua Developers"
 order: 6
 slug: "arrays-sequences-maps-pipelines"
-summary: "Use pipelines for sequence work and Option when keyed lookup may be absent."
+summary: "Translate the Lua habit, then use the Musi Book for the full rule."
 ---
 
-# Arrays, Sequences, Maps, and Pipelines
+A Lua reader brings habits from tables, metatables, nil, coroutines, embedding, modules, and small runtime boundaries. That helps with simple data and host/runtime edges without much ceremony, but the Musi page asks a narrower question: what contract should this lists, slices, maps, and pipelines example make visible?
 
-Lua sequences are tables with integer keys:
+{{compare:lua-arrays-sequences-maps-pipelines}}
 
-```lua
-local ports = { 3000, 8080 }
-table.insert(ports, 9000)
-```
+## Reading Arrays, Sequences, Maps, and Pipelines from Lua
 
-Musi pipelines keep the sequence moving left to right.
+On the Musi side, Musi collection examples keep indexing, field access, and pipelines explicit so a reader can see where each value comes from. Read the shared example through Lua eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-{{snippet:lua-arrays-pipelines}}
+## False friend
 
-Lua tables also act as maps:
+Do not import lazy iterators, stream chains, table conventions, or pointer arithmetic unless the Musi example needs that behavior. For a Lua reader, the trap is letting table shape, missing fields, and behavior conventions blur together; Musi `class` is not a metatable pattern; records/data hold table-like shape, classes/instances name promised behavior.
 
-```lua
-local ports = { web = 8080, admin = 9000 }
-local port = ports.web
-```
+## When this pays off
 
-When absence matters, Musi examples return `Option` instead of relying on `nil`.
+Use this shape for prices, stops, animals, files, and other small batches where each step has a name. The Lua instinct still helps here: Keep the Lua habit of using small names and simple values.
 
-{{snippet:lua-map-option}}
+## Keep close
+
+- [Arrays and slices](/learn/book/data/arrays-and-slices)
+- [Records](/learn/book/data/records)
+- [Dot calls](/learn/book/core/dot-calls)

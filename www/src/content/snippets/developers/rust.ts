@@ -4,10 +4,10 @@ export const rustDeveloperSnippets = [
 	{
 		id: "rust-values-functions",
 		language: "musi",
-		sourceText: `let total (base : Int, fee : Int) : Int := base + fee;
+		sourceText: `let total (orderTotal : Int, serviceFee : Int) : Int := orderTotal + serviceFee;
 
-let answer := total(1200, 45);
-answer;`,
+let invoiceTotal := total(1200, 45);
+invoiceTotal;`,
 		evidence: {
 			path: "docs/what/language/developers/rust/values-functions.md",
 			line: 1,
@@ -28,9 +28,9 @@ selected;`,
 	{
 		id: "rust-mutation-counter",
 		language: "musi",
-		sourceText: `let visits := mut 0;
-visits := visits + 1;
-visits;`,
+		sourceText: `let queuedJobs := mut 0;
+queuedJobs := queuedJobs + 1;
+queuedJobs;`,
 		evidence: {
 			path: "docs/what/language/developers/rust/mutation.md",
 			line: 1,

@@ -1,39 +1,31 @@
 ---
 title: "Namespaces, Modules, and Packages"
-description: "Translate C# namespaces, files, and NuGet-style package habits into Musi exports, imports, and package paths."
+description: "Read Namespaces, Modules, and Packages as a C# habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "C# Developers"
 order: 12
 slug: "namespaces-modules-packages"
-summary: "Use export for public names and import for package or relative module boundaries."
+summary: "Translate the C# habit, then use the Musi Book for the full rule."
 ---
 
-C# namespaces and projects organize public APIs:
+A C# reader brings habits from nullable flow analysis, records, LINQ, async tasks, extension methods, interfaces, namespaces, and attributes. That helps with domain code through named APIs and tooling feedback, but the Musi page asks a narrower question: what contract should this fresh values and mutation example make visible?
 
-```csharp
-namespace Ports;
+{{compare:csharp-namespaces-modules-packages}}
 
-public static class Defaults
-{
-    public static int DefaultPort() => 8080;
-}
-```
+## Reading Namespaces, Modules, and Packages from C#
 
-Musi marks public names with `export`.
+On the Musi side, Musi makes mutation explicit with `mut` and assignment; ordinary `let` names read as stable facts. Read the shared example through C# eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-{{snippet:csharp-module-export}}
+## False friend
 
-Another file imports the module and calls the exported function.
+Do not translate every rebinding habit into mutation. A new receipt, label, or counter snapshot can be a fresh name. For a C# reader, the trap is mapping Musi classes to object classes or service containers; Musi `class` is a typeclass-style behavior contract, not a CLR class with fields, constructors, and inheritance.
 
-```csharp
-using Ports;
+## When this pays off
 
-var port = Defaults.DefaultPort();
-port;
-```
+Use mutation when the domain really changes over time, such as queue depth or a buffer cursor. The C# instinct still helps here: Keep the C# habit of making api shape readable at the call site.
 
-Musi imports the module value and reads exported names from it.
+## Keep close
 
-{{snippet:csharp-module-import}}
-
-Package imports such as `@std/io` are for shared packages. Relative imports such as `./ports` are for nearby project files.
+- [Mutation](/learn/book/start/mutation)
+- [Values and let](/learn/book/start/values-and-let)
+- [Blocks and expressions](/learn/book/start/blocks-and-expressions)

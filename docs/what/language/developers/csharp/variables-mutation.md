@@ -1,41 +1,31 @@
 ---
 title: "Variables and Mutation"
-description: "Translate C# locals, var, and assignment into Musi names, mut values, and fresh bindings."
+description: "Read Variables and Mutation as a C# habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "C# Developers"
 order: 4
 slug: "variables-mutation"
-summary: "Use mut for real state changes and fresh names for ordinary derived values."
+summary: "Translate the C# habit, then use the Musi Book for the full rule."
 ---
 
-C# local variables can be reassigned:
+A C# reader brings habits from nullable flow analysis, records, LINQ, async tasks, extension methods, interfaces, namespaces, and attributes. That helps with domain code through named APIs and tooling feedback, but the Musi page asks a narrower question: what contract should this fresh values and mutation example make visible?
 
-```csharp
-var visits = 0;
-visits += 1;
+{{compare:csharp-variables-mutation}}
 
-var nextVisits = visits + 1;
-nextVisits;
-```
+## Reading Variables and Mutation from C#
 
-Musi marks the value that can change with `mut`.
+On the Musi side, Musi makes mutation explicit with `mut` and assignment; ordinary `let` names read as stable facts. Read the shared example through C# eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-{{snippet:csharp-variables-mutation}}
+## False friend
 
-Use `mut` like a visible dial on a machine. Readers know which dial can move.
+Do not translate every rebinding habit into mutation. A new receipt, label, or counter snapshot can be a fresh name. For a C# reader, the trap is mapping Musi classes to object classes or service containers; Musi `class` is a typeclass-style behavior contract, not a CLR class with fields, constructors, and inheritance.
 
-## Fresh values
+## When this pays off
 
-C# often uses `var` for derived values:
+Use mutation when the domain really changes over time, such as queue depth or a buffer cursor. The C# instinct still helps here: Keep the C# habit of making api shape readable at the call site.
 
-```csharp
-var basePrice = 1200;
-var total = basePrice + 45;
-total;
-```
+## Keep close
 
-Musi fresh bindings read the same way.
-
-{{snippet:csharp-fresh-value}}
-
-Use fresh names when a later value is another fact, not a state change.
+- [Mutation](/learn/book/start/mutation)
+- [Values and let](/learn/book/start/values-and-let)
+- [Blocks and expressions](/learn/book/start/blocks-and-expressions)

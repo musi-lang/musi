@@ -8,23 +8,12 @@ slug: "data"
 summary: "Keep data-shape learning readable by separating records, sequences, and patterns."
 ---
 
-This part introduces values with shape.
-Records, arrays, slices, and patterns all answer different kinds of data questions, and the examples should help you feel when to reach for each one.
-The section is about practical structure, not abstract taxonomy.
+Data is where programs start to describe the real world. People have names, cars have mileage, payments have states, animals have tags, rooms have bookings, and packages have destinations. Musi gives you several ways to model those shapes, and each one answers a different question.
 
-## Path Through This Part
+Records are for named fields. Use them when the parts deserve labels, like `street`, `city`, and `postalCode`. Arrays and slices are for ordered collections, like seats in a row or payments on a statement. Data definitions are for meaningful alternatives, like pending, paid, or failed. Patterns are for reading those shapes back safely. Option and Result explain the two most common special shapes: maybe there is no value, or maybe the work failed with a reason.
 
-This section teaches labeled data, ordered data, and branching on data shape.
-You will construct values, update them, and then decide what to do when shape changes the result.
+This part should make code less vague. A boolean can say whether something is active, but a variant can say whether a subscription is trialing, active, paused, cancelled, or expired. A tuple can hold two values, but a record can say which value is `lowerBound` and which is `upperBound`.
 
-## What This Part Solves
+Good data modeling removes guesswork from later code. If the shape is honest, functions become shorter because they no longer need to check for impossible combinations. If the shape is vague, every function has to defend itself.
 
-Once values stop being just numbers or strings, users need examples that answer "how should I model this?" not only "what punctuation exists?"
-If the docs stay too thin here, beginners end up asking how to update one field, how to represent a list, or how to branch on constructor cases.
-This section should answer those questions with compact but meaningful examples.
-
-## How to Read It
-
-Start with records and arrays before pattern matching.
-Get comfortable recognizing named fields versus ordered positions, then move into `match` once those shapes already mean something to you.
-When examples grow, keep asking what data shape each construct is making visible.
+Read these chapters with everyday examples in mind. A lost-and-found desk, a school roster, a pet shelter, a delivery route, and a family calendar all have different data shapes. The language features matter because they let those shapes stay visible.

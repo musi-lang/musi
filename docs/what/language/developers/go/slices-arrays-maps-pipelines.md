@@ -1,34 +1,31 @@
 ---
 title: "Slices, Arrays, Maps, and Pipelines"
-description: "Translate Go slices and map-style transformations into Musi collection pipelines."
+description: "Read Slices, Arrays, Maps, and Pipelines as a Go habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Go Developers"
 order: 6
 slug: "slices-arrays-maps-pipelines"
-summary: "Use pipelines when collection work should read left to right."
+summary: "Translate the Go habit, then use the Musi Book for the full rule."
 ---
 
-# Slices, Arrays, Maps, and Pipelines
+A Go reader brings habits from packages, structs, slices, nil, multiple returns, interfaces, goroutines, channels, and explicit errors. That helps with small named operations and direct data flow, but the Musi page asks a narrower question: what contract should this lists, slices, maps, and pipelines example make visible?
 
-Go slices often grow with `append`:
+{{compare:go-slices-arrays-maps-pipelines}}
 
-```go
-ports := []int{3000, 8080}
-ports = append(ports, 9000)
-visible := append([]int{}, ports...)
-```
+## Reading Slices, Arrays, Maps, and Pipelines from Go
 
-Musi pipelines keep the collection moving left to right.
+On the Musi side, Musi collection examples keep indexing, field access, and pipelines explicit so a reader can see where each value comes from. Read the shared example through Go eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-{{snippet:go-slices-pipelines}}
+## False friend
 
-Go maps are good for keyed lookup:
+Do not import lazy iterators, stream chains, table conventions, or pointer arithmetic unless the Musi example needs that behavior. For a Go reader, the trap is using absence or failure as a side channel because Go makes that cheap; Musi `class` is closer to an explicit interface constraint with instances; it is not a struct and not a method set attached by package convention.
 
-```go
-ports := map[string]int{"web": 8080, "admin": 9000}
-port := ports["web"]
-```
+## When this pays off
 
-When absence matters, Musi examples should return `Option` instead of relying on a zero value.
+Use this shape for prices, stops, animals, files, and other small batches where each step has a name. The Go instinct still helps here: Keep the Go habit of writing the small thing first and naming package boundaries clearly.
 
-{{snippet:go-map-option}}
+## Keep close
+
+- [Arrays and slices](/learn/book/data/arrays-and-slices)
+- [Records](/learn/book/data/records)
+- [Dot calls](/learn/book/core/dot-calls)

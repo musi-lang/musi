@@ -8,23 +8,12 @@ slug: "effects-runtime"
 summary: "Make effect flow explicit, then place runtime and stdlib on top of that model."
 ---
 
-This part explains explicit capability flow and the layers built around it.
-Effects describe requested work, `using` surfaces required capabilities, handlers resolve requests, and foundation/runtime/stdlib pages place imports in their proper layer.
-The goal is to make boundary thinking readable instead of mystical.
+Effects and Runtime explain how Musi talks to the world outside plain value calculation. A function can add numbers or format a record by itself. It cannot know the current time, read a file, print a line, or ask for randomness without crossing a boundary.
 
-## Path Through This Part
+Effects make those boundaries visible. An effect declares operations that may be requested. A request asks for one of those operations. A handler or runtime answers it. Errors and Recovery sits near the front because absence, recoverable failure, and outside requests are easy to confuse. Keeping them separate makes ordinary business rules easier to test.
 
-This section teaches effect requests, capability requirements, request handling, and module layering from core to runtime to stdlib.
-It is one of richest parts of the book, but every page should still answer one practical question.
+Use everyday examples while reading this part. A receipt total is ordinary calculation. Print the receipt is outside work. Choose a delivery window from a known date is ordinary calculation. Read today's date is outside work. Parse text is ordinary calculation. Read the file that contains the text is outside work.
 
-## What This Part Solves
+The runtime chapters show the host-facing side: process data, file access, logging, time, randomness, text helpers, and path handling. The stdlib chapter explains shared vocabulary so every package does not rebuild its own option, result, or text helpers.
 
-Effects and runtime topics become intimidating when all boundaries are introduced at once.
-Users then ask whether something is built in, imported, handled, runtime-backed, or just standard library code.
-This section prevents that pile-up by separating each concern while keeping one coherent model of explicit capability flow.
-
-## How to Read It
-
-Follow the order.
-Learn effect requests before handlers, understand `using` before resolving capabilities, and keep module layers distinct when reading imports.
-Whenever a page feels abstract, come back to concrete question: what work is being requested, and who is responsible for providing it?
+By the end, you should know where a request is made, who answers it, and how to move back to ordinary values as quickly as possible. That habit makes code easier to test, format, highlight, and review.
