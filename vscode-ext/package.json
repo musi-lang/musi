@@ -1,7 +1,7 @@
 {
 	"name": "vscode-musi",
 	"displayName": "Musi",
-	"description": "Musi package-aware syntax, LSP, and CLI tooling",
+	"description": "Musi language support for VS Code, including syntax highlighting, LSP diagnostics, hover, semantic tokens, formatting, and package commands.",
 	"version": "0.1.0-alpha.1",
 	"author": {
 		"name": "xsyetopz"
@@ -18,7 +18,14 @@
 		"url": "https://github.com/musi-lang/musi/issues"
 	},
 	"keywords": [
-		"Musi"
+		"musi",
+		"language",
+		"lsp",
+		"syntax",
+		"formatter",
+		"diagnostics",
+		"semantic-highlighting",
+		"vscode-extension"
 	],
 	"categories": [
 		"Linters",
