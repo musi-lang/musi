@@ -12,6 +12,27 @@ test("maps Musi documents to stdin formatter args", () => {
 	assert.deepEqual(formatArgs("ms"), ["fmt", "--ext", "ms", "-"]);
 });
 
+test("maps editor indentation options to formatter args", () => {
+	assert.deepEqual(formatArgs("ms", { insertSpaces: true, tabSize: 4 }), [
+		"fmt",
+		"--ext",
+		"ms",
+		"--indent-width",
+		"4",
+		"--use-spaces",
+		"-",
+	]);
+	assert.deepEqual(formatArgs("ms", { insertSpaces: false, tabSize: 3 }), [
+		"fmt",
+		"--ext",
+		"ms",
+		"--indent-width",
+		"3",
+		"--use-tabs",
+		"-",
+	]);
+});
+
 test("maps Markdown documents to markdown formatter args", () => {
 	assert.equal(
 		formatKindForDocument("markdown", "/workspace/README.md"),

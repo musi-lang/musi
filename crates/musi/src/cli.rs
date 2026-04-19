@@ -8,6 +8,32 @@ pub enum DiagnosticsFormatArg {
     Json,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum FmtProfileArg {
+    Standard,
+    Compact,
+    Expanded,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum FmtMatchArmIndentArg {
+    PipeAligned,
+    Block,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum FmtMatchArmArrowAlignmentArg {
+    None,
+    Consecutive,
+    Block,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum FmtOperatorBreakArg {
+    Before,
+    After,
+}
+
 #[derive(Debug, Parser)]
 #[command(name = "musi")]
 pub struct Cli {
@@ -37,8 +63,18 @@ pub struct FmtArgs {
     pub line_width: Option<usize>,
     #[arg(long)]
     pub indent_width: Option<usize>,
+    #[arg(long)]
+    pub profile: Option<FmtProfileArg>,
+    #[arg(long)]
+    pub match_arm_indent: Option<FmtMatchArmIndentArg>,
+    #[arg(long)]
+    pub match_arm_arrow_alignment: Option<FmtMatchArmArrowAlignmentArg>,
+    #[arg(long)]
+    pub operator_break: Option<FmtOperatorBreakArg>,
     #[arg(long, action = ArgAction::Count)]
     pub use_tabs: u8,
+    #[arg(long, action = ArgAction::Count)]
+    pub use_spaces: u8,
     #[arg(long = "ignore")]
     pub ignore: Vec<String>,
     #[arg(long = "watch", action = ArgAction::Count)]

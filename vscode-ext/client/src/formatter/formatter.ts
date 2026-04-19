@@ -7,6 +7,7 @@ import {
 	loadPackageRoot,
 } from "../manifest/manifest.ts";
 import {
+	type FormatEditorOptions,
 	type FormatKind,
 	formatArgs,
 	formatKindForDocument,
@@ -32,6 +33,25 @@ function workspaceFolderForDocument(
 	return vscode.workspace.getWorkspaceFolder(document.uri);
 }
 
+function activeEditorFormatOptions(
+	editor: vscode.TextEditor,
+): FormatEditorOptions {
+	const options: FormatEditorOptions = {};
+	if (typeof editor.options.insertSpaces === "boolean") {
+		return {
+			...options,
+			insertSpaces: editor.options.insertSpaces,
+			...(typeof editor.options.tabSize === "number"
+				? { tabSize: editor.options.tabSize }
+				: {}),
+		};
+	}
+	if (typeof editor.options.tabSize === "number") {
+		return { tabSize: editor.options.tabSize };
+	}
+	return options;
+}
+
 async function formatCwd(document: vscode.TextDocument): Promise<string> {
 	const manifestPath = findOwningManifestPathForUri(document.uri);
 	if (manifestPath) {
@@ -48,13 +68,14 @@ function runCliFormat(
 	document: vscode.TextDocument,
 	kind: FormatKind,
 	cwd: string,
+	options: FormatEditorOptions,
 ): Promise<CliFormatResult> {
 	const cliPath = findCliPath();
 	if (!cliPath) {
 		return Promise.reject(new Error("Musi CLI binary not found"));
 	}
 	return new Promise((resolve, reject) => {
-		const proc = spawn(cliPath, formatArgs(kind), {
+		const proc = spawn(cliPath, formatArgs(kind, options), {
 			cwd,
 			stdio: ["pipe", "pipe", "pipe"],
 		});
@@ -84,6 +105,7 @@ async function formatDocumentWithCli(
 	document: vscode.TextDocument,
 	forExplicitCommand: boolean,
 	isLspRunning: boolean,
+	options: FormatEditorOptions = {},
 ): Promise<vscode.TextEdit[]> {
 	if (document.uri.scheme !== "file") {
 		return [];
@@ -97,7 +119,12 @@ async function formatDocumentWithCli(
 		await showCliNotFoundUI();
 		return [];
 	}
-	const result = await runCliFormat(document, kind, await formatCwd(document));
+	const result = await runCliFormat(
+		document,
+		kind,
+		await formatCwd(document),
+		options,
+	);
 	if (result.exitCode !== 0) {
 		const message = result.stderr.trim() || result.stdout.trim();
 		throw new Error(
@@ -121,8 +148,12 @@ export class CliFormatProvider
 
 	async provideDocumentFormattingEdits(
 		document: vscode.TextDocument,
+		options: vscode.FormattingOptions,
 	): Promise<vscode.TextEdit[]> {
-		return formatDocumentWithCli(document, false, !this.#formatMusi);
+		return formatDocumentWithCli(document, false, !this.#formatMusi, {
+			insertSpaces: options.insertSpaces,
+			tabSize: options.tabSize,
+		});
 	}
 }
 
@@ -168,7 +199,12 @@ export async function formatActiveDocumentWithCli() {
 		return;
 	}
 	try {
-		const edits = await formatDocumentWithCli(editor.document, true, false);
+		const edits = await formatDocumentWithCli(
+			editor.document,
+			true,
+			false,
+			activeEditorFormatOptions(editor),
+		);
 		if (edits.length === 0) {
 			return;
 		}

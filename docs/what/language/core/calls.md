@@ -1,6 +1,6 @@
 ---
 title: "Calls"
-description: "Learn call syntax as its own reading skill before adding dot calls."
+description: "Learn call syntax as its own reading skill before adding dot-calls."
 group: "Core Syntax"
 section: "Core Syntax"
 order: 10

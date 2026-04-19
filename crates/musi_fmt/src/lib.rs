@@ -15,7 +15,10 @@ pub use markdown::format_markdown;
 pub use paths::{FormatPathChange, FormatPathSummary, format_file, format_paths};
 pub use source::{FormatResult, format_source};
 
-use musi_project::manifest::FmtConfig;
+use musi_project::manifest::{
+    FmtBracePosition, FmtConfig, FmtGroupLayout, FmtMatchArmArrowAlignment, FmtMatchArmIndent,
+    FmtOperatorBreak, FmtProfile, FmtTrailingCommas,
+};
 use thiserror::Error;
 
 pub type FormatResultOf<T = FormatResult> = Result<T, FormatError>;
@@ -33,6 +36,31 @@ pub enum BracePosition {
     NextLine,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MatchArmIndent {
+    PipeAligned,
+    Block,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MatchArmArrowAlignment {
+    None,
+    Consecutive,
+    Block,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GroupLayout {
+    Auto,
+    Block,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OperatorBreak {
+    Before,
+    After,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FormatOptions {
     pub use_tabs: bool,
@@ -40,6 +68,13 @@ pub struct FormatOptions {
     pub indent_width: usize,
     pub trailing_commas: TrailingCommas,
     pub brace_position: BracePosition,
+    pub match_arm_indent: MatchArmIndent,
+    pub match_arm_arrow_alignment: MatchArmArrowAlignment,
+    pub call_argument_layout: GroupLayout,
+    pub declaration_parameter_layout: GroupLayout,
+    pub record_field_layout: GroupLayout,
+    pub effect_member_parameter_layout: GroupLayout,
+    pub operator_break: OperatorBreak,
     pub include: Vec<String>,
     pub exclude: Vec<String>,
     pub assume_extension: Option<FormatInputKind>,
@@ -53,6 +88,13 @@ impl Default for FormatOptions {
             indent_width: 2,
             trailing_commas: TrailingCommas::MultiLine,
             brace_position: BracePosition::SameLine,
+            match_arm_indent: MatchArmIndent::PipeAligned,
+            match_arm_arrow_alignment: MatchArmArrowAlignment::None,
+            call_argument_layout: GroupLayout::Auto,
+            declaration_parameter_layout: GroupLayout::Auto,
+            record_field_layout: GroupLayout::Block,
+            effect_member_parameter_layout: GroupLayout::Auto,
+            operator_break: OperatorBreak::Before,
             include: Vec::new(),
             exclude: Vec::new(),
             assume_extension: None,
@@ -65,6 +107,9 @@ impl FormatOptions {
     pub fn from_manifest(config: Option<&FmtConfig>) -> Self {
         let mut options = Self::default();
         if let Some(config) = config {
+            if let Some(profile) = config.profile {
+                options.apply_profile(profile);
+            }
             options.include.clone_from(&config.include);
             options.exclude.clone_from(&config.exclude);
             if let Some(use_tabs) = config.use_tabs {
@@ -82,14 +127,57 @@ impl FormatOptions {
             {
                 options.indent_width = indent_width;
             }
-            if let Some(trailing_commas) = config.trailing_commas.as_deref() {
+            if let Some(trailing_commas) = config.trailing_commas {
                 options.trailing_commas = TrailingCommas::from_manifest_value(trailing_commas);
             }
-            if let Some(brace_position) = config.brace_position.as_deref() {
+            if let Some(brace_position) = config.brace_position {
                 options.brace_position = BracePosition::from_manifest_value(brace_position);
+            }
+            if let Some(match_arm_indent) = config.match_arm_indent {
+                options.match_arm_indent = MatchArmIndent::from_manifest_value(match_arm_indent);
+            }
+            if let Some(alignment) = config.match_arm_arrow_alignment {
+                options.match_arm_arrow_alignment =
+                    MatchArmArrowAlignment::from_manifest_value(alignment);
+            }
+            if let Some(layout) = config.call_argument_layout {
+                options.call_argument_layout = GroupLayout::from_manifest_value(layout);
+            }
+            if let Some(layout) = config.declaration_parameter_layout {
+                options.declaration_parameter_layout = GroupLayout::from_manifest_value(layout);
+            }
+            if let Some(layout) = config.record_field_layout {
+                options.record_field_layout = GroupLayout::from_manifest_value(layout);
+            }
+            if let Some(layout) = config.effect_member_parameter_layout {
+                options.effect_member_parameter_layout = GroupLayout::from_manifest_value(layout);
+            }
+            if let Some(operator_break) = config.operator_break {
+                options.operator_break = OperatorBreak::from_manifest_value(operator_break);
             }
         }
         options
+    }
+
+    pub fn apply_profile(&mut self, profile: FmtProfile) {
+        match profile {
+            FmtProfile::Standard => {}
+            FmtProfile::Compact => {
+                self.line_width = 100;
+                self.match_arm_indent = MatchArmIndent::PipeAligned;
+                self.match_arm_arrow_alignment = MatchArmArrowAlignment::None;
+                self.record_field_layout = GroupLayout::Auto;
+            }
+            FmtProfile::Expanded => {
+                self.line_width = 80;
+                self.match_arm_indent = MatchArmIndent::Block;
+                self.match_arm_arrow_alignment = MatchArmArrowAlignment::Block;
+                self.call_argument_layout = GroupLayout::Block;
+                self.declaration_parameter_layout = GroupLayout::Block;
+                self.record_field_layout = GroupLayout::Block;
+                self.effect_member_parameter_layout = GroupLayout::Block;
+            }
+        }
     }
 
     #[must_use]
@@ -121,21 +209,62 @@ impl FormatInputKind {
 
 impl TrailingCommas {
     #[must_use]
-    pub const fn from_manifest_value(value: &str) -> Self {
-        match value.as_bytes() {
-            b"never" => Self::Never,
-            b"always" => Self::Always,
-            _ => Self::MultiLine,
+    pub const fn from_manifest_value(value: FmtTrailingCommas) -> Self {
+        match value {
+            FmtTrailingCommas::Never => Self::Never,
+            FmtTrailingCommas::Always => Self::Always,
+            FmtTrailingCommas::MultiLine => Self::MultiLine,
         }
     }
 }
 
 impl BracePosition {
     #[must_use]
-    pub const fn from_manifest_value(value: &str) -> Self {
-        match value.as_bytes() {
-            b"nextLine" => Self::NextLine,
-            _ => Self::SameLine,
+    pub const fn from_manifest_value(value: FmtBracePosition) -> Self {
+        match value {
+            FmtBracePosition::SameLine => Self::SameLine,
+            FmtBracePosition::NextLine => Self::NextLine,
+        }
+    }
+}
+
+impl MatchArmIndent {
+    #[must_use]
+    pub const fn from_manifest_value(value: FmtMatchArmIndent) -> Self {
+        match value {
+            FmtMatchArmIndent::PipeAligned => Self::PipeAligned,
+            FmtMatchArmIndent::Block => Self::Block,
+        }
+    }
+}
+
+impl MatchArmArrowAlignment {
+    #[must_use]
+    pub const fn from_manifest_value(value: FmtMatchArmArrowAlignment) -> Self {
+        match value {
+            FmtMatchArmArrowAlignment::None => Self::None,
+            FmtMatchArmArrowAlignment::Consecutive => Self::Consecutive,
+            FmtMatchArmArrowAlignment::Block => Self::Block,
+        }
+    }
+}
+
+impl GroupLayout {
+    #[must_use]
+    pub const fn from_manifest_value(value: FmtGroupLayout) -> Self {
+        match value {
+            FmtGroupLayout::Auto => Self::Auto,
+            FmtGroupLayout::Block => Self::Block,
+        }
+    }
+}
+
+impl OperatorBreak {
+    #[must_use]
+    pub const fn from_manifest_value(value: FmtOperatorBreak) -> Self {
+        match value {
+            FmtOperatorBreak::Before => Self::Before,
+            FmtOperatorBreak::After => Self::After,
         }
     }
 }

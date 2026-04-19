@@ -13,7 +13,10 @@ use music_module::ModuleKey;
 use music_seam::Artifact;
 
 use crate::builtin_std::STD_FILES;
-use crate::manifest::{License, LicenseFile, PackageManifest, PublishConfig};
+use crate::manifest::{
+    FmtGroupLayout, FmtMatchArmArrowAlignment, FmtOperatorBreak, FmtProfile, License, LicenseFile,
+    PackageManifest, PublishConfig,
+};
 use crate::{
     PackageSource, Project, ProjectError, ProjectOptions, ProjectTestTargetKind,
     ProjectTestTargetSource,
@@ -84,7 +87,7 @@ fn write_option_prelude_entry(root: &Path) {
         root,
         "index.ms",
         r"
-export let answer () : Option[Int] := some[Int](1);
+export let answer () : Option[Int] := makeSome[Int](1);
 ",
     );
 }
@@ -999,7 +1002,7 @@ export let Option := import "@std/option";
 let OptionPkg := import "@std/option";
 export let Int := Int;
 export opaque let Option := OptionPkg.Option;
-export let some := OptionPkg.some;
+export let makeSome := OptionPkg.makeSome;
 export let none := OptionPkg.none;
 "#,
         );
@@ -1011,7 +1014,7 @@ export opaque let Option[T] := data {
   | Some(T)
   | None
 };
-export let some[T] (value : T) : Option[T] := .Some(value);
+export let makeSome[T] (value : T) : Option[T] := .Some(value);
 export let none[T] () : Option[T] := .None;
 ",
         );
@@ -1129,6 +1132,120 @@ mod failure {
         .expect_err("private should not be accepted");
 
         assert!(error.to_string().contains("unknown field `private`"));
+    }
+
+    #[test]
+    fn manifest_rejects_invalid_fmt_enum_value() {
+        let error = serde_json::from_str::<PackageManifest>(
+            r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "fmt": {
+    "trailingCommas": "sometimes"
+  }
+}"#,
+        )
+        .expect_err("invalid formatter enum should not parse");
+
+        assert!(error.to_string().contains("unknown variant `sometimes`"));
+
+        let error = serde_json::from_str::<PackageManifest>(
+            r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "fmt": {
+    "matchArmIndent": "deep"
+  }
+}"#,
+        )
+        .expect_err("invalid formatter match indent enum should not parse");
+
+        assert!(error.to_string().contains("unknown variant `deep`"));
+    }
+
+    #[test]
+    fn manifest_accepts_advanced_fmt_config() {
+        let manifest = serde_json::from_str::<PackageManifest>(
+            r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "fmt": {
+    "profile": "expanded",
+    "matchArmArrowAlignment": "block",
+    "callArgumentLayout": "block",
+    "declarationParameterLayout": "block",
+    "recordFieldLayout": "block",
+    "effectMemberParameterLayout": "block",
+    "operatorBreak": "after"
+  }
+}"#,
+        )
+        .expect("advanced formatter config should parse");
+
+        let config = manifest.fmt.expect("fmt config should exist");
+        assert_eq!(config.profile, Some(FmtProfile::Expanded));
+        assert_eq!(
+            config.match_arm_arrow_alignment,
+            Some(FmtMatchArmArrowAlignment::Block)
+        );
+        assert_eq!(config.call_argument_layout, Some(FmtGroupLayout::Block));
+        assert_eq!(config.operator_break, Some(FmtOperatorBreak::After));
+    }
+
+    #[test]
+    fn fmt_line_width_must_be_positive() {
+        assert_manifest_validation_error(
+            r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "fmt": {
+    "lineWidth": 0
+  }
+}"#,
+            "load should fail",
+            "invalid fmt.lineWidth value",
+        );
+    }
+
+    #[test]
+    fn fmt_indent_width_must_be_positive() {
+        assert_manifest_validation_error(
+            r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "fmt": {
+    "indentWidth": 0
+  }
+}"#,
+            "load should fail",
+            "invalid fmt.indentWidth value",
+        );
+    }
+
+    #[test]
+    fn fmt_include_and_exclude_patterns_must_be_unique() {
+        assert_manifest_validation_error(
+            r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "fmt": {
+    "include": ["src/**", "src/**"]
+  }
+}"#,
+            "load should fail",
+            "duplicate fmt.include pattern `src/**`",
+        );
+        assert_manifest_validation_error(
+            r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "fmt": {
+    "exclude": ["target/**", "target/**"]
+  }
+}"#,
+            "load should fail",
+            "duplicate fmt.exclude pattern `target/**`",
+        );
     }
 
     #[test]

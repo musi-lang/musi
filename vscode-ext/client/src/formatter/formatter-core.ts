@@ -13,6 +13,11 @@ const MARKDOWN_EXTENSIONS = new Set([
 
 export type FormatKind = "ms" | "markdown";
 
+export interface FormatEditorOptions {
+	readonly insertSpaces?: boolean;
+	readonly tabSize?: number;
+}
+
 export function formatKindForDocument(
 	languageId: string,
 	filePath: string,
@@ -29,8 +34,24 @@ export function formatKindForDocument(
 	return undefined;
 }
 
-export function formatArgs(kind: FormatKind): string[] {
-	return ["fmt", "--ext", kind, "-"];
+export function formatArgs(
+	kind: FormatKind,
+	options: FormatEditorOptions = {},
+): string[] {
+	const args = ["fmt", "--ext", kind];
+	if (typeof options.tabSize === "number" && Number.isFinite(options.tabSize)) {
+		args.push(
+			"--indent-width",
+			String(Math.max(1, Math.trunc(options.tabSize))),
+		);
+	}
+	if (options.insertSpaces === true) {
+		args.push("--use-spaces");
+	} else if (options.insertSpaces === false) {
+		args.push("--use-tabs");
+	}
+	args.push("-");
+	return args;
 }
 
 export function shouldUseCliFormatter(

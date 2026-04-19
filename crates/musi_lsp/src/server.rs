@@ -6,10 +6,10 @@ use std::pin::Pin;
 
 use async_lsp::lsp_types::{
     DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
-    DidSaveTextDocumentParams, DocumentFormattingParams, Hover, HoverContents, HoverParams,
-    HoverProviderCapability, InitializeParams, InitializeResult, InitializedParams, InlayHint,
-    InlayHintOptions, InlayHintParams, InlayHintServerCapabilities, MarkupContent, MarkupKind,
-    OneOf, PublishDiagnosticsParams, Range, SemanticTokens, SemanticTokensFullOptions,
+    DidSaveTextDocumentParams, DocumentFormattingParams, FormattingOptions, Hover, HoverContents,
+    HoverParams, HoverProviderCapability, InitializeParams, InitializeResult, InitializedParams,
+    InlayHint, InlayHintOptions, InlayHintParams, InlayHintServerCapabilities, MarkupContent,
+    MarkupKind, OneOf, PublishDiagnosticsParams, Range, SemanticTokens, SemanticTokensFullOptions,
     SemanticTokensOptions, SemanticTokensParams, SemanticTokensRangeParams,
     SemanticTokensRangeResult, SemanticTokensResult, SemanticTokensServerCapabilities,
     ServerCapabilities, ServerInfo, TextDocumentContentChangeEvent, TextDocumentItem,
@@ -212,8 +212,7 @@ impl MusiLanguageServer {
             .map_or_else(FormatOptions::default, |project| {
                 FormatOptions::from_manifest(project.manifest().fmt.as_ref())
             });
-        options.indent_width = usize::try_from(params.options.tab_size).unwrap_or(2);
-        options.use_tabs = !params.options.insert_spaces;
+        apply_document_formatting_options(&mut options, &params.options);
         let formatted = format_source(text, &options).ok()?;
         if !formatted.changed {
             return Some(Vec::new());
@@ -243,6 +242,14 @@ impl MusiLanguageServer {
                 }),
         );
     }
+}
+
+fn apply_document_formatting_options(
+    options: &mut FormatOptions,
+    formatting_options: &FormattingOptions,
+) {
+    options.indent_width = usize::try_from(formatting_options.tab_size).unwrap_or(2);
+    options.use_tabs = !formatting_options.insert_spaces;
 }
 
 impl LanguageServer for MusiLanguageServer {

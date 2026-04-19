@@ -914,6 +914,7 @@ fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> Pro
             "`musiModulesDir` boolean must be false",
         ));
     }
+    validate_fmt_config(manifest, source)?;
     for (export_name, export_path) in manifest.export_map() {
         if export_name != "." && !export_name.starts_with("./") {
             let pointer = format!("/exports/{}", escape_pointer_segment(&export_name));
@@ -944,6 +945,65 @@ fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> Pro
     }
     validate_task_graph(manifest, source)?;
     Ok(())
+}
+
+fn validate_fmt_config(manifest: &PackageManifest, source: &ManifestSource) -> ProjectResult {
+    let Some(config) = manifest.fmt.as_ref() else {
+        return Ok(());
+    };
+    if matches!(config.line_width, Some(0)) {
+        let span = source
+            .value_span(&json_pointer(&["fmt", "lineWidth"]))
+            .unwrap_or_else(|| source.insertion_span());
+        return Err(source.error(
+            DiagCode::new(3606),
+            "invalid fmt.lineWidth value",
+            span,
+            "`fmt.lineWidth` must be at least 1",
+        ));
+    }
+    if matches!(config.indent_width, Some(0)) {
+        let span = source
+            .value_span(&json_pointer(&["fmt", "indentWidth"]))
+            .unwrap_or_else(|| source.insertion_span());
+        return Err(source.error(
+            DiagCode::new(3606),
+            "invalid fmt.indentWidth value",
+            span,
+            "`fmt.indentWidth` must be at least 1",
+        ));
+    }
+    if let Some(pattern) = first_duplicate(&config.include) {
+        let span = source
+            .value_span(&json_pointer(&["fmt", "include"]))
+            .unwrap_or_else(|| source.insertion_span());
+        return Err(source.error(
+            DiagCode::new(3606),
+            format!("duplicate fmt.include pattern `{pattern}`"),
+            span,
+            "`fmt.include` patterns must be unique",
+        ));
+    }
+    if let Some(pattern) = first_duplicate(&config.exclude) {
+        let span = source
+            .value_span(&json_pointer(&["fmt", "exclude"]))
+            .unwrap_or_else(|| source.insertion_span());
+        return Err(source.error(
+            DiagCode::new(3606),
+            format!("duplicate fmt.exclude pattern `{pattern}`"),
+            span,
+            "`fmt.exclude` patterns must be unique",
+        ));
+    }
+    Ok(())
+}
+
+fn first_duplicate(items: &[String]) -> Option<&str> {
+    let mut seen = BTreeSet::new();
+    items
+        .iter()
+        .find(|item| !seen.insert(item.as_str()))
+        .map(String::as_str)
 }
 
 fn seed_builtin_std_package(

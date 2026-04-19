@@ -28,7 +28,12 @@ Read `musi run`, `musi check`, `musi build`, `musi fmt`, and `musi test` as pack
 Read `music check index.ms`, `music build index.ms`, and `music run index.seam` as direct lane for single-file or lower-level work.
 Read `music disasm index.ms` as the SEAM HIL view and `music disasm --level seam index.ms` as the lowered `.seam` IL view.
 Read `musi fmt` as the Deno-style formatter for `.ms` files and Musi code fences in Markdown.
-Read hover and semantic highlighting in editors as sema-backed: record members stay properties, dot-callable UDNS heads (`value.name(...)`) stay dot callables.
+Configure it through `musi.json` under `fmt`.
+The formatter starts from `profile` (`standard`, `compact`, or `expanded`), then applies explicit overrides such as `lineWidth`, `indentWidth`, `useTabs`, `trailingCommas`, `bracePosition`, `matchArmIndent`, `matchArmArrowAlignment`, `callArgumentLayout`, `declarationParameterLayout`, `recordFieldLayout`, `effectMemberParameterLayout`, and `operatorBreak`.
+Use `matchArmIndent` to choose pipe-aligned or block-indented match arms, and `matchArmArrowAlignment` to choose whether `=>` stays compact or aligns within match-arm runs.
+Use the `*Layout` fields to keep fitting groups automatic or force block layout.
+The CLI can override common style choices with `musi fmt --profile`, `--match-arm-indent`, `--match-arm-arrow-alignment`, and `--operator-break`.
+Read hover and semantic highlighting in editors as sema-backed: record members stay properties, dot-callable UDNS heads (`value.name(...)`) stay dot-callables.
 When in doubt, ask first whether you are inside a package or handling one file directly; that decision usually picks the right command family immediately.
 
 ## Small Exercise

@@ -372,6 +372,100 @@ export let test () :=
     }
 
     #[test]
+    fn fmt_stdin_uses_manifest_config_and_cli_indent_overrides() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"fmt\": { \"useTabs\": true, \"indentWidth\": 8 }\n}\n",
+        );
+        write_file(temp.path(), "index.ms", "export let answer : Int := 1;");
+
+        let manifest_tabs = run_musi_with_input(
+            &["fmt", "--ext", "ms", "-"],
+            temp.path(),
+            "let x:=data{| A};",
+        );
+        let editor_spaces = run_musi_with_input(
+            &[
+                "fmt",
+                "--ext",
+                "ms",
+                "--indent-width",
+                "4",
+                "--use-spaces",
+                "-",
+            ],
+            temp.path(),
+            "let x:=data{| A};",
+        );
+
+        assert_success(&manifest_tabs);
+        assert_success(&editor_spaces);
+        assert_eq!(
+            String::from_utf8_lossy(&manifest_tabs.stdout),
+            "let x := data {\n\t| A\n};\n"
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&editor_spaces.stdout),
+            "let x := data {\n    | A\n};\n"
+        );
+    }
+
+    #[test]
+    fn fmt_stdin_uses_profile_and_match_alignment_overrides() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"fmt\": { \"profile\": \"expanded\", \"matchArmIndent\": \"pipeAligned\" }\n}\n",
+        );
+        write_file(temp.path(), "index.ms", "export let answer : Int := 1;");
+        let source = "export let describe (target : Ordering) : String := match target(| .Less => \"less\" | .GreaterThanEverything => \"greater\" | _ => \"same\");";
+
+        let output = run_musi_with_input(&["fmt", "--ext", "ms", "-"], temp.path(), source);
+
+        assert_success(&output);
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout),
+            "export let describe (\n  target : Ordering\n) : String :=\n  match target (\n  | .Less                  => \"less\"\n  | .GreaterThanEverything => \"greater\"\n  | _                      => \"same\"\n  );\n"
+        );
+    }
+
+    #[test]
+    fn fmt_cli_match_alignment_overrides_manifest_profile() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"fmt\": { \"profile\": \"expanded\" }\n}\n",
+        );
+        write_file(temp.path(), "index.ms", "export let answer : Int := 1;");
+        let source = "export let describe (target : Ordering) : String := match target(| .Less => \"less\" | .GreaterThanEverything => \"greater\" | _ => \"same\");";
+
+        let output = run_musi_with_input(
+            &[
+                "fmt",
+                "--ext",
+                "ms",
+                "--match-arm-indent",
+                "pipe-aligned",
+                "--match-arm-arrow-alignment",
+                "none",
+                "-",
+            ],
+            temp.path(),
+            source,
+        );
+
+        assert_success(&output);
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout),
+            "export let describe (\n  target : Ordering\n) : String :=\n  match target (\n  | .Less => \"less\"\n  | .GreaterThanEverything => \"greater\"\n  | _ => \"same\"\n  );\n"
+        );
+    }
+
+    #[test]
     fn fmt_markdown_formats_musi_fences_only() {
         let temp = TempDir::new();
         write_file(

@@ -23,7 +23,7 @@ fn collect_node_token_roles(
             SyntaxElement::Node(child_node) => collect_node_token_roles(child_node, roles, index),
             SyntaxElement::Token(token) => {
                 if let Some(role) = roles.get_mut(*index) {
-                    *role = token_role_for(node.kind(), token.kind());
+                    *role = token_role_for(node, token.kind());
                 }
                 *index = index.saturating_add(1);
             }
@@ -75,8 +75,8 @@ fn count_node_tokens(node: SyntaxNode<'_, '_>) -> usize {
         .sum()
 }
 
-const fn token_role_for(parent: SyntaxNodeKind, token: TokenKind) -> TokenFormatRole {
-    match (parent, token) {
+fn token_role_for(parent: SyntaxNode<'_, '_>, token: TokenKind) -> TokenFormatRole {
+    match (parent.kind(), token) {
         (SyntaxNodeKind::SequenceExpr, TokenKind::LParen | TokenKind::RParen) => {
             TokenFormatRole::SequenceParen
         }
@@ -85,6 +85,16 @@ const fn token_role_for(parent: SyntaxNodeKind, token: TokenKind) -> TokenFormat
         }
         (SyntaxNodeKind::MemberList, TokenKind::LParen | TokenKind::RParen) => {
             TokenFormatRole::ForeignGroupParen
+        }
+        (SyntaxNodeKind::CallExpr, TokenKind::LParen | TokenKind::RParen) => {
+            TokenFormatRole::CallParen
+        }
+        (SyntaxNodeKind::ParamList, TokenKind::LParen | TokenKind::RParen)
+            if parent
+                .parent()
+                .is_some_and(|node| node.kind() == SyntaxNodeKind::Member) =>
+        {
+            TokenFormatRole::MemberParamParen
         }
         (SyntaxNodeKind::ParamList, TokenKind::LParen | TokenKind::RParen) => {
             TokenFormatRole::ParamParen
@@ -95,6 +105,10 @@ const fn token_role_for(parent: SyntaxNodeKind, token: TokenKind) -> TokenFormat
         (SyntaxNodeKind::ArrayTy, TokenKind::LBracket | TokenKind::RBracket) => {
             TokenFormatRole::ArrayTypeBracket
         }
+        (
+            SyntaxNodeKind::EffectSet | SyntaxNodeKind::RecordExpr | SyntaxNodeKind::RecordPat,
+            TokenKind::LBrace | TokenKind::RBrace,
+        ) => TokenFormatRole::CommaListBrace,
         _ => TokenFormatRole::Regular,
     }
 }

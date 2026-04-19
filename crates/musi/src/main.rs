@@ -14,16 +14,20 @@ use std::thread;
 use std::time::{Duration, SystemTime};
 
 use clap::Parser;
-use cli::{Cli, Command, DiagnosticsFormatArg, FmtArgs};
+use cli::{
+    Cli, Command, DiagnosticsFormatArg, FmtArgs, FmtMatchArmArrowAlignmentArg,
+    FmtMatchArmIndentArg, FmtOperatorBreakArg, FmtProfileArg,
+};
 use diag::{CliDiagKind, cli_error_kind};
 use musi_fmt::{
-    FormatError, FormatInputKind, FormatOptions, format_markdown, format_paths, format_source,
+    FormatError, FormatInputKind, FormatOptions, MatchArmArrowAlignment, MatchArmIndent,
+    OperatorBreak, format_markdown, format_paths, format_source,
 };
 use musi_lsp::run_stdio_server;
 use musi_native::{NativeHost, NativeTestReport};
 use musi_project::{
     PackageId, Project, ProjectEntry, ProjectError, ProjectOptions, ProjectTestTarget,
-    ProjectTestTargetSource, TaskSpec, load_project, load_project_ancestor,
+    ProjectTestTargetSource, TaskSpec, load_project, load_project_ancestor, manifest::FmtProfile,
 };
 use musi_rt::{Runtime, RuntimeError, RuntimeOptions, RuntimeOutputMode};
 use musi_tooling::{
@@ -580,6 +584,9 @@ fn fmt_stdin(args: &FmtArgs) -> MusiResult {
 }
 
 fn apply_fmt_args(options: &mut FormatOptions, args: &FmtArgs) {
+    if let Some(profile) = args.profile {
+        options.apply_profile(fmt_profile_arg(profile));
+    }
     if let Some(line_width) = args.line_width {
         options.line_width = line_width;
     }
@@ -589,10 +596,54 @@ fn apply_fmt_args(options: &mut FormatOptions, args: &FmtArgs) {
     if args.use_tabs > 0 {
         options.use_tabs = true;
     }
+    if args.use_spaces > 0 {
+        options.use_tabs = false;
+    }
+    if let Some(indent) = args.match_arm_indent {
+        options.match_arm_indent = fmt_match_arm_indent_arg(indent);
+    }
+    if let Some(alignment) = args.match_arm_arrow_alignment {
+        options.match_arm_arrow_alignment = fmt_match_arm_arrow_alignment_arg(alignment);
+    }
+    if let Some(operator_break) = args.operator_break {
+        options.operator_break = fmt_operator_break_arg(operator_break);
+    }
     if let Some(ext) = &args.ext {
         options.assume_extension = FormatInputKind::from_extension(ext);
     }
     options.exclude.extend(args.ignore.iter().cloned());
+}
+
+const fn fmt_profile_arg(arg: FmtProfileArg) -> FmtProfile {
+    match arg {
+        FmtProfileArg::Standard => FmtProfile::Standard,
+        FmtProfileArg::Compact => FmtProfile::Compact,
+        FmtProfileArg::Expanded => FmtProfile::Expanded,
+    }
+}
+
+const fn fmt_match_arm_indent_arg(arg: FmtMatchArmIndentArg) -> MatchArmIndent {
+    match arg {
+        FmtMatchArmIndentArg::PipeAligned => MatchArmIndent::PipeAligned,
+        FmtMatchArmIndentArg::Block => MatchArmIndent::Block,
+    }
+}
+
+const fn fmt_match_arm_arrow_alignment_arg(
+    arg: FmtMatchArmArrowAlignmentArg,
+) -> MatchArmArrowAlignment {
+    match arg {
+        FmtMatchArmArrowAlignmentArg::None => MatchArmArrowAlignment::None,
+        FmtMatchArmArrowAlignmentArg::Consecutive => MatchArmArrowAlignment::Consecutive,
+        FmtMatchArmArrowAlignmentArg::Block => MatchArmArrowAlignment::Block,
+    }
+}
+
+const fn fmt_operator_break_arg(arg: FmtOperatorBreakArg) -> OperatorBreak {
+    match arg {
+        FmtOperatorBreakArg::Before => OperatorBreak::Before,
+        FmtOperatorBreakArg::After => OperatorBreak::After,
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -626,7 +677,8 @@ fn fmt_session(args: &FmtArgs) -> MusiResult<FmtSession> {
     }
     let anchor = args
         .paths
-        .first()
+        .iter()
+        .find(|path| path.as_os_str() != "-")
         .cloned()
         .unwrap_or_else(|| current.clone());
     let project = load_project_ancestor(&anchor, ProjectOptions::default()).ok();

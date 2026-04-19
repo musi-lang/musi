@@ -10,13 +10,6 @@ summary: "Use dot-callable functions through dot notation without needing an imp
 
 Dot calls use receiver-pattern methods or explicitly visible receiver-first functions. Receiver-pattern methods attach callable lookup to a receiver type without reserving a `self` keyword.
 
-```musi
-let (point : Point).move(dx : Int) : Point := ...;
-
-point.move(1);
-Point.move(point, 1);
-```
-
 `point.move(1)` resolves through UDNS and inserts `point` as the first argument. `Point.move(point, 1)` uses the receiver type namespace explicitly. Attached methods do not pollute bare function lookup, so `move(point, 1)` only works when a callable named `move` is explicitly bound or imported.
 
 {{snippet:chapter-methods}}

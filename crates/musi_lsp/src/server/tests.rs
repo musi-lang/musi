@@ -1,5 +1,7 @@
 use std::env::temp_dir;
+use std::fs;
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use async_lsp::lsp_types::{
     DiagnosticSeverity, InlayHintKind, Position, SemanticToken, TextDocumentIdentifier,
@@ -14,6 +16,18 @@ use super::convert::{
     to_severity, truncate_hover_contents,
 };
 use super::*;
+
+static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(0);
+
+fn temp_project() -> std::path::PathBuf {
+    let id = NEXT_TEMP_ID.fetch_add(1, Ordering::Relaxed);
+    let path = temp_dir().join(format!("musi-lsp-test-{id}"));
+    if path.exists() {
+        fs::remove_dir_all(&path).expect("stale temp project should be removed");
+    }
+    fs::create_dir_all(&path).expect("temp project should be created");
+    path
+}
 
 mod success {
     use super::*;
@@ -47,6 +61,93 @@ mod success {
                 start: Position::new(0, 0),
                 end: Position::new(1, 3),
             }
+        );
+    }
+
+    #[test]
+    fn formatting_options_override_manifest_indentation() {
+        let mut options = FormatOptions {
+            use_tabs: true,
+            indent_width: 8,
+            ..FormatOptions::default()
+        };
+
+        apply_document_formatting_options(
+            &mut options,
+            &FormattingOptions {
+                tab_size: 4,
+                insert_spaces: true,
+                ..FormattingOptions::default()
+            },
+        );
+
+        assert!(!options.use_tabs);
+        assert_eq!(options.indent_width, 4);
+    }
+
+    #[test]
+    fn document_formatting_formats_multiline_match_like_cli_formatter() {
+        let uri = Url::parse("file:///tmp/index.ms").expect("uri should parse");
+        let source = r#"export let isLess (target : Ordering) : Bool := match target(
+    | .Less => 0 = 0
+    | _ => 0 = 1);
+"#;
+        let expected = r#"export let isLess (target : Ordering) : Bool :=
+  match target (
+  | .Less => 0 = 0
+  | _ => 0 = 1
+  );
+"#;
+        let mut server = MusiLanguageServer::new(ClientSocket::new_closed());
+        let _ = server.open_documents.insert(uri.clone(), source.to_owned());
+
+        let edits = server
+            .document_formatting(DocumentFormattingParams {
+                text_document: TextDocumentIdentifier { uri },
+                options: FormattingOptions {
+                    tab_size: 2,
+                    insert_spaces: true,
+                    ..FormattingOptions::default()
+                },
+                work_done_progress_params: Default::default(),
+            })
+            .expect("formatting should run");
+
+        assert_eq!(edits.len(), 1);
+        assert_eq!(edits[0].new_text, expected);
+    }
+
+    #[test]
+    fn document_formatting_uses_manifest_profile_and_overrides() {
+        let root = temp_project();
+        fs::write(
+            root.join("musi.json"),
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"fmt\": { \"profile\": \"expanded\", \"matchArmIndent\": \"pipeAligned\" }\n}\n",
+        )
+        .expect("manifest should be written");
+        let path = root.join("index.ms");
+        fs::write(&path, "export let answer : Int := 1;").expect("entry should be written");
+        let uri = Url::from_file_path(&path).expect("file URI should build");
+        let source = "export let describe (target : Ordering) : String := match target(| .Less => \"less\" | .GreaterThanEverything => \"greater\" | _ => \"same\");";
+        let mut server = MusiLanguageServer::new(ClientSocket::new_closed());
+        let _ = server.open_documents.insert(uri.clone(), source.to_owned());
+
+        let edits = server
+            .document_formatting(DocumentFormattingParams {
+                text_document: TextDocumentIdentifier { uri },
+                options: FormattingOptions {
+                    tab_size: 2,
+                    insert_spaces: true,
+                    ..FormattingOptions::default()
+                },
+                work_done_progress_params: Default::default(),
+            })
+            .expect("formatting should run");
+
+        assert_eq!(edits.len(), 1);
+        assert_eq!(
+            edits[0].new_text,
+            "export let describe (\n  target : Ordering\n) : String :=\n  match target (\n  | .Less                  => \"less\"\n  | .GreaterThanEverything => \"greater\"\n  | _                      => \"same\"\n  );\n"
         );
     }
 

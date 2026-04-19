@@ -1,4 +1,4 @@
-.PHONY: check lint fmt test rscheck
+.PHONY: check lint fmt test rscheck install-local
 
 RUST_TOOLCHAIN := 1.95.0
 CARGO := rustup run $(RUST_TOOLCHAIN) cargo
@@ -30,3 +30,9 @@ fmt:
 
 test:
 	$(CARGO) test --workspace
+
+install-local:
+	$(CARGO) build
+	$(CARGO) build --release
+	$(CARGO) install --locked --force --path crates/music
+	$(CARGO) install --locked --force --path crates/musi
