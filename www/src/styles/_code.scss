@@ -5,19 +5,24 @@
 	max-width: 100%;
 }
 
-.docs-content .mx-code-frame,
-.docs-content .docs-code-sample {
+.docs-content>.mx-code-frame,
+.docs-content>.docs-code-sample,
+.docs-content>.mx-code-tabs {
 	margin-block: 1.35rem;
 }
 
 .docs-content h2+.mx-code-frame,
+.docs-content h2+.mx-code-tabs,
 .docs-content h3+.mx-code-frame,
-.docs-content h4+.mx-code-frame {
+.docs-content h3+.mx-code-tabs,
+.docs-content h4+.mx-code-frame,
+.docs-content h4+.mx-code-tabs {
 	margin-top: 0.9rem;
 }
 
-.docs-content .mx-code-frame:first-child,
-.docs-content .docs-code-sample:first-child {
+.docs-content>.mx-code-frame:first-child,
+.docs-content>.docs-code-sample:first-child,
+.docs-content>.mx-code-tabs:first-child {
 	margin-top: 0;
 }
 

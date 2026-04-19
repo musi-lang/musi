@@ -5,6 +5,7 @@ import {
 	docGroups,
 	docNeighbors,
 	docSearchEntries,
+	guideGroups,
 } from "../../docs";
 import { siteCopy } from "../../lib/site-copy";
 import type { AppRoute } from "../../routes";
@@ -18,7 +19,6 @@ import {
 	MachinesPost,
 	MachinesSection,
 	MachinesSidebarPanel,
-	MachinesTile,
 } from "../../ui/machines";
 import { SiteHeading } from "../../ui/site-heading";
 import { OnThisPageNav } from "../../ui/toc";
@@ -47,18 +47,19 @@ export function DocsIndexPage(_props: { route: AppRoute }) {
 				aria-label={siteCopy.ui.docsEntryPoints}
 			>
 				<MachinesActionCard
-					href="/learn/book/start/getting-started"
+					href="/learn/book"
 					kicker={copy.eyebrow}
-					title={copy.startTitle}
-					description={copy.description}
-					action={siteCopy.ui.openFirstChapter}
+					title="Musi Book"
+					description="Read the main Musi book in order, without language-transition guides mixed into the path."
+					action="Open book"
 				/>
-				<MachinesTile kicker={siteCopy.ui.learnSection} title={copy.partsTitle}>
-					<p>
-						Read short chapters in order and move forward only when the current
-						mental model feels stable.
-					</p>
-				</MachinesTile>
+				<MachinesActionCard
+					href="/learn/guides"
+					kicker="Guides"
+					title="Musi for Developers"
+					description="Use these when you already know another language and want a translation map."
+					action="Open guides"
+				/>
 			</section>
 			<MachinesSection title={siteCopy.ui.findDocs}>
 				<DocsSearch
@@ -68,10 +69,12 @@ export function DocsIndexPage(_props: { route: AppRoute }) {
 					showHeader={false}
 				/>
 			</MachinesSection>
-			<MachinesSection
-				kicker={siteCopy.ui.learnSection}
-				title={copy.partsTitle}
-			>
+			<MachinesSection kicker={siteCopy.ui.learnSection} title="Musi Book">
+				<p className="site-copy site-copy--small">
+					This is the main book. It moves from first file to syntax, data,
+					types, effects, and tooling. Language guides are separate because they
+					answer a different question.
+				</p>
 				<div className="mx-grid site-doc-groups">
 					{docGroups.map((group) => (
 						<DocListGroup
@@ -85,15 +88,23 @@ export function DocsIndexPage(_props: { route: AppRoute }) {
 					))}
 				</div>
 			</MachinesSection>
-			<MachinesSection
-				kicker={siteCopy.ui.learnSection}
-				title={copy.startTitle}
-			>
+			<MachinesSection kicker="Guides" title="Musi for Developers">
 				<p className="site-copy site-copy--small">
-					Musi Book is the main reading path. Use the chapter list when you want
-					structure, or jump into a developer guide when you are mapping from
-					another language.
+					Use these pages only when you want to map C, Rust, Python, JavaScript,
+					or another known language into Musi terms.
 				</p>
+				<div className="mx-grid site-doc-groups">
+					{guideGroups.map((group) => (
+						<DocListGroup
+							key={group.group}
+							group={group.group}
+							path={group.path}
+							summaryHtml={group.summaryHtml}
+							pages={group.pages}
+							linkLabel="Open guides"
+						/>
+					))}
+				</div>
 			</MachinesSection>
 		</div>
 	);
@@ -156,17 +167,17 @@ function DocPageRail(props: {
 	next: { path: string; title: string } | undefined;
 }) {
 	return (
-		<MachinesSidebarPanel className="docs-page-rail" title="Page guide">
+		<MachinesSidebarPanel className="docs-page-rail" title="Chapter tools">
 			<MachinesGroupbox
 				legend={siteCopy.ui.onThisPage}
 				className="docs-rail-box"
 			>
 				<OnThisPageNav headings={props.headings} />
 			</MachinesGroupbox>
-			<MachinesGroupbox legend={siteCopy.ui.findDocs} className="docs-rail-box">
+			<MachinesGroupbox legend="Jump to chapter" className="docs-rail-box">
 				<DocsSearch
 					entries={docSearchEntries}
-					heading="Open search"
+					heading="Open chapter search"
 					inputLabel="Search chapters"
 					lede="Jump to another chapter without losing the current reading path."
 					showHeader={false}
@@ -175,11 +186,14 @@ function DocPageRail(props: {
 					queryLimit={8}
 				/>
 			</MachinesGroupbox>
-			<MachinesGroupbox legend="Path" className="docs-rail-box">
+			<MachinesGroupbox
+				legend="Chapter path"
+				className="docs-rail-box docs-rail-box--path"
+			>
 				<DocPathRail breadcrumb={props.breadcrumb} />
 			</MachinesGroupbox>
 			{props.previous || props.next ? (
-				<MachinesGroupbox legend="Next" className="docs-rail-box">
+				<MachinesGroupbox legend="Chapter navigation" className="docs-rail-box">
 					<DocChapterActions previous={props.previous} next={props.next} />
 				</MachinesGroupbox>
 			) : null}
@@ -218,12 +232,6 @@ export function DocPage(props: { pathname: string; route: AppRoute }) {
 				descriptionHtml={page.descriptionHtml}
 			/>
 			<div className="docs-body-grid">
-				<DocPageRail
-					breadcrumb={breadcrumb}
-					headings={page.headings}
-					previous={neighbors.previous}
-					next={neighbors.next}
-				/>
 				<MachinesPost className="docs-article">
 					<HtmlSnippet className="docs-content" html={page.html} />
 					{childPages.length > 0 ? (
@@ -233,6 +241,12 @@ export function DocPage(props: { pathname: string; route: AppRoute }) {
 						</div>
 					) : null}
 				</MachinesPost>
+				<DocPageRail
+					breadcrumb={breadcrumb}
+					headings={page.headings}
+					previous={neighbors.previous}
+					next={neighbors.next}
+				/>
 			</div>
 		</div>
 	);

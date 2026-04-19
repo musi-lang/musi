@@ -1,3 +1,4 @@
+import { CodeTabs } from "@musi-lang/machines/preact";
 import {
 	commandRows,
 	installCommandGroup,
@@ -7,7 +8,6 @@ import {
 import { siteCopy } from "../../lib/site-copy";
 import type { AppRoute } from "../../routes";
 import { ActionStrip, InlineAction, SecondaryAction } from "../../ui/actions";
-import { CodeTabs } from "../../ui/code-tabs";
 import { HtmlSnippet } from "../../ui/html-snippet";
 import {
 	MachinesCodeFrame,
@@ -104,8 +104,8 @@ export function InstallPage(_props: { route: AppRoute }) {
 						</p>
 						{scriptInstallGroup.tabs ? (
 							<CodeTabs
+								label={copy.installScriptsLabel}
 								tabs={scriptInstallGroup.tabs}
-								ariaLabel={copy.installScriptsLabel}
 							/>
 						) : null}
 					</MachinesGroupbox>

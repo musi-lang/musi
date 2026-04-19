@@ -590,6 +590,11 @@
 	box-shadow: none;
 }
 
+.mx-code-tabs {
+	display: grid;
+	gap: 0;
+}
+
 .mx-code-tabs__rail {
 	position: relative;
 	z-index: 2;
@@ -598,7 +603,7 @@
 	border: 0;
 	background: transparent;
 	overflow-x: auto;
-	overflow-y: visible;
+	overflow-y: hidden;
 }
 
 .mx-code-tabs__rail::after {
@@ -648,6 +653,7 @@
 .mx-code-tabs__frame {
 	position: relative;
 	z-index: 1;
+	margin-block: 0;
 	margin-top: 0;
 	border-top: 1px solid color-mix(in srgb, var(--mx-accent-2) 72%, var(--mx-border));
 	border-top-left-radius: 0;

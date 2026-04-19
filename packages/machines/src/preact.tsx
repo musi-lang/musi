@@ -8,7 +8,9 @@ function clampNumber(value: number, min: number, max: number): number {
 
 function percentOf(value: number, min: number, max: number): number {
 	const safeMax = max > min ? max : min + 100;
-	return Math.round(((clampNumber(value, min, safeMax) - min) / (safeMax - min)) * 100);
+	return Math.round(
+		((clampNumber(value, min, safeMax) - min) / (safeMax - min)) * 100,
+	);
 }
 
 function focusableElements(container: HTMLElement | null): HTMLElement[] {
@@ -192,7 +194,8 @@ export function MeterBar(props: {
 		meterStyle["--mx-meter-high"] = `${percentOf(props.high, min, safeMax)}%`;
 	}
 	if (typeof props.optimum === "number") {
-		meterStyle["--mx-meter-optimum"] = `${percentOf(props.optimum, min, safeMax)}%`;
+		meterStyle["--mx-meter-optimum"] =
+			`${percentOf(props.optimum, min, safeMax)}%`;
 	}
 	const tone =
 		typeof props.optimum === "number" && clampedValue >= props.optimum
@@ -272,11 +275,11 @@ export function Slider(
 		onValueChange?.(nextValue);
 	};
 	return (
-		<label class={classNames("mx-slider", classProp, className)} htmlFor={sliderId}>
+		<label class={classNames("mx-slider", classProp, className)} for={sliderId}>
 			<span class="mx-slider__head">
 				<span class="mx-field__label">{label}</span>
 				{showValue ? (
-					<output class="mx-slider__value" htmlFor={sliderId}>
+					<output class="mx-slider__value" for={sliderId}>
 						{currentValue}
 					</output>
 				) : null}
@@ -385,7 +388,8 @@ export function Tabs(props: { items: readonly TabItem[]; label: string }) {
 export interface CodeTabItem {
 	id: string;
 	label: string;
-	code: string;
+	code?: string;
+	html?: string;
 	language?: string;
 }
 
@@ -433,7 +437,7 @@ export function CodeTabs(props: {
 		}
 	};
 	return (
-		<div class="mx-code-tabs">
+		<div class="mx-code-tabs" data-code-tabs={true}>
 			<div
 				class="mx-nav-rail mx-code-tabs__rail"
 				role="tablist"
@@ -452,6 +456,7 @@ export function CodeTabs(props: {
 								aria-selected={item.id === active.id}
 								aria-controls={`${tabBaseId}-${item.id}-panel`}
 								tabIndex={index === activeIndex ? 0 : -1}
+								data-code-tab-trigger={item.id}
 								class={classNames(
 									"mx-tab",
 									item.id === active.id && "is-active",
@@ -465,21 +470,36 @@ export function CodeTabs(props: {
 					))}
 				</ul>
 			</div>
-			<div
-				id={`${tabBaseId}-${active.id}-panel`}
-				class="mx-code-frame mx-code-tabs__frame"
-				role="tabpanel"
-				aria-labelledby={`${tabBaseId}-${active.id}-tab`}
-			>
-				{active.language ? (
-					<div class="mx-code-frame__header mx-code-frame__header--meta">
-						<span class="mx-code-frame__language">{active.language}</span>
+			{props.tabs.map((item) => {
+				const selected = item.id === active.id;
+				return (
+					<div
+						key={item.id}
+						id={`${tabBaseId}-${item.id}-panel`}
+						class="mx-code-frame mx-code-tabs__frame"
+						role="tabpanel"
+						aria-labelledby={`${tabBaseId}-${item.id}-tab`}
+						data-code-tab-panel={item.id}
+						hidden={!selected}
+					>
+						{item.language ? (
+							<div class="mx-code-frame__header mx-code-frame__header--meta">
+								<span class="mx-code-frame__language">{item.language}</span>
+							</div>
+						) : null}
+						{item.html ? (
+							<div
+								class="mx-code-frame__content"
+								dangerouslySetInnerHTML={{ __html: item.html }}
+							/>
+						) : (
+							<pre>
+								<code>{item.code ?? ""}</code>
+							</pre>
+						)}
 					</div>
-				) : null}
-				<pre>
-					<code>{active.code}</code>
-				</pre>
-			</div>
+				);
+			})}
 		</div>
 	);
 }
@@ -512,7 +532,9 @@ export function Drawer(props: {
 		setOpen(false);
 		requestAnimationFrame(() => triggerRef.current?.focus());
 	};
-	const onDrawerKeyDown = (event: Preact.TargetedKeyboardEvent<HTMLDivElement>) => {
+	const onDrawerKeyDown = (
+		event: Preact.TargetedKeyboardEvent<HTMLDivElement>,
+	) => {
 		if (event.key === "Escape") {
 			closeDrawer();
 			return;
@@ -523,7 +545,7 @@ export function Drawer(props: {
 		const focusable = focusableElements(panelRef.current);
 		const first = focusable[0];
 		const last = focusable.at(-1);
-		if (!first || !last) {
+		if (!(first && last)) {
 			event.preventDefault();
 			return;
 		}

@@ -61,15 +61,15 @@ describe("site accessibility scaffolding", () => {
 	it("renders docs page with complementary navigation landmarks", () => {
 		const html = render("/learn/book/start/getting-started");
 		expect(html).toContain("Documentation sections");
-		expect(html).toContain("Page guide");
+		expect(html).toContain("Chapter tools");
 		expect(html).toContain("On this page");
 		expect(countOccurrences(html, "On this page")).toBe(1);
-		expect(html).toContain("Chapter Navigation");
+		expect(html).toContain("Chapter navigation");
 	});
 
 	it("renders deep docs pages with sidebar ancestry", () => {
-		const html = render("/learn/book/developers/guides/rust/mutation");
-		expect(html).toContain("Language Guides");
+		const html = render("/learn/guides/rust/mutation");
+		expect(html).toContain("Musi for Developers");
 		expect(html).toContain("Musi for Rust Developers");
 		expect(html).toContain("Mutation");
 		expect(html).toContain("Documentation sections");
@@ -112,8 +112,8 @@ describe("site accessibility scaffolding", () => {
 	it("renders descriptive home card links", () => {
 		const html = render("/");
 		expect(html).toContain("Read Musi Book");
-		expect(html).toContain("Open install guide");
-		expect(html).toContain("Open community links");
+		expect(html).toContain("Open install path");
+		expect(html).toContain("Open project links");
 	});
 
 	it("renders docs search on portal and docs pages", () => {
@@ -149,7 +149,7 @@ describe("site accessibility scaffolding", () => {
 		expect(html).toContain("docs-page-rail");
 		expect(html).toContain("mx-sidebar--standalone");
 		expect(html).toContain("mx-sidebar__link");
-		expect(countOccurrences(html, "Find docs")).toBe(1);
+		expect(countOccurrences(html, "Jump to chapter")).toBe(1);
 		expect(countOccurrences(html, "Search docs")).toBe(0);
 	});
 
@@ -179,7 +179,7 @@ describe("site accessibility scaffolding", () => {
 	it("renders portal directory status and task paths", () => {
 		const html = render("/");
 		expect(html).toContain("Book-first");
-		expect(html).toContain("First file path");
+		expect(html).toContain("Read Musi Book");
 		expect(html).toContain("Unusual cases");
 	});
 
@@ -205,9 +205,10 @@ describe("site accessibility scaffolding", () => {
 		expect(html).toContain('data-code-tab-panel="powershell" hidden');
 	});
 
-	it("does not nest Machines code frames in home or install snippets", () => {
+	it("does not nest raw Machines code frames in home or install snippets", () => {
 		const home = render("/");
 		const install = render("/install");
+		const docsComparison = render("/learn/guides/c99/blocks-control-flow");
 		expect(home).toContain("Start with one value, one function");
 		const sampleFrameClass = 'class="mx-code-frame home-hero-sample"';
 		expect(home.indexOf("home-sample-copy")).toBeGreaterThanOrEqual(0);
@@ -218,13 +219,21 @@ describe("site accessibility scaffolding", () => {
 		expect(home).not.toContain('class="mx-code-frame docs-code-sample"');
 		expect(countOccurrences(home, sampleFrameClass)).toBe(1);
 		expect(install).toContain('class="install-command-grid"');
+		expect(install).toContain('class="mx-code-tabs"');
+		expect(install).toContain('class="mx-code-frame__content"');
 		expect(install).not.toContain('class="mx-code-frame"><section');
-		expect(install).not.toContain('class="mx-code-frame__content"');
+		expect(docsComparison).toContain('class="mx-code-tabs"');
+		expect(docsComparison).toContain('data-code-tab-panel="source"');
+		expect(docsComparison).toContain('data-code-tab-panel="musi" hidden');
 	});
 
 	it("keeps install command groupboxes and code tabs from clipping", () => {
 		const siteCss = readFileSync(
 			new URL("./styles/_content.scss", import.meta.url),
+			"utf8",
+		);
+		const codeCss = readFileSync(
+			new URL("./styles/_code.scss", import.meta.url),
 			"utf8",
 		);
 		const machinesCss = readFileSync(
@@ -236,6 +245,10 @@ describe("site accessibility scaffolding", () => {
 		expect(machinesCss).toContain("overflow-x: auto;");
 		expect(machinesCss).toContain("flex-wrap: nowrap;");
 		expect(machinesCss).toContain("white-space: nowrap;");
+		expect(machinesCss).toContain("overflow-y: hidden;");
+		expect(machinesCss).toContain("margin-block: 0;");
+		expect(codeCss).toContain(".docs-content>.mx-code-tabs");
+		expect(codeCss).not.toContain(".docs-content .mx-code-frame,\n");
 	});
 
 	it("keeps install command groups stacked in one column", () => {
@@ -309,6 +322,9 @@ describe("site accessibility scaffolding", () => {
 		expect(html).toContain("docs-body-grid");
 		expect(html).toContain("docs-page-rail");
 		expect(html).toContain("docs-article");
+		expect(html.indexOf("docs-article")).toBeLessThan(
+			html.indexOf("docs-page-rail"),
+		);
 		expect(html).not.toContain('class="docs-sidebar"');
 		expect(responsiveCss).not.toContain(".site-shell-docs .site-frame");
 		expect(responsiveCss).not.toContain(".docs-sidebar");

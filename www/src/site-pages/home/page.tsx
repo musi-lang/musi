@@ -128,22 +128,6 @@ export function HomePage(_props: { route: AppRoute }) {
 				/>
 			</MachinesSection>
 
-			<section
-				className="mx-grid site-grid--three"
-				aria-label={siteCopy.ui.primaryPaths}
-			>
-				{copy.paths.map((link) => (
-					<MachinesActionCard
-						key={link.title}
-						href={link.href}
-						kicker={link.label}
-						title={link.title}
-						description={link.copy}
-						action={link.actionLabel}
-					/>
-				))}
-			</section>
-
 			<MachinesSection
 				kicker={siteCopy.ui.learnSection}
 				title={copy.sectionsTitle}
