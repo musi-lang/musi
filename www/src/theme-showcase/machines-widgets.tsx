@@ -7,7 +7,6 @@ import {
 	ProgressBar,
 	Slider,
 	Tabs,
-	ThemeToggle,
 } from "@musi-lang/machines/preact";
 
 export function MachinesWidgets() {
@@ -77,7 +76,6 @@ export function MachinesWidgets() {
 					</p>
 				</Drawer>
 			</div>
-			<ThemeToggle initialTheme="warm" initialScheme="light" />
 			<LiveFilter
 				label="Live filter"
 				items={[

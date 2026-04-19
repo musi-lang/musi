@@ -10,10 +10,8 @@ html {
 }
 
 body {
-	background:
-		linear-gradient(180deg, var(--site-bg-elevated) 0, var(--site-bg) 12rem),
-		var(--site-bg);
-	color: var(--site-text);
+	background: var(--mx-bg);
+	color: var(--mx-text);
 	font-family: inherit;
 	line-height: 1.6;
 	-webkit-font-smoothing: antialiased;
@@ -93,9 +91,9 @@ samp {
 
 .inline-code {
 	padding: 0.08rem 0.28rem;
-	background: var(--site-bg-code);
-	border: 1px solid var(--site-border);
-	border-radius: 0.2rem;
+	background: var(--mx-surface-3);
+	border: 1px solid var(--mx-border);
+	border-radius: var(--mx-radius-sm);
 	font-size: 0.94em;
 }
 
@@ -117,9 +115,9 @@ samp {
 	top: -4rem;
 	z-index: 1000;
 	padding: 0.65rem 0.9rem;
-	background: var(--site-panel);
-	border: 2px solid var(--site-focus);
-	color: var(--site-text);
+	background: var(--mx-surface);
+	border: 2px solid var(--mx-focus);
+	color: var(--mx-text);
 	text-decoration: none;
 }
 

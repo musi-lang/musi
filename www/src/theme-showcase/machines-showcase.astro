@@ -8,8 +8,8 @@ import CodeFrame from "@musi-lang/machines/astro/CodeFrame.astro";
 import DataTable from "@musi-lang/machines/astro/DataTable.astro";
 import Field from "@musi-lang/machines/astro/Field.astro";
 import List from "@musi-lang/machines/astro/List.astro";
-import MeterBar from "@musi-lang/machines/astro/MeterBar.astro";
 import Message from "@musi-lang/machines/astro/Message.astro";
+import MeterBar from "@musi-lang/machines/astro/MeterBar.astro";
 import NavTabs from "@musi-lang/machines/astro/NavTabs.astro";
 import Panel from "@musi-lang/machines/astro/Panel.astro";
 import Post from "@musi-lang/machines/astro/Post.astro";
@@ -62,12 +62,37 @@ const customThemeStyle = `
 `;
 const colorTokens = [
 	["Base", ["--mx-bg", "--mx-surface", "--mx-surface-2", "--mx-surface-3"]],
-	["Chrome", ["--mx-rail", "--mx-header", "--mx-header-2", "--mx-subheader", "--mx-subheader-2"]],
+	[
+		"Chrome",
+		[
+			"--mx-rail",
+			"--mx-header",
+			"--mx-header-2",
+			"--mx-subheader",
+			"--mx-subheader-2",
+		],
+	],
 	["Borders", ["--mx-border", "--mx-border-strong", "--mx-border-soft"]],
 	["Text", ["--mx-text", "--mx-muted", "--mx-link", "--mx-link-hover"]],
-	["Signals", ["--mx-accent", "--mx-accent-2", "--mx-good", "--mx-warn", "--mx-danger", "--mx-focus"]],
+	[
+		"Signals",
+		[
+			"--mx-accent",
+			"--mx-accent-2",
+			"--mx-good",
+			"--mx-warn",
+			"--mx-danger",
+			"--mx-focus",
+		],
+	],
 ] as const;
-const signalTokens = ["--mx-accent-2", "--mx-good", "--mx-warn", "--mx-danger", "--mx-focus"] as const;
+const signalTokens = [
+	"--mx-accent-2",
+	"--mx-good",
+	"--mx-warn",
+	"--mx-danger",
+	"--mx-focus",
+] as const;
 const colorVisionPreviews = [
 	{ id: "normal", label: "Default vision" },
 	{ id: "protanopia", label: "Protanopia" },
@@ -95,7 +120,7 @@ const colorVisionPreviews = [
 				<feColorMatrix type="matrix" values="0.95 0.05 0 0 0 0 0.433 0.567 0 0 0 0.475 0.525 0 0 0 0 0 1 0"></feColorMatrix>
 			</filter>
 		</svg>
-		<Root theme="warm" scheme="light">
+		<Root theme="warm">
 			<header class="mx-header">
 				<div class="mx-header__inner mx-shell">
 					<a class="mx-brand" href="/__theme"><span class="mx-brand__mark"></span><span>MACHINES</span></a>
@@ -256,30 +281,10 @@ const colorVisionPreviews = [
 					<Post author="maintainer" meta="today"><p>Post layout supports forum-like discussions, notes, changelog entries, and release commentary.</p></Post>
 				</Section>
 
-				<Panel title="Theme color comparison">
-					<div class="mx-grid mx-token-compare" aria-label="Warm and Midnight color token comparison">
-						<Root theme="warm" scheme="light" class="mx-token-scheme">
+				<Panel title="Theme color reference">
+					<div class="mx-grid mx-token-compare" aria-label="Warm color token reference">
+						<Root theme="warm" class="mx-token-scheme">
 							<Card title="Warm / light" kicker="Reference">
-								<div class="mx-stack">
-									{colorTokens.map(([groupName, tokens]) => (
-										<div class="mx-token-group">
-											<div class="mx-token-group__title">{groupName}</div>
-											<div class="mx-token-list">
-												{tokens.map((token) => (
-													<div class="mx-token-row">
-														<span class="mx-token-swatch" style={`--mx-token-swatch-color: var(${token})`}></span>
-														<span class="mx-token-name">{token}</span>
-														<span class="mx-token-sample" style={`color: var(${token})`}>Sample</span>
-													</div>
-												))}
-											</div>
-										</div>
-									))}
-								</div>
-							</Card>
-						</Root>
-						<Root theme="midnight" scheme="dark" class="mx-token-scheme">
-							<Card title="Midnight / dark" kicker="Inverse">
 								<div class="mx-stack">
 									{colorTokens.map(([groupName, tokens]) => (
 										<div class="mx-token-group">
@@ -307,24 +312,13 @@ const colorVisionPreviews = [
 							<div class:list={["mx-cvd-preview", `mx-cvd-preview--${preview.id}`]}>
 								<div class="mx-cvd-preview__title">{preview.label}</div>
 								<div class="mx-cvd-preview__themes">
-									<Root theme="warm" scheme="light" class="mx-token-scheme">
+									<Root theme="warm" class="mx-token-scheme">
 										<div class="mx-token-list">
 											{signalTokens.map((token) => (
 												<div class="mx-token-row mx-token-row--signal">
 													<span class="mx-token-swatch" style={`--mx-token-swatch-color: var(${token})`}></span>
 													<span class="mx-token-name">{token}</span>
 													<span class="mx-token-sample" style={`color: var(${token})`}>Warm</span>
-												</div>
-											))}
-										</div>
-									</Root>
-									<Root theme="midnight" scheme="dark" class="mx-token-scheme">
-										<div class="mx-token-list">
-											{signalTokens.map((token) => (
-												<div class="mx-token-row mx-token-row--signal">
-													<span class="mx-token-swatch" style={`--mx-token-swatch-color: var(${token})`}></span>
-													<span class="mx-token-name">{token}</span>
-													<span class="mx-token-sample" style={`color: var(${token})`}>Dark</span>
 												</div>
 											))}
 										</div>
@@ -337,9 +331,8 @@ const colorVisionPreviews = [
 
 				<Panel title="Theme variants">
 					<div class="mx-grid">
-						<Root theme="warm" scheme="light"><Card title="Warm"><p>Cozy brown/cream remaster, good fit for Musi later.</p></Card></Root>
-						<Root theme="midnight" scheme="dark"><Card title="Midnight"><p>Warm palette inverted into night chrome, not generic black mode.</p></Card></Root>
-						<Root theme="custom" scheme="light" style={customThemeStyle}><Card title="Custom"><p>Override CSS tokens on any Machines root without replacing components.</p></Card></Root>
+						<Root theme="warm"><Card title="Warm"><p>Cozy brown/cream remaster, good fit for Musi later.</p></Card></Root>
+						<Root theme="custom" style={customThemeStyle}><Card title="Custom"><p>Override CSS tokens on any Machines root without replacing components.</p></Card></Root>
 					</div>
 				</Panel>
 			</Shell>
@@ -380,11 +373,6 @@ const colorVisionPreviews = [
 				background: var(--mx-surface);
 			}
 
-			[data-mx-theme="midnight"] .mx-token-list {
-				border-color: color-mix(in srgb, var(--mx-border) 78%, var(--mx-border-strong));
-				background: color-mix(in srgb, var(--mx-bg) 46%, var(--mx-surface));
-			}
-
 			.mx-token-row {
 				display: grid;
 				grid-template-columns: 2.4rem minmax(8.5rem, 1fr) minmax(4.5rem, auto);
@@ -397,10 +385,6 @@ const colorVisionPreviews = [
 
 			.mx-token-row + .mx-token-row {
 				border-top: 1px solid var(--mx-border-soft);
-			}
-
-			[data-mx-theme="midnight"] .mx-token-row + .mx-token-row {
-				border-top-color: color-mix(in srgb, var(--mx-border-soft) 72%, var(--mx-border-strong));
 			}
 
 			.mx-token-swatch {

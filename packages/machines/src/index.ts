@@ -1,8 +1,6 @@
-export const themeNames = ["warm", "midnight", "custom"] as const;
-export const schemeNames = ["light", "dark"] as const;
+export const themeNames = ["warm", "custom"] as const;
 
 export type MachinesTheme = (typeof themeNames)[number];
-export type MachinesScheme = (typeof schemeNames)[number];
 export type ClassValue = string | false | null | undefined;
 
 export function classNames(...values: ClassValue[]): string {
@@ -63,7 +61,6 @@ export const componentGroups = [
 			"slider",
 			"progress-bar",
 			"meter-bar",
-			"theme-toggle",
 			"live-filter",
 		],
 	},

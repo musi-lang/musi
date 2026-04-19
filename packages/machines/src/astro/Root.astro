@@ -1,13 +1,11 @@
 ---
 // biome-ignore-all lint/correctness/noUnusedVariables: Astro template expressions consume frontmatter values.
 interface Props {
-	theme?: "warm" | "midnight" | "custom";
-	scheme?: "light" | "dark";
+	theme?: "warm" | "custom";
 	class?: string;
 }
 const {
 	theme = "warm",
-	scheme = "light",
 	class: className = "",
 	...rest
 } = Astro.props;
@@ -16,7 +14,6 @@ const {
 	{...rest}
 	data-mx-root
 	data-mx-theme={theme}
-	data-mx-scheme={scheme}
 	class:list={["mx-root", className]}
 >
 	<slot />

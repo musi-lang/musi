@@ -38,6 +38,10 @@
 	--mx-danger: #9b3d71;
 	--mx-focus: #285fd4;
 	--mx-on-header: #fffaf2;
+	--mx-strip-text: var(--mx-text);
+	--mx-strip-muted: var(--mx-muted);
+	--mx-strip-link: var(--mx-link);
+	--mx-strip-accent: var(--mx-accent);
 	--mx-shadow: 0 1px 0 rgba(33, 26, 22, 0.04);
 	--mx-shadow-raised: var(--mx-bevel-ring), 1px 1px 0 rgba(33, 26, 22, 0.035);
 	--mx-shadow-sunken: inset 0 1px 2px rgba(33, 26, 22, 0.095), inset 0 0 0 1px rgba(122, 102, 88, 0.05);
@@ -69,53 +73,4 @@
 	font-family: var(--mx-font-sans);
 	color: var(--mx-text);
 	color-scheme: light;
-}
-
-[data-mx-root][data-mx-scheme="dark"],
-[data-mx-root][data-mx-theme="midnight"] {
-	--mx-bg: #3b3029;
-	--mx-surface: #4a3d35;
-	--mx-surface-2: #5a4a40;
-	--mx-surface-3: #446468;
-	--mx-rail: #947763;
-	--mx-header: #765546;
-	--mx-header-2: #ad866d;
-	--mx-subheader: #9b826a;
-	--mx-subheader-2: #c8b39b;
-	--mx-border: #918072;
-	--mx-border-strong: #c4a98d;
-	--mx-border-soft: #74665b;
-	--mx-text: #d9c8ba;
-	--mx-muted: #c0aa9a;
-	--mx-link: #82cdd3;
-	--mx-link-hover: #a7dde1;
-	--mx-accent: #d5aa8b;
-	--mx-accent-2: #86ced5;
-	--mx-good: #7fd4cb;
-	--mx-warn: #e6c15c;
-	--mx-danger: #f095c4;
-	--mx-focus: #9dbdff;
-	--mx-on-header: #ead8ca;
-	--mx-shadow: 0 1px 0 rgba(0, 0, 0, 0.1);
-	--mx-shadow-raised: var(--mx-bevel-ring), 1px 1px 0 rgba(0, 0, 0, 0.08);
-	--mx-shadow-sunken: inset 0 1px 2px rgba(0, 0, 0, 0.16), inset 0 0 0 1px rgba(255, 240, 223, 0.04);
-	--mx-bevel-highlight: rgba(255, 240, 223, 0.12);
-	--mx-bevel-lowlight: rgba(0, 0, 0, 0.14);
-	--mx-bevel-ring: inset 1px 1px 0 var(--mx-bevel-highlight), inset -1px -1px 0 var(--mx-bevel-lowlight);
-	--mx-control-shadow: var(--mx-bevel-ring), 0 1px 0 rgba(0, 0, 0, 0.1);
-	--mx-control-shadow-active: inset 1px 1px 2px rgba(0, 0, 0, 0.22), inset -1px -1px 0 rgba(255, 240, 223, 0.08);
-	--mx-subheader-gradient-top: #47382f;
-	--mx-subheader-gradient-bottom: #5e4d42;
-	--mx-card-title-top: #43352d;
-	--mx-card-title-bottom: var(--mx-surface);
-	--mx-section-body-top: color-mix(in srgb, var(--mx-surface) 92%, var(--mx-subheader-gradient-bottom));
-	--mx-section-body-bottom: var(--mx-surface);
-	--mx-accent-wash-top: color-mix(in srgb, var(--mx-subheader-gradient-top) 24%, var(--mx-surface));
-	--mx-accent-wash-bottom: var(--mx-surface);
-	--mx-secondary-top: color-mix(in srgb, var(--mx-surface) 86%, var(--mx-subheader-2));
-	--mx-secondary-bottom: color-mix(in srgb, var(--mx-surface) 88%, var(--mx-subheader));
-	--mx-row-top: var(--mx-surface-2);
-	--mx-row-bottom: color-mix(in srgb, var(--mx-surface) 84%, var(--mx-bg));
-	--mx-stripes: repeating-linear-gradient(135deg, transparent 0, transparent 6px, rgba(255, 240, 223, 0.07) 6px, rgba(255, 240, 223, 0.07) 7px, transparent 7px, transparent 13px, rgba(0, 0, 0, 0.12) 13px, rgba(0, 0, 0, 0.12) 14px);
-	color-scheme: dark;
 }

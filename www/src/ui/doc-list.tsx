@@ -1,4 +1,5 @@
-import { Surface } from "./surface";
+import { siteCopy } from "../lib/site-copy";
+import { MachinesActionCard, MachinesGroupbox } from "./machines";
 
 interface DocListPage {
 	id: string;
@@ -11,6 +12,16 @@ interface DocListPage {
 	summary: string;
 }
 
+function pageKindLabel(page: DocListPage) {
+	const kind =
+		page.kind === "section"
+			? "Section"
+			: page.kind === "part"
+				? "Part"
+				: "Chapter";
+	return page.childIds.length > 0 ? `${kind} · ${page.childIds.length}` : kind;
+}
+
 export function DocListGroup(props: {
 	group: string;
 	path?: string;
@@ -19,47 +30,62 @@ export function DocListGroup(props: {
 	linkLabel?: string;
 }) {
 	return (
-		<Surface className="doc-group" tone="raised">
-			<div className="doc-group-header">
-				{props.path ? (
-					<a href={props.path} className="eyebrow doc-group-link">
-						{props.linkLabel
-							? `${props.linkLabel}: ${props.group}`
-							: props.group}
-					</a>
-				) : (
-					<div className="eyebrow">{props.group}</div>
-				)}
-				{props.summaryHtml ? (
-					<p
-						className="muted doc-group-summary"
-						dangerouslySetInnerHTML={{ __html: props.summaryHtml }}
-					/>
-				) : null}
-			</div>
-			<div className="doc-list">
+		<MachinesGroupbox legend={props.group} className="docs-groupbox">
+			{props.path ? (
+				<a
+					href={props.path}
+					className="mx-button mx-button--link docs-groupbox__open"
+				>
+					{props.linkLabel ?? siteCopy.ui.openSection}
+				</a>
+			) : null}
+			{props.summaryHtml ? (
+				<div
+					className="site-copy site-copy--small"
+					dangerouslySetInnerHTML={{ __html: props.summaryHtml }}
+				/>
+			) : null}
+			<div className="docs-child-list">
 				{props.pages.map((page) => (
-					<a key={page.id} href={page.path} className="doc-row">
-						<div>
-							<div className="doc-row-meta">
-								{page.kind === "section"
-									? "Section"
-									: page.kind === "part"
-										? "Part"
-										: "Chapter"}
-								{page.childIds.length > 0
-									? ` · ${page.childIds.length} items`
-									: ""}
-							</div>
-							<h3>{page.title}</h3>
-							<p dangerouslySetInnerHTML={{ __html: page.summaryHtml }} />
-						</div>
-						<span className="doc-row-arrow" aria-hidden="true">
-							&gt;&gt;
-						</span>
-					</a>
+					<MachinesActionCard
+						key={page.id}
+						href={page.path}
+						className="docs-child-card"
+						kicker={pageKindLabel(page)}
+						title={page.title}
+						action="»"
+					>
+						<span
+							className="mx-action-card__body docs-child-card__summary"
+							dangerouslySetInnerHTML={{ __html: page.summaryHtml }}
+						/>
+					</MachinesActionCard>
 				))}
 			</div>
-		</Surface>
+		</MachinesGroupbox>
+	);
+}
+
+export function DocPartTile(props: {
+	title: string;
+	path: string;
+	summaryHtml: string;
+	chapterCount: number;
+}) {
+	return (
+		<MachinesActionCard
+			href={props.path}
+			className="docs-part-tile"
+			kicker={`${props.chapterCount} ${
+				props.chapterCount === 1 ? "chapter" : "chapters"
+			}`}
+			title={props.title}
+			action={siteCopy.ui.openSection}
+		>
+			<span
+				className="mx-action-card__body docs-part-tile__summary"
+				dangerouslySetInnerHTML={{ __html: props.summaryHtml }}
+			/>
+		</MachinesActionCard>
 	);
 }

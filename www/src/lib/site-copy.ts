@@ -11,9 +11,6 @@ export interface SiteCopy {
 	};
 	utilityLabels: {
 		github: string;
-		themeLight: string;
-		themeDark: string;
-		themeSystem: string;
 	};
 	ui: {
 		sample: string;
@@ -119,9 +116,6 @@ export const siteCopy = {
 	},
 	utilityLabels: {
 		github: "GitHub repository",
-		themeLight: "Switch from light theme to dark theme",
-		themeDark: "Switch from dark theme to system theme",
-		themeSystem: "Switch from system theme to light theme",
 	},
 	ui: {
 		sample: "Sample",

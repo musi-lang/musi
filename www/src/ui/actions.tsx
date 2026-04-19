@@ -1,10 +1,18 @@
-import type {
-	AnchorHTMLAttributes,
-	ButtonHTMLAttributes,
-	ReactNode,
-} from "preact/compat";
+import type { AnchorHTMLAttributes, ReactNode } from "preact/compat";
 
-type ButtonTone = "primary" | "secondary" | "ghost";
+type ButtonTone = "primary" | "secondary" | "ghost" | "link";
+
+function buttonClass(tone: ButtonTone, className?: unknown) {
+	const toneClass =
+		tone === "secondary"
+			? " mx-button--secondary"
+			: tone === "ghost"
+				? " mx-button--ghost"
+				: tone === "link"
+					? " mx-button--link"
+					: "";
+	return `mx-button${toneClass}${typeof className === "string" ? ` ${className}` : ""}`;
+}
 
 function ActionAnchor(
 	props: AnchorHTMLAttributes<HTMLAnchorElement> & {
@@ -12,10 +20,10 @@ function ActionAnchor(
 		tone: ButtonTone;
 	},
 ) {
-	const className = `button button-${props.tone}${props.className ? ` ${props.className}` : ""}`;
+	const { children, className, tone, ...rest } = props;
 	return (
-		<a {...props} className={className}>
-			{props.children}
+		<a {...rest} className={buttonClass(tone, className)}>
+			{children}
 		</a>
 	);
 }
@@ -42,25 +50,14 @@ export function InlineAction(
 		href: string;
 	},
 ) {
-	const className = `inline-action${props.className ? ` ${props.className}` : ""}`;
+	const { children, className, ...rest } = props;
 	return (
-		<a {...props} className={className}>
-			{props.children}
+		<a {...rest} className={buttonClass("link", className)}>
+			{children}
 		</a>
 	);
 }
 
-export function ThemeToggleButton(
-	props: ButtonHTMLAttributes<HTMLButtonElement> & { children: ReactNode },
-) {
-	const className = `header-icon-control theme-toggle${props.className ? ` ${props.className}` : ""}`;
-	return (
-		<button type="button" {...props} className={className}>
-			{props.children}
-		</button>
-	);
-}
-
 export function ActionStrip(props: { children: ReactNode }) {
-	return <div className="action-strip">{props.children}</div>;
+	return <div className="mx-cluster">{props.children}</div>;
 }

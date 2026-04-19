@@ -9,7 +9,6 @@ import { exampleGroups } from "./content/examples/groups";
 import { contentSnippets } from "./content/snippet-registry";
 import { docSearchEntries } from "./docs";
 import { renderedDocs, renderedSnippets } from "./generated-content";
-import { nextScheme } from "./layout/site-layout";
 import { siteCopy } from "./lib/site-copy";
 
 const BANNED_SNIPPET_PATTERNS = [/\bif\b/, /\bthen\b/, /\belse\b/, /==/];
@@ -117,18 +116,17 @@ function topLevelLetCount(source: string) {
 }
 
 describe("content generation", () => {
-	it("cycles color scheme in the header order", () => {
-		expect(nextScheme("light")).toBe("dark");
-		expect(nextScheme("dark")).toBe("system");
-		expect(nextScheme("system")).toBe("light");
-	});
-
-	it("emits dual-theme shiki markup", () => {
+	it("emits light-only shiki markup", () => {
 		expect(renderedSnippets.homeSampleHtml).toContain(
 			"github-light-high-contrast",
 		);
-		expect(renderedSnippets.homeSampleHtml).toContain("github-dark");
 		expect(renderedSnippets.homeSampleHtml).not.toContain("Source:");
+		for (const html of Object.values(renderedSnippets)) {
+			expect(html).toContain("<pre");
+			expect(html).not.toContain("mx-code-frame");
+			expect(html).not.toContain("github-dark");
+			expect(html).not.toContain("--shiki-dark");
+		}
 	});
 
 	it("builds searchable docs entries from generated docs", () => {
@@ -695,7 +693,7 @@ describe("content generation", () => {
 		expect(guideDocs.length).toBeGreaterThan(0);
 		for (const doc of guideDocs) {
 			expect(doc.html, doc.id).toContain("<pre");
-			expect(doc.html, doc.id).toContain('class="snippet-block"');
+			expect(doc.html, doc.id).toContain('class="mx-code-frame"');
 		}
 	});
 

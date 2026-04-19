@@ -6,11 +6,16 @@ import {
 } from "../../content";
 import { siteCopy } from "../../lib/site-copy";
 import type { AppRoute } from "../../routes";
-import { InlineAction, SecondaryAction } from "../../ui/actions";
+import { ActionStrip, InlineAction, SecondaryAction } from "../../ui/actions";
 import { CodeTabs } from "../../ui/code-tabs";
 import { HtmlSnippet } from "../../ui/html-snippet";
-import { PageHeader } from "../../ui/page-header";
-import { Surface } from "../../ui/surface";
+import {
+	MachinesCodeFrame,
+	MachinesGroupbox,
+	MachinesMessage,
+	MachinesSection,
+} from "../../ui/machines";
+import { SiteHeading } from "../../ui/site-heading";
 
 export function InstallPage(_props: { route: AppRoute }) {
 	const copy = siteCopy.install;
@@ -39,94 +44,104 @@ export function InstallPage(_props: { route: AppRoute }) {
 		},
 	];
 	return (
-		<div className="page-stack">
-			<PageHeader
+		<div className="site-stack">
+			<SiteHeading
 				eyebrow={copy.eyebrow}
 				title={copy.title}
 				description={copy.description}
 				actions={
-					<div className="action-strip">
+					<ActionStrip>
 						<SecondaryAction href="/learn">
 							{siteCopy.nav.learn}
 						</SecondaryAction>
 						<InlineAction href="/community">
 							{siteCopy.nav.community}
 						</InlineAction>
-					</div>
+					</ActionStrip>
 				}
 			/>
 
-			<section className="process-grid" aria-label="Install process">
+			<section className="install-step-list" aria-label="Install process">
 				{installSteps.map((step) => (
-					<Surface key={step.label} tone="raised" className="process-card">
-						<div className="process-step">{step.label}</div>
-						<div>
-							<h2>{step.title}</h2>
-							<p>{step.copy}</p>
-						</div>
-					</Surface>
+					<MachinesMessage
+						key={step.label}
+						mark={step.label}
+						className="install-step-message"
+					>
+						<strong>{step.title}</strong>
+						<p>{step.copy}</p>
+					</MachinesMessage>
 				))}
 			</section>
 
-			<section className="portal-grid" aria-label={copy.prerequisitesLabel}>
+			<section
+				className="mx-grid site-grid--three"
+				aria-label={copy.prerequisitesLabel}
+			>
 				{installPrerequisites().map((item) => (
-					<Surface
+					<MachinesGroupbox
 						key={item.title}
-						tone="panel"
-						className="portal-card portal-card-task"
+						legend={item.title}
+						className="mx-groupbox--compact"
 					>
-						<div className="eyebrow">{item.title}</div>
 						<h2>{item.value}</h2>
 						<p>{item.copy}</p>
-					</Surface>
+					</MachinesGroupbox>
 				))}
 			</section>
 
-			<section className="code-grid" aria-label={siteCopy.ui.installCommands}>
-				<Surface tone="code" className="snippet-panel">
-					<div className="eyebrow">{copy.installScriptsLabel}</div>
-					{scriptInstallGroup ? (
-						<div className="code-tabs-stack">
-							<p className="muted">{scriptInstallGroup.copy}</p>
-							{scriptInstallGroup.tabs ? (
-								<CodeTabs
-									tabs={scriptInstallGroup.tabs}
-									ariaLabel={copy.installScriptsLabel}
-								/>
-							) : null}
-						</div>
-					) : null}
-				</Surface>
-				<Surface tone="code" className="snippet-panel">
-					<div className="eyebrow">{copy.cargoInstallLabel}</div>
-					{cargoInstallGroup ? (
-						<div className="code-tabs-stack">
-							<p className="muted">{cargoInstallGroup.copy}</p>
-							{cargoInstallGroup.html ? (
-								<HtmlSnippet
-									className="docs-content"
-									html={cargoInstallGroup.html}
-								/>
-							) : null}
-						</div>
-					) : null}
-				</Surface>
-				<Surface tone="code" className="snippet-panel">
-					<div className="eyebrow">{copy.quickStartLabel}</div>
-					<HtmlSnippet className="docs-content" html={quickstartHtml} />
-				</Surface>
+			<section
+				className="install-command-grid"
+				aria-label={siteCopy.ui.installCommands}
+			>
+				{scriptInstallGroup ? (
+					<MachinesGroupbox
+						legend={copy.installScriptsLabel}
+						className="install-command-group"
+					>
+						<p className="site-copy site-copy--small">
+							{scriptInstallGroup.copy}
+						</p>
+						{scriptInstallGroup.tabs ? (
+							<CodeTabs
+								tabs={scriptInstallGroup.tabs}
+								ariaLabel={copy.installScriptsLabel}
+							/>
+						) : null}
+					</MachinesGroupbox>
+				) : null}
+				{cargoInstallGroup ? (
+					<MachinesGroupbox
+						legend={copy.cargoInstallLabel}
+						className="install-command-group"
+					>
+						<p className="site-copy site-copy--small">
+							{cargoInstallGroup.copy}
+						</p>
+						{cargoInstallGroup.html ? (
+							<MachinesCodeFrame>
+								<HtmlSnippet html={cargoInstallGroup.html} />
+							</MachinesCodeFrame>
+						) : null}
+					</MachinesGroupbox>
+				) : null}
+				<MachinesGroupbox
+					legend={copy.quickStartLabel}
+					className="install-command-group"
+				>
+					<MachinesCodeFrame>
+						<HtmlSnippet html={quickstartHtml} />
+					</MachinesCodeFrame>
+				</MachinesGroupbox>
 			</section>
 
-			<Surface tone="panel" className="section-panel">
-				<div className="section-heading-row">
-					<div>
-						<div className="eyebrow">{copy.commandMapLabel}</div>
-						<h2>{copy.commandMapTitle}</h2>
-						<p className="muted">{copy.commandMapCopy}</p>
-					</div>
-				</div>
-				<div className="table-wrap">
-					<table className="data-table">
+			<MachinesSection
+				kicker={copy.commandMapLabel}
+				title={copy.commandMapTitle}
+			>
+				<p className="site-copy site-copy--small">{copy.commandMapCopy}</p>
+				<div className="mx-table-wrap">
+					<table>
 						<caption className="sr-only">
 							{siteCopy.ui.commandReference}
 						</caption>
@@ -150,7 +165,7 @@ export function InstallPage(_props: { route: AppRoute }) {
 						</tbody>
 					</table>
 				</div>
-			</Surface>
+			</MachinesSection>
 		</div>
 	);
 }

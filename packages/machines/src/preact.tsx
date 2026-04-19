@@ -1,6 +1,6 @@
 import type * as Preact from "preact";
 import { useEffect, useId, useMemo, useRef, useState } from "preact/hooks";
-import { classNames, type MachinesScheme, type MachinesTheme } from "./index";
+import { classNames, type MachinesTheme } from "./index";
 
 function clampNumber(value: number, min: number, max: number): number {
 	return Math.min(Math.max(value, min), max);
@@ -69,7 +69,6 @@ export function MachinesRoot(
 	props: Preact.HTMLAttributes<HTMLDivElement> & {
 		children: Preact.ComponentChildren;
 		theme?: MachinesTheme;
-		scheme?: MachinesScheme;
 	},
 ) {
 	const {
@@ -77,7 +76,6 @@ export function MachinesRoot(
 		class: classProp,
 		className,
 		theme = "warm",
-		scheme = "light",
 		...rest
 	} = props;
 	return (
@@ -85,7 +83,6 @@ export function MachinesRoot(
 			{...rest}
 			data-mx-root={true}
 			data-mx-theme={theme}
-			data-mx-scheme={scheme}
 			class={classNames(
 				"mx-root",
 				typeof classProp === "string" ? classProp : undefined,
@@ -581,49 +578,6 @@ export function Drawer(props: {
 					</div>
 				</div>
 			) : null}
-		</div>
-	);
-}
-
-export function ThemeToggle(props: {
-	initialTheme?: MachinesTheme;
-	initialScheme?: MachinesScheme;
-}) {
-	const themes: MachinesTheme[] = ["warm", "midnight", "custom"];
-	const schemes: MachinesScheme[] = ["light", "dark"];
-	const [theme, setTheme] = useState<MachinesTheme>(
-		props.initialTheme ?? "warm",
-	);
-	const [scheme, setScheme] = useState<MachinesScheme>(
-		props.initialScheme ?? "light",
-	);
-	return (
-		<div
-			class="mx-cluster"
-			data-mx-root={true}
-			data-mx-theme={theme}
-			data-mx-scheme={scheme}
-		>
-			<Button
-				variant="secondary"
-				onClick={() =>
-					setTheme(
-						themes[(themes.indexOf(theme) + 1) % themes.length] ?? "warm",
-					)
-				}
-			>
-				Theme: {theme}
-			</Button>
-			<Button
-				variant="secondary"
-				onClick={() =>
-					setScheme(
-						schemes[(schemes.indexOf(scheme) + 1) % schemes.length] ?? "light",
-					)
-				}
-			>
-				Scheme: {scheme}
-			</Button>
 		</div>
 	);
 }

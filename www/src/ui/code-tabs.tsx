@@ -18,34 +18,35 @@ export function CodeTabs(props: {
 	}
 
 	return (
-		<div className="code-tabs-shell" data-code-tabs={true}>
+		<div className="mx-code-tabs" data-code-tabs={true}>
 			<div
+				className="mx-nav-rail mx-code-tabs__rail"
 				role="tablist"
 				aria-label={props.ariaLabel}
-				className="code-tab-list"
 			>
-				{props.tabs.map((tab) => {
-					const tabElementId = `${baseId}-${tab.id}-tab`;
-					const panelElementId = `${baseId}-${tab.id}-panel`;
-					const selected = tab.id === props.tabs[0]?.id;
-					return (
-						<button
-							key={tab.id}
-							type="button"
-							id={tabElementId}
-							role="tab"
-							aria-controls={panelElementId}
-							aria-selected={selected}
-							tabIndex={selected ? 0 : -1}
-							data-code-tab-trigger={tab.id}
-							className={
-								selected ? "code-tab-trigger is-active" : "code-tab-trigger"
-							}
-						>
-							{tab.label}
-						</button>
-					);
-				})}
+				<ul className="mx-nav-tabs">
+					{props.tabs.map((tab) => {
+						const tabElementId = `${baseId}-${tab.id}-tab`;
+						const panelElementId = `${baseId}-${tab.id}-panel`;
+						const selected = tab.id === props.tabs[0]?.id;
+						return (
+							<li key={tab.id}>
+								<button
+									type="button"
+									id={tabElementId}
+									role="tab"
+									aria-controls={panelElementId}
+									aria-selected={selected}
+									tabIndex={selected ? 0 : -1}
+									data-code-tab-trigger={tab.id}
+									className={selected ? "mx-tab is-active" : "mx-tab"}
+								>
+									{tab.label}
+								</button>
+							</li>
+						);
+					})}
+				</ul>
 			</div>
 			{props.tabs.map((tab) => {
 				const selected = tab.id === props.tabs[0]?.id;
@@ -56,10 +57,10 @@ export function CodeTabs(props: {
 						role="tabpanel"
 						aria-labelledby={`${baseId}-${tab.id}-tab`}
 						data-code-tab-panel={tab.id}
-						className="code-tab-panel"
+						className="mx-code-frame mx-code-tabs__frame"
 						hidden={!selected}
 					>
-						<HtmlSnippet className="docs-content" html={tab.html} />
+						<HtmlSnippet html={tab.html} />
 					</div>
 				);
 			})}
