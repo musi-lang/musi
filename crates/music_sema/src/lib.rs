@@ -19,9 +19,9 @@ pub use api::{
     ComptimeTypeValue, ComptimeValue, ComptimeValueList, ConstraintEvidence, ConstraintKey,
     ConstraintKind, ConstraintSurface, DataSurface, DataVariantSurface, DefinitionKey,
     EffectOpSurface, EffectSurface, ExportedValue, ExprMemberFact, ExprMemberKind, InstanceFacts,
-    InstanceSurface, LawFacts, LawParamFacts, LawParamSurface, LawSurface, ModuleSurface,
-    SemaDataDef, SemaDataVariantDef, SemaDiagList, SemaEffectDef, SemaEffectOpDef, SemaEnv,
-    SemaModule, SemaOptions, SurfaceDim, SurfaceEffectItem, SurfaceEffectRow, SurfaceTy,
+    InstanceSurface, JitTargetInfo, LawFacts, LawParamFacts, LawParamSurface, LawSurface,
+    ModuleSurface, SemaDataDef, SemaDataVariantDef, SemaDiagList, SemaEffectDef, SemaEffectOpDef,
+    SemaEnv, SemaModule, SemaOptions, SurfaceDim, SurfaceEffectItem, SurfaceEffectRow, SurfaceTy,
     SurfaceTyField, SurfaceTyId, SurfaceTyKind, TargetInfo, sema_diag_kind,
 };
 pub use checker::check_module;

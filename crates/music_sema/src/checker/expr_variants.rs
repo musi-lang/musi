@@ -110,71 +110,153 @@ impl CheckPass<'_, '_, '_> {
         let named_variant = field_names.iter().any(Option::is_some);
         let named_args = arg_nodes.iter().any(|arg| arg.name.is_some());
         if named_variant {
-            if !named_args {
-                self.diag(diag_span, DiagKind::VariantNamedFieldsRequired, "");
-                self.typecheck_positional_args(
-                    diag_span,
-                    expected_args,
-                    arg_nodes.into_iter().map(|arg| arg.expr).collect(),
-                    effects,
-                    DiagKind::VariantConstructorArityMismatch,
-                );
-                return;
-            }
-            let mut seen = HashSet::<Symbol>::new();
-            for arg in &arg_nodes {
-                let Some(name) = arg.name else {
-                    self.diag(diag_span, DiagKind::VariantNamedFieldsRequired, "");
-                    continue;
-                };
-                if !seen.insert(name.name) {
-                    let field_name = self.resolve_symbol(name.name).to_owned();
-                    self.diag_message(
-                        name.span,
-                        DiagKind::DuplicateVariantField,
-                        format!("duplicate variant field `{field_name}`"),
-                        format!("duplicate variant field `{field_name}`"),
-                    );
-                }
-                let field_index = field_names
-                    .iter()
-                    .position(|field| field.as_deref() == Some(self.resolve_symbol(name.name)));
-                let expected = field_index
-                    .and_then(|index| expected_args.get(index).copied())
-                    .unwrap_or_else(|| {
-                        let field_name = self.resolve_symbol(name.name).to_owned();
-                        self.diag_message(
-                            name.span,
-                            DiagKind::UnknownVariantField,
-                            format!("unknown variant field `{field_name}`"),
-                            format!("unknown variant field `{field_name}`"),
-                        );
-                        self.builtins().unknown
-                    });
-                self.push_expected_ty(expected);
-                let facts = check_expr(self, arg.expr);
-                let _ = self.pop_expected_ty();
-                effects.union_with(&facts.effects);
-                let origin = self.expr(arg.expr).origin;
-                self.type_mismatch(origin, expected, facts.ty);
-            }
-            for field_name in field_names.iter().flatten() {
-                let expected_symbol = self.intern(field_name);
-                if !seen.contains(&expected_symbol) {
-                    self.diag_message(
-                        diag_span,
-                        DiagKind::MissingVariantField,
-                        format!("missing variant field `{field_name}`"),
-                        format!("missing variant field `{field_name}`"),
-                    );
-                }
-            }
+            self.typecheck_named_variant_args(
+                diag_span,
+                expected_args,
+                field_names,
+                arg_nodes,
+                named_args,
+                effects,
+            );
+        } else {
+            self.typecheck_ordinary_variant_args(
+                diag_span,
+                expected_args,
+                arg_nodes,
+                named_args,
+                effects,
+            );
+        }
+    }
+
+    fn typecheck_named_variant_args(
+        &mut self,
+        diag_span: Span,
+        expected_args: &[HirTyId],
+        field_names: &[Option<Box<str>>],
+        arg_nodes: Vec<HirArg>,
+        named_args: bool,
+        effects: &mut EffectRow,
+    ) {
+        if !named_args {
+            self.diag(diag_span, DiagKind::VariantNamedFieldsRequired, "");
+            self.typecheck_positional_variant_args(diag_span, expected_args, arg_nodes, effects);
             return;
         }
+        let mut seen = HashSet::<Symbol>::new();
+        for arg in &arg_nodes {
+            self.typecheck_named_variant_arg(
+                diag_span,
+                expected_args,
+                field_names,
+                arg,
+                &mut seen,
+                effects,
+            );
+        }
+        self.report_missing_variant_fields(diag_span, field_names, &seen);
+    }
 
+    fn typecheck_named_variant_arg(
+        &mut self,
+        diag_span: Span,
+        expected_args: &[HirTyId],
+        field_names: &[Option<Box<str>>],
+        arg: &HirArg,
+        seen: &mut HashSet<Symbol>,
+        effects: &mut EffectRow,
+    ) {
+        let Some(name) = arg.name else {
+            self.diag(diag_span, DiagKind::VariantNamedFieldsRequired, "");
+            return;
+        };
+        self.record_variant_field_name(name, seen);
+        let expected = self.expected_variant_field_ty(name, field_names, expected_args);
+        self.push_expected_ty(expected);
+        let facts = check_expr(self, arg.expr);
+        let _ = self.pop_expected_ty();
+        effects.union_with(&facts.effects);
+        let origin = self.expr(arg.expr).origin;
+        self.type_mismatch(origin, expected, facts.ty);
+    }
+
+    fn record_variant_field_name(&mut self, name: Ident, seen: &mut HashSet<Symbol>) {
+        if !seen.insert(name.name) {
+            let field_name = self.resolve_symbol(name.name).to_owned();
+            self.diag_message(
+                name.span,
+                DiagKind::DuplicateVariantField,
+                format!("duplicate variant field `{field_name}`"),
+                format!("duplicate variant field `{field_name}`"),
+            );
+        }
+    }
+
+    fn expected_variant_field_ty(
+        &mut self,
+        name: Ident,
+        field_names: &[Option<Box<str>>],
+        expected_args: &[HirTyId],
+    ) -> HirTyId {
+        let field_index = field_names
+            .iter()
+            .position(|field| field.as_deref() == Some(self.resolve_symbol(name.name)));
+        field_index
+            .and_then(|index| expected_args.get(index).copied())
+            .unwrap_or_else(|| self.unknown_variant_field_ty(name))
+    }
+
+    fn unknown_variant_field_ty(&mut self, name: Ident) -> HirTyId {
+        let field_name = self.resolve_symbol(name.name).to_owned();
+        self.diag_message(
+            name.span,
+            DiagKind::UnknownVariantField,
+            format!("unknown variant field `{field_name}`"),
+            format!("unknown variant field `{field_name}`"),
+        );
+        self.builtins().unknown
+    }
+
+    fn report_missing_variant_fields(
+        &mut self,
+        diag_span: Span,
+        field_names: &[Option<Box<str>>],
+        seen: &HashSet<Symbol>,
+    ) {
+        for field_name in field_names.iter().flatten() {
+            let expected_symbol = self.intern(field_name);
+            if !seen.contains(&expected_symbol) {
+                self.diag_message(
+                    diag_span,
+                    DiagKind::MissingVariantField,
+                    format!("missing variant field `{field_name}`"),
+                    format!("missing variant field `{field_name}`"),
+                );
+            }
+        }
+    }
+
+    fn typecheck_ordinary_variant_args(
+        &mut self,
+        diag_span: Span,
+        expected_args: &[HirTyId],
+        arg_nodes: Vec<HirArg>,
+        named_args: bool,
+        effects: &mut EffectRow,
+    ) {
         if named_args {
             self.diag(diag_span, DiagKind::VariantNamedFieldsUnexpected, "");
         }
+        self.typecheck_positional_variant_args(diag_span, expected_args, arg_nodes, effects);
+    }
+
+    fn typecheck_positional_variant_args(
+        &mut self,
+        diag_span: Span,
+        expected_args: &[HirTyId],
+        arg_nodes: Vec<HirArg>,
+        effects: &mut EffectRow,
+    ) {
         self.typecheck_positional_args(
             diag_span,
             expected_args,

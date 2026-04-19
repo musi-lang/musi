@@ -132,52 +132,96 @@ impl CheckPass<'_, '_, '_> {
         access: HirAccessKind,
         name: Ident,
     ) -> HirTyId {
-        let builtins = self.builtins();
         let (base_ty, base_is_mut) = base;
         if self.ty(base_ty).kind == HirTyKind::Module {
-            if let Some((surface, export)) = module_export_for_expr(self, base_expr, name) {
-                let module_target = export.module_target.clone();
-                if let Some(target) = module_target.clone() {
-                    self.set_expr_module_target(expr_id, target);
-                }
-                let scheme = self.scheme_from_export(&surface, &export);
-                if scheme.type_params.is_empty() {
-                    let instantiated = self.instantiate_monomorphic_scheme(&scheme);
-                    if let Some(evidence) =
-                        self.resolve_obligations_to_evidence(origin, &instantiated.obligations)
-                        && !evidence.is_empty()
-                    {
-                        self.set_expr_evidence(expr_id, evidence);
-                    }
-                }
-                self.set_expr_callable_effects(expr_id, scheme.effects.clone());
-                let value_ty = self.scheme_value_ty(&scheme);
-                let mut fact =
-                    ExprMemberFact::new(ExprMemberKind::ModuleExport, name.name, value_ty);
-                if let Some(target) = module_target {
-                    fact = fact.with_module_target(target);
-                }
-                self.set_expr_member_fact(expr_id, fact);
-                return value_ty;
-            }
-            return builtins.any;
+            return self.check_module_field_expr(expr_id, origin, base_expr, name);
         }
+        if let Some(field_ty) = self.check_type_or_callable_field(
+            expr_id,
+            origin,
+            base_expr,
+            base_ty,
+            base_is_mut,
+            name,
+        ) {
+            return field_ty;
+        }
+        self.diag_invalid_non_record_field(origin, base_ty, access, name)
+    }
 
+    fn check_module_field_expr(
+        &mut self,
+        expr_id: HirExprId,
+        origin: HirOrigin,
+        base_expr: HirExprId,
+        name: Ident,
+    ) -> HirTyId {
+        let Some((surface, export)) = module_export_for_expr(self, base_expr, name) else {
+            return self.builtins().any;
+        };
+        let module_target = export.module_target.clone();
+        if let Some(target) = module_target.clone() {
+            self.set_expr_module_target(expr_id, target);
+        }
+        let scheme = self.scheme_from_export(&surface, &export);
+        self.resolve_module_export_evidence(expr_id, origin, &scheme);
+        self.set_expr_callable_effects(expr_id, scheme.effects.clone());
+        let value_ty = self.scheme_value_ty(&scheme);
+        let mut fact = ExprMemberFact::new(ExprMemberKind::ModuleExport, name.name, value_ty);
+        if let Some(target) = module_target {
+            fact = fact.with_module_target(target);
+        }
+        self.set_expr_member_fact(expr_id, fact);
+        value_ty
+    }
+
+    fn resolve_module_export_evidence(
+        &mut self,
+        expr_id: HirExprId,
+        origin: HirOrigin,
+        scheme: &BindingScheme,
+    ) {
+        if !scheme.type_params.is_empty() {
+            return;
+        }
+        let instantiated = self.instantiate_monomorphic_scheme(scheme);
+        if let Some(evidence) =
+            self.resolve_obligations_to_evidence(origin, &instantiated.obligations)
+            && !evidence.is_empty()
+        {
+            self.set_expr_evidence(expr_id, evidence);
+        }
+    }
+
+    fn check_type_or_callable_field(
+        &mut self,
+        expr_id: HirExprId,
+        origin: HirOrigin,
+        base_expr: HirExprId,
+        base_ty: HirTyId,
+        base_is_mut: bool,
+        name: Ident,
+    ) -> Option<HirTyId> {
         let method_name = name.name;
         if self.ty(base_ty).kind == HirTyKind::Type
             && let Some(method_ty) =
                 self.check_attached_method_namespace(expr_id, origin, base_expr, method_name)
         {
-            return method_ty;
+            return Some(method_ty);
         }
-        if let Some(field_ty) = self.check_std_ffi_pointer_field(expr_id, base_expr, name) {
-            return field_ty;
-        }
-        if let Some(method_ty) =
-            self.check_dot_callable_field(expr_id, origin, base_ty, base_is_mut, method_name)
-        {
-            return method_ty;
-        }
+        self.check_std_ffi_pointer_field(expr_id, base_expr, name)
+            .or_else(|| {
+                self.check_dot_callable_field(expr_id, origin, base_ty, base_is_mut, method_name)
+            })
+    }
+
+    fn diag_invalid_non_record_field(
+        &mut self,
+        origin: HirOrigin,
+        base_ty: HirTyId,
+        access: HirAccessKind,
+        name: Ident,
+    ) -> HirTyId {
         if matches!(self.ty(base_ty).kind, HirTyKind::Record { .. })
             || self.range_item_type(base_ty).is_some()
         {
@@ -188,22 +232,19 @@ impl CheckPass<'_, '_, '_> {
                 format!("unknown field `{field_name}`"),
                 format!("unknown field `{field_name}`"),
             );
-            return builtins.unknown;
+            return self.builtins().unknown;
         }
-        if matches!(access, HirAccessKind::Direct) {
-            self.diag(
-                origin.span,
-                DiagKind::InvalidFieldTarget,
-                "field access target must be record, module, or dot-callable target",
-            );
+        self.diag_invalid_field_target(origin, access);
+        self.builtins().unknown
+    }
+
+    fn diag_invalid_field_target(&mut self, origin: HirOrigin, access: HirAccessKind) {
+        let message = if matches!(access, HirAccessKind::Direct) {
+            "field access target must be record, module, or dot-callable target"
         } else {
-            self.diag(
-                origin.span,
-                DiagKind::InvalidFieldTarget,
-                "optional field access target must be optional record-like value",
-            );
-        }
-        builtins.unknown
+            "optional field access target must be optional record-like value"
+        };
+        self.diag(origin.span, DiagKind::InvalidFieldTarget, message);
     }
 
     fn check_attached_method_namespace(

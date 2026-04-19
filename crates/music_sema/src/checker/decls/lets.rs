@@ -88,6 +88,26 @@ struct LetBindingSchemeInput {
     constraints: ConstraintFactsList,
 }
 
+struct LetFinalTyInput<'a> {
+    expr_id: HirExprId,
+    origin: HirOrigin,
+    expr_mods: HirMods,
+    mods: HirLetMods,
+    pat: HirPatId,
+    receiver: Option<HirReceiverDecl>,
+    has_param_clause: bool,
+    params: SliceRange<HirParam>,
+    effects: Option<&'a HirEffectSet>,
+    value: HirExprId,
+    binding: Option<NameBindingId>,
+    bound_name: Option<Ident>,
+    type_params: Box<[Symbol]>,
+    type_param_kinds: Box<[HirTyId]>,
+    constraints: ConstraintFactsList,
+    declared_ty: Option<HirTyId>,
+    is_module_stmt: bool,
+}
+
 pub(in super::super) fn check_let_expr(
     ctx: &mut CheckPass<'_, '_, '_>,
     input: LetExprInput,
@@ -501,44 +521,83 @@ impl CheckPass<'_, '_, '_> {
             self.lower_type_expr(expr, origin)
         });
 
-        let final_ty = if is_module_stmt && expr_mods.foreign.is_some() {
-            check_foreign_let(self, expr_id, type_params, type_param_kinds)
-                .unwrap_or(builtins.unknown)
-        } else if has_param_clause {
-            self.check_callable_let_expr(CallableLetCheckInput {
-                origin,
-                exported: expr_mods.export.is_some(),
-                mods,
-                pat,
-                params,
-                effects: effects.as_ref(),
-                declared_ty,
-                value,
-                binding,
-                receiver,
-                type_params,
-                type_param_kinds,
-                constraints,
-            })
-        } else {
-            self.check_non_callable_let_expr(NonCallableLetCheckInput {
-                origin,
-                exported: expr_mods.export.is_some(),
-                mods,
-                pat,
-                value,
-                params,
-                binding,
-                declared_ty,
-                is_module_stmt,
-                bound_name,
-                type_params,
-                type_param_kinds,
-                constraints,
-            })
-        };
+        let final_ty = self.check_let_final_ty(LetFinalTyInput {
+            expr_id,
+            origin,
+            expr_mods,
+            mods,
+            pat,
+            receiver,
+            has_param_clause,
+            params,
+            effects: effects.as_ref(),
+            value,
+            binding,
+            bound_name,
+            type_params,
+            type_param_kinds,
+            constraints,
+            declared_ty,
+            is_module_stmt,
+        });
 
         self.pop_type_param_kinds();
+        self.finish_let_expr(pat, value, final_ty, binding, bound_name);
+        ExprFacts::new(builtins.unit, EffectRow::empty())
+    }
+
+    fn check_let_final_ty(&mut self, input: LetFinalTyInput<'_>) -> HirTyId {
+        if input.is_module_stmt && input.expr_mods.foreign.is_some() {
+            return check_foreign_let(
+                self,
+                input.expr_id,
+                input.type_params,
+                input.type_param_kinds,
+            )
+            .unwrap_or_else(|| self.builtins().unknown);
+        }
+        if input.has_param_clause {
+            return self.check_callable_let_expr(CallableLetCheckInput {
+                origin: input.origin,
+                exported: input.expr_mods.export.is_some(),
+                mods: input.mods,
+                pat: input.pat,
+                params: input.params,
+                effects: input.effects,
+                declared_ty: input.declared_ty,
+                value: input.value,
+                binding: input.binding,
+                receiver: input.receiver,
+                type_params: input.type_params,
+                type_param_kinds: input.type_param_kinds,
+                constraints: input.constraints,
+            });
+        }
+        self.check_non_callable_let_expr(NonCallableLetCheckInput {
+            origin: input.origin,
+            exported: input.expr_mods.export.is_some(),
+            mods: input.mods,
+            pat: input.pat,
+            value: input.value,
+            params: input.params,
+            binding: input.binding,
+            declared_ty: input.declared_ty,
+            is_module_stmt: input.is_module_stmt,
+            bound_name: input.bound_name,
+            type_params: input.type_params,
+            type_param_kinds: input.type_param_kinds,
+            constraints: input.constraints,
+        })
+    }
+
+    fn finish_let_expr(
+        &mut self,
+        pat: HirPatId,
+        value: HirExprId,
+        final_ty: HirTyId,
+        binding: Option<NameBindingId>,
+        bound_name: Option<Ident>,
+    ) {
         if !bind_module_pattern(self, pat, value) {
             bind_pat(self, pat, final_ty);
         }
@@ -549,17 +608,21 @@ impl CheckPass<'_, '_, '_> {
         }
         if let Some(binding) = binding
             && let Some(name) = bound_name
-            && is_std_ffi_unsafe_public_pointer_op(
-                self.module_key().as_str(),
-                self.resolve_symbol(name.name),
-            )
         {
-            self.mark_unsafe_binding(binding);
+            self.mark_std_ffi_pointer_op_unsafe(binding, name);
         }
         if let Some(name) = bound_name {
             bind_structural_alias(self, name, value);
         }
-        ExprFacts::new(builtins.unit, EffectRow::empty())
+    }
+
+    fn mark_std_ffi_pointer_op_unsafe(&mut self, binding: NameBindingId, name: Ident) {
+        if is_std_ffi_unsafe_public_pointer_op(
+            self.module_key().as_str(),
+            self.resolve_symbol(name.name),
+        ) {
+            self.mark_unsafe_binding(binding);
+        }
     }
 }
 

@@ -48,6 +48,10 @@ pub fn canonical_surface_ty(surface: &ModuleSurface, ty: SurfaceTyId) -> String 
         .try_ty(ty)
         .expect("surface type missing while formatting")
         .kind;
+    canonical_surface_ty_kind(surface, kind)
+}
+
+fn canonical_surface_ty_kind(surface: &ModuleSurface, kind: &SurfaceTyKind) -> String {
     if let Some(rendered) = canonical_simple_surface_ty(kind) {
         return rendered;
     }
@@ -96,35 +100,7 @@ pub fn canonical_surface_ty(surface: &ModuleSurface, ty: SurfaceTyId) -> String 
         SurfaceTyKind::AnyClass { class } => canonical_surface_prefixed(surface, "any", *class),
         SurfaceTyKind::SomeClass { class } => canonical_surface_prefixed(surface, "some", *class),
         SurfaceTyKind::Record { fields } => canonical_surface_record(surface, fields),
-        SurfaceTyKind::Error
-        | SurfaceTyKind::Unknown
-        | SurfaceTyKind::Type
-        | SurfaceTyKind::Syntax
-        | SurfaceTyKind::Any
-        | SurfaceTyKind::Empty
-        | SurfaceTyKind::Unit
-        | SurfaceTyKind::Bool
-        | SurfaceTyKind::Nat
-        | SurfaceTyKind::Int
-        | SurfaceTyKind::Int8
-        | SurfaceTyKind::Int16
-        | SurfaceTyKind::Int32
-        | SurfaceTyKind::Int64
-        | SurfaceTyKind::Nat8
-        | SurfaceTyKind::Nat16
-        | SurfaceTyKind::Nat32
-        | SurfaceTyKind::Nat64
-        | SurfaceTyKind::Float
-        | SurfaceTyKind::Float32
-        | SurfaceTyKind::Float64
-        | SurfaceTyKind::String
-        | SurfaceTyKind::Rune
-        | SurfaceTyKind::CString
-        | SurfaceTyKind::CPtr
-        | SurfaceTyKind::Module
-        | SurfaceTyKind::NatLit(_) => {
-            canonical_simple_surface_ty(kind).expect("simple surface type should render")
-        }
+        _ => canonical_simple_surface_ty(kind).expect("simple surface type should render"),
     }
 }
 
@@ -282,6 +258,10 @@ impl<'a> SurfaceTyBuilder<'a> {
 
     fn lower_kind(&mut self, id: HirTyId) -> SurfaceTyKind {
         let kind = &self.hir.tys.get(id).kind;
+        self.lower_ty_kind(kind)
+    }
+
+    fn lower_ty_kind(&mut self, kind: &HirTyKind) -> SurfaceTyKind {
         if let Some(simple) = simple_surface_ty_kind(kind) {
             return simple;
         }
@@ -324,21 +304,11 @@ impl<'a> SurfaceTyBuilder<'a> {
                 dims: self.lower_dims(dims.clone()),
                 item: self.lower(*item),
             },
-            HirTyKind::Range { bound } => SurfaceTyKind::Range {
-                bound: self.lower(*bound),
-            },
-            HirTyKind::ClosedRange { bound } => SurfaceTyKind::ClosedRange {
-                bound: self.lower(*bound),
-            },
-            HirTyKind::PartialRangeFrom { bound } => SurfaceTyKind::PartialRangeFrom {
-                bound: self.lower(*bound),
-            },
-            HirTyKind::PartialRangeUpTo { bound } => SurfaceTyKind::PartialRangeUpTo {
-                bound: self.lower(*bound),
-            },
-            HirTyKind::PartialRangeThru { bound } => SurfaceTyKind::PartialRangeThru {
-                bound: self.lower(*bound),
-            },
+            HirTyKind::Range { .. }
+            | HirTyKind::ClosedRange { .. }
+            | HirTyKind::PartialRangeFrom { .. }
+            | HirTyKind::PartialRangeUpTo { .. }
+            | HirTyKind::PartialRangeThru { .. } => self.lower_range_kind(kind),
             HirTyKind::Handler {
                 effect,
                 input,
@@ -362,6 +332,28 @@ impl<'a> SurfaceTyBuilder<'a> {
             },
             other => simple_surface_ty_kind(other)
                 .expect("expected primitive type kind after composite matches"),
+        }
+    }
+
+    fn lower_range_kind(&mut self, kind: &HirTyKind) -> SurfaceTyKind {
+        match kind {
+            HirTyKind::Range { bound } => SurfaceTyKind::Range {
+                bound: self.lower(*bound),
+            },
+            HirTyKind::ClosedRange { bound } => SurfaceTyKind::ClosedRange {
+                bound: self.lower(*bound),
+            },
+            HirTyKind::PartialRangeFrom { bound } => SurfaceTyKind::PartialRangeFrom {
+                bound: self.lower(*bound),
+            },
+            HirTyKind::PartialRangeUpTo { bound } => SurfaceTyKind::PartialRangeUpTo {
+                bound: self.lower(*bound),
+            },
+            HirTyKind::PartialRangeThru { bound } => SurfaceTyKind::PartialRangeThru {
+                bound: self.lower(*bound),
+            },
+            other => simple_surface_ty_kind(other)
+                .expect("expected primitive type kind after range matches"),
         }
     }
 
@@ -445,6 +437,10 @@ impl<'ctx, 'ctx_state, 'interner, 'env> SurfaceTyImporter<'ctx, 'ctx_state, 'int
             .try_ty(id)
             .expect("surface type missing while reading")
             .kind;
+        self.import_ty_kind(kind)
+    }
+
+    fn import_ty_kind(&mut self, kind: &SurfaceTyKind) -> HirTyKind {
         if let Some(simple) = simple_hir_ty_kind(kind) {
             return simple;
         }
@@ -487,21 +483,11 @@ impl<'ctx, 'ctx_state, 'interner, 'env> SurfaceTyImporter<'ctx, 'ctx_state, 'int
                 dims: self.import_dims(dims),
                 item: self.import(*item),
             },
-            SurfaceTyKind::Range { bound } => HirTyKind::Range {
-                bound: self.import(*bound),
-            },
-            SurfaceTyKind::ClosedRange { bound } => HirTyKind::ClosedRange {
-                bound: self.import(*bound),
-            },
-            SurfaceTyKind::PartialRangeFrom { bound } => HirTyKind::PartialRangeFrom {
-                bound: self.import(*bound),
-            },
-            SurfaceTyKind::PartialRangeUpTo { bound } => HirTyKind::PartialRangeUpTo {
-                bound: self.import(*bound),
-            },
-            SurfaceTyKind::PartialRangeThru { bound } => HirTyKind::PartialRangeThru {
-                bound: self.import(*bound),
-            },
+            SurfaceTyKind::Range { .. }
+            | SurfaceTyKind::ClosedRange { .. }
+            | SurfaceTyKind::PartialRangeFrom { .. }
+            | SurfaceTyKind::PartialRangeUpTo { .. }
+            | SurfaceTyKind::PartialRangeThru { .. } => self.import_range_kind(kind),
             SurfaceTyKind::Handler {
                 effect,
                 input,
@@ -525,6 +511,28 @@ impl<'ctx, 'ctx_state, 'interner, 'env> SurfaceTyImporter<'ctx, 'ctx_state, 'int
             },
             other => simple_hir_ty_kind(other)
                 .expect("expected primitive surface type kind after composite matches"),
+        }
+    }
+
+    fn import_range_kind(&mut self, kind: &SurfaceTyKind) -> HirTyKind {
+        match kind {
+            SurfaceTyKind::Range { bound } => HirTyKind::Range {
+                bound: self.import(*bound),
+            },
+            SurfaceTyKind::ClosedRange { bound } => HirTyKind::ClosedRange {
+                bound: self.import(*bound),
+            },
+            SurfaceTyKind::PartialRangeFrom { bound } => HirTyKind::PartialRangeFrom {
+                bound: self.import(*bound),
+            },
+            SurfaceTyKind::PartialRangeUpTo { bound } => HirTyKind::PartialRangeUpTo {
+                bound: self.import(*bound),
+            },
+            SurfaceTyKind::PartialRangeThru { bound } => HirTyKind::PartialRangeThru {
+                bound: self.import(*bound),
+            },
+            other => simple_hir_ty_kind(other)
+                .expect("expected primitive surface type kind after range matches"),
         }
     }
 

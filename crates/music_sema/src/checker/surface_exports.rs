@@ -3,13 +3,14 @@ use music_base::Span;
 use music_hir::{
     HirArg, HirArrayItem, HirAttr, HirExprId, HirExprKind, HirFieldDef, HirHandleClause,
     HirLitKind, HirMatchArm, HirMemberDef, HirParam, HirPatId, HirPatKind, HirRecordItem,
-    HirTemplatePart, HirVariantDef,
+    HirTemplatePart, HirTyId, HirVariantDef,
 };
 use music_module::ModuleKey;
 use music_names::{Ident, Interner, NameBindingId, NameBindingKind, NameSite, Symbol};
 
 use super::surface_types::{SurfaceTyBuilder, lower_surface_effect_row};
 use super::{DeclState, ModuleState, TypingState};
+use crate::BindingScheme;
 use crate::api::{
     Attr, AttrArg, AttrRecordField, AttrValue, ClassMemberSurface, ClassSurface, ConstraintFacts,
     ConstraintSurface, DataSurface, DataVariantSurface, EffectOpSurface, EffectSurface,
@@ -241,80 +242,117 @@ impl ExportSurfaceCollector<'_, '_> {
             if typing.is_gated_binding(export.binding) {
                 return None;
             }
-            let symbol = this.module.resolved.names.bindings.get(export.binding).name;
-            let scheme = typing.binding_schemes().get(&export.binding);
-            let ty = scheme.map_or_else(
-                || typing.binding_types().get(&export.binding).copied(),
-                |scheme| Some(scheme.ty),
-            )?;
-            let mut value = ExportedValue::new(export.name.clone(), this.tys.lower(ty))
-                .with_type_params(scheme.map_or_else(Box::<[Box<str>]>::default, |scheme| {
-                    lower_type_params(&scheme.type_params, this.tys.interner)
-                }))
-                .with_type_param_kinds(scheme.map_or_else(
-                    Box::<[SurfaceTyId]>::default,
-                    |scheme| {
-                        scheme
-                            .type_param_kinds
-                            .iter()
-                            .copied()
-                            .map(|ty| this.tys.lower(ty))
-                            .collect::<Vec<_>>()
-                            .into_boxed_slice()
-                    },
-                ))
-                .with_param_names(scheme.map_or_else(Box::<[Box<str>]>::default, |scheme| {
-                    lower_type_params(&scheme.param_names, this.tys.interner)
-                }))
-                .with_comptime_params(scheme.map_or_else(Box::<[bool]>::default, |scheme| {
-                    scheme.comptime_params.clone()
-                }))
-                .with_constraints(
-                    scheme.map_or_else(Box::<[ConstraintSurface]>::default, |scheme| {
-                        this.lower_constraints(&scheme.constraints)
-                    }),
-                )
-                .with_effects(scheme.map_or_else(SurfaceEffectRow::default, |scheme| {
-                    lower_surface_effect_row(&mut this.tys, &scheme.effects)
-                }))
-                .with_opaque(export.opaque)
-                .with_inert_attrs(inert_attrs)
-                .with_musi_attrs(musi_attrs);
-            if let Some(module_target) = export_module_target(this.module, typing, export.binding) {
-                value = value.with_module_target(module_target);
-            }
-            if let Some(class_key) = decls
-                .class_facts_by_name()
-                .get(&symbol)
-                .map(|facts| facts.key.clone())
-            {
-                value = value.with_class_key(class_key);
-            }
-            if let Some(effect_key) = decls
-                .effect_def(export.name.as_ref())
-                .map(|effect| effect.key().clone())
-            {
-                value = value.with_effect_key(effect_key);
-            }
-            if let Some(data_key) = decls
-                .data_def(export.name.as_ref())
-                .map(|data| data.key().clone())
-            {
-                value = value.with_data_key(data_key);
-            }
-            if let Some(const_int) = typing.binding_const_ints().get(&export.binding).copied() {
-                value = value.with_const_int(const_int);
-            }
-            if let Some(comptime_value) = typing.binding_comptime_values().get(&export.binding) {
-                value = value.with_comptime_value(comptime_value.clone());
-            }
-            if this.module.resolved.names.bindings.get(export.binding).kind
-                == NameBindingKind::AttachedMethod
-            {
-                value = value.with_attached_method();
-            }
-            Some(value)
+            this.lower_exported_value(typing, decls, export, inert_attrs, musi_attrs)
         })
+    }
+
+    fn lower_exported_value(
+        &mut self,
+        typing: &TypingState,
+        decls: &DeclState,
+        export: &ExportBinding,
+        inert_attrs: Box<[Attr]>,
+        musi_attrs: Box<[Attr]>,
+    ) -> Option<ExportedValue> {
+        let symbol = self.module.resolved.names.bindings.get(export.binding).name;
+        let scheme = typing.binding_schemes().get(&export.binding);
+        let ty = scheme.map_or_else(
+            || typing.binding_types().get(&export.binding).copied(),
+            |scheme| Some(scheme.ty),
+        )?;
+        let value = self.lower_exported_value_base(export, scheme, ty, inert_attrs, musi_attrs);
+        Some(self.attach_exported_value_metadata(value, typing, decls, export, symbol))
+    }
+
+    fn lower_exported_value_base(
+        &mut self,
+        export: &ExportBinding,
+        scheme: Option<&BindingScheme>,
+        ty: HirTyId,
+        inert_attrs: Box<[Attr]>,
+        musi_attrs: Box<[Attr]>,
+    ) -> ExportedValue {
+        ExportedValue::new(export.name.clone(), self.tys.lower(ty))
+            .with_type_params(scheme.map_or_else(Box::<[Box<str>]>::default, |scheme| {
+                lower_type_params(&scheme.type_params, self.tys.interner)
+            }))
+            .with_type_param_kinds(self.lower_exported_type_param_kinds(scheme))
+            .with_param_names(scheme.map_or_else(Box::<[Box<str>]>::default, |scheme| {
+                lower_type_params(&scheme.param_names, self.tys.interner)
+            }))
+            .with_comptime_params(scheme.map_or_else(Box::<[bool]>::default, |scheme| {
+                scheme.comptime_params.clone()
+            }))
+            .with_constraints(
+                scheme.map_or_else(Box::<[ConstraintSurface]>::default, |scheme| {
+                    self.lower_constraints(&scheme.constraints)
+                }),
+            )
+            .with_effects(scheme.map_or_else(SurfaceEffectRow::default, |scheme| {
+                lower_surface_effect_row(&mut self.tys, &scheme.effects)
+            }))
+            .with_opaque(export.opaque)
+            .with_inert_attrs(inert_attrs)
+            .with_musi_attrs(musi_attrs)
+    }
+
+    fn lower_exported_type_param_kinds(
+        &mut self,
+        scheme: Option<&BindingScheme>,
+    ) -> Box<[SurfaceTyId]> {
+        scheme.map_or_else(Box::<[SurfaceTyId]>::default, |scheme| {
+            scheme
+                .type_param_kinds
+                .iter()
+                .copied()
+                .map(|ty| self.tys.lower(ty))
+                .collect::<Vec<_>>()
+                .into_boxed_slice()
+        })
+    }
+
+    fn attach_exported_value_metadata(
+        &self,
+        mut value: ExportedValue,
+        typing: &TypingState,
+        decls: &DeclState,
+        export: &ExportBinding,
+        symbol: Symbol,
+    ) -> ExportedValue {
+        if let Some(module_target) = export_module_target(self.module, typing, export.binding) {
+            value = value.with_module_target(module_target);
+        }
+        if let Some(class_key) = decls
+            .class_facts_by_name()
+            .get(&symbol)
+            .map(|facts| facts.key.clone())
+        {
+            value = value.with_class_key(class_key);
+        }
+        if let Some(effect_key) = decls
+            .effect_def(export.name.as_ref())
+            .map(|effect| effect.key().clone())
+        {
+            value = value.with_effect_key(effect_key);
+        }
+        if let Some(data_key) = decls
+            .data_def(export.name.as_ref())
+            .map(|data| data.key().clone())
+        {
+            value = value.with_data_key(data_key);
+        }
+        if let Some(const_int) = typing.binding_const_ints().get(&export.binding).copied() {
+            value = value.with_const_int(const_int);
+        }
+        if let Some(comptime_value) = typing.binding_comptime_values().get(&export.binding) {
+            value = value.with_comptime_value(comptime_value.clone());
+        }
+        if self.module.resolved.names.bindings.get(export.binding).kind
+            == NameBindingKind::AttachedMethod
+        {
+            value = value.with_attached_method();
+        }
+        value
     }
 }
 
@@ -725,6 +763,19 @@ fn collect_exports_from_kind(
     exports: &mut ModuleExports,
     attr_stack: &mut Vec<HirAttr>,
 ) {
+    if collect_aggregate_exports(module, interner, kind, exports, attr_stack)
+        || collect_call_like_exports(module, interner, kind, exports, attr_stack)
+        || collect_decl_or_control_exports(module, interner, kind, exports, attr_stack)
+    {}
+}
+
+fn collect_aggregate_exports(
+    module: &ModuleState,
+    interner: &Interner,
+    kind: &HirExprKind,
+    exports: &mut ModuleExports,
+    attr_stack: &mut Vec<HirAttr>,
+) -> bool {
     match kind {
         HirExprKind::Sequence { exprs } | HirExprKind::Tuple { items: exprs } => {
             collect_expr_id_range(module, interner, *exprs, exports, attr_stack);
@@ -741,6 +792,19 @@ fn collect_exports_from_kind(
         HirExprKind::Template { parts } => {
             collect_template_exprs(module, interner, parts, exports, attr_stack);
         }
+        _ => return false,
+    }
+    true
+}
+
+fn collect_call_like_exports(
+    module: &ModuleState,
+    interner: &Interner,
+    kind: &HirExprKind,
+    exports: &mut ModuleExports,
+    attr_stack: &mut Vec<HirAttr>,
+) -> bool {
+    match kind {
         HirExprKind::Pi { binder_ty, ret, .. } => {
             collect_pair_exprs(module, interner, *binder_ty, *ret, exports, attr_stack);
         }
@@ -768,6 +832,19 @@ fn collect_exports_from_kind(
         HirExprKind::Binary { left, right, .. } => {
             collect_pair_exprs(module, interner, *left, *right, exports, attr_stack);
         }
+        _ => return false,
+    }
+    true
+}
+
+fn collect_decl_or_control_exports(
+    module: &ModuleState,
+    interner: &Interner,
+    kind: &HirExprKind,
+    exports: &mut ModuleExports,
+    attr_stack: &mut Vec<HirAttr>,
+) -> bool {
+    match kind {
         HirExprKind::Let { value, .. } => {
             collect_expr(module, interner, *value, exports, attr_stack);
         }
@@ -802,7 +879,9 @@ fn collect_exports_from_kind(
         | HirExprKind::ArrayTy { .. }
         | HirExprKind::HandlerTy { .. }
         | HirExprKind::Variant { .. } => {}
+        _ => return false,
     }
+    true
 }
 
 fn collect_exprs<I>(

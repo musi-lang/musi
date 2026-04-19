@@ -10,6 +10,14 @@ use music_names::{Ident, Symbol};
 use super::decls::expr_has_structural_target;
 use super::{CheckPass, DiagKind, PassBase};
 
+#[derive(Default)]
+struct DataLayoutHints {
+    repr_kind: Option<Box<str>>,
+    align: Option<u32>,
+    pack: Option<u32>,
+    frozen: bool,
+}
+
 pub(super) fn extract_data_layout_hints(
     ctx: &mut PassBase<'_, '_, '_>,
     origin: HirOrigin,
@@ -24,82 +32,99 @@ impl PassBase<'_, '_, '_> {
         origin: HirOrigin,
         attr_ranges: &[SliceRange<HirAttr>],
     ) -> (Option<Box<str>>, Option<u32>, Option<u32>, bool) {
-        let mut repr_kind: Option<Box<str>> = None;
-        let mut align: Option<u32> = None;
-        let mut pack: Option<u32> = None;
-        let mut frozen = false;
+        let mut hints = DataLayoutHints::default();
         for range in attr_ranges {
             for attr in self.attrs(range.clone()) {
-                let path = self.attr_path_base(&attr);
-                match path.as_slice() {
-                    ["repr"] => {
-                        if repr_kind.is_some() {
-                            self.diag(origin.span, DiagKind::AttrDuplicateRepr, "");
-                            continue;
-                        }
-                        repr_kind = self.parse_named_string_arg(&attr, "kind");
-                        if repr_kind.is_none() {
-                            self.diag(origin.span, DiagKind::AttrReprRequiresKindString, "");
-                        }
-                    }
-                    ["layout"] => {
-                        for arg in self.attr_args(attr.args.clone()) {
-                            let Some(name) = arg.name else {
-                                self.diag(origin.span, DiagKind::AttrLayoutArgRequiresName, "");
-                                continue;
-                            };
-                            let key = self.resolve_symbol(name.name);
-                            match key {
-                                "align" => {
-                                    if align.is_some() {
-                                        self.diag(
-                                            origin.span,
-                                            DiagKind::AttrDuplicateLayoutAlign,
-                                            "",
-                                        );
-                                        continue;
-                                    }
-                                    align = self.parse_u32_value(arg.value);
-                                    if align.is_none() {
-                                        self.diag(
-                                            origin.span,
-                                            DiagKind::AttrLayoutAlignRequiresU32,
-                                            "",
-                                        );
-                                    }
-                                }
-                                "pack" => {
-                                    if pack.is_some() {
-                                        self.diag(
-                                            origin.span,
-                                            DiagKind::AttrDuplicateLayoutPack,
-                                            "",
-                                        );
-                                        continue;
-                                    }
-                                    pack = self.parse_u32_value(arg.value);
-                                    if pack.is_none() {
-                                        self.diag(
-                                            origin.span,
-                                            DiagKind::AttrLayoutPackRequiresU32,
-                                            "",
-                                        );
-                                    }
-                                }
-                                _ => self.diag_named(
-                                    name.span,
-                                    DiagKind::AttrUnknownArg,
-                                    format!("unknown attribute argument `{key}`"),
-                                ),
-                            }
-                        }
-                    }
-                    ["frozen"] => frozen = true,
-                    _ => {}
-                }
+                self.extract_data_layout_attr(origin, &attr, &mut hints);
             }
         }
-        (repr_kind, align, pack, frozen)
+        (hints.repr_kind, hints.align, hints.pack, hints.frozen)
+    }
+
+    fn extract_data_layout_attr(
+        &mut self,
+        origin: HirOrigin,
+        attr: &HirAttr,
+        hints: &mut DataLayoutHints,
+    ) {
+        let path = self.attr_path_base(attr);
+        match path.as_slice() {
+            ["repr"] => self.extract_repr_hint(origin, attr, hints),
+            ["layout"] => self.extract_layout_hints(origin, attr, hints),
+            ["frozen"] => hints.frozen = true,
+            _ => {}
+        }
+    }
+
+    fn extract_repr_hint(
+        &mut self,
+        origin: HirOrigin,
+        attr: &HirAttr,
+        hints: &mut DataLayoutHints,
+    ) {
+        if hints.repr_kind.is_some() {
+            self.diag(origin.span, DiagKind::AttrDuplicateRepr, "");
+            return;
+        }
+        hints.repr_kind = self.parse_named_string_arg(attr, "kind");
+        if hints.repr_kind.is_none() {
+            self.diag(origin.span, DiagKind::AttrReprRequiresKindString, "");
+        }
+    }
+
+    fn extract_layout_hints(
+        &mut self,
+        origin: HirOrigin,
+        attr: &HirAttr,
+        hints: &mut DataLayoutHints,
+    ) {
+        for arg in self.attr_args(attr.args.clone()) {
+            let Some(name) = arg.name else {
+                self.diag(origin.span, DiagKind::AttrLayoutArgRequiresName, "");
+                continue;
+            };
+            match self.resolve_symbol(name.name) {
+                "align" => self.extract_layout_align_hint(origin, arg.value, hints),
+                "pack" => self.extract_layout_pack_hint(origin, arg.value, hints),
+                key => self.diag_named(
+                    name.span,
+                    DiagKind::AttrUnknownArg,
+                    format!("unknown attribute argument `{key}`"),
+                ),
+            }
+        }
+    }
+
+    fn extract_layout_align_hint(
+        &mut self,
+        origin: HirOrigin,
+        expr: HirExprId,
+        hints: &mut DataLayoutHints,
+    ) {
+        if hints.align.is_some() {
+            self.diag(origin.span, DiagKind::AttrDuplicateLayoutAlign, "");
+            return;
+        }
+        hints.align = self.parse_u32_value(expr);
+        if hints.align.is_none() {
+            self.diag(origin.span, DiagKind::AttrLayoutAlignRequiresU32, "");
+        }
+    }
+
+    fn extract_layout_pack_hint(
+        &mut self,
+        origin: HirOrigin,
+        expr: HirExprId,
+        hints: &mut DataLayoutHints,
+    ) {
+        if hints.pack.is_some() {
+            self.diag(origin.span, DiagKind::AttrDuplicateLayoutPack, "");
+            return;
+        }
+        hints.pack = self.parse_u32_value(expr);
+        if hints.pack.is_none() {
+            self.diag(origin.span, DiagKind::AttrLayoutPackRequiresU32, "");
+        }
     }
 }
 

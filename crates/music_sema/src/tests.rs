@@ -682,10 +682,10 @@ mod success {
     #[test]
     fn record_shaped_data_reports_bad_record_literals() {
         let wrong_type = check(
-            r#"
+            r"
         let Box[T] := data { value : T; };
         let boxedName : Box[String] := { value := 42 };
-    "#,
+    ",
         );
         assert!(
             has_diag(&wrong_type, SemaDiagKind::TypeMismatch),

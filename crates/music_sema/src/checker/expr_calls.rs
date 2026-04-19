@@ -50,76 +50,111 @@ impl CallArgChecker<'_, '_, '_, '_, '_, '_> {
     ) {
         let mut named_seen = HashSet::<Symbol>::new();
         let mut in_named_suffix = false;
-
         for arg in args {
             let Some(name) = arg.name else {
-                if in_named_suffix {
-                    let diag = if arg.spread {
-                        DiagKind::CallSpreadAfterNamedArgument
-                    } else {
-                        DiagKind::CallPositionalAfterNamedArgument
-                    };
-                    let span = self.ctx.expr(arg.expr).origin.span;
-                    self.ctx.diag(span, diag, "");
-                }
+                self.check_positional_arg_order(arg, in_named_suffix);
                 self.check_arg(arg, params, comptime_params);
                 continue;
             };
-
-            if arg.spread {
-                self.ctx
-                    .diag(name.span, DiagKind::CallNamedSpreadArgument, "");
-                self.check_arg(arg, params, comptime_params);
+            if self.check_named_arg_blockers(arg, name, params, comptime_params) {
                 continue;
             }
-
-            if self.has_runtime_spread {
-                self.ctx.diag(
-                    name.span,
-                    DiagKind::CallNamedArgumentsAfterRuntimeSpread,
-                    "",
-                );
-                self.ctx
-                    .check_named_call_arg(name, arg.expr, None, false, self.effects);
-                continue;
-            }
-
             in_named_suffix = true;
-            if !named_seen.insert(name.name) {
-                self.ctx
-                    .diag(name.span, DiagKind::CallNamedArgumentDuplicate, "");
-            }
-
-            let Some(expected_index) = param_names.iter().position(|param| *param == name.name)
-            else {
-                let argument_name = self.ctx.resolve_symbol(name.name).to_owned();
-                self.ctx.diag_message(
-                    name.span,
-                    DiagKind::CallNamedArgumentUnknown,
-                    format!("unknown named call argument `{argument_name}`"),
-                    format!("unknown named call argument `{argument_name}`"),
-                );
-                self.ctx
-                    .check_named_call_arg(name, arg.expr, None, false, self.effects);
-                continue;
-            };
-
-            if self.filled.get(expected_index).copied().unwrap_or(false) {
-                self.ctx
-                    .diag(name.span, DiagKind::CallNamedArgumentAlreadyProvided, "");
-            }
-
-            let expected = params.get(expected_index).copied();
-            let is_comptime = comptime_params
-                .get(expected_index)
-                .copied()
-                .unwrap_or(false);
-            self.ctx
-                .check_named_call_arg(name, arg.expr, expected, is_comptime, self.effects);
-            if let Some(slot) = self.filled.get_mut(expected_index) {
-                *slot = true;
-            }
+            self.check_named_arg(
+                arg,
+                name,
+                params,
+                param_names,
+                comptime_params,
+                &mut named_seen,
+            );
         }
+    }
+
+    fn check_positional_arg_order(&mut self, arg: &HirArg, in_named_suffix: bool) {
+        if in_named_suffix {
+            let diag = if arg.spread {
+                DiagKind::CallSpreadAfterNamedArgument
+            } else {
+                DiagKind::CallPositionalAfterNamedArgument
+            };
+            let span = self.ctx.expr(arg.expr).origin.span;
+            self.ctx.diag(span, diag, "");
+        }
+    }
+
+    fn check_named_arg_blockers(
+        &mut self,
+        arg: &HirArg,
+        name: Ident,
+        params: &[HirTyId],
+        comptime_params: &[bool],
+    ) -> bool {
+        if arg.spread {
+            self.ctx
+                .diag(name.span, DiagKind::CallNamedSpreadArgument, "");
+            self.check_arg(arg, params, comptime_params);
+            return true;
+        }
+        if self.has_runtime_spread {
+            self.ctx.diag(
+                name.span,
+                DiagKind::CallNamedArgumentsAfterRuntimeSpread,
+                "",
+            );
+            self.ctx
+                .check_named_call_arg(name, arg.expr, None, false, self.effects);
+            return true;
+        }
+        false
+    }
+
+    fn check_named_arg(
+        &mut self,
+        arg: &HirArg,
+        name: Ident,
+        params: &[HirTyId],
+        param_names: &[Symbol],
+        comptime_params: &[bool],
+        named_seen: &mut HashSet<Symbol>,
+    ) {
+        if !named_seen.insert(name.name) {
+            self.ctx
+                .diag(name.span, DiagKind::CallNamedArgumentDuplicate, "");
+        }
+        let Some(expected_index) = self.named_arg_index(name, param_names) else {
+            self.ctx
+                .check_named_call_arg(name, arg.expr, None, false, self.effects);
+            return;
+        };
+        if self.filled.get(expected_index).copied().unwrap_or(false) {
+            self.ctx
+                .diag(name.span, DiagKind::CallNamedArgumentAlreadyProvided, "");
+        }
+        let expected = params.get(expected_index).copied();
+        let is_comptime = comptime_params
+            .get(expected_index)
+            .copied()
+            .unwrap_or(false);
+        self.ctx
+            .check_named_call_arg(name, arg.expr, expected, is_comptime, self.effects);
+        if let Some(slot) = self.filled.get_mut(expected_index) {
+            *slot = true;
+        }
+    }
+
+    fn named_arg_index(&mut self, name: Ident, param_names: &[Symbol]) -> Option<usize> {
+        let index = param_names.iter().position(|param| *param == name.name);
+        if index.is_none() {
+            let argument_name = self.ctx.resolve_symbol(name.name).to_owned();
+            self.ctx.diag_message(
+                name.span,
+                DiagKind::CallNamedArgumentUnknown,
+                format!("unknown named call argument `{argument_name}`"),
+                format!("unknown named call argument `{argument_name}`"),
+            );
+        }
+        index
     }
 
     fn check_arg(&mut self, arg: &HirArg, params: &[HirTyId], comptime_params: &[bool]) {

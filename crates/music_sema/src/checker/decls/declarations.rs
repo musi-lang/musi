@@ -3,7 +3,8 @@ use std::collections::{BTreeMap, HashSet};
 use music_arena::SliceRange;
 use music_hir::{
     HirAttr, HirConstraint, HirExprId, HirExprKind, HirFieldDef, HirLitId, HirLitKind,
-    HirMemberDef, HirMemberKind, HirPatKind, HirTyId, HirTyKind, HirVariantDef, HirVariantFieldDef,
+    HirMemberDef, HirMemberKind, HirOrigin, HirPatKind, HirTyId, HirTyKind, HirVariantDef,
+    HirVariantFieldDef,
 };
 use music_names::{Ident, NameBindingId, Symbol};
 
@@ -405,83 +406,134 @@ impl CheckPass<'_, '_, '_> {
     ) -> ExprFacts {
         let data_name: Box<str> = self.resolve_symbol(name.name).into();
         if self.data_def(&data_name).is_none() {
-            let mut variant_map = BTreeMap::<Box<str>, super::super::DataVariantDef>::new();
-            let mut seen_variants = BTreeMap::<Box<str>, _>::new();
-            let mut seen_tags = HashSet::<i64>::new();
-            for (variant_index, variant) in self.variants(variants.clone()).into_iter().enumerate()
-            {
-                let tag: Box<str> = self.resolve_symbol(variant.name.name).into();
-                let tag_value = data_variant_tag(
-                    self,
-                    variant.value,
-                    i64::try_from(variant_index).unwrap_or(i64::MAX),
-                );
-                if !record_data_variant_tag(&mut seen_tags, tag_value) {
-                    self.diag(
-                        variant.origin.span,
-                        DiagKind::DuplicateDataVariantDiscriminant,
-                        "",
-                    );
-                }
-                let variant_fields = self.variant_fields(variant.fields);
-                if variant_payload_style_is_mixed(&variant_fields) {
-                    self.diag(variant.origin.span, DiagKind::MixedVariantPayloadStyle, "");
-                }
-                let (payload, field_tys, field_names) =
-                    lower_variant_payload(self, &variant_fields);
-                let result = variant
-                    .result
-                    .map(|expr| self.lower_type_expr(expr, variant.origin));
-                if let Some(previous_origin) = seen_variants.insert(tag.clone(), variant.origin) {
-                    self.diag_message_with_previous(
-                        variant.origin.span,
-                        previous_origin.span,
-                        DiagKind::CollectDuplicateDataVariant,
-                        format!("duplicate data variant `{tag}`"),
-                        format!("data variant `{tag}` first declared here"),
-                    );
-                }
-                let _previous_variant = variant_map.insert(
-                    tag,
-                    super::super::DataVariantDef::new(
-                        tag_value,
-                        payload,
-                        result,
-                        field_tys,
-                        field_names,
-                    ),
-                );
-            }
-            if variant_map.is_empty() {
-                let record_fields = self.fields(fields.clone());
-                let field_names = record_fields
-                    .iter()
-                    .map(|field| Some(self.resolve_symbol(field.name.name).into()))
-                    .collect::<Vec<Option<Box<str>>>>()
-                    .into_boxed_slice();
-                let field_tys = record_fields
-                    .into_iter()
-                    .map(|field| {
-                        let origin = self.expr(field.ty).origin;
-                        self.lower_type_expr(field.ty, origin)
-                    })
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice();
-                if !field_tys.is_empty() {
-                    let _ = variant_map.insert(
-                        data_name.clone(),
-                        super::super::DataVariantDef::new(0, None, None, field_tys, field_names),
-                    );
-                }
-            }
-            let key = surface_key(self.module_key(), self.interner(), name.name);
-            self.insert_data_def(
-                data_name,
-                super::super::DataDef::new(key, variant_map, None, None, None, false)
-                    .with_record_shape(variants.is_empty() && !fields.is_empty()),
-            );
+            self.insert_bound_data_def(name, &data_name, &variants, &fields);
         }
         self.check_data_expr(variants, fields)
+    }
+
+    fn insert_bound_data_def(
+        &mut self,
+        name: Ident,
+        data_name: &str,
+        variants: &VariantDefRange,
+        fields: &FieldDefRange,
+    ) {
+        let variant_map =
+            self.collect_bound_data_variants(data_name, variants.clone(), fields.clone());
+        let key = surface_key(self.module_key(), self.interner(), name.name);
+        self.insert_data_def(
+            data_name,
+            super::super::DataDef::new(key, variant_map, None, None, None, false)
+                .with_record_shape(variants.is_empty() && !fields.is_empty()),
+        );
+    }
+
+    fn collect_bound_data_variants(
+        &mut self,
+        data_name: &str,
+        variants: VariantDefRange,
+        fields: FieldDefRange,
+    ) -> BTreeMap<Box<str>, super::super::DataVariantDef> {
+        let mut variant_map = BTreeMap::<Box<str>, super::super::DataVariantDef>::new();
+        let mut seen_variants = BTreeMap::<Box<str>, _>::new();
+        let mut seen_tags = HashSet::<i64>::new();
+        for (variant_index, variant) in self.variants(variants).into_iter().enumerate() {
+            self.collect_bound_data_variant(
+                variant_index,
+                variant,
+                &mut seen_tags,
+                &mut seen_variants,
+                &mut variant_map,
+            );
+        }
+        if variant_map.is_empty() {
+            self.insert_bound_record_data_variant(data_name, fields, &mut variant_map);
+        }
+        variant_map
+    }
+
+    fn collect_bound_data_variant(
+        &mut self,
+        variant_index: usize,
+        variant: HirVariantDef,
+        seen_tags: &mut HashSet<i64>,
+        seen_variants: &mut BTreeMap<Box<str>, HirOrigin>,
+        variant_map: &mut BTreeMap<Box<str>, super::super::DataVariantDef>,
+    ) {
+        let tag: Box<str> = self.resolve_symbol(variant.name.name).into();
+        let default_tag = i64::try_from(variant_index).unwrap_or(i64::MAX);
+        let tag_value = data_variant_tag(self, variant.value, default_tag);
+        self.record_bound_data_variant_tag(seen_tags, tag_value, variant.origin);
+        let variant_fields = self.variant_fields(variant.fields);
+        if variant_payload_style_is_mixed(&variant_fields) {
+            self.diag(variant.origin.span, DiagKind::MixedVariantPayloadStyle, "");
+        }
+        let (payload, field_tys, field_names) = lower_variant_payload(self, &variant_fields);
+        let result = variant
+            .result
+            .map(|expr| self.lower_type_expr(expr, variant.origin));
+        self.record_bound_data_variant_name(seen_variants, &tag, variant.origin);
+        let _previous_variant = variant_map.insert(
+            tag,
+            super::super::DataVariantDef::new(tag_value, payload, result, field_tys, field_names),
+        );
+    }
+
+    fn record_bound_data_variant_tag(
+        &mut self,
+        seen_tags: &mut HashSet<i64>,
+        tag_value: i64,
+        origin: HirOrigin,
+    ) {
+        if !record_data_variant_tag(seen_tags, tag_value) {
+            self.diag(origin.span, DiagKind::DuplicateDataVariantDiscriminant, "");
+        }
+    }
+
+    fn record_bound_data_variant_name(
+        &mut self,
+        seen_variants: &mut BTreeMap<Box<str>, HirOrigin>,
+        tag: &str,
+        origin: HirOrigin,
+    ) {
+        let Some(previous_origin) = seen_variants.insert(tag.into(), origin) else {
+            return;
+        };
+        self.diag_message_with_previous(
+            origin.span,
+            previous_origin.span,
+            DiagKind::CollectDuplicateDataVariant,
+            format!("duplicate data variant `{tag}`"),
+            format!("data variant `{tag}` first declared here"),
+        );
+    }
+
+    fn insert_bound_record_data_variant(
+        &mut self,
+        data_name: &str,
+        fields: FieldDefRange,
+        variant_map: &mut BTreeMap<Box<str>, super::super::DataVariantDef>,
+    ) {
+        let record_fields = self.fields(fields);
+        let field_names = record_fields
+            .iter()
+            .map(|field| Some(self.resolve_symbol(field.name.name).into()))
+            .collect::<Vec<Option<Box<str>>>>()
+            .into_boxed_slice();
+        let field_tys = record_fields
+            .into_iter()
+            .map(|field| {
+                let origin = self.expr(field.ty).origin;
+                self.lower_type_expr(field.ty, origin)
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        if !field_tys.is_empty() {
+            let _ = variant_map.insert(
+                data_name.into(),
+                super::super::DataVariantDef::new(0, None, None, field_tys, field_names),
+            );
+        }
     }
 
     pub(in super::super) fn check_bound_effect(

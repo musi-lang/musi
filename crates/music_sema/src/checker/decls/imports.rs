@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use music_hir::{HirExprId, HirExprKind, HirPatId, HirPatKind};
+use music_hir::{HirExprId, HirExprKind, HirPatId, HirPatKind, HirTyId};
 use music_module::ModuleKey;
 use music_names::{Ident, NameBindingId, Symbol};
 
@@ -8,8 +8,8 @@ use super::super::pats::{bind_pat, bound_name_from_pat};
 use super::super::surface::import_surface_ty;
 use super::super::{CheckPass, DataDef, DataVariantDef, DiagKind, EffectDef, EffectOpDef};
 use crate::api::{
-    ClassFacts, ClassMemberFacts, ConstraintFacts, ExportedValue, LawFacts, LawParamFacts,
-    ModuleSurface, PatFacts,
+    ClassFacts, ClassMemberFacts, ConstraintFacts, ConstraintSurface, ExportedValue, LawFacts,
+    LawParamFacts, LawSurface, ModuleSurface, PatFacts,
 };
 use crate::api::{ClassSurface, DataSurface, EffectSurface, ExprFacts};
 
@@ -275,7 +275,22 @@ impl CheckPass<'_, '_, '_> {
         if is_opaque {
             self.mark_sealed_class(surface.key.clone());
         }
-        let members = surface
+        let members = self.import_class_members(module_surface, surface);
+        let laws = self.import_class_laws(module_surface, surface);
+        let constraints = self.import_class_constraints(module_surface, surface);
+        let facts = ClassFacts::new(surface.key.clone(), alias_name, members, laws)
+            .with_type_params(self.import_class_type_params(surface))
+            .with_type_param_kinds(self.import_class_type_param_kinds(module_surface, surface))
+            .with_constraints(constraints);
+        self.insert_class_facts_by_name(alias_name, facts);
+    }
+
+    fn import_class_members(
+        &mut self,
+        module_surface: &ModuleSurface,
+        surface: &ClassSurface,
+    ) -> Box<[ClassMemberFacts]> {
+        surface
             .members
             .iter()
             .map(|member| {
@@ -292,64 +307,89 @@ impl CheckPass<'_, '_, '_> {
                 )
             })
             .collect::<Vec<_>>()
-            .into_boxed_slice();
-        let laws = surface
+            .into_boxed_slice()
+    }
+
+    fn import_class_laws(
+        &mut self,
+        module_surface: &ModuleSurface,
+        surface: &ClassSurface,
+    ) -> Box<[LawFacts]> {
+        surface
             .laws
             .iter()
-            .map(|law| {
-                LawFacts::new(
-                    self.intern(&law.name),
-                    law.params
-                        .iter()
-                        .map(|param| {
-                            LawParamFacts::new(
-                                self.intern(&param.name),
-                                import_surface_ty(self, module_surface, param.ty),
-                            )
-                        })
-                        .collect::<Vec<_>>()
-                        .into_boxed_slice(),
-                )
-            })
+            .map(|law| self.import_class_law(module_surface, law))
             .collect::<Vec<_>>()
-            .into_boxed_slice();
-        let constraints = surface
+            .into_boxed_slice()
+    }
+
+    fn import_class_law(&mut self, module_surface: &ModuleSurface, law: &LawSurface) -> LawFacts {
+        LawFacts::new(
+            self.intern(&law.name),
+            law.params
+                .iter()
+                .map(|param| {
+                    LawParamFacts::new(
+                        self.intern(&param.name),
+                        import_surface_ty(self, module_surface, param.ty),
+                    )
+                })
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+        )
+    }
+
+    fn import_class_constraints(
+        &mut self,
+        module_surface: &ModuleSurface,
+        surface: &ClassSurface,
+    ) -> Box<[ConstraintFacts]> {
+        surface
             .constraints
             .iter()
-            .map(|constraint| {
-                let lowered = ConstraintFacts::new(
-                    self.intern(&constraint.name),
-                    constraint.kind,
-                    import_surface_ty(self, module_surface, constraint.value),
-                );
-                if let Some(class_key) = constraint.class_key.clone() {
-                    lowered.with_class_key(class_key)
-                } else {
-                    lowered
-                }
-            })
+            .map(|constraint| self.import_class_constraint(module_surface, constraint))
             .collect::<Vec<_>>()
-            .into_boxed_slice();
-        let facts = ClassFacts::new(surface.key.clone(), alias_name, members, laws)
-            .with_type_params(
-                surface
-                    .type_params
-                    .iter()
-                    .map(|param| self.intern(param))
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-            )
-            .with_type_param_kinds(
-                surface
-                    .type_param_kinds
-                    .iter()
-                    .copied()
-                    .map(|ty| import_surface_ty(self, module_surface, ty))
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-            )
-            .with_constraints(constraints);
-        self.insert_class_facts_by_name(alias_name, facts);
+            .into_boxed_slice()
+    }
+
+    fn import_class_constraint(
+        &mut self,
+        module_surface: &ModuleSurface,
+        constraint: &ConstraintSurface,
+    ) -> ConstraintFacts {
+        let lowered = ConstraintFacts::new(
+            self.intern(&constraint.name),
+            constraint.kind,
+            import_surface_ty(self, module_surface, constraint.value),
+        );
+        if let Some(class_key) = constraint.class_key.clone() {
+            lowered.with_class_key(class_key)
+        } else {
+            lowered
+        }
+    }
+
+    fn import_class_type_params(&mut self, surface: &ClassSurface) -> Box<[Symbol]> {
+        surface
+            .type_params
+            .iter()
+            .map(|param| self.intern(param))
+            .collect::<Vec<_>>()
+            .into_boxed_slice()
+    }
+
+    fn import_class_type_param_kinds(
+        &mut self,
+        module_surface: &ModuleSurface,
+        surface: &ClassSurface,
+    ) -> Box<[HirTyId]> {
+        surface
+            .type_param_kinds
+            .iter()
+            .copied()
+            .map(|ty| import_surface_ty(self, module_surface, ty))
+            .collect::<Vec<_>>()
+            .into_boxed_slice()
     }
 
     fn import_effect_alias(

@@ -10,127 +10,260 @@ use crate::effects::EffectRow;
 use super::exprs::peel_mut_ty;
 use super::{CheckPass, DiagKind};
 
+type RecordFieldMap = BTreeMap<Box<str>, HirTyId>;
+type RecordTyFieldMap = BTreeMap<Box<str>, HirTyField>;
+
+struct RecordExprFields {
+    fields: RecordTyFieldMap,
+    inferred_record_ty: Option<HirTyId>,
+}
+
 impl CheckPass<'_, '_, '_> {
     pub(super) fn check_record_expr(&mut self, items: SliceRange<HirRecordItem>) -> ExprFacts {
-        let mut effects = EffectRow::empty();
         let expected_ty = self
             .expected_ty()
             .map(|expected| peel_mut_ty(self, expected));
-        let expected_record = expected_ty.and_then(|expected| {
-            let expected_inner = peel_mut_ty(self, expected);
-            match self.ty(expected_inner).kind {
-                HirTyKind::Record { fields } => Some(
-                    self.ty_fields(fields)
-                        .into_iter()
-                        .map(|field| (self.resolve_symbol(field.name).into(), field.ty))
-                        .collect::<BTreeMap<_, _>>(),
-                ),
-                HirTyKind::Named { name, args } => self.data_record_fields(name, args),
-                _ => None,
-            }
-        });
+        let expected_record =
+            expected_ty.and_then(|expected| self.expected_record_fields(expected));
+        let (record_fields, effects) =
+            self.collect_record_expr_fields(items, expected_record.as_ref());
+        self.report_missing_record_fields(expected_record.as_ref(), &record_fields.fields);
+        self.record_expr_facts(
+            expected_ty,
+            expected_record.is_some(),
+            record_fields,
+            effects,
+        )
+    }
 
+    fn expected_record_fields(&mut self, expected: HirTyId) -> Option<RecordFieldMap> {
+        let expected_inner = peel_mut_ty(self, expected);
+        match self.ty(expected_inner).kind {
+            HirTyKind::Record { fields } => Some(
+                self.ty_fields(fields)
+                    .into_iter()
+                    .map(|field| (self.resolve_symbol(field.name).into(), field.ty))
+                    .collect(),
+            ),
+            HirTyKind::Named { name, args } => self.data_record_fields(name, args),
+            _ => None,
+        }
+    }
+
+    fn collect_record_expr_fields(
+        &mut self,
+        items: SliceRange<HirRecordItem>,
+        expected_record: Option<&RecordFieldMap>,
+    ) -> (RecordExprFields, EffectRow) {
+        let mut effects = EffectRow::empty();
         let mut seen_explicit = BTreeSet::<Box<str>>::new();
-        let mut fields = BTreeMap::<Box<str>, HirTyField>::new();
+        let mut fields = RecordTyFieldMap::new();
         let mut inferred_record_ty = None;
         for record_item in self.record_items(items) {
-            if record_item.spread {
-                let facts = super::exprs::check_expr(self, record_item.value);
-                effects.union_with(&facts.effects);
-                let origin = self.expr(record_item.value).origin;
-                let spread_ty = peel_mut_ty(self, facts.ty);
-                if matches!(self.ty(spread_ty).kind, HirTyKind::Named { .. }) {
-                    inferred_record_ty = Some(spread_ty);
-                }
-                let Some(spread_fields) = self.record_like_fields(spread_ty) else {
-                    self.diag(
-                        origin.span,
-                        DiagKind::InvalidSpreadSource,
-                        "record spread source must be record value",
-                    );
-                    continue;
-                };
-                for (key, spread_ty) in spread_fields {
-                    let name = self.intern(key.as_ref());
-                    let _ = fields.insert(key, HirTyField::new(name, spread_ty));
-                }
-                continue;
-            }
+            self.check_record_item(
+                &record_item,
+                expected_record,
+                &mut fields,
+                &mut seen_explicit,
+                &mut inferred_record_ty,
+                &mut effects,
+            );
+        }
+        (
+            RecordExprFields {
+                fields,
+                inferred_record_ty,
+            },
+            effects,
+        )
+    }
 
-            let Some(name) = record_item.name else {
-                let facts = super::exprs::check_expr(self, record_item.value);
-                effects.union_with(&facts.effects);
-                continue;
-            };
-            let expected_field_ty = expected_record
-                .as_ref()
-                .and_then(|map| map.get(self.resolve_symbol(name.name)).copied())
-                .or_else(|| {
-                    fields
-                        .get(self.resolve_symbol(name.name))
-                        .map(|field| field.ty)
-                })
-                .unwrap_or_else(|| self.builtins().unknown);
-            if expected_record
-                .as_ref()
-                .is_some_and(|map| !map.contains_key(self.resolve_symbol(name.name)))
-            {
-                let field_name = self.resolve_symbol(name.name).to_owned();
-                self.diag_message(
-                    name.span,
-                    DiagKind::UnknownField,
-                    format!("unknown field `{field_name}`"),
-                    format!("unknown field `{field_name}`"),
-                );
-            }
-            self.push_expected_ty(expected_field_ty);
+    fn check_record_item(
+        &mut self,
+        record_item: &HirRecordItem,
+        expected_record: Option<&RecordFieldMap>,
+        fields: &mut RecordTyFieldMap,
+        seen_explicit: &mut BTreeSet<Box<str>>,
+        inferred_record_ty: &mut Option<HirTyId>,
+        effects: &mut EffectRow,
+    ) {
+        if record_item.spread {
+            self.check_record_spread_item(record_item, fields, inferred_record_ty, effects);
+        } else if let Some(name) = record_item.name {
+            self.check_record_named_item(
+                record_item,
+                name.name,
+                expected_record,
+                fields,
+                seen_explicit,
+                effects,
+            );
+        } else {
             let facts = super::exprs::check_expr(self, record_item.value);
-            let _ = self.pop_expected_ty();
             effects.union_with(&facts.effects);
-            let value_origin = self.expr(record_item.value).origin;
-            self.type_mismatch(value_origin, expected_field_ty, facts.ty);
+        }
+    }
 
-            let key: Box<str> = self.resolve_symbol(name.name).into();
-            if !seen_explicit.insert(key.clone()) {
-                let span = self.expr(record_item.value).origin.span;
-                self.diag(span, DiagKind::DuplicateRecordField, "");
-            }
-            let _ = fields.insert(key, HirTyField::new(name.name, facts.ty));
+    fn check_record_spread_item(
+        &mut self,
+        record_item: &HirRecordItem,
+        fields: &mut RecordTyFieldMap,
+        inferred_record_ty: &mut Option<HirTyId>,
+        effects: &mut EffectRow,
+    ) {
+        let facts = super::exprs::check_expr(self, record_item.value);
+        effects.union_with(&facts.effects);
+        let origin = self.expr(record_item.value).origin;
+        let spread_ty = peel_mut_ty(self, facts.ty);
+        if matches!(self.ty(spread_ty).kind, HirTyKind::Named { .. }) {
+            *inferred_record_ty = Some(spread_ty);
         }
-        if let Some(expected) = &expected_record {
-            for field_name in expected.keys() {
-                if !fields.contains_key(field_name) {
-                    let span = self.expr(self.root_expr_id()).origin.span;
-                    self.diag_message(
-                        span,
-                        DiagKind::MissingRecordField,
-                        format!("missing field `{field_name}`"),
-                        format!("field `{field_name}` required here"),
-                    );
-                }
+        let Some(spread_fields) = self.record_like_fields(spread_ty) else {
+            self.diag_spread_source(origin);
+            return;
+        };
+        for (key, spread_ty) in spread_fields {
+            let name = self.intern(key.as_ref());
+            let _ = fields.insert(key, HirTyField::new(name, spread_ty));
+        }
+    }
+
+    fn check_record_named_item(
+        &mut self,
+        record_item: &HirRecordItem,
+        name: Symbol,
+        expected_record: Option<&RecordFieldMap>,
+        fields: &mut RecordTyFieldMap,
+        seen_explicit: &mut BTreeSet<Box<str>>,
+        effects: &mut EffectRow,
+    ) {
+        let expected = self.expected_record_field_ty(name, expected_record, fields);
+        self.report_unknown_record_field(name, record_item, expected_record);
+        self.push_expected_ty(expected);
+        let facts = super::exprs::check_expr(self, record_item.value);
+        let _ = self.pop_expected_ty();
+        effects.union_with(&facts.effects);
+        let origin = self.expr(record_item.value).origin;
+        self.type_mismatch(origin, expected, facts.ty);
+        self.insert_checked_record_field(name, record_item.value, facts.ty, fields, seen_explicit);
+    }
+
+    fn expected_record_field_ty(
+        &self,
+        name: Symbol,
+        expected_record: Option<&RecordFieldMap>,
+        fields: &RecordTyFieldMap,
+    ) -> HirTyId {
+        expected_record
+            .and_then(|map| map.get(self.resolve_symbol(name)).copied())
+            .or_else(|| fields.get(self.resolve_symbol(name)).map(|field| field.ty))
+            .unwrap_or_else(|| self.builtins().unknown)
+    }
+
+    fn report_unknown_record_field(
+        &mut self,
+        name: Symbol,
+        record_item: &HirRecordItem,
+        expected_record: Option<&RecordFieldMap>,
+    ) {
+        if expected_record.is_none_or(|map| map.contains_key(self.resolve_symbol(name))) {
+            return;
+        }
+        let field_name = self.resolve_symbol(name).to_owned();
+        self.diag_message(
+            record_item.name.expect("record name checked").span,
+            DiagKind::UnknownField,
+            format!("unknown field `{field_name}`"),
+            format!("unknown field `{field_name}`"),
+        );
+    }
+
+    fn insert_checked_record_field(
+        &mut self,
+        name: Symbol,
+        value: HirExprId,
+        ty: HirTyId,
+        fields: &mut RecordTyFieldMap,
+        seen_explicit: &mut BTreeSet<Box<str>>,
+    ) {
+        let key: Box<str> = self.resolve_symbol(name).into();
+        if !seen_explicit.insert(key.clone()) {
+            let span = self.expr(value).origin.span;
+            self.diag(span, DiagKind::DuplicateRecordField, "");
+        }
+        let _ = fields.insert(key, HirTyField::new(name, ty));
+    }
+
+    fn report_missing_record_fields(
+        &mut self,
+        expected_record: Option<&RecordFieldMap>,
+        fields: &RecordTyFieldMap,
+    ) {
+        let Some(expected) = expected_record else {
+            return;
+        };
+        for field_name in expected.keys() {
+            if !fields.contains_key(field_name) {
+                self.diag_missing_record_field(field_name);
             }
         }
+    }
+
+    fn diag_missing_record_field(&mut self, field_name: &str) {
+        let span = self.expr(self.root_expr_id()).origin.span;
+        self.diag_message(
+            span,
+            DiagKind::MissingRecordField,
+            format!("missing field `{field_name}`"),
+            format!("field `{field_name}` required here"),
+        );
+    }
+
+    fn record_expr_facts(
+        &mut self,
+        expected_ty: Option<HirTyId>,
+        has_expected_record: bool,
+        record_fields: RecordExprFields,
+        effects: EffectRow,
+    ) -> ExprFacts {
         if let Some(expected_ty) = expected_ty
-            && expected_record.is_some()
+            && has_expected_record
             && matches!(self.ty(expected_ty).kind, HirTyKind::Named { .. })
         {
             return ExprFacts::new(expected_ty, effects);
         }
-        if let Some(inferred_record_ty) = inferred_record_ty {
-            if let Some(expected) = self.record_like_fields(inferred_record_ty)
-                && expected
-                    .keys()
-                    .all(|field_name| fields.contains_key(field_name))
-                && fields
-                    .keys()
-                    .all(|field_name| expected.contains_key(field_name))
-            {
-                return ExprFacts::new(inferred_record_ty, effects);
-            }
+        if let Some(facts) = self.inferred_record_expr_facts(&record_fields, &effects) {
+            return facts;
         }
-        let fields = self.alloc_ty_fields(fields.into_values());
+        let fields = self.alloc_ty_fields(record_fields.fields.into_values());
         let ty = self.alloc_ty(HirTyKind::Record { fields });
         ExprFacts::new(ty, effects)
+    }
+
+    fn inferred_record_expr_facts(
+        &mut self,
+        record_fields: &RecordExprFields,
+        effects: &EffectRow,
+    ) -> Option<ExprFacts> {
+        let inferred_record_ty = record_fields.inferred_record_ty?;
+        let expected = self.record_like_fields(inferred_record_ty)?;
+        let all_expected_found = expected
+            .keys()
+            .all(|field_name| record_fields.fields.contains_key(field_name));
+        let no_extra_fields = record_fields
+            .fields
+            .keys()
+            .all(|field_name| expected.contains_key(field_name));
+        (all_expected_found && no_extra_fields)
+            .then(|| ExprFacts::new(inferred_record_ty, effects.clone()))
+    }
+
+    fn diag_spread_source(&mut self, origin: HirOrigin) {
+        self.diag(
+            origin.span,
+            DiagKind::InvalidSpreadSource,
+            "record spread source must be record value",
+        );
     }
 
     pub(super) fn check_record_update_expr(

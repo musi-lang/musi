@@ -3,12 +3,12 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use music_arena::SliceRange;
 use music_hir::{
     HirArg, HirArrayItem, HirAttr, HirBinder, HirConstraint, HirExprId, HirExprKind, HirFieldDef,
-    HirMatchArm, HirMemberDef, HirMemberKind, HirOrigin, HirTemplatePart, HirVariantDef,
+    HirMatchArm, HirMemberDef, HirMemberKind, HirOrigin, HirTemplatePart, HirTyId, HirVariantDef,
     HirVariantFieldDef,
 };
-use music_names::Ident;
+use music_names::{Ident, Symbol};
 
-use crate::api::ClassFacts;
+use crate::api::{ClassFacts, ClassMemberFacts, DefinitionKey, LawFacts};
 
 use super::attrs::extract_data_layout_hints;
 use super::const_eval::{data_variant_tag, record_data_variant_tag};
@@ -17,6 +17,28 @@ use super::pats::bound_name_from_pat;
 use super::surface::surface_key;
 use super::variant_payload::lower_variant_payload;
 use super::{CollectPass, DataDef, DataVariantDef, DiagKind, EffectDef, EffectOpDef};
+
+struct DataDeclTypeParams {
+    scope: Vec<(Symbol, HirTyId)>,
+    names: Box<[Symbol]>,
+    kinds: Box<[HirTyId]>,
+}
+
+fn data_decl_type_names(type_param_kinds: &[(Symbol, HirTyId)]) -> Box<[Symbol]> {
+    type_param_kinds
+        .iter()
+        .map(|(name, _)| *name)
+        .collect::<Vec<_>>()
+        .into_boxed_slice()
+}
+
+fn data_decl_type_kinds(type_param_kinds: &[(Symbol, HirTyId)]) -> Box<[HirTyId]> {
+    type_param_kinds
+        .iter()
+        .map(|(_, kind)| *kind)
+        .collect::<Vec<_>>()
+        .into_boxed_slice()
+}
 
 pub fn collect_module(ctx: &mut CollectPass<'_, '_, '_>) {
     ctx.collect_module();
@@ -265,95 +287,79 @@ impl CollectPass<'_, '_, '_> {
 
         let (repr_kind, layout_align, layout_pack, frozen) =
             extract_data_layout_hints(self, origin, attrs);
-        let type_param_kinds = self.lower_type_param_kinds(type_params);
+        let type_params = self.data_decl_type_params(type_params);
         let key = surface_key(self.module_key(), self.interner(), name.name);
-        let type_param_names = type_param_kinds
+        self.insert_data_stub(
+            &data_name,
+            key.clone(),
+            (repr_kind.clone(), layout_align, layout_pack, frozen),
+            &type_params,
+        );
+        self.push_type_param_kinds(&type_params.scope);
+        let is_record_shape = variants.is_empty() && !fields.is_empty();
+        let variant_map = self.collect_data_variants(&data_name, variants, fields);
+        self.pop_type_param_kinds();
+        self.insert_data_final(
+            data_name,
+            key,
+            variant_map,
+            (repr_kind, layout_align, layout_pack, frozen),
+            type_params,
+            is_record_shape,
+        );
+    }
+
+    fn data_decl_type_params(&mut self, type_params: SliceRange<HirBinder>) -> DataDeclTypeParams {
+        let scope = self.lower_type_param_kinds(type_params);
+        let names = scope
             .iter()
             .map(|(name, _)| *name)
             .collect::<Vec<_>>()
             .into_boxed_slice();
-        let type_param_kind_tys = type_param_kinds
+        let kinds = scope
             .iter()
             .map(|(_, kind)| *kind)
             .collect::<Vec<_>>()
             .into_boxed_slice();
+        DataDeclTypeParams {
+            scope,
+            names,
+            kinds,
+        }
+    }
+
+    fn insert_data_stub(
+        &mut self,
+        data_name: &str,
+        key: DefinitionKey,
+        layout: (Option<Box<str>>, Option<u32>, Option<u32>, bool),
+        type_params: &DataDeclTypeParams,
+    ) {
+        let (repr_kind, layout_align, layout_pack, frozen) = layout;
         self.insert_data_def(
-            data_name.clone(),
+            data_name,
             DataDef::new(
-                key.clone(),
+                key,
                 BTreeMap::new(),
-                repr_kind.clone(),
+                repr_kind,
                 layout_align,
                 layout_pack,
                 frozen,
             )
-            .with_type_params(type_param_names.clone(), type_param_kind_tys.clone()),
+            .with_type_params(type_params.names.clone(), type_params.kinds.clone()),
         );
-        self.push_type_param_kinds(&type_param_kinds);
-        let mut variant_map = BTreeMap::<Box<str>, DataVariantDef>::new();
-        let mut seen_variants = HashMap::<Box<str>, HirOrigin>::new();
-        let mut seen_tags = HashSet::<i64>::new();
-        let is_record_shape = variants.is_empty() && !fields.is_empty();
-        for (variant_index, variant) in self.variants(variants).into_iter().enumerate() {
-            let tag: Box<str> = self.resolve_symbol(variant.name.name).into();
-            let tag_value = data_variant_tag(
-                self,
-                variant.value,
-                i64::try_from(variant_index).unwrap_or(i64::MAX),
-            );
-            if !record_data_variant_tag(&mut seen_tags, tag_value) {
-                self.diag(
-                    variant.origin.span,
-                    DiagKind::DuplicateDataVariantDiscriminant,
-                    "",
-                );
-            }
-            let variant_fields = self.variant_fields(variant.fields);
-            if variant_payload_style_is_mixed(&variant_fields) {
-                self.diag(variant.origin.span, DiagKind::MixedVariantPayloadStyle, "");
-            }
-            let (payload, field_tys, field_names) = lower_variant_payload(self, &variant_fields);
-            let result = variant
-                .result
-                .map(|expr| self.lower_type_expr(expr, variant.origin));
-            if let Some(previous_origin) = seen_variants.insert(tag.clone(), variant.origin) {
-                self.diag_message_with_previous(
-                    variant.origin.span,
-                    previous_origin.span,
-                    DiagKind::CollectDuplicateDataVariant,
-                    format!("duplicate data variant `{tag}`"),
-                    format!("data variant `{tag}` first declared here"),
-                );
-            }
-            let _previous_variant = variant_map.insert(
-                tag,
-                DataVariantDef::new(tag_value, payload, result, field_tys, field_names),
-            );
-        }
-        if variant_map.is_empty() {
-            let record_fields = self.fields(fields);
-            let field_names = record_fields
-                .iter()
-                .map(|field| Some(self.resolve_symbol(field.name.name).into()))
-                .collect::<Vec<Option<Box<str>>>>()
-                .into_boxed_slice();
-            let field_tys = record_fields
-                .into_iter()
-                .map(|field| {
-                    let origin = self.expr(field.ty).origin;
-                    self.lower_type_expr(field.ty, origin)
-                })
-                .collect::<Vec<_>>()
-                .into_boxed_slice();
-            if !field_tys.is_empty() {
-                let _ = variant_map.insert(
-                    data_name.clone(),
-                    DataVariantDef::new(0, None, None, field_tys, field_names),
-                );
-            }
-        }
+    }
 
-        self.pop_type_param_kinds();
+    fn insert_data_final(
+        &mut self,
+        data_name: Box<str>,
+        key: DefinitionKey,
+        variant_map: BTreeMap<Box<str>, DataVariantDef>,
+        layout: (Option<Box<str>>, Option<u32>, Option<u32>, bool),
+        type_params: DataDeclTypeParams,
+        is_record_shape: bool,
+    ) {
+        let (repr_kind, layout_align, layout_pack, frozen) = layout;
         self.insert_data_def(
             data_name,
             DataDef::new(
@@ -364,9 +370,117 @@ impl CollectPass<'_, '_, '_> {
                 layout_pack,
                 frozen,
             )
-            .with_type_params(type_param_names, type_param_kind_tys)
+            .with_type_params(type_params.names, type_params.kinds)
             .with_record_shape(is_record_shape),
         );
+    }
+
+    fn collect_data_variants(
+        &mut self,
+        data_name: &str,
+        variants: SliceRange<HirVariantDef>,
+        fields: SliceRange<HirFieldDef>,
+    ) -> BTreeMap<Box<str>, DataVariantDef> {
+        let mut variant_map = BTreeMap::<Box<str>, DataVariantDef>::new();
+        let mut seen_variants = HashMap::<Box<str>, HirOrigin>::new();
+        let mut seen_tags = HashSet::<i64>::new();
+        for (variant_index, variant) in self.variants(variants).into_iter().enumerate() {
+            self.collect_data_variant(
+                variant_index,
+                variant,
+                &mut seen_tags,
+                &mut seen_variants,
+                &mut variant_map,
+            );
+        }
+        if variant_map.is_empty() {
+            self.insert_record_data_variant(data_name, fields, &mut variant_map);
+        }
+        variant_map
+    }
+
+    fn collect_data_variant(
+        &mut self,
+        variant_index: usize,
+        variant: HirVariantDef,
+        seen_tags: &mut HashSet<i64>,
+        seen_variants: &mut HashMap<Box<str>, HirOrigin>,
+        variant_map: &mut BTreeMap<Box<str>, DataVariantDef>,
+    ) {
+        let tag: Box<str> = self.resolve_symbol(variant.name.name).into();
+        let default_tag = i64::try_from(variant_index).unwrap_or(i64::MAX);
+        let tag_value = data_variant_tag(self, variant.value, default_tag);
+        self.record_data_variant_tag(seen_tags, tag_value, variant.origin);
+        let variant_fields = self.variant_fields(variant.fields);
+        if variant_payload_style_is_mixed(&variant_fields) {
+            self.diag(variant.origin.span, DiagKind::MixedVariantPayloadStyle, "");
+        }
+        let (payload, field_tys, field_names) = lower_variant_payload(self, &variant_fields);
+        let result = variant
+            .result
+            .map(|expr| self.lower_type_expr(expr, variant.origin));
+        self.record_data_variant_name(seen_variants, &tag, variant.origin);
+        let _previous_variant = variant_map.insert(
+            tag,
+            DataVariantDef::new(tag_value, payload, result, field_tys, field_names),
+        );
+    }
+
+    fn record_data_variant_tag(
+        &mut self,
+        seen_tags: &mut HashSet<i64>,
+        tag_value: i64,
+        origin: HirOrigin,
+    ) {
+        if !record_data_variant_tag(seen_tags, tag_value) {
+            self.diag(origin.span, DiagKind::DuplicateDataVariantDiscriminant, "");
+        }
+    }
+
+    fn record_data_variant_name(
+        &mut self,
+        seen_variants: &mut HashMap<Box<str>, HirOrigin>,
+        tag: &str,
+        origin: HirOrigin,
+    ) {
+        let Some(previous_origin) = seen_variants.insert(tag.into(), origin) else {
+            return;
+        };
+        self.diag_message_with_previous(
+            origin.span,
+            previous_origin.span,
+            DiagKind::CollectDuplicateDataVariant,
+            format!("duplicate data variant `{tag}`"),
+            format!("data variant `{tag}` first declared here"),
+        );
+    }
+
+    fn insert_record_data_variant(
+        &mut self,
+        data_name: &str,
+        fields: SliceRange<HirFieldDef>,
+        variant_map: &mut BTreeMap<Box<str>, DataVariantDef>,
+    ) {
+        let record_fields = self.fields(fields);
+        let field_names = record_fields
+            .iter()
+            .map(|field| Some(self.resolve_symbol(field.name.name).into()))
+            .collect::<Vec<Option<Box<str>>>>()
+            .into_boxed_slice();
+        let field_tys = record_fields
+            .into_iter()
+            .map(|field| {
+                let origin = self.expr(field.ty).origin;
+                self.lower_type_expr(field.ty, origin)
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        if !field_tys.is_empty() {
+            let _ = variant_map.insert(
+                data_name.into(),
+                DataVariantDef::new(0, None, None, field_tys, field_names),
+            );
+        }
     }
 
     fn collect_effect_decl(&mut self, name: Ident, members: SliceRange<HirMemberDef>) {
@@ -452,9 +566,33 @@ impl CollectPass<'_, '_, '_> {
             return;
         }
         let members_vec = self.members(members);
+        self.validate_class_decl_members(&members_vec);
+        let type_param_kinds = self.lower_type_param_kinds(type_params);
+        self.push_type_param_kinds(&type_param_kinds);
+        let class_members = self.collect_class_members(&members_vec);
+        let laws = self.collect_class_laws(&members_vec);
+        self.insert_class_id(name.name, value);
+        let type_params = data_decl_type_names(&type_param_kinds);
+        let type_param_kind_tys = data_decl_type_kinds(&type_param_kinds);
+        let constraints = self.lower_constraints(constraints);
+        self.pop_type_param_kinds();
+        let facts = ClassFacts::new(
+            surface_key(self.module_key(), self.interner(), name.name),
+            name.name,
+            class_members,
+            laws,
+        )
+        .with_type_params(type_params)
+        .with_type_param_kinds(type_param_kind_tys)
+        .with_constraints(constraints);
+        self.insert_class_facts(value, facts.clone());
+        self.insert_class_facts_by_name(name.name, facts);
+    }
+
+    fn validate_class_decl_members(&mut self, members: &[HirMemberDef]) {
         let mut seen_members = HashMap::new();
         let mut seen_laws = HashMap::new();
-        for member in &members_vec {
+        for member in members {
             match member.kind {
                 HirMemberKind::Let
                     if seen_members
@@ -483,44 +621,24 @@ impl CollectPass<'_, '_, '_> {
                 _ => {}
             }
         }
-        let type_param_kinds = self.lower_type_param_kinds(type_params);
-        self.push_type_param_kinds(&type_param_kinds);
-        let class_members = members_vec
+    }
+
+    fn collect_class_members(&mut self, members: &[HirMemberDef]) -> Box<[ClassMemberFacts]> {
+        members
             .iter()
             .filter(|member| member.kind == HirMemberKind::Let)
             .map(|member| member_signature(self, member, false))
             .collect::<Vec<_>>()
-            .into_boxed_slice();
-        let laws = members_vec
+            .into_boxed_slice()
+    }
+
+    fn collect_class_laws(&mut self, members: &[HirMemberDef]) -> Box<[LawFacts]> {
+        members
             .iter()
             .filter(|member| member.kind == HirMemberKind::Law)
             .map(|member| member_law_facts(self, member))
             .collect::<Vec<_>>()
-            .into_boxed_slice();
-        self.insert_class_id(name.name, value);
-        let type_params = type_param_kinds
-            .iter()
-            .map(|(name, _)| *name)
-            .collect::<Vec<_>>()
-            .into_boxed_slice();
-        let type_param_kind_tys = type_param_kinds
-            .iter()
-            .map(|(_, kind)| *kind)
-            .collect::<Vec<_>>()
-            .into_boxed_slice();
-        let constraints = self.lower_constraints(constraints);
-        self.pop_type_param_kinds();
-        let facts = ClassFacts::new(
-            surface_key(self.module_key(), self.interner(), name.name),
-            name.name,
-            class_members,
-            laws,
-        )
-        .with_type_params(type_params)
-        .with_type_param_kinds(type_param_kind_tys)
-        .with_constraints(constraints);
-        self.insert_class_facts(value, facts.clone());
-        self.insert_class_facts_by_name(name.name, facts);
+            .into_boxed_slice()
     }
 
     fn visit_member(&mut self, member: &HirMemberDef) {
