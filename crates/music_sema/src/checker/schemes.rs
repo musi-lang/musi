@@ -18,6 +18,16 @@ use super::{CheckPass, DiagKind, PassBase};
 
 type TypeSubstMap = HashMap<Symbol, HirTyId>;
 
+struct SurfaceInstanceEvidenceScan<'a> {
+    origin: HirOrigin,
+    class_key: &'a DefinitionKey,
+    class_args: &'a [HirTyId],
+    stack: &'a mut Vec<String>,
+    matches: &'a mut Vec<ConstraintEvidence>,
+    module_key: &'a ModuleKey,
+    surface: &'a ModuleSurface,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BindingScheme {
     pub type_params: Box<[Symbol]>,
@@ -256,7 +266,7 @@ impl CheckPass<'_, '_, '_> {
             .collect()
     }
 
-    fn instantiate_binding_with_subst(
+    pub(super) fn instantiate_binding_with_subst(
         &mut self,
         scheme: &BindingScheme,
         subst: &TypeSubstMap,
@@ -311,82 +321,107 @@ impl CheckPass<'_, '_, '_> {
 
 impl PassBase<'_, '_, '_> {
     pub fn substitute_ty(&mut self, ty: HirTyId, subst: &TypeSubstMap) -> HirTyId {
-        let ctx = self;
-        let kind = ctx.ty(ty).kind;
+        self.substitute_ty_kind(ty, self.ty(ty).kind, subst)
+    }
+
+    fn substitute_ty_kind(
+        &mut self,
+        ty: HirTyId,
+        kind: HirTyKind,
+        subst: &TypeSubstMap,
+    ) -> HirTyId {
         match kind {
-            HirTyKind::Named { name, args } => ctx.substitute_named_ty(name, args, subst),
+            HirTyKind::Named { name, args } => self.substitute_named_ty(name, args, subst),
             HirTyKind::Pi {
                 binder,
                 binder_ty,
                 body,
                 is_effectful,
-            } => {
-                let binder_ty = ctx.substitute_ty(binder_ty, subst);
-                let mut next = subst.clone();
-                let _ = next.remove(&binder);
-                let body = ctx.substitute_ty(body, &next);
-                ctx.alloc_ty(HirTyKind::Pi {
-                    binder,
-                    binder_ty,
-                    body,
-                    is_effectful,
-                })
-            }
+            } => self.substitute_pi_ty(binder, binder_ty, body, is_effectful, subst),
             HirTyKind::Arrow {
                 params,
                 ret,
                 is_effectful,
-            } => {
-                let params = ctx.substitute_ty_list(params, subst);
-                let ret = ctx.substitute_ty(ret, subst);
-                ctx.alloc_ty(HirTyKind::Arrow {
-                    params,
-                    ret,
-                    is_effectful,
-                })
-            }
-            HirTyKind::Sum { left, right } => {
-                let left = ctx.substitute_ty(left, subst);
-                let right = ctx.substitute_ty(right, subst);
-                ctx.alloc_ty(HirTyKind::Sum { left, right })
-            }
-            HirTyKind::Tuple { items } => ctx.substitute_tuple_ty(items, subst),
+            } => self.substitute_arrow_ty(params, ret, is_effectful, subst),
+            HirTyKind::Sum { left, right } => self.substitute_sum_ty(left, right, subst),
+            HirTyKind::Tuple { items } => self.substitute_tuple_ty(items, subst),
             HirTyKind::Seq { item } => {
-                ctx.substitute_item_ty(item, subst, |item| HirTyKind::Seq { item })
+                self.substitute_item_ty(item, subst, |item| HirTyKind::Seq { item })
             }
-            HirTyKind::Array { dims, item } => ctx.substitute_array_ty(dims, item, subst),
+            HirTyKind::Array { dims, item } => self.substitute_array_ty(dims, item, subst),
             HirTyKind::Range { bound } => {
-                ctx.substitute_item_ty(bound, subst, |bound| HirTyKind::Range { bound })
+                self.substitute_item_ty(bound, subst, |bound| HirTyKind::Range { bound })
             }
             HirTyKind::ClosedRange { bound } => {
-                ctx.substitute_item_ty(bound, subst, |bound| HirTyKind::ClosedRange { bound })
+                self.substitute_item_ty(bound, subst, |bound| HirTyKind::ClosedRange { bound })
             }
             HirTyKind::PartialRangeFrom { bound } => {
-                ctx.substitute_item_ty(bound, subst, |bound| HirTyKind::PartialRangeFrom { bound })
+                self.substitute_item_ty(bound, subst, |bound| HirTyKind::PartialRangeFrom { bound })
             }
             HirTyKind::PartialRangeUpTo { bound } => {
-                ctx.substitute_item_ty(bound, subst, |bound| HirTyKind::PartialRangeUpTo { bound })
+                self.substitute_item_ty(bound, subst, |bound| HirTyKind::PartialRangeUpTo { bound })
             }
             HirTyKind::PartialRangeThru { bound } => {
-                ctx.substitute_item_ty(bound, subst, |bound| HirTyKind::PartialRangeThru { bound })
+                self.substitute_item_ty(bound, subst, |bound| HirTyKind::PartialRangeThru { bound })
             }
             HirTyKind::Handler {
                 effect,
                 input,
                 output,
-            } => ctx.substitute_handler_ty(effect, input, output, subst),
-            HirTyKind::Mut { inner } => ctx.substitute_mut_ty(inner, subst),
-            HirTyKind::Record { fields } => {
-                let fields = ctx
-                    .ty_fields(fields)
-                    .into_iter()
-                    .map(|field| HirTyField::new(field.name, ctx.substitute_ty(field.ty, subst)))
-                    .collect::<Vec<_>>();
-                let fields = ctx.alloc_ty_fields(fields);
-                ctx.alloc_ty(HirTyKind::Record { fields })
-            }
+            } => self.substitute_handler_ty(effect, input, output, subst),
+            HirTyKind::Mut { inner } => self.substitute_mut_ty(inner, subst),
+            HirTyKind::AnyClass { class } => self.substitute_class_ty(class, subst, true),
+            HirTyKind::SomeClass { class } => self.substitute_class_ty(class, subst, false),
+            HirTyKind::Record { fields } => self.substitute_record_ty(fields, subst),
             _ => ty,
         }
+    }
+
+    fn substitute_pi_ty(
+        &mut self,
+        binder: Symbol,
+        binder_ty: HirTyId,
+        body: HirTyId,
+        is_effectful: bool,
+        subst: &TypeSubstMap,
+    ) -> HirTyId {
+        let binder_ty = self.substitute_ty(binder_ty, subst);
+        let mut next = subst.clone();
+        let _ = next.remove(&binder);
+        let body = self.substitute_ty(body, &next);
+        self.alloc_ty(HirTyKind::Pi {
+            binder,
+            binder_ty,
+            body,
+            is_effectful,
+        })
+    }
+
+    fn substitute_arrow_ty(
+        &mut self,
+        params: SliceRange<HirTyId>,
+        ret: HirTyId,
+        is_effectful: bool,
+        subst: &TypeSubstMap,
+    ) -> HirTyId {
+        let params = self.substitute_ty_list(params, subst);
+        let ret = self.substitute_ty(ret, subst);
+        self.alloc_ty(HirTyKind::Arrow {
+            params,
+            ret,
+            is_effectful,
+        })
+    }
+
+    fn substitute_sum_ty(
+        &mut self,
+        left: HirTyId,
+        right: HirTyId,
+        subst: &TypeSubstMap,
+    ) -> HirTyId {
+        let left = self.substitute_ty(left, subst);
+        let right = self.substitute_ty(right, subst);
+        self.alloc_ty(HirTyKind::Sum { left, right })
     }
 
     fn substitute_named_ty(
@@ -451,6 +486,34 @@ impl PassBase<'_, '_, '_> {
     fn substitute_mut_ty(&mut self, inner: HirTyId, subst: &TypeSubstMap) -> HirTyId {
         let inner = self.substitute_ty(inner, subst);
         self.alloc_ty(HirTyKind::Mut { inner })
+    }
+
+    fn substitute_class_ty(
+        &mut self,
+        class: HirTyId,
+        subst: &TypeSubstMap,
+        is_any: bool,
+    ) -> HirTyId {
+        let class = self.substitute_ty(class, subst);
+        if is_any {
+            self.alloc_ty(HirTyKind::AnyClass { class })
+        } else {
+            self.alloc_ty(HirTyKind::SomeClass { class })
+        }
+    }
+
+    fn substitute_record_ty(
+        &mut self,
+        fields: SliceRange<HirTyField>,
+        subst: &TypeSubstMap,
+    ) -> HirTyId {
+        let fields = self
+            .ty_fields(fields)
+            .into_iter()
+            .map(|field| HirTyField::new(field.name, self.substitute_ty(field.ty, subst)))
+            .collect::<Vec<_>>();
+        let fields = self.alloc_ty_fields(fields);
+        self.alloc_ty(HirTyKind::Record { fields })
     }
 
     fn substitute_ty_list(
@@ -545,6 +608,16 @@ impl PassBase<'_, '_, '_> {
 }
 
 impl CheckPass<'_, '_, '_> {
+    pub(super) fn unify_ty_for_type_params(
+        &mut self,
+        type_params: &[Symbol],
+        pattern: HirTyId,
+        actual: HirTyId,
+        subst: &mut HashMap<Symbol, HirTyId>,
+    ) -> bool {
+        self.unify_ty(type_params, pattern, actual, subst)
+    }
+
     fn solve_obligation(
         &mut self,
         origin: HirOrigin,
@@ -597,78 +670,99 @@ impl CheckPass<'_, '_, '_> {
         obligation: &ConstraintObligation,
         stack: &mut Vec<String>,
     ) -> bool {
-        let ctx = self;
-        let Some((class_key, class_args)) = ctx.obligation_class_target(obligation) else {
-            ctx.diag(origin.span, DiagKind::UnsatisfiedConstraint, "");
+        let Some((class_key, class_args)) = self.obligation_class_target(obligation) else {
+            self.diag(origin.span, DiagKind::UnsatisfiedConstraint, "");
             return false;
         };
-        let frame = format!(
-            "{}:{}",
-            class_key.name,
-            class_args
-                .iter()
-                .copied()
-                .map(|arg| ctx.render_ty(arg))
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
+        let frame = self.constraint_stack_frame(&class_key, &class_args);
         if stack.contains(&frame) {
             return true;
         }
         stack.push(frame);
-
-        let mut matches = 0usize;
-        let local_instances = ctx.instance_facts().values().cloned().collect::<Vec<_>>();
-        for instance in &local_instances {
-            if instance.class_key != class_key {
-                continue;
-            }
-            if ctx.instance_matches(origin, instance, &class_args, stack) {
-                matches = matches.saturating_add(1);
-            }
-        }
-
-        let Some(env) = ctx.sema_env() else {
-            let _ = stack.pop();
-            if matches == 0 {
-                ctx.diag(origin.span, DiagKind::UnsatisfiedConstraint, "");
-                return false;
-            }
-            if matches > 1 {
-                ctx.diag(origin.span, DiagKind::AmbiguousInstanceMatch, "");
-                return false;
-            }
-            return true;
-        };
-
-        let mut visited = BTreeSet::new();
-        let mut pending = ctx.static_imports();
-        while let Some(module_key) = pending.pop() {
-            if !visited.insert(module_key.clone()) {
-                continue;
-            }
-            let Some(surface) = env.module_surface(&module_key) else {
-                continue;
-            };
-            pending.extend(surface.static_imports().iter().cloned());
-            for instance in surface.exported_instances() {
-                if instance.class_key != class_key {
-                    continue;
-                }
-                let imported = ctx.instance_facts_from_surface(&surface, instance);
-                if ctx.instance_matches(origin, &imported, &class_args, stack) {
-                    matches = matches.saturating_add(1);
-                }
-            }
-        }
-
+        let matches = self.count_matching_instances(origin, &class_key, &class_args, stack);
         let _ = stack.pop();
+        self.finish_instance_match_count(origin, matches)
+    }
+
+    fn count_matching_instances(
+        &mut self,
+        origin: HirOrigin,
+        class_key: &DefinitionKey,
+        class_args: &[HirTyId],
+        stack: &mut Vec<String>,
+    ) -> usize {
+        let mut matches = self.count_local_instance_matches(origin, class_key, class_args, stack);
+        matches += self.count_imported_instance_matches(origin, class_key, class_args, stack);
+        matches
+    }
+
+    fn count_local_instance_matches(
+        &mut self,
+        origin: HirOrigin,
+        class_key: &DefinitionKey,
+        class_args: &[HirTyId],
+        stack: &mut Vec<String>,
+    ) -> usize {
+        let local_instances = self.instance_facts().values().cloned().collect::<Vec<_>>();
+        local_instances
+            .iter()
+            .filter(|instance| instance.class_key == *class_key)
+            .filter(|instance| self.instance_matches(origin, instance, class_args, stack))
+            .count()
+    }
+
+    fn count_imported_instance_matches(
+        &mut self,
+        origin: HirOrigin,
+        class_key: &DefinitionKey,
+        class_args: &[HirTyId],
+        stack: &mut Vec<String>,
+    ) -> usize {
+        let Some(env) = self.sema_env() else {
+            return 0;
+        };
+        let mut matches = 0usize;
+        let mut visited = BTreeSet::new();
+        let mut pending = self.static_imports();
+        while let Some(module_key) = pending.pop() {
+            if let Some(surface) = env
+                .module_surface(&module_key)
+                .filter(|_| visited.insert(module_key.clone()))
+            {
+                pending.extend(surface.static_imports().iter().cloned());
+                matches += self
+                    .count_surface_instance_matches(origin, class_key, class_args, stack, &surface);
+            }
+        }
+        matches
+    }
+
+    fn count_surface_instance_matches(
+        &mut self,
+        origin: HirOrigin,
+        class_key: &DefinitionKey,
+        class_args: &[HirTyId],
+        stack: &mut Vec<String>,
+        surface: &ModuleSurface,
+    ) -> usize {
+        surface
+            .exported_instances()
+            .iter()
+            .filter(|instance| instance.class_key == *class_key)
+            .filter(|instance| {
+                let imported = self.instance_facts_from_surface(surface, instance);
+                self.instance_matches(origin, &imported, class_args, stack)
+            })
+            .count()
+    }
+
+    fn finish_instance_match_count(&mut self, origin: HirOrigin, matches: usize) -> bool {
         if matches == 0 {
-            ctx.diag(origin.span, DiagKind::UnsatisfiedConstraint, "");
+            self.diag(origin.span, DiagKind::UnsatisfiedConstraint, "");
             return false;
         }
         if matches > 1 {
-            ctx.diag(origin.span, DiagKind::AmbiguousInstanceMatch, "");
+            self.diag(origin.span, DiagKind::AmbiguousInstanceMatch, "");
             return false;
         }
         true
@@ -681,14 +775,41 @@ impl CheckPass<'_, '_, '_> {
         stack: &mut Vec<String>,
     ) -> Option<ConstraintEvidence> {
         let key = obligation.key();
-        if let Some(evidence) = self.resolve_in_scope_evidence(&key) {
+        if let Some(evidence) = self.resolve_available_evidence(&key) {
             return Some(evidence);
         }
         let Some((class_key, class_args)) = self.obligation_class_target(obligation) else {
             self.diag(origin.span, DiagKind::UnsatisfiedConstraint, "");
             return None;
         };
-        let frame = format!(
+        let frame = self.constraint_stack_frame(&class_key, &class_args);
+        if stack.contains(&frame) {
+            self.diag(origin.span, DiagKind::UnsatisfiedConstraint, "");
+            return None;
+        }
+        stack.push(frame);
+        let mut matches =
+            self.collect_local_instance_evidence(origin, &class_key, &class_args, stack);
+        self.collect_imported_instance_evidence(
+            origin,
+            &class_key,
+            &class_args,
+            stack,
+            &mut matches,
+        );
+        let _ = stack.pop();
+        self.finish_instance_evidence(origin, matches)
+    }
+}
+
+impl CheckPass<'_, '_, '_> {
+    fn resolve_available_evidence(&self, key: &ConstraintKey) -> Option<ConstraintEvidence> {
+        self.resolve_in_scope_evidence(key)
+            .or_else(|| self.resolve_equivalent_in_scope_evidence(key))
+    }
+
+    fn constraint_stack_frame(&self, class_key: &DefinitionKey, class_args: &[HirTyId]) -> String {
+        format!(
             "{}:{}",
             class_key.name,
             class_args
@@ -697,60 +818,97 @@ impl CheckPass<'_, '_, '_> {
                 .map(|arg| self.render_ty(arg))
                 .collect::<Vec<_>>()
                 .join(", ")
-        );
-        if stack.contains(&frame) {
-            self.diag(origin.span, DiagKind::UnsatisfiedConstraint, "");
-            return None;
-        }
-        stack.push(frame);
+        )
+    }
 
-        let mut matches = Vec::<ConstraintEvidence>::new();
+    fn collect_local_instance_evidence(
+        &mut self,
+        origin: HirOrigin,
+        class_key: &DefinitionKey,
+        class_args: &[HirTyId],
+        stack: &mut Vec<String>,
+    ) -> Vec<ConstraintEvidence> {
         let local_instances = self.instance_facts().values().cloned().collect::<Vec<_>>();
-        for instance in &local_instances {
-            if instance.class_key != class_key {
+        local_instances
+            .iter()
+            .filter(|instance| instance.class_key == *class_key)
+            .filter_map(|instance| {
+                self.instance_provider_evidence(
+                    origin,
+                    instance,
+                    self.module_key().clone(),
+                    class_args,
+                    stack,
+                )
+            })
+            .collect()
+    }
+
+    fn collect_imported_instance_evidence(
+        &mut self,
+        origin: HirOrigin,
+        class_key: &DefinitionKey,
+        class_args: &[HirTyId],
+        stack: &mut Vec<String>,
+        matches: &mut Vec<ConstraintEvidence>,
+    ) {
+        let Some(env) = self.sema_env() else {
+            return;
+        };
+        let mut visited = BTreeSet::new();
+        let mut pending = self.static_imports();
+        while let Some(module_key) = pending.pop() {
+            if !visited.insert(module_key.clone()) {
                 continue;
             }
+            let Some(surface) = env.module_surface(&module_key) else {
+                continue;
+            };
+            pending.extend(surface.static_imports().iter().cloned());
+            self.collect_surface_instance_evidence(SurfaceInstanceEvidenceScan {
+                origin,
+                class_key,
+                class_args,
+                stack,
+                matches,
+                module_key: &module_key,
+                surface: &surface,
+            });
+        }
+    }
+
+    fn collect_surface_instance_evidence(&mut self, scan: SurfaceInstanceEvidenceScan<'_>) {
+        let SurfaceInstanceEvidenceScan {
+            origin,
+            class_key,
+            class_args,
+            stack,
+            matches,
+            module_key,
+            surface,
+        } = scan;
+        for instance in surface.exported_instances() {
+            if instance.class_key != *class_key {
+                continue;
+            }
+            let imported = self.instance_facts_from_surface(surface, instance);
             if let Some(evidence) = self.instance_provider_evidence(
                 origin,
-                instance,
-                self.module_key().clone(),
-                &class_args,
+                &imported,
+                module_key.clone(),
+                class_args,
                 stack,
             ) {
                 matches.push(evidence);
             }
         }
+    }
 
-        if let Some(env) = self.sema_env() {
-            let mut visited = BTreeSet::new();
-            let mut pending = self.static_imports();
-            while let Some(module_key) = pending.pop() {
-                if !visited.insert(module_key.clone()) {
-                    continue;
-                }
-                let Some(surface) = env.module_surface(&module_key) else {
-                    continue;
-                };
-                pending.extend(surface.static_imports().iter().cloned());
-                for instance in surface.exported_instances() {
-                    if instance.class_key != class_key {
-                        continue;
-                    }
-                    let imported = self.instance_facts_from_surface(&surface, instance);
-                    if let Some(evidence) = self.instance_provider_evidence(
-                        origin,
-                        &imported,
-                        module_key.clone(),
-                        &class_args,
-                        stack,
-                    ) {
-                        matches.push(evidence);
-                    }
-                }
-            }
-        }
-
-        let _ = stack.pop();
+    fn finish_instance_evidence(
+        &mut self,
+        origin: HirOrigin,
+        mut matches: Vec<ConstraintEvidence>,
+    ) -> Option<ConstraintEvidence> {
         match matches.len() {
             0 => {
                 self.diag(origin.span, DiagKind::UnsatisfiedConstraint, "");
@@ -762,6 +920,21 @@ impl CheckPass<'_, '_, '_> {
                 None
             }
         }
+    }
+
+    fn resolve_equivalent_in_scope_evidence(
+        &self,
+        key: &ConstraintKey,
+    ) -> Option<ConstraintEvidence> {
+        self.evidence_entries_in_scope()
+            .into_iter()
+            .find_map(|(candidate, evidence)| {
+                (candidate.kind == key.kind
+                    && candidate.class_key == key.class_key
+                    && self.ty_matches(candidate.subject, key.subject)
+                    && self.ty_matches(candidate.value, key.value))
+                .then_some(evidence)
+            })
     }
 
     fn obligation_class_target(
@@ -785,7 +958,9 @@ impl CheckPass<'_, '_, '_> {
         };
         Some((class_key, class_args.into_boxed_slice()))
     }
+}
 
+impl CheckPass<'_, '_, '_> {
     fn instance_matches(
         &mut self,
         origin: HirOrigin,
@@ -859,7 +1034,9 @@ impl CheckPass<'_, '_, '_> {
         }
         Some(subst)
     }
+}
 
+impl CheckPass<'_, '_, '_> {
     fn unify_ty(
         &mut self,
         type_params: &[Symbol],
@@ -867,20 +1044,19 @@ impl CheckPass<'_, '_, '_> {
         actual: HirTyId,
         subst: &mut TypeSubstMap,
     ) -> bool {
-        let ctx = self;
-        match ctx.ty(pattern).kind {
+        match self.ty(pattern).kind {
             HirTyKind::Named { name, args } if type_params.contains(&name) => {
-                ctx.unify_type_constructor_param(type_params, name, args, actual, subst)
+                self.unify_type_constructor_param(type_params, name, args, actual, subst)
             }
             HirTyKind::Named {
                 name: left_name,
                 args: left_args,
-            } => ctx.unify_named_ty(type_params, actual, subst, left_name, left_args),
+            } => self.unify_named_ty(type_params, actual, subst, left_name, left_args),
             HirTyKind::Arrow {
                 params: left_params,
                 ret: left_ret,
                 is_effectful: left_effectful,
-            } => ctx.unify_arrow_ty(
+            } => self.unify_arrow_ty(
                 type_params,
                 actual,
                 subst,
@@ -889,48 +1065,126 @@ impl CheckPass<'_, '_, '_> {
                 left_effectful,
             ),
             HirTyKind::Sum { left, right } => {
-                let HirTyKind::Sum {
-                    left: actual_left,
-                    right: actual_right,
-                } = ctx.ty(actual).kind
-                else {
-                    return false;
-                };
-                ctx.unify_ty(type_params, left, actual_left, subst)
-                    && ctx.unify_ty(type_params, right, actual_right, subst)
+                self.unify_sum_ty(type_params, left, right, actual, subst)
             }
-            HirTyKind::Tuple { items } => {
-                let HirTyKind::Tuple {
-                    items: actual_items,
-                } = ctx.ty(actual).kind
-                else {
-                    return false;
-                };
-                ctx.unify_ty_lists(type_params, items, actual_items, subst)
-            }
+            HirTyKind::Tuple { items } => self.unify_tuple_ty(type_params, items, actual, subst),
             HirTyKind::Array { dims, item } => {
-                let HirTyKind::Array {
-                    dims: actual_dims,
-                    item: actual_item,
-                } = ctx.ty(actual).kind
-                else {
-                    return false;
-                };
-                ctx.dims(dims) == ctx.dims(actual_dims)
-                    && ctx.unify_ty(type_params, item, actual_item, subst)
+                self.unify_array_ty(type_params, dims, item, actual, subst)
             }
-            HirTyKind::Mut { inner } => {
-                let HirTyKind::Mut {
-                    inner: actual_inner,
-                } = ctx.ty(actual).kind
-                else {
-                    return false;
-                };
-                ctx.unify_ty(type_params, inner, actual_inner, subst)
+            HirTyKind::Mut { inner } => self.unify_mut_ty(type_params, inner, actual, subst),
+            HirTyKind::AnyClass { class } => {
+                self.unify_any_class_ty(type_params, class, actual, subst)
             }
-            HirTyKind::Record { fields } => ctx.unify_record_ty(type_params, actual, subst, fields),
-            _ => ctx.ty_matches(pattern, actual),
+            HirTyKind::SomeClass { class } => {
+                self.unify_some_class_ty(type_params, class, actual, subst)
+            }
+            HirTyKind::Record { fields } => {
+                self.unify_record_ty(type_params, actual, subst, fields)
+            }
+            _ => self.ty_matches(pattern, actual),
         }
+    }
+
+    fn unify_sum_ty(
+        &mut self,
+        type_params: &[Symbol],
+        left: HirTyId,
+        right: HirTyId,
+        actual: HirTyId,
+        subst: &mut TypeSubstMap,
+    ) -> bool {
+        let HirTyKind::Sum {
+            left: actual_left,
+            right: actual_right,
+        } = self.ty(actual).kind
+        else {
+            return false;
+        };
+        self.unify_ty(type_params, left, actual_left, subst)
+            && self.unify_ty(type_params, right, actual_right, subst)
+    }
+
+    fn unify_tuple_ty(
+        &mut self,
+        type_params: &[Symbol],
+        items: SliceRange<HirTyId>,
+        actual: HirTyId,
+        subst: &mut TypeSubstMap,
+    ) -> bool {
+        let HirTyKind::Tuple {
+            items: actual_items,
+        } = self.ty(actual).kind
+        else {
+            return false;
+        };
+        self.unify_ty_lists(type_params, items, actual_items, subst)
+    }
+
+    fn unify_array_ty(
+        &mut self,
+        type_params: &[Symbol],
+        dims: SliceRange<HirDim>,
+        item: HirTyId,
+        actual: HirTyId,
+        subst: &mut TypeSubstMap,
+    ) -> bool {
+        let HirTyKind::Array {
+            dims: actual_dims,
+            item: actual_item,
+        } = self.ty(actual).kind
+        else {
+            return false;
+        };
+        self.dims(dims) == self.dims(actual_dims)
+            && self.unify_ty(type_params, item, actual_item, subst)
+    }
+
+    fn unify_mut_ty(
+        &mut self,
+        type_params: &[Symbol],
+        inner: HirTyId,
+        actual: HirTyId,
+        subst: &mut TypeSubstMap,
+    ) -> bool {
+        let HirTyKind::Mut {
+            inner: actual_inner,
+        } = self.ty(actual).kind
+        else {
+            return false;
+        };
+        self.unify_ty(type_params, inner, actual_inner, subst)
+    }
+
+    fn unify_any_class_ty(
+        &mut self,
+        type_params: &[Symbol],
+        class: HirTyId,
+        actual: HirTyId,
+        subst: &mut TypeSubstMap,
+    ) -> bool {
+        let HirTyKind::AnyClass {
+            class: actual_class,
+        } = self.ty(actual).kind
+        else {
+            return false;
+        };
+        self.unify_ty(type_params, class, actual_class, subst)
+    }
+
+    fn unify_some_class_ty(
+        &mut self,
+        type_params: &[Symbol],
+        class: HirTyId,
+        actual: HirTyId,
+        subst: &mut TypeSubstMap,
+    ) -> bool {
+        let HirTyKind::SomeClass {
+            class: actual_class,
+        } = self.ty(actual).kind
+        else {
+            return false;
+        };
+        self.unify_ty(type_params, class, actual_class, subst)
     }
 
     fn unify_type_param(&self, name: Symbol, actual: HirTyId, subst: &mut TypeSubstMap) -> bool {
@@ -1086,7 +1340,9 @@ impl PassBase<'_, '_, '_> {
         let _ = class_args;
         ctx.intern(&class_key.name)
     }
+}
 
+impl CheckPass<'_, '_, '_> {
     fn instance_provider_name(&self, instance: &InstanceFacts) -> Box<str> {
         let args = instance
             .class_args

@@ -39,7 +39,7 @@ export const contentCollections = [
 	{
 		id: "guides",
 		title: "Musi for Developers",
-		path: "/learn/book/developers",
+		path: "/learn/guides",
 		audience: "language-transition",
 	},
 	{

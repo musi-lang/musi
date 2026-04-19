@@ -13,15 +13,19 @@ Canonical syntax sources live in grammar, not in scattered prose, but this page 
 
 - Surface syntax is expression-first.
 - Modules use `.ms`.
+- Comments use `--` and `/- ... -/`; item docs use `---` and `/-- ... -/`; module docs use `--!` and `/-! ... -/`. Block comments nest.
 - Pattern matching uses `match expr (| pattern => expr ...)`.
 - Effect invocation uses `request Effect.op(...)`.
 - Record updates use spread literals such as `{ ...point, y := 9 }`.
 - Data variants use constructor-style payload declarations such as `| Some(T)` or `| Configured(port : Int, secure : Bool)`.
 - Ordinary calls can use positional or named arguments, such as `render(8080, secure := .True)` or `render(port := 8080, secure := .True)`.
+- Receiver callable dot form uses UDNS notation: `value.inc(by := 2)` lowers as an attached or receiver-first call. Receiver-pattern declarations use `let (value : Type).inc(by : Int) := ...`; the explicit namespace form is `Type.inc(value, by := 2)`.
 - Pure function types use `T -> U`.
 - Effectful function types use `T ~> U`.
 - Generic calls can be bare or dotted: `f[T](x)` and `value.f[T](x)`.
 - Compile-time values use value-position `comptime`: `let x := comptime 3;` and `let scale(comptime n : Int, x : Int) := x * n;`. See `docs/what/language/advanced/comptime.md` for specialization and generated syntax.
+- Class constraints use `where T : Eq`; class members can be called through evidence as `Eq.eq(left, right)`.
+- Existential and opaque implementer types use type-position modifiers: `any Writer` and `some Writer`. Bare `Writer` names the class/type itself; it is not an existential.
 - Higher-kinded type parameters use arrow kinds: `F : Type -> Type`.
 - Type constructors can be partially applied from the left: `Result[String]` can fit `Type -> Type` when `Result` has two type parameters.
 - Parsing pipeline today is `music_syntax` lexer + parser, then `music_resolve`, `music_sema`, `music_ir`, `music_emit`.

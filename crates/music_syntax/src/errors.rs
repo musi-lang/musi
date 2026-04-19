@@ -1,8 +1,107 @@
-use music_base::diag::{Diag, DiagCode};
+use music_base::diag::{Diag, DiagCode, DiagContext, DiagLevel, DiagnosticKind};
 use music_base::{SourceId, Span};
 use thiserror::Error;
 
 use crate::TokenKind;
+
+#[path = "diag_catalog_gen.rs"]
+mod diag_catalog_gen;
+
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SyntaxDiagKind {
+    InvalidChar,
+    UnterminatedStringLiteral,
+    UnterminatedRuneLiteral,
+    EmptyRuneLiteral,
+    RuneLiteralTooLong,
+    UnterminatedBlockComment,
+    UnterminatedTemplateLiteral,
+    MissingDigitsAfterBasePrefix,
+    InvalidDigitForBase,
+    UnexpectedUnderscoreInNumberLiteral,
+    MissingDigitAfterUnderscoreInNumberLiteral,
+    MissingExponentDigits,
+    MissingEscapeCode,
+    UnexpectedEscape,
+    MissingHexDigitsInByteEscape,
+    InvalidHexDigitInByteEscape,
+    MissingHexDigitsInUnicodeEscape,
+    InvalidHexDigitInUnicodeEscape,
+    ExpectedFourOrSixHexDigitsInUnicodeEscape,
+    InvalidUnicodeScalar,
+    ExpectedToken,
+    ExpectedExpression,
+    ExpectedPattern,
+    ExpectedMember,
+    ExpectedIdentifier,
+    ReservedKeywordIdentifier,
+    ExpectedSpliceTarget,
+    ExpectedOperatorMemberName,
+    ExpectedFieldTarget,
+    ExpectedConstraintOperator,
+    ExpectedAttrValue,
+    SpliceOutsideQuote,
+    NonAssociativeChain,
+}
+
+impl SyntaxDiagKind {
+    #[must_use]
+    pub fn code(self) -> DiagCode {
+        DiagCode::new(diag_catalog_gen::code(self))
+    }
+
+    #[must_use]
+    pub fn message(self) -> &'static str {
+        diag_catalog_gen::message(self)
+    }
+
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        diag_catalog_gen::primary(self)
+    }
+
+    #[must_use]
+    pub fn hint(self) -> Option<&'static str> {
+        diag_catalog_gen::help(self)
+    }
+
+    #[must_use]
+    pub fn from_code(code: DiagCode) -> Option<Self> {
+        diag_catalog_gen::from_code(code.raw())
+    }
+
+    #[must_use]
+    pub fn from_diag(diag: &Diag) -> Option<Self> {
+        diag.code().and_then(Self::from_code)
+    }
+}
+
+impl DiagnosticKind for SyntaxDiagKind {
+    fn code(self) -> DiagCode {
+        self.code()
+    }
+
+    fn phase(self) -> &'static str {
+        "syntax"
+    }
+
+    fn level(self) -> DiagLevel {
+        DiagLevel::Error
+    }
+
+    fn message(self) -> &'static str {
+        self.message()
+    }
+
+    fn primary(self) -> &'static str {
+        self.label()
+    }
+
+    fn help(self) -> Option<&'static str> {
+        self.hint()
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub enum LexErrorKind {
@@ -104,6 +203,9 @@ pub enum ParseErrorKind {
     #[error("expected identifier, found {found}")]
     ExpectedIdentifier { found: TokenKind },
 
+    #[error("reserved keyword {keyword} cannot name identifier")]
+    ReservedKeywordIdentifier { keyword: TokenKind },
+
     #[error("expected splice target, found {found}")]
     ExpectedSpliceTarget { found: TokenKind },
 
@@ -152,68 +254,49 @@ impl ParseError {
 
 impl LexErrorKind {
     #[must_use]
-    pub const fn code(self) -> DiagCode {
-        DiagCode::new(match self {
-            Self::InvalidChar { .. } => 1200,
-            Self::UnterminatedStringLiteral => 1201,
-            Self::UnterminatedRuneLiteral => 1202,
-            Self::EmptyRuneLiteral => 1203,
-            Self::RuneLiteralTooLong => 1204,
-            Self::UnterminatedBlockComment => 1205,
-            Self::UnterminatedTemplateLiteral => 1206,
-            Self::MissingDigitsAfterBasePrefix { .. } => 1207,
-            Self::InvalidDigitForBase { .. } => 1208,
-            Self::UnexpectedUnderscoreInNumberLiteral => 1209,
-            Self::MissingDigitAfterUnderscoreInNumberLiteral => 1210,
-            Self::MissingExponentDigits => 1211,
-            Self::MissingEscapeCode => 1212,
-            Self::UnexpectedEscape { .. } => 1213,
-            Self::MissingHexDigitsInByteEscape => 1214,
-            Self::InvalidHexDigitInByteEscape { .. } => 1215,
-            Self::MissingHexDigitsInUnicodeEscape => 1216,
-            Self::InvalidHexDigitInUnicodeEscape { .. } => 1217,
-            Self::ExpectedFourOrSixHexDigitsInUnicodeEscape => 1218,
-            Self::InvalidUnicodeScalar { .. } => 1219,
-        })
+    pub const fn diag_kind(self) -> SyntaxDiagKind {
+        diag_catalog_gen::lex_error_kind(self)
+    }
+
+    #[must_use]
+    pub fn code(self) -> DiagCode {
+        self.diag_kind().code()
     }
 
     #[must_use]
     pub fn headline(self) -> String {
+        self.context().render(self.diag_kind().message())
+    }
+
+    #[must_use]
+    pub fn context(self) -> DiagContext {
         match self {
-            Self::InvalidChar { .. } => "invalid character".into(),
-            Self::UnterminatedStringLiteral => "unterminated string literal".into(),
-            Self::UnterminatedRuneLiteral => "unterminated rune literal".into(),
-            Self::EmptyRuneLiteral => "empty rune literal".into(),
-            Self::RuneLiteralTooLong => "rune literal contains more than one character".into(),
-            Self::UnterminatedBlockComment => "unterminated block comment".into(),
-            Self::UnterminatedTemplateLiteral => "unterminated template literal".into(),
-            Self::MissingDigitsAfterBasePrefix { base } => {
-                format!("base {base} literal requires digits")
+            Self::InvalidChar { ch }
+            | Self::UnexpectedEscape { ch }
+            | Self::InvalidHexDigitInByteEscape { ch }
+            | Self::InvalidHexDigitInUnicodeEscape { ch } => {
+                DiagContext::new().with("ch", escape_char(ch))
             }
-            Self::InvalidDigitForBase { base, .. } => {
-                format!("invalid digit in base {base} literal")
-            }
-            Self::UnexpectedUnderscoreInNumberLiteral => "underscore invalid".into(),
-            Self::MissingDigitAfterUnderscoreInNumberLiteral => {
-                "digit after `_` is required".into()
-            }
-            Self::MissingExponentDigits => "exponent requires digits".into(),
-            Self::MissingEscapeCode => "escape requires code".into(),
-            Self::UnexpectedEscape { .. } => "invalid escape".into(),
-            Self::MissingHexDigitsInByteEscape => "`\\x` escape requires hex digits".into(),
-            Self::InvalidHexDigitInByteEscape { .. } => {
-                "`\\x` escape contains invalid hex digit".into()
-            }
-            Self::MissingHexDigitsInUnicodeEscape => "`\\u` escape requires hex digits".into(),
-            Self::InvalidHexDigitInUnicodeEscape { .. } => {
-                "`\\u` escape contains invalid hex digit".into()
-            }
-            Self::ExpectedFourOrSixHexDigitsInUnicodeEscape => {
-                "`\\u` escape requires 4 or 6 hex digits".into()
-            }
+            Self::MissingDigitsAfterBasePrefix { base } => DiagContext::new().with("base", base),
+            Self::InvalidDigitForBase { base, ch } => DiagContext::new()
+                .with("base", base)
+                .with("ch", escape_char(ch)),
             Self::InvalidUnicodeScalar { value } => {
-                format!("invalid unicode scalar `U+{value:06X}`")
+                DiagContext::new().with("value", format!("{value:06X}"))
             }
+            Self::UnterminatedStringLiteral
+            | Self::UnterminatedRuneLiteral
+            | Self::EmptyRuneLiteral
+            | Self::RuneLiteralTooLong
+            | Self::UnterminatedBlockComment
+            | Self::UnterminatedTemplateLiteral
+            | Self::UnexpectedUnderscoreInNumberLiteral
+            | Self::MissingDigitAfterUnderscoreInNumberLiteral
+            | Self::MissingExponentDigits
+            | Self::MissingEscapeCode
+            | Self::MissingHexDigitsInByteEscape
+            | Self::MissingHexDigitsInUnicodeEscape
+            | Self::ExpectedFourOrSixHexDigitsInUnicodeEscape => DiagContext::new(),
         }
     }
 
@@ -252,40 +335,39 @@ impl LexErrorKind {
 
 impl ParseErrorKind {
     #[must_use]
-    pub const fn code(self) -> DiagCode {
-        DiagCode::new(match self {
-            Self::ExpectedToken { .. } => 1300,
-            Self::ExpectedExpression { .. } => 1301,
-            Self::ExpectedPattern { .. } => 1302,
-            Self::ExpectedMember { .. } => 1303,
-            Self::ExpectedIdentifier { .. } => 1304,
-            Self::ExpectedSpliceTarget { .. } => 1305,
-            Self::ExpectedOperatorMemberName { .. } => 1306,
-            Self::ExpectedFieldTarget { .. } => 1307,
-            Self::ExpectedConstraintOperator { .. } => 1308,
-            Self::ExpectedAttrValue { .. } => 1309,
-            Self::SpliceOutsideQuote => 1310,
-            Self::NonAssociativeChain => 1311,
-        })
+    pub const fn diag_kind(self) -> SyntaxDiagKind {
+        diag_catalog_gen::parse_error_kind(self)
+    }
+
+    #[must_use]
+    pub fn code(self) -> DiagCode {
+        self.diag_kind().code()
     }
 
     #[must_use]
     pub fn headline(self) -> String {
+        self.context().render(self.diag_kind().message())
+    }
+
+    #[must_use]
+    pub fn context(self) -> DiagContext {
         match self {
-            Self::ExpectedToken { expected, .. } => format!("expected {expected}"),
-            Self::ExpectedExpression { .. } => "expected expression".into(),
-            Self::ExpectedPattern { .. } => "expected pattern".into(),
-            Self::ExpectedMember { .. } => "expected member".into(),
-            Self::ExpectedIdentifier { .. } => "expected identifier".into(),
-            Self::ExpectedSpliceTarget { .. } => "expected splice target".into(),
-            Self::ExpectedOperatorMemberName { .. } => "expected operator member name".into(),
-            Self::ExpectedFieldTarget { .. } => "expected field name or tuple index".into(),
-            Self::ExpectedConstraintOperator { .. } => {
-                "expected constraint operator `<:` or `:`".into()
+            Self::ExpectedToken { expected, found } => DiagContext::new()
+                .with("expected", expected)
+                .with("found", found),
+            Self::ExpectedExpression { found }
+            | Self::ExpectedPattern { found }
+            | Self::ExpectedMember { found }
+            | Self::ExpectedIdentifier { found }
+            | Self::ExpectedSpliceTarget { found }
+            | Self::ExpectedOperatorMemberName { found }
+            | Self::ExpectedFieldTarget { found }
+            | Self::ExpectedConstraintOperator { found }
+            | Self::ExpectedAttrValue { found } => DiagContext::new().with("found", found),
+            Self::ReservedKeywordIdentifier { keyword } => {
+                DiagContext::new().with("keyword", keyword)
             }
-            Self::ExpectedAttrValue { .. } => "expected attribute value".into(),
-            Self::SpliceOutsideQuote => "splice is only valid inside quote".into(),
-            Self::NonAssociativeChain => "comparison chain requires grouping".into(),
+            Self::SpliceOutsideQuote | Self::NonAssociativeChain => DiagContext::new(),
         }
     }
 
@@ -305,14 +387,17 @@ impl ParseErrorKind {
             | Self::ExpectedAttrValue { found } => {
                 format!("found {}", describe_found(source_text, span, found))
             }
+            Self::ReservedKeywordIdentifier { keyword } => {
+                format!("{keyword} found where identifier required")
+            }
             Self::SpliceOutsideQuote => {
                 format!("found {}", describe_span(source_text, span, "`#`"))
             }
             Self::NonAssociativeChain => "chain continues here".into(),
         };
         diag = diag.with_label(span, source_id, label);
-        if matches!(self, Self::NonAssociativeChain) {
-            diag = diag.with_hint("parenthesize comparison");
+        if let Some(hint) = self.diag_kind().hint() {
+            diag = diag.with_hint(hint);
         }
         diag
     }
@@ -361,49 +446,4 @@ fn escape_char(ch: char) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use music_base::SourceMap;
-
-    use super::*;
-
-    fn source_id(text: &str) -> SourceId {
-        let mut map = SourceMap::default();
-        map.add("test.ms", text).expect("source add succeeds")
-    }
-
-    #[test]
-    fn lex_diag_points_at_invalid_character() {
-        let text = "€";
-        let diag = LexError::new(LexErrorKind::InvalidChar { ch: '€' }, Span::new(0, 3))
-            .to_diag(source_id(text), text);
-
-        assert_eq!(diag.message(), "invalid character");
-        assert_eq!(diag.labels()[0].message(), "found `€`");
-    }
-
-    #[test]
-    fn parse_diag_uses_end_of_input() {
-        let text = "let x := 1";
-        let diag = ParseError::new(
-            ParseErrorKind::ExpectedToken {
-                expected: TokenKind::Semicolon,
-                found: TokenKind::Eof,
-            },
-            Span::new(10, 10),
-        )
-        .to_diag(source_id(text), text);
-
-        assert_eq!(diag.message(), "expected `;`");
-        assert_eq!(diag.labels()[0].message(), "found end of input");
-    }
-
-    #[test]
-    fn parse_diag_uses_fixit_hint_only_for_grouping_error() {
-        let text = "a < b < c";
-        let diag = ParseError::new(ParseErrorKind::NonAssociativeChain, Span::new(6, 7))
-            .to_diag(source_id(text), text);
-
-        assert_eq!(diag.message(), "comparison chain requires grouping");
-        assert_eq!(diag.hint(), Some("parenthesize comparison"));
-    }
-}
+mod tests;

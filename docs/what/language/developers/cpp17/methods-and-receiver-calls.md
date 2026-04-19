@@ -1,29 +1,31 @@
 ---
 title: "Methods and Receiver Calls"
-description: "Translate C++17 methods into Musi functions and receiver-style calls where they improve reading."
+description: "Read Methods and Receiver Calls as a C++17 habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "C++ Developers"
 order: 11
 slug: "methods-and-receiver-calls"
-summary: "Keep functions primary and use receiver calls for left-to-right transformations."
+summary: "Translate the C++17 habit, then use the Musi Book for the full rule."
 ---
 
-# Methods and Receiver Calls
+A C++ reader brings habits from RAII, overload sets, templates, references, optional values, exceptions, and object hierarchies. That helps with ownership stories, value categories, and compile-time abstractions, but the Musi page asks a narrower question: what contract should this local values and calls example make visible?
 
-C++17 attaches receiver behavior to a class or struct:
+{{compare:cpp17-methods-and-receiver-calls}}
 
-```cpp
-struct Port {
-    int port;
+## Reading Methods and Receiver Calls from C++17
 
-    auto with_offset(const int offset) const -> int {
-        return port + offset;
-    }
-};
+On the Musi side, Musi lets a calculation be a `let`, a function, or a final expression without wrapping it in an object or framework first. Read the shared example through C++17 eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-const auto selected = Port{8080}.with_offset(100);
-```
+## False friend
 
-Musi keeps functions primary while allowing receiver-style calls.
+Do not preserve call ceremony just because the source language needs it for methods, receivers, overloads, or closures. For a C++ reader, the trap is turning every Musi value into a class-shaped design; Musi `class` is closer to a concept or trait than a C++ class; records/data store shape, instances satisfy behavior.
 
-{{snippet:cpp17-methods-receiver-calls}}
+## When this pays off
+
+Use this shape when a receipt total, label, distance, or score is pure data moving through named calls. The C++17 instinct still helps here: Keep the C++ habit of asking which operation is generic and which value owns shape.
+
+## Keep close
+
+- [Calls](/learn/book/core/calls)
+- [Dot calls](/learn/book/core/dot-calls)
+- [Functions](/learn/book/core/functions)

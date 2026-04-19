@@ -1,0 +1,145 @@
+catalog project musi_project ProjectDiagKind crates/musi_project/src/diag_catalog_gen.rs
+
+diag MissingManifest 5000
+  message "missing manifest `{path}`"
+  primary "missing manifest `{path}`"
+
+diag MissingManifestAncestor 5001
+  message "missing manifest ancestor from `{path}`"
+  primary "missing manifest ancestor from `{path}`"
+
+diag MissingPackageRoot 5002
+  message "missing package root `{path}`"
+  primary "missing package root `{path}`"
+
+diag MissingModule 5003
+  message "missing module path `{path}`"
+  primary "missing module path `{path}`"
+
+diag InvalidManifestJson 5004
+  message "invalid manifest `{path}` JSON (`{source}`)"
+  primary "invalid manifest `{path}` JSON"
+
+diag ProjectIoFailed 5005
+  message "project path `{path}` I/O failed (`{source}`)"
+  primary "project path `{path}` I/O failed"
+
+diag ManifestValidationFailed 5006
+  message "manifest validation failed (`{message}`)"
+  primary "manifest validation failed"
+
+diag DuplicateWorkspaceMember 5007
+  message "duplicate workspace member `{member}`"
+  primary "duplicate workspace member `{member}`"
+
+diag DuplicatePackageName 5008
+  message "duplicate package `{name}` in project graph"
+  primary "duplicate package `{name}`"
+
+diag MissingPackageVersion 5009
+  message "missing version for package `{name}`"
+  primary "missing version for package `{name}`"
+
+diag NoRootPackage 5010
+  message "missing root package entry"
+  primary "missing root package entry"
+
+diag MissingPackageEntryModule 5011
+  message "missing entry module for package `{package}`"
+  primary "missing entry module for package `{package}`"
+
+diag UnknownTask 5012
+  message "missing task `{name}`"
+  primary "missing task `{name}`"
+
+diag TaskDependencyCycle 5013
+  message "task dependency cycle reaches `{name}`"
+  primary "task dependency cycle reaches `{name}`"
+
+diag PackageDependencyCycle 5014
+  message "package dependency cycle reaches `{name}`"
+  primary "package dependency cycle reaches `{name}`"
+
+diag UnresolvedImport 5015
+  message "unresolved import specifier `{spec}`"
+  primary "unresolved import specifier `{spec}`"
+
+diag MissingRegistryRoot 5016
+  message "registry root required for `{name}`"
+  primary "registry root required for `{name}`"
+
+diag MissingGlobalCacheRoot 5017
+  message "global cache directory unavailable"
+  primary "global cache directory unavailable"
+
+diag RegistryVersionNotFound 5018
+  message "missing registry version for `{name}` matching `{requirement}`"
+  primary "missing registry version for `{name}`"
+
+diag InvalidVersionRequirement 5019
+  message "invalid semver requirement `{requirement}` for `{name}`"
+  primary "invalid semver requirement `{requirement}`"
+
+diag MissingFrozenLockfile 5020
+  message "frozen lockfile `{path}` required"
+  primary "frozen lockfile `{path}` required"
+
+diag FrozenLockfileOutOfDate 5021
+  message "frozen lockfile `{path}` out of date"
+  primary "frozen lockfile `{path}` out of date"
+
+diag UnknownPackage 5022
+  message "unknown package `{name}`"
+  primary "unknown package `{name}`"
+
+diag PackageGraphEntryMissing 5023
+  message "missing package graph entry `{name}`"
+  primary "missing package graph entry `{name}`"
+
+diag InvalidGitDependency 5024
+  message "invalid git dependency `{requirement}` for `{name}`"
+  primary "invalid git dependency `{requirement}`"
+
+diag GitCommandFailed 5025
+  message "git command `{command}` failed at `{path}`"
+  primary "git command `{command}` failed"
+
+diag GitReferenceNotFound 5026
+  message "missing git reference `{reference}` for `{name}`"
+  primary "missing git reference `{reference}`"
+
+diag SessionCompilationFailed 5027
+  message "project session compilation failed (`{source}`)"
+  primary "project session compilation failed"
+
+map project_error_kind crate::ProjectError option
+  case "MissingManifest { .. }" MissingManifest
+  case "MissingManifestAncestor { .. }" MissingManifestAncestor
+  case "MissingPackageRoot { .. }" MissingPackageRoot
+  case "MissingModule { .. }" MissingModule
+  case "InvalidManifestJson { .. }" InvalidManifestJson
+  case "SourceDiagnostic(_)" none
+  case "ProjectIoFailed { .. }" ProjectIoFailed
+  case "ManifestValidationFailed { .. }" ManifestValidationFailed
+  case "DuplicateWorkspaceMember { .. }" DuplicateWorkspaceMember
+  case "DuplicatePackageName { .. }" DuplicatePackageName
+  case "MissingPackageVersion { .. }" MissingPackageVersion
+  case "NoRootPackage" NoRootPackage
+  case "MissingPackageEntryModule { .. }" MissingPackageEntryModule
+  case "UnknownTask { .. }" UnknownTask
+  case "TaskDependencyCycle { .. }" TaskDependencyCycle
+  case "PackageDependencyCycle { .. }" PackageDependencyCycle
+  case "UnresolvedImport { .. }" UnresolvedImport
+  case "UnknownPackage { .. }" UnknownPackage
+  case "PackageGraphEntryMissing { .. }" PackageGraphEntryMissing
+  case "MissingRegistryRoot { .. }" MissingRegistryRoot
+  case "MissingGlobalCacheRoot" MissingGlobalCacheRoot
+  case "RegistryVersionNotFound { .. }" RegistryVersionNotFound
+  case "InvalidVersionRequirement { .. }" InvalidVersionRequirement
+  case "InvalidGitDependency { .. }" InvalidGitDependency
+  case "GitCommandFailed { .. }" GitCommandFailed
+  case "GitReferenceNotFound { .. }" GitReferenceNotFound
+  case "MissingFrozenLockfile { .. }" MissingFrozenLockfile
+  case "FrozenLockfileOutOfDate { .. }" FrozenLockfileOutOfDate
+  case "SessionCompilationFailed(_)" SessionCompilationFailed
+end

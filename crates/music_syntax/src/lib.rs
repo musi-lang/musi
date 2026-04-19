@@ -10,6 +10,7 @@ mod trivia;
 
 pub use errors::{
     LexError, LexErrorKind, LexErrorList, ParseError, ParseErrorKind, ParseErrorList, ParseResult,
+    SyntaxDiagKind,
 };
 pub use intern::canonical_name_text;
 pub use lexer::Lexer;

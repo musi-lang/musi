@@ -229,6 +229,7 @@ pub enum HirExprKind {
         mods: HirLetMods,
         pat: HirPatId,
         type_params: SliceRange<HirBinder>,
+        receiver: Option<HirReceiverDecl>,
         has_param_clause: bool,
         params: SliceRange<HirParam>,
         constraints: ConstraintRange,
@@ -300,6 +301,8 @@ pub enum HirPrefixOp {
     Not,
     Mut,
     Comptime,
+    Any,
+    Some,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -379,42 +382,30 @@ impl HirParam {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HirLetMods {
     pub is_rec: bool,
-    pub receiver: Option<HirLetReceiver>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct HirLetReceiver {
-    pub is_mut: bool,
-    pub binder: Ident,
-    pub ty: HirExprId,
-    pub member: Ident,
-}
-
-impl HirLetReceiver {
-    #[must_use]
-    pub const fn new(is_mut: bool, binder: Ident, ty: HirExprId, member: Ident) -> Self {
-        Self {
-            is_mut,
-            binder,
-            ty,
-            member,
-        }
-    }
 }
 
 impl HirLetMods {
     #[must_use]
     pub const fn new(is_rec: bool) -> Self {
-        Self {
-            is_rec,
-            receiver: None,
-        }
+        Self { is_rec }
     }
+}
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HirReceiverDecl {
+    pub receiver: Ident,
+    pub receiver_ty: HirExprId,
+    pub method: Ident,
+}
+
+impl HirReceiverDecl {
     #[must_use]
-    pub const fn with_receiver(mut self, receiver: HirLetReceiver) -> Self {
-        self.receiver = Some(receiver);
-        self
+    pub const fn new(receiver: Ident, receiver_ty: HirExprId, method: Ident) -> Self {
+        Self {
+            receiver,
+            receiver_ty,
+            method,
+        }
     }
 }
 

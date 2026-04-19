@@ -1,37 +1,31 @@
 ---
-title: "Values, Functions, and Expressions"
-description: "Translate Go functions and expression habits into Musi expression-bodied functions and named calls."
+title: "Values, Functions, and Final Expressions"
+description: "Read Values, Functions, and Final Expressions as a Go habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Go Developers"
 order: 2
 slug: "values-functions-expressions"
-summary: "Use expression bodies, positional calls, and named calls for readable functions."
+summary: "Translate the Go habit, then use the Musi Book for the full rule."
 ---
 
-# Values, Functions, and Expressions
+A Go reader brings habits from packages, structs, slices, nil, multiple returns, interfaces, goroutines, channels, and explicit errors. That helps with small named operations and direct data flow, but the Musi page asks a narrower question: what contract should this local values and calls example make visible?
 
-Go functions name parameters and return types, then use `return` to produce the result:
+{{compare:go-values-functions-expressions}}
 
-```go
-func total(basePrice int, fee int) int {
-    return basePrice + fee
-}
+## Reading Values, Functions, and Final Expressions from Go
 
-answer := total(1200, 45)
-```
+On the Musi side, Musi lets a calculation be a `let`, a function, or a final expression without wrapping it in an object or framework first. Read the shared example through Go eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-Musi keeps the signature explicit. The function body is the result expression.
+## False friend
 
-{{snippet:go-values-functions}}
+Do not preserve call ceremony just because the source language needs it for methods, receivers, overloads, or closures. For a Go reader, the trap is using absence or failure as a side channel because Go makes that cheap; Musi `class` is closer to an explicit interface constraint with instances; it is not a struct and not a method set attached by package convention.
 
-## Named calls
+## When this pays off
 
-Go call sites are positional:
+Use this shape when a receipt total, label, distance, or score is pure data moving through named calls. The Go instinct still helps here: Keep the Go habit of writing the small thing first and naming package boundaries clearly.
 
-```go
-selected := render(8080, true)
-```
+## Keep close
 
-That works, but booleans and repeated numbers become harder to read. Musi lets the call site name arguments when labels carry meaning.
-
-{{snippet:go-named-calls}}
+- [Values and let](/learn/book/start/values-and-let)
+- [Functions](/learn/book/core/functions)
+- [Calls](/learn/book/core/calls)

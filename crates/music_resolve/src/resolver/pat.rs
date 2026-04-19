@@ -68,7 +68,9 @@ where
 
     fn lower_pat_bind(&mut self, node: SyntaxNode<'tree, 'src>) -> HirPatId {
         let origin = self.origin_node(node);
-        let tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
+        let tok = node
+            .child_tokens()
+            .find(|t| Self::is_ident_token_kind(t.kind()));
         let name = tok
             .and_then(|t| self.intern_ident_token(t))
             .unwrap_or_else(|| {
@@ -81,7 +83,9 @@ where
 
     fn lower_pat_variant(&mut self, node: SyntaxNode<'tree, 'src>) -> HirPatId {
         let origin = self.origin_node(node);
-        let tag_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
+        let tag_tok = node
+            .child_tokens()
+            .find(|t| Self::is_ident_token_kind(t.kind()));
         let tag = tag_tok
             .and_then(|t| self.intern_ident_token(t))
             .unwrap_or_else(|| {
@@ -103,7 +107,9 @@ where
             .child_nodes()
             .filter(|inner| inner.kind() == SyntaxNodeKind::VariantPatArg)
         {
-            let name_tok = child.child_tokens().find(|t| t.kind() == TokenKind::Ident);
+            let name_tok = child
+                .child_tokens()
+                .find(|t| Self::is_ident_token_kind(t.kind()));
             let name = if child.child_tokens().any(|t| t.kind() == TokenKind::ColonEq) {
                 name_tok.and_then(|tok| self.intern_ident_token(tok))
             } else {
@@ -170,7 +176,9 @@ where
             Some(pat) => self.lower_pat(pat),
             None => self.alloc_error_pat(node),
         };
-        let name_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
+        let name_tok = node
+            .child_tokens()
+            .find(|t| Self::is_ident_token_kind(t.kind()));
         let name = name_tok
             .and_then(|t| self.intern_ident_token(t))
             .unwrap_or_else(|| {
@@ -193,7 +201,7 @@ where
                 .get(i)
                 .copied()
                 .and_then(SyntaxElement::into_token)
-                .filter(|t| t.kind() == TokenKind::Ident)
+                .filter(|t| Self::is_ident_token_kind(t.kind()))
             else {
                 i += 1;
                 continue;

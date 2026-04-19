@@ -1,42 +1,31 @@
 ---
 title: "Mutation"
-description: "Translate Rust 2024 edition (1.85+) mutation habits into Musi's value-based mutation model."
+description: "Read Mutation as a Rust habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Rust Developers"
 order: 3
 slug: "mutation"
-summary: "Read Musi mutation as a mutable value binding, not as a variable-mode prefix."
+summary: "Translate the Rust habit, then use the Musi Book for the full rule."
 ---
 
-Rust marks the binding mutable:
+A Rust reader brings habits from ownership, enums, traits, Result, modules, pattern matching, and explicit unsafe blocks. That helps with the type that carries the invariant, but the Musi page asks a narrower question: what contract should this fresh values and mutation example make visible?
 
-```rust
-let mut visits = 0;
-visits += 1;
-visits
-```
+{{compare:rust-mutation}}
 
-Musi keeps mutability on the value owned by the binding.
+## Reading Mutation from Rust
 
-{{snippet:rust-mutation-counter}}
+On the Musi side, Musi makes mutation explicit with `mut` and assignment; ordinary `let` names read as stable facts. Read the shared example through Rust eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-Read `let visits := mut 0;` as a normal name bound to a value that may change. The update writes the next value back into that mutable value.
+## False friend
 
-## When to translate `let mut`
+Do not translate every rebinding habit into mutation. A new receipt, label, or counter snapshot can be a fresh name. For a Rust reader, the trap is expecting Musi syntax to mirror Rust even when the ideas are separated differently; Musi `class` is closest to a Rust trait plus law text; instances play the role of implementations for behavior.
 
-Use Musi mutation for Rust code where the same local state changes over time:
+## When this pays off
 
-- counters
-- parser cursors
-- reusable buffers
-- local totals built over several steps
+Use mutation when the domain really changes over time, such as queue depth or a buffer cursor. The Rust instinct still helps here: Keep the Rust habit of asking which type carries the invariant.
 
-If Rust uses `mut` only to stage a clearer next value, Musi often reads better with a new `let` name.
+## Keep close
 
-```rust
-let base = 1200;
-let total = base + 45;
-total
-```
-
-{{snippet:rust-fresh-value}}
+- [Mutation](/learn/book/start/mutation)
+- [Values and let](/learn/book/start/values-and-let)
+- [Blocks and expressions](/learn/book/start/blocks-and-expressions)

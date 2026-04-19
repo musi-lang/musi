@@ -1,4 +1,4 @@
-use music_seam::{Instruction, MethodId, Opcode, Operand};
+use music_seam::{Instruction, Opcode, Operand, ProcedureId};
 
 use crate::VmValueKind;
 use crate::value::{ClosureValuePtr, ForeignValue, ValueList};
@@ -6,21 +6,21 @@ use crate::value::{ClosureValuePtr, ForeignValue, ValueList};
 use super::{StepOutcome, Value, Vm, VmError, VmErrorKind, VmResult};
 
 impl Vm {
-    pub(crate) fn call_arity(&self, module_slot: usize, method: MethodId) -> VmResult<usize> {
+    pub(crate) fn call_arity(&self, module_slot: usize, procedure: ProcedureId) -> VmResult<usize> {
         Ok(usize::from(
             self.module(module_slot)?
                 .program
                 .artifact()
-                .methods
-                .get(method)
+                .procedures
+                .get(procedure)
                 .params,
         ))
     }
 
     pub(crate) fn exec_call(&mut self, instruction: &Instruction) -> VmResult<StepOutcome> {
         match instruction.opcode {
-            Opcode::Call => self.exec_method_call(instruction),
-            Opcode::CallSeq => self.exec_seq_method_call(instruction),
+            Opcode::Call => self.exec_procedure_call(instruction),
+            Opcode::CallSeq => self.exec_seq_procedure_call(instruction),
             Opcode::CallCls => self.exec_closure_call(),
             Opcode::CallClsSeq => self.exec_seq_closure_call(),
             Opcode::CallTail => self.exec_tail_call(instruction),
@@ -30,20 +30,20 @@ impl Vm {
         }
     }
 
-    fn exec_method_call(&mut self, instruction: &Instruction) -> VmResult<StepOutcome> {
-        let method = Self::method_operand(instruction)?;
+    fn exec_procedure_call(&mut self, instruction: &Instruction) -> VmResult<StepOutcome> {
+        let procedure = Self::procedure_operand(instruction)?;
         let module_slot = self.current_module_slot()?;
-        let params = self.call_arity(module_slot, method)?;
+        let params = self.call_arity(module_slot, procedure)?;
         let args = self.pop_args(params)?;
-        self.push_frame(module_slot, method, args)?;
+        self.push_frame(module_slot, procedure, args)?;
         Ok(StepOutcome::Continue)
     }
 
-    fn exec_seq_method_call(&mut self, instruction: &Instruction) -> VmResult<StepOutcome> {
-        let method = Self::method_operand(instruction)?;
+    fn exec_seq_procedure_call(&mut self, instruction: &Instruction) -> VmResult<StepOutcome> {
+        let procedure = Self::procedure_operand(instruction)?;
         let module_slot = self.current_module_slot()?;
         let args = self.pop_seq_args()?;
-        self.push_frame(module_slot, method, args)?;
+        self.push_frame(module_slot, procedure, args)?;
         Ok(StepOutcome::Continue)
     }
 
@@ -78,34 +78,38 @@ impl Vm {
     }
 
     fn exec_tail_call(&mut self, instruction: &Instruction) -> VmResult<StepOutcome> {
-        let method = Self::method_operand(instruction)?;
+        let procedure = Self::procedure_operand(instruction)?;
         let module_slot = self.current_module_slot()?;
-        let params = self.call_arity(module_slot, method)?;
+        let params = self.call_arity(module_slot, procedure)?;
         let args = self.pop_args(params)?;
         let _ = self.frames.pop();
-        self.push_frame(module_slot, method, args)?;
+        self.push_frame(module_slot, procedure, args)?;
         Ok(StepOutcome::Continue)
     }
 
     fn exec_closure_new(&mut self, instruction: &Instruction) -> VmResult<StepOutcome> {
-        let Operand::WideMethodCaptures { method, captures } = instruction.operand else {
+        let Operand::WideProcedureCaptures {
+            procedure,
+            captures,
+        } = instruction.operand
+        else {
             return Err(Self::invalid_operand(instruction));
         };
         let module_slot = self.current_module_slot()?;
         let capture_count = usize::from(captures);
         let captures = self.pop_args(capture_count)?;
-        self.push_value(Value::closure(module_slot, method, captures))?;
+        self.push_value(Value::closure(module_slot, procedure, captures))?;
         Ok(StepOutcome::Continue)
     }
 
     fn push_closure_call_frame(&mut self, closure: &ClosureValuePtr) -> VmResult {
         let closure = closure.borrow();
-        let total_params = self.call_arity(closure.module_slot, closure.method)?;
+        let total_params = self.call_arity(closure.module_slot, closure.procedure)?;
         let arg_count = total_params.saturating_sub(closure.captures.len());
         let args = self.pop_args(arg_count)?;
         let mut full_args = closure.captures.clone();
         full_args.extend(args);
-        self.push_frame(closure.module_slot, closure.method, full_args)
+        self.push_frame(closure.module_slot, closure.procedure, full_args)
     }
 
     fn push_seq_closure_call_frame(
@@ -114,13 +118,13 @@ impl Vm {
         args: ValueList,
     ) -> VmResult {
         let closure = closure.borrow();
-        let total_params = self.call_arity(closure.module_slot, closure.method)?;
+        let total_params = self.call_arity(closure.module_slot, closure.procedure)?;
         let arg_count = total_params.saturating_sub(closure.captures.len());
         if args.len() != arg_count {
             let name = self
                 .module(closure.module_slot)?
                 .program
-                .loaded_method(closure.method)?
+                .loaded_procedure(closure.procedure)?
                 .name
                 .clone();
             return Err(VmError::new(VmErrorKind::CallArityMismatch {
@@ -131,14 +135,14 @@ impl Vm {
         }
         let mut full_args = closure.captures.clone();
         full_args.extend(args);
-        self.push_frame(closure.module_slot, closure.method, full_args)
+        self.push_frame(closure.module_slot, closure.procedure, full_args)
     }
 
-    fn method_operand(instruction: &Instruction) -> VmResult<MethodId> {
-        let Operand::Method(method) = instruction.operand else {
+    fn procedure_operand(instruction: &Instruction) -> VmResult<ProcedureId> {
+        let Operand::Procedure(procedure) = instruction.operand else {
             return Err(Self::invalid_operand(instruction));
         };
-        Ok(method)
+        Ok(procedure)
     }
 
     fn call_foreign_value(&mut self, foreign: ForeignValue) -> VmResult<Value> {

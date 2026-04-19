@@ -609,16 +609,31 @@ name = "musi"
 version = "0.1.0-alpha.1"
 dependencies = [
  "clap",
+ "musi_fmt",
  "musi_lsp",
  "musi_native",
  "musi_project",
  "musi_rt",
  "musi_tooling",
  "musi_vm",
+ "music_base",
  "music_module",
  "music_sema",
  "music_session",
  "serde_json",
+]
+
+[[package]]
+name = "musi_diaggen"
+version = "0.1.0-alpha.1"
+
+[[package]]
+name = "musi_fmt"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "musi_project",
+ "music_base",
+ "music_syntax",
  "thiserror",
 ]
 
@@ -626,6 +641,7 @@ dependencies = [
 name = "musi_foundation"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "music_builtin",
  "music_module",
  "music_session",
  "music_term",
@@ -636,6 +652,8 @@ name = "musi_lsp"
 version = "0.1.0-alpha.1"
 dependencies = [
  "async-lsp",
+ "musi_fmt",
+ "musi_project",
  "musi_tooling",
  "tokio",
 ]
@@ -666,6 +684,7 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "musi_foundation",
  "music_base",
+ "music_builtin",
  "music_emit",
  "music_module",
  "music_seam",
@@ -674,7 +693,6 @@ dependencies = [
  "music_syntax",
  "serde",
  "serde_json",
- "thiserror",
 ]
 
 [[package]]
@@ -685,11 +703,11 @@ dependencies = [
  "musi_foundation",
  "musi_native",
  "musi_vm",
+ "music_base",
  "music_module",
  "music_session",
  "music_term",
  "serde_json",
- "thiserror",
 ]
 
 [[package]]
@@ -709,20 +727,20 @@ dependencies = [
  "music_syntax",
  "serde",
  "serde_json",
- "thiserror",
 ]
 
 [[package]]
 name = "musi_vm"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "criterion",
  "musi_foundation",
+ "music_base",
  "music_module",
  "music_seam",
  "music_session",
  "music_term",
  "smallvec",
- "thiserror",
 ]
 
 [[package]]
@@ -732,10 +750,10 @@ dependencies = [
  "clap",
  "musi_tooling",
  "musi_vm",
+ "music_base",
  "music_seam",
  "music_session",
  "serde_json",
- "thiserror",
 ]
 
 [[package]]
@@ -749,6 +767,10 @@ dependencies = [
  "criterion",
  "thiserror",
 ]
+
+[[package]]
+name = "music_builtin"
+version = "0.1.0-alpha.1"
 
 [[package]]
 name = "music_emit"
@@ -805,6 +827,7 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "music_arena",
  "music_base",
+ "music_builtin",
 ]
 
 [[package]]
@@ -824,8 +847,8 @@ name = "music_seam"
 version = "0.1.0-alpha.1"
 dependencies = [
  "music_arena",
+ "music_base",
  "music_term",
- "thiserror",
 ]
 
 [[package]]
@@ -834,6 +857,7 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "music_arena",
  "music_base",
+ "music_builtin",
  "music_hir",
  "music_module",
  "music_names",
@@ -858,7 +882,6 @@ dependencies = [
  "music_sema",
  "music_syntax",
  "music_term",
- "thiserror",
 ]
 
 [[package]]
@@ -1220,9 +1243,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.51.1"
+version = "1.52.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f66bf9585cda4b724d3e78ab34b73fb2bbaba9011b9bfdf69dc836382ea13b8c"
+checksum = "b67dee974fe86fd92cc45b7a95fdd2f99a36a6d7b0d431a231178d3d670bbcc6"
 dependencies = [
  "libc",
  "mio",

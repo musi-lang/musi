@@ -1,62 +1,40 @@
 ---
 title: "Overview"
-description: "Translate Rust 2024 edition (1.85+) habits into Musi code with side-by-side examples."
+description: "Map Rust habits to the Musi Book without repeating every construct example."
 group: "Musi for Developers"
 section: "Rust Developers"
 order: 1
 slug: "overview"
-summary: "Start from Rust habits, then read the equivalent Musi expression, data, abstraction, effect, and FFI shapes."
+summary: "Use this guide when Rust habits make Musi feel surprising."
 ---
 
-Rust 2024 edition (1.85+) is the comparison point for this guide. Each page starts with Rust code, then shows the Musi equivalent with the same names and the same job.
+Rust readers already look for ownership, enums, traits, Result, modules, pattern matching, and explicit unsafe. Musi shares the habit of making branches and contracts visible, but has its own split: data for variants, records for fields, classes/instances for behavior, effects for requested outside work, and foreign declarations for native edges.
 
-A Rust reader should not have to skim a generic Musi example and guess the translation. The Musi block below each Rust block is the translation.
+Use this guide as a translation journal for Rust code. Start with the familiar habit, then ask which Musi construct owns the same promise. A page is successful when it tells you which old instinct to keep and which old shortcut to drop.
 
-## First translation
+## Start from the habit that hurts
 
-Rust often starts with a small function and a binding for the result:
+- [Values, Functions, and Final Expressions](/learn/guides/rust/values-functions) - values habits get translated once, then the Musi Book owns the details.
+- [Mutation](/learn/guides/rust/mutation) - mutation habits get translated once, then the Musi Book owns the details.
+- [Records, Structs, and Field Updates](/learn/guides/rust/records-structs) - records habits get translated once, then the Musi Book owns the details.
+- [Enums, Data, and Pattern Matching](/learn/guides/rust/enums-data) - patterns habits get translated once, then the Musi Book owns the details.
+- [Traits, Classes, Instances, and Laws](/learn/guides/rust/traits-classes-laws) - behavior contracts stop hiding in object habits.
+- [Generics and Type Constructors](/learn/guides/rust/generics) - generics habits get translated once, then the Musi Book owns the details.
+- [Results, I/O, and Effects](/learn/guides/rust/results-effects) - outside work becomes a named request.
+- [Modules, Packages, and Visibility](/learn/guides/rust/modules-packages) - package boundaries replace compatibility-era habits.
+- [Unsafe and FFI](/learn/guides/rust/unsafe-ffi) - native edges stay narrow enough to audit.
+- [Testing and Tooling](/learn/guides/rust/testing-tooling) - testing habits get translated once, then the Musi Book owns the details.
 
-```rust
-fn total(base: i32, fee: i32) -> i32 {
-    base + fee
-}
+## Habits that still help
 
-let answer = total(1200, 45);
-answer
-```
+- Keep the Rust habit of asking which type carries the invariant.
+- Drop syntax expectations around impl, lifetimes, and match punctuation; read the Musi contract instead.
+- Keep examples tied to ordinary work: receipts, routes, files, animals, people, rooms, and services.
 
-Musi writes the same calculation as a `let` function. The final expression leaves the value.
+## First false friend
 
-{{snippet:rust-values-functions}}
+Musi `class` is closest to a Rust trait plus law text; instances play the role of implementations for behavior. If you need a person, car, invoice, or package, start with records or data. If you need any type that can compare, show, encode, or step, use a class with instances.
 
-## Reading path
+## When to switch to the Musi Book
 
-Read these pages in order if you are moving a Rust habit into Musi code:
-
-- [Values, Functions, and Final Expressions](/learn/book/developers/guides/rust/values-functions)
-- [Mutation](/learn/book/developers/guides/rust/mutation)
-- [Records, Structs, and Field Updates](/learn/book/developers/guides/rust/records-structs)
-- [Enums, Data, and Pattern Matching](/learn/book/developers/guides/rust/enums-data)
-- [Traits, Classes, Instances, and Laws](/learn/book/developers/guides/rust/traits-classes-laws)
-- [Generics and Type Constructors](/learn/book/developers/guides/rust/generics)
-- [Results, Requests, and Effects](/learn/book/developers/guides/rust/results-effects)
-- [Modules, Packages, and Visibility](/learn/book/developers/guides/rust/modules-packages)
-- [Unsafe and FFI](/learn/book/developers/guides/rust/unsafe-ffi)
-- [Testing and Tooling](/learn/book/developers/guides/rust/testing-tooling)
-
-## Rust habits that transfer
-
-- name data by domain
-- keep functions small
-- make boundary work visible
-- use types to explain what values can be
-- test behavior close to the code that owns it
-
-## Rust habits to translate
-
-- `let mut name` becomes a binding to a mutable value
-- `return` is not used for ordinary final values
-- `enum` variants become `data` variants
-- `trait` and `impl` become `class`, `instance`, and laws when rules matter
-- `Result` handles recoverable data failure; effects handle requested outside work
-- raw native work stays behind `foreign` and `unsafe`
+Stay in this guide while a Rust habit is getting in the way. Switch to [Values and let](/learn/book/start/values-and-let), [Records](/learn/book/data/records), [Patterns](/learn/book/data/patterns), [Generics](/learn/book/types/generics), [Classes](/learn/book/abstractions/classes), and [Effects](/learn/book/effects-runtime/effects) when you need the source-of-truth rule.

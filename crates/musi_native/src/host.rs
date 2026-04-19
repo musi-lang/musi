@@ -104,7 +104,7 @@ impl NativeHost {
     fn call_fallback<R>(&self, f: impl FnOnce(&mut dyn VmHost) -> VmResult<R>) -> VmResult<R> {
         let mut state = self.state.borrow_mut();
         let Some(fallback) = state.fallback.as_mut() else {
-            return Err(VmError::new(VmErrorKind::ProgramShapeInvalid {
+            return Err(VmError::new(VmErrorKind::InvalidProgramShape {
                 detail: "native host fallback missing".into(),
             }));
         };

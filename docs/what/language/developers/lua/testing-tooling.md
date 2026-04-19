@@ -1,27 +1,31 @@
 ---
 title: "Testing and Tooling"
-description: "Translate Lua test habits into small Musi package tests and toolchain checks."
+description: "Read Testing and Tooling as a Lua habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Lua Developers"
 order: 13
 slug: "testing-tooling"
-summary: "Write tests as small examples and use the package toolchain for routine checks."
+summary: "Translate the Lua habit, then use the Musi Book for the full rule."
 ---
 
-# Testing and Tooling
+A Lua reader brings habits from tables, metatables, nil, coroutines, embedding, modules, and small runtime boundaries. That helps with simple data and host/runtime edges without much ceremony, but the Musi page asks a narrower question: what contract should this tests as domain promises example make visible?
 
-Lua tests often call a function and raise an error when the expectation fails:
+{{compare:lua-testing-tooling}}
 
-```lua
-local function testDefaultPort()
-  if defaultPort() ~= 8080 then
-    error("default port mismatch")
-  end
-end
-```
+## Reading Testing and Tooling from Lua
 
-Musi tests keep the rule name, the small value, and the expectation together.
+On the Musi side, Musi tests should state the domain promise first, then check the function or value that proves it. Read the shared example through Lua eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-{{snippet:lua-testing-tooling}}
+## False friend
 
-Use the package toolchain for formatting, checking, and running tests so local work matches CI behavior.
+Do not write a test that only proves syntax can be called. Make the receipt, route, badge, or parser claim visible. For a Lua reader, the trap is letting table shape, missing fields, and behavior conventions blur together; Musi `class` is not a metatable pattern; records/data hold table-like shape, classes/instances name promised behavior.
+
+## When this pays off
+
+Use this style when a future reader needs to know which behavior broke, not only which line failed. The Lua instinct still helps here: Keep the Lua habit of using small names and simple values.
+
+## Keep close
+
+- [Testing](/learn/book/advanced/testing)
+- [Running and tooling](/learn/book/advanced/running-and-tooling)
+- [Packages](/learn/book/organization/packages)

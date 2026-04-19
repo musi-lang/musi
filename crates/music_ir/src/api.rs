@@ -197,6 +197,12 @@ fn lower_surface_named_callable_type_term(types: &[SurfaceTy], ty: &SurfaceTy) -
         SurfaceTyKind::Mut { inner } => TypeTerm::new(TypeTermKind::Mut {
             inner: Box::new(lower_surface_type_term_id(types, *inner)),
         }),
+        SurfaceTyKind::AnyClass { class } => TypeTerm::new(TypeTermKind::AnyClass {
+            class: Box::new(lower_surface_type_term_id(types, *class)),
+        }),
+        SurfaceTyKind::SomeClass { class } => TypeTerm::new(TypeTermKind::SomeClass {
+            class: Box::new(lower_surface_type_term_id(types, *class)),
+        }),
         _ => return None,
     })
 }
@@ -672,7 +678,7 @@ pub enum IrExprKind {
         base: Box<IrExpr>,
         indices: Box<[IrExpr]>,
     },
-    DynamicImport {
+    ModuleLoad {
         spec: Box<IrExpr>,
     },
     ModuleGet {
@@ -1160,6 +1166,24 @@ impl IrEffectOpDef {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IrModuleInitPart {
+    Global { name: Box<str> },
+    Expr(IrExpr),
+}
+
+impl IrModuleInitPart {
+    #[must_use]
+    pub fn global(name: impl Into<Box<str>>) -> Self {
+        Self::Global { name: name.into() }
+    }
+
+    #[must_use]
+    pub const fn expr(expr: IrExpr) -> Self {
+        Self::Expr(expr)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrClassDef {
     pub key: DefinitionKey,
     pub member_names: IrNameList,
@@ -1218,6 +1242,7 @@ pub struct IrModule {
     exports: Box<[ExportedValue]>,
     callables: Box<[IrCallable]>,
     globals: Box<[IrGlobal]>,
+    init_parts: Box<[IrModuleInitPart]>,
     data_defs: Box<[IrDataDef]>,
     foreigns: Box<[IrForeignDef]>,
     effects: Box<[IrEffectDef]>,
@@ -1230,6 +1255,7 @@ type IrModuleCollections = (
     Box<[ExportedValue]>,
     Box<[IrCallable]>,
     Box<[IrGlobal]>,
+    Box<[IrModuleInitPart]>,
     Box<[IrDataDef]>,
     Box<[IrForeignDef]>,
     Box<[IrEffectDef]>,
@@ -1253,12 +1279,13 @@ impl IrModule {
             exports: collections.0,
             callables: collections.1,
             globals: collections.2,
-            data_defs: collections.3,
-            foreigns: collections.4,
-            effects: collections.5,
-            classes: collections.6,
-            instances: collections.7,
-            meta: collections.8,
+            init_parts: collections.3,
+            data_defs: collections.4,
+            foreigns: collections.5,
+            effects: collections.6,
+            classes: collections.7,
+            instances: collections.8,
+            meta: collections.9,
         }
     }
 
@@ -1290,6 +1317,11 @@ impl IrModule {
     #[must_use]
     pub fn globals(&self) -> &[IrGlobal] {
         &self.globals
+    }
+
+    #[must_use]
+    pub fn init_parts(&self) -> &[IrModuleInitPart] {
+        &self.init_parts
     }
 
     #[must_use]

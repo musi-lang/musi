@@ -154,16 +154,16 @@ Use `musi` inside package roots. Use `music` when you want one source graph or o
 Prefer focused stdlib imports:
 
 ```musi
-let Option := import "@std/option";
-let Testing := import "@std/testing";
+let option := import "@std/option";
+let testing := import "@std/testing";
 ```
 
 Root import also works:
 
 ```musi
-let Std := import "@std";
-let Option := Std.option;
-let Testing := Std.testing;
+let std := import "@std";
+let option := std.option;
+let testing := std.testing;
 ```
 
 Foundation and runtime stay separate from stdlib:

@@ -1,32 +1,31 @@
 ---
 title: "Unsafe, Interop, and FFI"
-description: "Translate C# unsafe code and P/Invoke habits into Musi foreign declarations, Ptr values, and unsafe blocks."
+description: "Read Unsafe, Interop, and FFI as a C# habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "C# Developers"
 order: 14
 slug: "unsafe-interop-ffi"
-summary: "Keep native calls explicit with foreign declarations, @std/ffi types, and unsafe blocks."
+summary: "Translate the C# habit, then use the Musi Book for the full rule."
 ---
 
-C# can cross native boundaries with P/Invoke and unsafe code:
+A C# reader brings habits from nullable flow analysis, records, LINQ, async tasks, extension methods, interfaces, namespaces, and attributes. That helps with domain code through named APIs and tooling feedback, but the Musi page asks a narrower question: what contract should this native and unsafe boundaries example make visible?
 
-```csharp
-using System.Runtime.InteropServices;
+{{compare:csharp-unsafe-interop-ffi}}
 
-[LibraryImport("c")]
-internal static partial int puts(IntPtr message);
-```
+## Reading Unsafe, Interop, and FFI from C#
 
-Musi declares the foreign function and keeps the call behind `unsafe`.
+On the Musi side, Musi foreign declarations use `foreign "c" let ...` or a parenthesized foreign group, and unsafe calls stay inside `unsafe { ... }`. Read the shared example through C# eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-{{snippet:csharp-unsafe-interop-ffi}}
+## False friend
 
-`foreign "c"` names the native calling world. `unsafe { ... }` marks the operation that needs extra care.
+Do not invent a C-like foreign block or spread unsafe assumptions through ordinary Musi code. For a C# reader, the trap is mapping Musi classes to object classes or service containers; Musi `class` is a typeclass-style behavior contract, not a CLR class with fields, constructors, and inheritance.
 
-## Pointer helpers
+## When this pays off
 
-Use `@std/ffi` pointer helpers when the native boundary gives you pointer-shaped values.
+Use this shape when a clock, driver, C library, host VM, or platform handle must cross into Musi. The C# instinct still helps here: Keep the C# habit of making api shape readable at the call site.
 
-{{snippet:csharp-ffi-pointer}}
+## Keep close
 
-Keep raw native work small. Convert it to ordinary Musi data before passing values deeper into the program.
+- [Unsafe and FFI](/learn/book/advanced/unsafe-and-ffi)
+- [Foreign](/learn/book/advanced/foreign)
+- [Runtime](/learn/book/effects-runtime/runtime)

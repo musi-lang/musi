@@ -1,39 +1,31 @@
 ---
 title: "Values, Functions, and Expressions"
-description: "Translate C++17 functions, expression habits, and named arguments into Musi expression-oriented bindings."
+description: "Read Values, Functions, and Expressions as a C++17 habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "C++ Developers"
 order: 2
 slug: "values-functions-expressions"
-summary: "C++ functions and call sites map to Musi let functions, expression bodies, and named calls."
+summary: "Translate the C++17 habit, then use the Musi Book for the full rule."
 ---
 
-# Values, Functions, and Expressions
+A C++ reader brings habits from RAII, overload sets, templates, references, optional values, exceptions, and object hierarchies. That helps with ownership stories, value categories, and compile-time abstractions, but the Musi page asks a narrower question: what contract should this local values and calls example make visible?
 
-C++17 often returns values through explicit `return` statements:
+{{compare:cpp17-values-functions-expressions}}
 
-```cpp
-auto total(const int base_price, const int fee) -> int {
-    return base_price + fee;
-}
+## Reading Values, Functions, and Expressions from C++17
 
-const auto answer = total(1200, 45);
-```
+On the Musi side, Musi lets a calculation be a `let`, a function, or a final expression without wrapping it in an object or framework first. Read the shared example through C++17 eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-Musi keeps the same input and output types, but the body is the produced value.
+## False friend
 
-{{snippet:cpp17-values-functions}}
+Do not preserve call ceremony just because the source language needs it for methods, receivers, overloads, or closures. For a C++ reader, the trap is turning every Musi value into a class-shaped design; Musi `class` is closer to a concept or trait than a C++ class; records/data store shape, instances satisfy behavior.
 
-C++ call sites depend on parameter order:
+## When this pays off
 
-```cpp
-auto render(const int port, const bool secure) -> int {
-    return port;
-}
+Use this shape when a receipt total, label, distance, or score is pure data moving through named calls. The C++17 instinct still helps here: Keep the C++ habit of asking which operation is generic and which value owns shape.
 
-const auto selected = render(8080, true);
-```
+## Keep close
 
-Musi can name arguments where the call benefits from visible roles.
-
-{{snippet:cpp17-named-calls}}
+- [Values and let](/learn/book/start/values-and-let)
+- [Functions](/learn/book/core/functions)
+- [Calls](/learn/book/core/calls)

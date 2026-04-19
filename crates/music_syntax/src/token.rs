@@ -26,6 +26,7 @@ pub enum TokenKind {
     // Keywords (grammar/Musi.abnf)
     KwAnd,
     KwAs,
+    KwAny,
     KwMatch,
     KwClass,
     KwComptime,
@@ -56,6 +57,7 @@ pub enum TokenKind {
     KwUnsafe,
     KwShl,
     KwShr,
+    KwSome,
     KwUsing,
     KwWhere,
     KwXor,
@@ -155,9 +157,10 @@ pub const TOKEN_PATTERNS: &[(&[u8], TokenKind)] = &[
     (b"_", TokenKind::Underscore),
 ];
 
-const KEYWORD_NAMES: [(&str, TokenKind, &str); 35] = [
+const KEYWORD_NAMES: [(&str, TokenKind, &str); 37] = [
     ("and", TokenKind::KwAnd, "`and`"),
     ("as", TokenKind::KwAs, "`as`"),
+    ("any", TokenKind::KwAny, "`any`"),
     ("match", TokenKind::KwMatch, "`match`"),
     ("class", TokenKind::KwClass, "`class`"),
     ("comptime", TokenKind::KwComptime, "`comptime`"),
@@ -188,6 +191,7 @@ const KEYWORD_NAMES: [(&str, TokenKind, &str); 35] = [
     ("unsafe", TokenKind::KwUnsafe, "`unsafe`"),
     ("shl", TokenKind::KwShl, "`shl`"),
     ("shr", TokenKind::KwShr, "`shr`"),
+    ("some", TokenKind::KwSome, "`some`"),
     ("using", TokenKind::KwUsing, "`using`"),
     ("where", TokenKind::KwWhere, "`where`"),
     ("xor", TokenKind::KwXor, "`xor`"),

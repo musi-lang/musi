@@ -23,7 +23,9 @@ music_sema = { path = "../music_sema" }
 music_syntax = { path = "../music_syntax" }
 serde = { workspace = true }
 serde_json = { workspace = true }
-thiserror = { workspace = true }
+
+[dev-dependencies]
+music_builtin = { path = "../music_builtin" }
 
 [lints]
 workspace = true

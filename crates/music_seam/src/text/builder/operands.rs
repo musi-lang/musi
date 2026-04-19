@@ -17,8 +17,10 @@ impl TextBuilder {
             OperandShape::Type => self.parse_type_operand(parts),
             OperandShape::Constant => self.parse_constant_operand(parts),
             OperandShape::Global => self.parse_global_operand(parts),
-            OperandShape::Method => self.parse_method_operand(parts),
-            OperandShape::WideMethodCaptures => self.parse_wide_method_captures_operand(parts),
+            OperandShape::Procedure => self.parse_procedure_operand(parts),
+            OperandShape::WideProcedureCaptures => {
+                self.parse_wide_procedure_captures_operand(parts)
+            }
             OperandShape::Foreign => self.parse_foreign_operand(parts),
             OperandShape::Effect => self.parse_effect_operand(parts),
             OperandShape::EffectId => self.parse_effect_id_operand(parts),
@@ -65,18 +67,24 @@ impl TextBuilder {
         Ok(Operand::Global(self.ensure_global_symbol(&name)))
     }
 
-    fn parse_method_operand(&mut self, parts: &[String]) -> AssemblyResult<Operand> {
-        let name = parse_symbol(must_get(parts.get(1), "method")?)?;
-        Ok(Operand::Method(self.ensure_method_symbol(&name)))
+    fn parse_procedure_operand(&mut self, parts: &[String]) -> AssemblyResult<Operand> {
+        let name = parse_symbol(must_get(parts.get(1), "procedure")?)?;
+        Ok(Operand::Procedure(self.ensure_procedure_symbol(&name)))
     }
 
-    fn parse_wide_method_captures_operand(&mut self, parts: &[String]) -> AssemblyResult<Operand> {
-        let name = parse_symbol(must_get(parts.get(1), "method")?)?;
-        let method = self.ensure_method_symbol(&name);
+    fn parse_wide_procedure_captures_operand(
+        &mut self,
+        parts: &[String],
+    ) -> AssemblyResult<Operand> {
+        let name = parse_symbol(must_get(parts.get(1), "procedure")?)?;
+        let procedure = self.ensure_procedure_symbol(&name);
         let captures = must_get(parts.get(2), "capture count")?
             .parse::<u8>()
             .map_err(|_| AssemblyError::TextParseFailed("invalid capture count".into()))?;
-        Ok(Operand::WideMethodCaptures { method, captures })
+        Ok(Operand::WideProcedureCaptures {
+            procedure,
+            captures,
+        })
     }
 
     fn parse_foreign_operand(&self, parts: &[String]) -> AssemblyResult<Operand> {

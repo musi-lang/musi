@@ -4,9 +4,8 @@ export const rustDeveloperPages = [
 	{
 		id: "musi-for-rust-developers",
 		partId: "developers",
-		path: "/docs/book/developers/overview",
+		path: "/docs/guides/rust/overview",
 		aliases: [
-			"/docs/book/developers/rust/overview",
 			"/docs/language/developers/rust",
 			"/learn/language/developers/rust",
 		],
@@ -16,9 +15,8 @@ export const rustDeveloperPages = [
 	{
 		id: "rust-values-functions",
 		partId: "developers",
-		path: "/docs/book/developers/values-functions",
+		path: "/docs/guides/rust/values-functions",
 		aliases: [
-			"/docs/book/developers/rust/values-functions",
 			"/docs/language/developers/rust/values-functions",
 			"/learn/language/developers/rust/values-functions",
 		],
@@ -28,9 +26,8 @@ export const rustDeveloperPages = [
 	{
 		id: "rust-mutation",
 		partId: "developers",
-		path: "/docs/book/developers/mutation",
+		path: "/docs/guides/rust/mutation",
 		aliases: [
-			"/docs/book/developers/rust/mutation",
 			"/docs/language/developers/rust/mutation",
 			"/learn/language/developers/rust/mutation",
 		],
@@ -40,9 +37,8 @@ export const rustDeveloperPages = [
 	{
 		id: "rust-records-structs",
 		partId: "developers",
-		path: "/docs/book/developers/records-structs",
+		path: "/docs/guides/rust/records-structs",
 		aliases: [
-			"/docs/book/developers/rust/records-structs",
 			"/docs/language/developers/rust/records-structs",
 			"/learn/language/developers/rust/records-structs",
 		],
@@ -52,9 +48,8 @@ export const rustDeveloperPages = [
 	{
 		id: "rust-enums-data",
 		partId: "developers",
-		path: "/docs/book/developers/enums-data",
+		path: "/docs/guides/rust/enums-data",
 		aliases: [
-			"/docs/book/developers/rust/enums-data",
 			"/docs/language/developers/rust/enums-data",
 			"/learn/language/developers/rust/enums-data",
 		],
@@ -64,9 +59,8 @@ export const rustDeveloperPages = [
 	{
 		id: "rust-traits-classes-laws",
 		partId: "developers",
-		path: "/docs/book/developers/traits-classes-laws",
+		path: "/docs/guides/rust/traits-classes-laws",
 		aliases: [
-			"/docs/book/developers/rust/traits-classes-laws",
 			"/docs/language/developers/rust/traits-classes-laws",
 			"/learn/language/developers/rust/traits-classes-laws",
 		],
@@ -76,9 +70,8 @@ export const rustDeveloperPages = [
 	{
 		id: "rust-generics",
 		partId: "developers",
-		path: "/docs/book/developers/generics",
+		path: "/docs/guides/rust/generics",
 		aliases: [
-			"/docs/book/developers/rust/generics",
 			"/docs/language/developers/rust/generics",
 			"/learn/language/developers/rust/generics",
 		],
@@ -88,9 +81,8 @@ export const rustDeveloperPages = [
 	{
 		id: "rust-results-effects",
 		partId: "developers",
-		path: "/docs/book/developers/results-effects",
+		path: "/docs/guides/rust/results-effects",
 		aliases: [
-			"/docs/book/developers/rust/results-effects",
 			"/docs/language/developers/rust/results-effects",
 			"/learn/language/developers/rust/results-effects",
 		],
@@ -100,9 +92,8 @@ export const rustDeveloperPages = [
 	{
 		id: "rust-modules-packages",
 		partId: "developers",
-		path: "/docs/book/developers/modules-packages",
+		path: "/docs/guides/rust/modules-packages",
 		aliases: [
-			"/docs/book/developers/rust/modules-packages",
 			"/docs/language/developers/rust/modules-packages",
 			"/learn/language/developers/rust/modules-packages",
 		],
@@ -112,9 +103,8 @@ export const rustDeveloperPages = [
 	{
 		id: "rust-unsafe-ffi",
 		partId: "developers",
-		path: "/docs/book/developers/unsafe-ffi",
+		path: "/docs/guides/rust/unsafe-ffi",
 		aliases: [
-			"/docs/book/developers/rust/unsafe-ffi",
 			"/docs/language/developers/rust/unsafe-ffi",
 			"/learn/language/developers/rust/unsafe-ffi",
 		],
@@ -124,9 +114,8 @@ export const rustDeveloperPages = [
 	{
 		id: "rust-testing-tooling",
 		partId: "developers",
-		path: "/docs/book/developers/testing-tooling",
+		path: "/docs/guides/rust/testing-tooling",
 		aliases: [
-			"/docs/book/developers/rust/testing-tooling",
 			"/docs/language/developers/rust/testing-tooling",
 			"/learn/language/developers/rust/testing-tooling",
 		],

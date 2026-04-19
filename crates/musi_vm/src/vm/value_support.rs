@@ -27,7 +27,7 @@ impl Vm {
                     .module(module_slot)
                     .map_or("", |module| module.program.string_text(*text));
                 let term = SyntaxTerm::parse(*shape, text).map_err(|detail| {
-                    VmError::new(VmErrorKind::SyntaxConstantInvalid {
+                    VmError::new(VmErrorKind::InvalidSyntaxConstant {
                         detail: detail.to_string().into(),
                     })
                 })?;

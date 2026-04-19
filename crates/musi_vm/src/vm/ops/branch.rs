@@ -35,15 +35,15 @@ impl Vm {
                         stack: VmStackKind::CallFrame,
                     })
                 })?;
-                let method = self
+                let procedure = self
                     .module(frame.module_slot)?
                     .program
-                    .loaded_method(frame.method)?
+                    .loaded_procedure(frame.procedure)?
                     .name
                     .clone();
                 let index = usize::try_from(index_raw).map_err(|_| {
-                    VmError::new(VmErrorKind::BranchTargetInvalid {
-                        method: method.clone(),
+                    VmError::new(VmErrorKind::InvalidBranchTarget {
+                        procedure: procedure.clone(),
                         label: None,
                         index: Some(index_raw),
                         len: Some(labels.len()),
@@ -54,8 +54,8 @@ impl Vm {
                     .or_else(|| labels.last())
                     .copied()
                     .ok_or_else(|| {
-                        VmError::new(VmErrorKind::BranchTargetInvalid {
-                            method,
+                        VmError::new(VmErrorKind::InvalidBranchTarget {
+                            procedure,
                             label: None,
                             index: Some(index_raw),
                             len: Some(labels.len()),

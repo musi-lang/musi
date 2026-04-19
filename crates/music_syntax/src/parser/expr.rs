@@ -130,6 +130,14 @@ impl Parser<'_> {
                 vec![op, SyntaxElementId::Node(operand)],
             ));
         }
+        if self.at_any(&[TokenKind::KwAny, TokenKind::KwSome]) {
+            let op = self.advance_element();
+            let operand = self.parse_type_expr(PREFIX_BP)?;
+            return Ok(self.builder.push_node_from_children(
+                SyntaxNodeKind::PrefixExpr,
+                vec![op, SyntaxElementId::Node(operand)],
+            ));
+        }
         self.parse_atom_expr()
     }
 
@@ -343,6 +351,8 @@ impl Parser<'_> {
                     | TokenKind::LBrace
                     | TokenKind::LBracket
                     | TokenKind::KwMut
+                    | TokenKind::KwAny
+                    | TokenKind::KwSome
             )
     }
 

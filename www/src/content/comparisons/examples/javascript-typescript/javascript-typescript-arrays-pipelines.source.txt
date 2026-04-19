@@ -1,0 +1,3 @@
+type TrafficLight = "red" | "yellow" | "green";
+
+const canWalk = (light: TrafficLight) => light === "green";

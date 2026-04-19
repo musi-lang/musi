@@ -28,6 +28,18 @@ where
         binding
     }
 
+    pub(super) fn alloc_binding_without_scope(
+        &mut self,
+        ident: Ident,
+        kind: NameBindingKind,
+    ) -> NameBindingId {
+        self.names.alloc_binding(NameBinding {
+            name: ident.name,
+            site: NameSite::new(self.source_id, ident.span),
+            kind,
+        })
+    }
+
     pub(super) fn lookup(&self, sym: Symbol) -> Option<NameBindingId> {
         for scope in self.scopes.iter().rev() {
             if let Some(id) = scope.names.get(&sym).copied() {

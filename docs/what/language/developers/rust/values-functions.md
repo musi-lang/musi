@@ -1,45 +1,31 @@
 ---
 title: "Values, Functions, and Final Expressions"
-description: "Translate Rust bindings, functions, and final expressions into Musi."
+description: "Read Values, Functions, and Final Expressions as a Rust habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Rust Developers"
 order: 2
 slug: "values-functions"
-summary: "Rust `let`, `fn`, and final-expression habits map to Musi `let` functions and expression results."
+summary: "Translate the Rust habit, then use the Musi Book for the full rule."
 ---
 
-Rust functions commonly end with an expression instead of an explicit `return`:
+A Rust reader brings habits from ownership, enums, traits, Result, modules, pattern matching, and explicit unsafe blocks. That helps with the type that carries the invariant, but the Musi page asks a narrower question: what contract should this local values and calls example make visible?
 
-```rust
-fn total(base: i32, fee: i32) -> i32 {
-    base + fee
-}
+{{compare:rust-values-functions}}
 
-let answer = total(1200, 45);
-answer
-```
+## Reading Values, Functions, and Final Expressions from Rust
 
-Musi uses the same expression-first idea, but function definitions are `let` bindings with parameters.
+On the Musi side, Musi lets a calculation be a `let`, a function, or a final expression without wrapping it in an object or framework first. Read the shared example through Rust eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-{{snippet:rust-values-functions}}
+## False friend
 
-`total` is a name bound to a function. `answer` is a name bound to the call result. The last expression is the value of the block or file.
+Do not preserve call ceremony just because the source language needs it for methods, receivers, overloads, or closures. For a Rust reader, the trap is expecting Musi syntax to mirror Rust even when the ideas are separated differently; Musi `class` is closest to a Rust trait plus law text; instances play the role of implementations for behavior.
 
-## Named arguments
+## When this pays off
 
-Rust readers often use struct fields or builder methods when positional calls become unclear. Musi can name call arguments directly:
+Use this shape when a receipt total, label, distance, or score is pure data moving through named calls. The Rust instinct still helps here: Keep the Rust habit of asking which type carries the invariant.
 
-```rust
-fn render(port: u16, secure: bool) -> u16 {
-    port
-}
+## Keep close
 
-let selected = render(8080, true);
-selected
-```
-
-The Musi equivalent can keep positional order or spell labels at the call site.
-
-{{snippet:rust-named-arguments}}
-
-Use named arguments when two values have the same type or when swapped order would be easy to miss.
+- [Values and let](/learn/book/start/values-and-let)
+- [Functions](/learn/book/core/functions)
+- [Calls](/learn/book/core/calls)

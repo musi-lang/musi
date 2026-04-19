@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { findWorkspaceLspBinary } from "./binary-selection.ts";
+import { findWorkspaceLspBinary } from "./binary/binary-selection.ts";
 import { CONFIG_DEFAULTS, getConfig } from "./config.ts";
 import {
 	getCargoBinDir,

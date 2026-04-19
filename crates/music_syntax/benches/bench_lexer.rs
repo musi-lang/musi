@@ -22,7 +22,7 @@ fn run_lexer_once(text: &str) -> usize {
 fn bench_lex_small_mixed(c: &mut Criterion) {
     let text = hint::black_box(
         r"
-/// doc
+--- doc
 let add = (+);
 let x = 1_000 + 2 * 3;
 let y = `hello ${x}`;
@@ -33,15 +33,15 @@ let y = `hello ${x}`;
 
 fn bench_lex_large_mixed_1mb(c: &mut Criterion) {
     let chunk = r"
-/// doc
+--- doc
 let add = (+);
 let mut counter = 0;
 counter := counter + 1;
 let x = 1_000 + 2 * 3;
 let y = `hello ${x}`;
 let z = `raw template`;
-// comment
-/* block comment */
+-- comment
+/- block comment -/
 ";
     let source = repeat_to_approx_bytes(chunk, 1_000_000);
     let text = hint::black_box(source.as_str());
@@ -60,7 +60,7 @@ fn bench_lex_long_string_1mb(c: &mut Criterion) {
 }
 
 fn bench_lex_trivia_heavy(c: &mut Criterion) {
-    let chunk = " \t  \n// line\n/// doc\n/* block */\n/** doc */\n\n";
+    let chunk = " \t  \n-- line\n--- doc\n/- block -/\n/-- doc -/\n\n";
     let source = repeat_to_approx_bytes(chunk, 1_000_000);
     let text = hint::black_box(source.as_str());
     _ = c.bench_function("bench_lex_trivia_heavy", |b| {

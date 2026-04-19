@@ -1,8 +1,5 @@
-import { Surface } from "./surface";
-
-export function OnThisPage(props: {
+export function OnThisPageNav(props: {
 	headings: Array<{ depth: number; id: string; text: string }>;
-	className?: string;
 	label?: string;
 }) {
 	const headings = props.headings.filter((heading) => heading.depth <= 3);
@@ -10,23 +7,19 @@ export function OnThisPage(props: {
 		return null;
 	}
 
+	const label = props.label ?? "Page sections";
 	return (
-		<Surface
-			className={`toc-panel${props.className ? ` ${props.className}` : ""}`}
-			tone="panel"
-		>
-			<div className="eyebrow">{props.label ?? "On this page"}</div>
-			<nav aria-label={props.label ?? "On this page"} className="toc-nav">
-				{headings.map((heading) => (
-					<a
-						key={heading.id}
-						href={`#${heading.id}`}
-						className={`toc-link${heading.depth === 3 ? " toc-link-child" : ""}`}
-					>
-						{heading.text}
-					</a>
-				))}
-			</nav>
-		</Surface>
+		<nav aria-label={label} className="mx-sidebar__nav">
+			{headings.map((heading) => (
+				<a
+					key={heading.id}
+					href={`#${heading.id}`}
+					className="mx-sidebar__link"
+					data-depth={heading.depth}
+				>
+					{heading.text}
+				</a>
+			))}
+		</nav>
 	);
 }

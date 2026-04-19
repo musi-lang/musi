@@ -36,8 +36,8 @@ bun run verify:lang
 
 What those commands cover:
 
-- `bun run check`: regenerate docs content, typecheck, and run Biome checks.
-- `bun run test`: regenerate docs content and run Vitest tests for website code and content generation.
+- `bun run check`: regenerate docs content, validate language docs inputs, typecheck, and run Biome checks.
+- `bun run test`: regenerate docs content, validate language docs inputs, and run Vitest tests for website code and content generation.
 - `bun run verify:lang`: build the static site and verify every generated HTML page has `<html lang="en">`.
 
 For Lighthouse accessibility audits, use a clean browser profile or incognito window with extensions disabled. Browser automation extensions can inject nodes such as `browser-mcp-container` or `data-mcp-root`; if DevTools shows those nodes, `html[lang]` warnings are audit-context noise, not shipped site markup.
@@ -53,7 +53,8 @@ Docs content is repo-backed. Markdown carries authored prose, TypeScript files c
 - Markdown files hold page copy.
 - `www/src/content/book/manifest.ts` controls routing, grouping, aliases, and order.
 - `www/src/content/snippet-registry.ts` and `www/src/content/examples/` provide code examples used by Markdown placeholders.
-- `www/scripts/generate-content.ts` renders docs into `www/src/generated-content.ts`.
+- `www/scripts/generate-content.ts` deterministically renders docs into `www/src/generated/rendered-docs.json` and `www/src/generated/rendered-snippets.json`.
+- `www/scripts/validate-language-docs.ts` validates frontmatter, placeholder references, and syntax-fence rules before generation.
 
 Rules for language docs:
 
@@ -97,7 +98,8 @@ The editor rejects paths outside the allowed docs roots.
 - `src/layout/`: shared shell, header, and docs sidebar.
 - `src/ui/`: site-owned primitives such as actions, surfaces, page headers, TOC, and theme controls.
 - `src/docs.ts` and `src/generated-content.ts`: generated docs route inventory and rendered HTML.
-- `scripts/generate-content.ts`: content generation entrypoint.
+- `scripts/generate-content.ts`: deterministic content generation entrypoint.
+- `scripts/validate-language-docs.ts`: language docs input validator used by generation.
 
 Astro owns document HTML, metadata, static routing, sitemap, robots, and 404 output. Preact is reserved for static-compatible components and small local islands when interaction needs state.
 

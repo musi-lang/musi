@@ -1,41 +1,31 @@
 ---
 title: "Names, Mutation, and Fresh Values"
-description: "Translate Python rebinding and mutable habits into Musi mutable values and fresh bindings."
+description: "Read Names, Mutation, and Fresh Values as a Python habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Python Developers"
 order: 4
 slug: "names-mutation"
-summary: "Use mut for real state changes and fresh names for ordinary derived values."
+summary: "Translate the Python habit, then use the Musi Book for the full rule."
 ---
 
-Python lets a name point at a new value later:
+A Python reader brings habits from names, dictionaries, classes, protocols, exceptions, None, imports, and duck typing. That helps with code around domain words before machinery, but the Musi page asks a narrower question: what contract should this local values and calls example make visible?
 
-```python
-visits = 0
-visits = visits + 1
+{{compare:python-names-mutation}}
 
-next_visits = visits + 1
-next_visits
-```
+## Reading Names, Mutation, and Fresh Values from Python
 
-Musi makes real mutation visible at the value that can change.
+On the Musi side, Musi lets a calculation be a `let`, a function, or a final expression without wrapping it in an object or framework first. Read the shared example through Python eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-{{snippet:python-names-mutation}}
+## False friend
 
-Think of `mut` as a counter on a desk. You can change the number on that counter, but readers can see which counter is allowed to move.
+Do not preserve call ceremony just because the source language needs it for methods, receivers, overloads, or closures. For a Python reader, the trap is trusting runtime convention where Musi expects a visible type or effect; Musi `class` is closer to an explicit protocol/typeclass than a Python class with attributes and methods.
 
-## Fresh names first
+## When this pays off
 
-When a step is just a derived value, prefer a new name:
+Use this shape when a receipt total, label, distance, or score is pure data moving through named calls. The Python instinct still helps here: Keep the Python habit of naming the real-world thing first.
 
-```python
-base = 1200
-total = base + 45
-total
-```
+## Keep close
 
-Musi reads that style directly.
-
-{{snippet:python-fresh-value}}
-
-Use mutation for counters, cursors, buffers, and small accumulators. Use fresh names when the next value is another fact in the calculation.
+- [Mutation](/learn/book/start/mutation)
+- [Values and let](/learn/book/start/values-and-let)
+- [Blocks and expressions](/learn/book/start/blocks-and-expressions)

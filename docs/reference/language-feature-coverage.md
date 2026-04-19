@@ -14,7 +14,7 @@ Each feature should have one current-language explanation and at least one snipp
 - Literals, number forms, strings, booleans, runes, and templates: `core/literals.md`, `advanced/templates-and-splices.md`
 - Tuples and unit: `core/tuples-and-unit.md`
 - Operators, ranges, and fixity/operator values: `core/operators.md`, `core/ranges.md`, `advanced/operator-forms.md`
-- Functions, lambdas, calls, named arguments, generic calls, pipelines, and methods: `core/functions.md`, `core/lambdas.md`, `core/calls.md`, `core/methods.md`
+- Functions, lambdas, calls, named arguments, generic calls, pipelines, and procedures: `core/functions.md`, `core/lambdas.md`, `core/calls.md`, `core/procedures.md`
 
 ## Data
 

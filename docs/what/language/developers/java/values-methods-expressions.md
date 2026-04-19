@@ -1,38 +1,31 @@
 ---
 title: "Values, Methods, and Expressions"
-description: "Translate Java methods and expression habits into Musi expression-bodied functions and named calls."
+description: "Read Values, Methods, and Expressions as a Java habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Java Developers"
 order: 2
 slug: "values-methods-expressions"
-summary: "Use expression bodies, positional calls, and named calls for readable functions."
+summary: "Translate the Java habit, then use the Musi Book for the full rule."
 ---
 
-# Values, Methods, and Expressions
+A Java reader brings habits from packages, classes, records, interfaces, exceptions, annotations, streams, and long-lived APIs. That helps with contracts, visibility, and maintainable names, but the Musi page asks a narrower question: what contract should this local values and calls example make visible?
 
-Java methods usually wrap work in a statement body:
+{{compare:java-values-methods-expressions}}
 
-```java
-static int total(int basePrice, int fee) {
-    return basePrice + fee;
-}
+## Reading Values, Methods, and Expressions from Java
 
-int answer = total(1200, 45);
-```
+On the Musi side, Musi lets a calculation be a `let`, a function, or a final expression without wrapping it in an object or framework first. Read the shared example through Java eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-Musi functions name parameters and output type directly, and the body expression is the result.
+## False friend
 
-{{snippet:java-values-methods-expressions}}
+Do not preserve call ceremony just because the source language needs it for methods, receivers, overloads, or closures. For a Java reader, the trap is reading Musi `class` as a nominal object type with constructors and fields; Musi `class` is a behavior contract supplied by instances; records and data model object shape.
 
-## Named calls
+## When this pays off
 
-Java call sites are positional:
+Use this shape when a receipt total, label, distance, or score is pure data moving through named calls. The Java instinct still helps here: Keep the Java habit of naming APIs for future readers.
 
-```java
-int selected = render(8080, true);
-```
+## Keep close
 
-That is compact, but numbers and booleans can become hard to read. Musi supports named calls when labels help.
-
-{{snippet:java-named-calls}}
-
+- [Values and let](/learn/book/start/values-and-let)
+- [Functions](/learn/book/core/functions)
+- [Calls](/learn/book/core/calls)

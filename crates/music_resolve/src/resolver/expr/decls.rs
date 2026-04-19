@@ -1,6 +1,7 @@
 use super::*;
 use crate::resolver::util::is_expr_or_ty;
-use music_hir::{HirBinder, HirLetReceiver, HirPrefixOp, HirVariantFieldDef};
+use music_base::Span;
+use music_hir::{HirBinder, HirParam, HirReceiverDecl, HirVariantFieldDef};
 
 impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src>
 where
@@ -82,7 +83,9 @@ where
         let merged_attrs = self.merge_attrs(mods.attrs.clone(), member_attrs);
         let mods = mods.with_attrs(merged_attrs);
 
-        let name_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
+        let name_tok = node
+            .child_tokens()
+            .find(|t| Self::is_ident_token_kind(t.kind()));
         let name = self.intern_ident_token_or_placeholder(name_tok, node.span());
         let _ = self.insert_binding(name, NameBindingKind::Let);
 
@@ -108,6 +111,7 @@ where
                 mods: HirLetMods::new(false),
                 pat,
                 type_params,
+                receiver: None,
                 has_param_clause,
                 params,
                 constraints,
@@ -155,7 +159,9 @@ where
     fn lower_variant_def(&mut self, node: SyntaxNode<'tree, 'src>) -> HirVariantDef {
         let origin = self.origin_node(node);
         let attrs = self.lower_attrs(node);
-        let name_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
+        let name_tok = node
+            .child_tokens()
+            .find(|t| Self::is_ident_token_kind(t.kind()));
         let name = self.intern_ident_token_or_placeholder(name_tok, node.span());
 
         let fields = node
@@ -197,7 +203,9 @@ where
         for child in node.child_nodes() {
             match child.kind() {
                 SyntaxNodeKind::VariantFieldDef => {
-                    let name_tok = child.child_tokens().find(|t| t.kind() == TokenKind::Ident);
+                    let name_tok = child
+                        .child_tokens()
+                        .find(|t| Self::is_ident_token_kind(t.kind()));
                     let name = name_tok.and_then(|tok| self.intern_ident_token(tok));
                     let ty = match child
                         .child_nodes()
@@ -221,7 +229,9 @@ where
     fn lower_field_def(&mut self, node: SyntaxNode<'tree, 'src>) -> HirFieldDef {
         let origin = self.origin_node(node);
         let attrs = self.lower_attrs(node);
-        let name_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
+        let name_tok = node
+            .child_tokens()
+            .find(|t| Self::is_ident_token_kind(t.kind()));
         let name = self.intern_ident_token_or_placeholder(name_tok, node.span());
 
         let mut exprs = node
@@ -299,7 +309,7 @@ where
 
         let name_tok = node
             .child_tokens()
-            .find(|t| matches!(t.kind(), TokenKind::Ident | TokenKind::OpIdent));
+            .find(|t| Self::is_name_token_kind(t.kind()));
         let name = self.intern_ident_token_or_placeholder(name_tok, node.span());
         let _ = self.insert_binding(name, NameBindingKind::Let);
 
@@ -319,14 +329,15 @@ where
 
     pub(super) fn lower_let_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
+        if child_of_kind(node, SyntaxNodeKind::ReceiverMethodHead).is_some() {
+            return self.lower_receiver_method_let(node);
+        }
 
         let is_rec = node.child_tokens().any(|t| t.kind() == TokenKind::KwRec);
         let pat_node = node.child_nodes().find(|n| n.kind().is_pat());
-        let binders = match (pat_node, self.receiver_member_ident(node)) {
-            (Some(pat), _) if pat.kind().is_pat() => self.collect_pat_binders(pat),
-            (_, Some(member)) => vec![member],
-            _ => Vec::new(),
-        };
+        let binders = pat_node
+            .filter(|pat| pat.kind().is_pat())
+            .map_or_else(Vec::new, |pat| self.collect_pat_binders(pat));
 
         let mut pending = Vec::<(Ident, NameBindingId)>::new();
         for b in binders {
@@ -347,16 +358,9 @@ where
 
         self.push_scope();
         let type_params = self.lower_let_type_params(node);
-        let receiver = self.lower_let_receiver(node);
-        let mods = receiver.map_or_else(
-            || HirLetMods::new(is_rec),
-            |(receiver, _)| HirLetMods::new(is_rec).with_receiver(receiver),
-        );
-        if let Some(receiver) = mods.receiver {
-            let _ = self.insert_binding(receiver.binder, NameBindingKind::Let);
-        }
+        let mods = HirLetMods::new(is_rec);
         let has_param_clause = child_of_kind(node, SyntaxNodeKind::ParamList).is_some();
-        let params = self.lower_let_params_clause(node, mods.receiver);
+        let params = self.lower_let_params_clause(node);
         let constraints = self.lower_constraints_clause(node);
         let effects = child_of_kind(node, SyntaxNodeKind::EffectSet)
             .map(|effect_set| self.lower_effect_set(effect_set));
@@ -369,13 +373,8 @@ where
             Some(expr) => self.lower_expr(expr),
             None => self.error_expr(origin),
         };
-        let pat = if let Some(pat_node) = pat_node.filter(|n| n.kind().is_pat()) {
+        let pat = if let Some(pat_node) = pat_node.filter(|node| node.kind().is_pat()) {
             self.lower_pat(pat_node)
-        } else if let Some((_, member)) = receiver {
-            self.store.alloc_pat(HirPat::new(
-                HirOrigin::new(self.source_id, member.span),
-                HirPatKind::Bind { name: member },
-            ))
         } else {
             self.store.alloc_pat(HirPat::new(origin, HirPatKind::Error))
         };
@@ -395,6 +394,7 @@ where
                 mods,
                 pat,
                 type_params,
+                receiver: None,
                 has_param_clause,
                 params,
                 constraints,
@@ -405,35 +405,89 @@ where
         )
     }
 
-    fn lower_let_receiver(
-        &mut self,
-        node: SyntaxNode<'tree, 'src>,
-    ) -> Option<(HirLetReceiver, Ident)> {
-        let receiver_node = child_of_kind(node, SyntaxNodeKind::ReceiverSpec)?;
-        let mut names = receiver_node
-            .child_tokens()
-            .filter(|token| token.kind() == TokenKind::Ident);
-        let binder = self.intern_ident_token_or_placeholder(names.next(), receiver_node.span());
-        let member = self.intern_ident_token_or_placeholder(names.next(), receiver_node.span());
-        let ty = self.lower_opt_expr(
-            self.origin_node(receiver_node),
-            receiver_node
-                .child_nodes()
-                .find(|child| is_expr_or_ty(child.kind())),
-        );
-        let is_mut = receiver_node
-            .child_tokens()
-            .any(|token| token.kind() == TokenKind::KwMut);
-        Some((HirLetReceiver::new(is_mut, binder, ty, member), member))
+    fn lower_receiver_method_let(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
+        let origin = self.origin_node(node);
+        let is_rec = node.child_tokens().any(|t| t.kind() == TokenKind::KwRec);
+        let head = child_of_kind(node, SyntaxNodeKind::ReceiverMethodHead);
+        let (receiver_name, method_name) = self.receiver_method_names(head, node.span());
+        let _ = self.alloc_binding_without_scope(method_name, NameBindingKind::AttachedMethod);
+
+        self.push_scope();
+        let type_params = self.lower_let_type_params(node);
+        let receiver_ty_node =
+            head.and_then(|head| head.child_nodes().find(|child| is_expr_or_ty(child.kind())));
+        let receiver_ty = match receiver_ty_node {
+            Some(ty) => self.lower_expr(ty),
+            None => self.error_expr(origin),
+        };
+        let _ = self.insert_binding(receiver_name, NameBindingKind::Param);
+        let mut params = vec![HirParam::new(receiver_name, Some(receiver_ty), None, false)];
+        if let Some(list) = child_of_kind(node, SyntaxNodeKind::ParamList) {
+            let lowered = self.lower_param_list(list);
+            params.extend(self.store.params.get(lowered).to_vec());
+        }
+        let params = self.store.params.alloc_from_iter(params);
+        let constraints = self.lower_constraints_clause(node);
+        let effects = child_of_kind(node, SyntaxNodeKind::EffectSet)
+            .map(|effect_set| self.lower_effect_set(effect_set));
+        let mut exprs = node
+            .child_nodes()
+            .filter(|child| is_expr_or_ty(child.kind()));
+        let sig = self.lower_optional_expr_clause(node, TokenKind::Colon, &mut exprs);
+        let value = match exprs.last() {
+            Some(expr) => self.lower_expr(expr),
+            None => self.error_expr(origin),
+        };
+        self.pop_scope();
+
+        let pat = self
+            .store
+            .alloc_pat(HirPat::new(origin, HirPatKind::Bind { name: method_name }));
+        let receiver = Some(HirReceiverDecl::new(
+            receiver_name,
+            receiver_ty,
+            method_name,
+        ));
+        self.alloc_expr(
+            origin,
+            HirExprKind::Let {
+                mods: HirLetMods::new(is_rec),
+                pat,
+                type_params,
+                receiver,
+                has_param_clause: true,
+                params,
+                constraints,
+                effects,
+                sig,
+                value,
+            },
+        )
     }
 
-    fn receiver_member_ident(&mut self, node: SyntaxNode<'tree, 'src>) -> Option<Ident> {
-        let receiver_node = child_of_kind(node, SyntaxNodeKind::ReceiverSpec)?;
-        let mut names = receiver_node
+    fn receiver_method_names(
+        &mut self,
+        head: Option<SyntaxNode<'tree, 'src>>,
+        fallback_span: Span,
+    ) -> (Ident, Ident) {
+        let Some(head) = head else {
+            let ident = self.placeholder_ident(fallback_span);
+            return (ident, ident);
+        };
+        let idents = head
             .child_tokens()
-            .filter(|token| token.kind() == TokenKind::Ident);
-        let _ = names.next()?;
-        Some(self.intern_ident_token_or_placeholder(names.next(), receiver_node.span()))
+            .filter(|token| Self::is_ident_token_kind(token.kind()))
+            .filter_map(|token| self.intern_ident_token(token))
+            .collect::<Vec<_>>();
+        let receiver = idents
+            .first()
+            .copied()
+            .unwrap_or_else(|| self.placeholder_ident(head.span()));
+        let method = idents
+            .last()
+            .copied()
+            .unwrap_or_else(|| self.placeholder_ident(head.span()));
+        (receiver, method)
     }
 
     fn lower_let_type_params(&mut self, node: SyntaxNode<'tree, 'src>) -> SliceRange<HirBinder> {
@@ -448,31 +502,8 @@ where
         self.store.binders.alloc_from_iter(params)
     }
 
-    fn lower_let_params_clause(
-        &mut self,
-        node: SyntaxNode<'tree, 'src>,
-        receiver: Option<HirLetReceiver>,
-    ) -> SliceRange<HirParam> {
+    fn lower_let_params_clause(&mut self, node: SyntaxNode<'tree, 'src>) -> SliceRange<HirParam> {
         let mut params = Vec::new();
-        if let Some(receiver) = receiver {
-            let receiver_ty = if receiver.is_mut {
-                self.alloc_expr(
-                    HirOrigin::new(self.source_id, receiver.binder.span),
-                    HirExprKind::Prefix {
-                        op: HirPrefixOp::Mut,
-                        expr: receiver.ty,
-                    },
-                )
-            } else {
-                receiver.ty
-            };
-            params.push(HirParam::new(
-                receiver.binder,
-                Some(receiver_ty),
-                None,
-                false,
-            ));
-        }
         if let Some(list) = child_of_kind(node, SyntaxNodeKind::ParamList) {
             let lowered = self.lower_param_list(list);
             params.extend(self.store.params.get(lowered).to_vec());

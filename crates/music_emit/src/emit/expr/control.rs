@@ -1,7 +1,7 @@
 use super::super::*;
 use crate::EmitDiagKind;
 
-impl MethodEmitter<'_, '_> {
+impl ProcedureEmitter<'_, '_> {
     pub(super) fn compile_binary(
         &mut self,
         op: &IrBinaryOp,
@@ -35,7 +35,7 @@ impl MethodEmitter<'_, '_> {
                     self.module_key,
                     &left.origin,
                     EmitDiagKind::UnsupportedBinaryOperator,
-                    format!("binary operator `{name}` has no emitted form"),
+                    format!("unsupported binary operator `{name}`"),
                 );
                 Opcode::CmpEq
             }
@@ -149,7 +149,7 @@ fn pattern_variantish(pattern: &IrCasePattern) -> Option<Variantish<'_>> {
     }
 }
 
-impl MethodEmitter<'_, '_> {
+impl ProcedureEmitter<'_, '_> {
     fn compile_case_variant_dispatch(
         &mut self,
         scrutinee_slot: u16,
@@ -234,7 +234,7 @@ fn variant_tags_are_dense(arms: &[IrMatchArm]) -> bool {
         })
 }
 
-impl MethodEmitter<'_, '_> {
+impl ProcedureEmitter<'_, '_> {
     fn emit_sparse_variant_dispatch(
         &mut self,
         scrutinee_slot: u16,
@@ -287,7 +287,7 @@ fn case_dispatch_origin(arms: &[IrMatchArm]) -> IrOrigin {
     )
 }
 
-impl MethodEmitter<'_, '_> {
+impl ProcedureEmitter<'_, '_> {
     fn emit_variant_dispatch_table(
         &mut self,
         scrutinee_slot: u16,
@@ -326,7 +326,7 @@ fn group_variant_arms_by_tag(arms: &[IrMatchArm], variant_count: u16) -> Vec<Vec
     out
 }
 
-impl MethodEmitter<'_, '_> {
+impl ProcedureEmitter<'_, '_> {
     fn emit_variant_dispatch_tag_blocks(
         &mut self,
         scrutinee_slot: u16,
@@ -368,7 +368,7 @@ impl MethodEmitter<'_, '_> {
     }
 }
 
-impl MethodEmitter<'_, '_> {
+impl ProcedureEmitter<'_, '_> {
     fn emit_match_arms(
         &mut self,
         scrutinee_slot: u16,
@@ -392,7 +392,7 @@ impl MethodEmitter<'_, '_> {
     }
 }
 
-impl MethodEmitter<'_, '_> {
+impl ProcedureEmitter<'_, '_> {
     fn emit_case_arm<F>(
         &mut self,
         next_label: u16,
@@ -402,7 +402,7 @@ impl MethodEmitter<'_, '_> {
         diags: &mut EmitDiagList,
         mut compile_pattern: F,
     ) where
-        F: FnMut(&mut MethodEmitter<'_, '_>, u16, &mut EmitDiagList) -> bool,
+        F: FnMut(&mut ProcedureEmitter<'_, '_>, u16, &mut EmitDiagList) -> bool,
     {
         if !compile_pattern(self, next_label, diags) {
             return;
@@ -411,7 +411,7 @@ impl MethodEmitter<'_, '_> {
     }
 }
 
-impl MethodEmitter<'_, '_> {
+impl ProcedureEmitter<'_, '_> {
     fn emit_case_arm_body(
         &mut self,
         next_label: u16,
@@ -438,7 +438,7 @@ impl MethodEmitter<'_, '_> {
     }
 }
 
-impl MethodEmitter<'_, '_> {
+impl ProcedureEmitter<'_, '_> {
     fn compile_case_pattern(
         &mut self,
         pattern: &IrCasePattern,
@@ -485,7 +485,7 @@ impl MethodEmitter<'_, '_> {
     }
 }
 
-impl MethodEmitter<'_, '_> {
+impl ProcedureEmitter<'_, '_> {
     fn compile_case_lit(
         &mut self,
         scrutinee_slot: u16,
@@ -517,7 +517,7 @@ impl MethodEmitter<'_, '_> {
     }
 }
 
-impl MethodEmitter<'_, '_> {
+impl ProcedureEmitter<'_, '_> {
     fn compile_case_variant_pattern(
         &mut self,
         scrutinee_slot: u16,
@@ -542,7 +542,7 @@ impl MethodEmitter<'_, '_> {
     }
 }
 
-impl MethodEmitter<'_, '_> {
+impl ProcedureEmitter<'_, '_> {
     fn compile_indexed_item(&mut self, scrutinee_slot: u16, index: usize, opcode: Opcode) -> u16 {
         self.code.push(CodeEntry::Instruction(Instruction::new(
             Opcode::LdLoc,
@@ -562,7 +562,7 @@ impl MethodEmitter<'_, '_> {
     }
 }
 
-impl MethodEmitter<'_, '_> {
+impl ProcedureEmitter<'_, '_> {
     fn compile_sequence_patterns(
         &mut self,
         scrutinee_slot: u16,
@@ -591,7 +591,7 @@ impl MethodEmitter<'_, '_> {
     }
 }
 
-impl MethodEmitter<'_, '_> {
+impl ProcedureEmitter<'_, '_> {
     fn compile_projected_patterns(
         &mut self,
         scrutinee_slot: u16,
@@ -610,7 +610,7 @@ impl MethodEmitter<'_, '_> {
     }
 }
 
-impl MethodEmitter<'_, '_> {
+impl ProcedureEmitter<'_, '_> {
     fn compile_record_patterns(
         &mut self,
         scrutinee_slot: u16,
@@ -628,7 +628,7 @@ impl MethodEmitter<'_, '_> {
     }
 }
 
-impl MethodEmitter<'_, '_> {
+impl ProcedureEmitter<'_, '_> {
     fn compile_record_item(&mut self, scrutinee_slot: u16, index: u16) -> u16 {
         self.code.push(CodeEntry::Instruction(Instruction::new(
             Opcode::LdLoc,
@@ -648,7 +648,7 @@ impl MethodEmitter<'_, '_> {
     }
 }
 
-impl MethodEmitter<'_, '_> {
+impl ProcedureEmitter<'_, '_> {
     fn compile_variant_payload_patterns(
         &mut self,
         scrutinee_slot: u16,
@@ -673,7 +673,7 @@ impl MethodEmitter<'_, '_> {
     }
 }
 
-impl MethodEmitter<'_, '_> {
+impl ProcedureEmitter<'_, '_> {
     fn compile_variant_tag_match(
         &mut self,
         scrutinee_slot: u16,
@@ -701,7 +701,7 @@ impl MethodEmitter<'_, '_> {
     }
 }
 
-impl MethodEmitter<'_, '_> {
+impl ProcedureEmitter<'_, '_> {
     fn resolve_variant_data_ty(
         &self,
         data_key: &DefinitionKey,
@@ -723,7 +723,7 @@ impl MethodEmitter<'_, '_> {
     }
 }
 
-impl MethodEmitter<'_, '_> {
+impl ProcedureEmitter<'_, '_> {
     fn store_binding_value(&mut self, scrutinee_slot: u16, binding: NameBindingId) {
         let slot = self.ensure_local_slot(binding);
         self.code.push(CodeEntry::Instruction(Instruction::new(

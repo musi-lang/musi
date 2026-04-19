@@ -1,0 +1,120 @@
+catalog seam music_seam SeamDiagKind crates/music_seam/src/diag_catalog_gen.rs
+
+diag ArtifactValidationFailed 5400
+  message "artifact validation failed (`{source}`)"
+  primary "artifact validation failed"
+
+diag InvalidBinaryHeader 5401
+  message "invalid binary header"
+  primary "invalid binary header"
+
+diag UnsupportedBinaryVersion 5402
+  message "unsupported binary version `{version}`"
+  primary "unsupported binary version `{version}`"
+
+diag UnknownSectionTag 5403
+  message "unknown section tag `{tag}`"
+  primary "unknown section tag `{tag}`"
+
+diag BinaryPayloadTruncated 5404
+  message "binary payload truncated"
+  primary "binary payload truncated"
+
+diag UnknownOpcode 5405
+  message "unknown opcode `{opcode}`"
+  primary "unknown opcode `{opcode}`"
+
+diag TextParseFailed 5406
+  message "text parse failed (`{source}`)"
+  primary "text parse failed"
+
+diag InvalidReference 5407
+  message "table reference `{table}` out of bounds"
+  primary "table reference `{table}` out of bounds"
+
+diag DuplicateLabel 5408
+  message "duplicate label in procedure `{procedure}`"
+  primary "duplicate label in procedure `{procedure}`"
+
+diag MissingLabel 5409
+  message "missing label reference in procedure `{procedure}`"
+  primary "missing label reference in procedure `{procedure}`"
+
+diag InvalidEffectOp 5410
+  message "invalid effect operation reference"
+  primary "invalid effect operation reference"
+
+diag OperandShapeMismatch 5411
+  message "opcode `{opcode}` operand shape mismatch"
+  primary "opcode `{opcode}` operand shape mismatch"
+
+diag HilMissingEntryBlock 5412
+  message "missing entry block in HIL function `{function}`"
+  primary "missing entry block in HIL function `{function}`"
+
+diag HilDuplicateBlock 5413
+  message "duplicate block `{block}` in HIL function `{function}`"
+  primary "duplicate HIL block `{block}`"
+
+diag HilDuplicateValue 5414
+  message "HIL value `{value}` defined more than once"
+  primary "duplicate HIL value `{value}`"
+
+diag HilUndefinedValue 5415
+  message "HIL value `{value}` used before definition"
+  primary "HIL value `{value}` undefined"
+
+diag HilTypeMismatch 5416
+  message "HIL value `{value}` expected `{expected}`, found `{found}`"
+  primary "HIL value `{value}` type mismatch"
+
+diag HilMissingBlockTarget 5417
+  message "missing HIL branch target `{target}`"
+  primary "missing HIL branch target `{target}`"
+
+diag HilReturnTypeMismatch 5418
+  message "HIL return expected `{expected}`, found `{found}`"
+  primary "HIL return type mismatch"
+
+diag HilReturnValueMissing 5419
+  message "missing HIL return value for result `{expected}`"
+  primary "missing HIL return value"
+
+diag HilReturnValueUnexpected 5420
+  message "HIL return value unexpected for unit result"
+  primary "HIL return value unexpected"
+
+diag HilCapabilityRequired 5421
+  message "HIL capability `{capability}` required"
+  primary "HIL capability `{capability}` required"
+
+map assembly_error_kind crate::AssemblyError required
+  case "ArtifactValidationFailed(_)" ArtifactValidationFailed
+  case "InvalidBinaryHeader" InvalidBinaryHeader
+  case "UnsupportedBinaryVersion(_)" UnsupportedBinaryVersion
+  case "UnknownSectionTag(_)" UnknownSectionTag
+  case "BinaryPayloadTruncated" BinaryPayloadTruncated
+  case "UnknownOpcode(_)" UnknownOpcode
+  case "TextParseFailed(_)" TextParseFailed
+end
+
+map artifact_error_kind crate::ArtifactError required
+  case "InvalidReference { .. }" InvalidReference
+  case "DuplicateLabel { .. }" DuplicateLabel
+  case "MissingLabel { .. }" MissingLabel
+  case "InvalidEffectOp" InvalidEffectOp
+  case "OperandShapeMismatch { .. }" OperandShapeMismatch
+end
+
+map hil_verify_error_kind crate::HilVerifyError required
+  case "MissingEntryBlock { .. }" HilMissingEntryBlock
+  case "DuplicateBlock { .. }" HilDuplicateBlock
+  case "DuplicateValue { .. }" HilDuplicateValue
+  case "UndefinedValue { .. }" HilUndefinedValue
+  case "TypeMismatch { .. }" HilTypeMismatch
+  case "MissingBlockTarget { .. }" HilMissingBlockTarget
+  case "ReturnTypeMismatch { .. }" HilReturnTypeMismatch
+  case "ReturnValueMissing { .. }" HilReturnValueMissing
+  case "ReturnValueUnexpected" HilReturnValueUnexpected
+  case "CapabilityRequired { .. }" HilCapabilityRequired
+end

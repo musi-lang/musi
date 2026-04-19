@@ -7,17 +7,20 @@ order: 13
 slug: "arrays-and-slices"
 summary: "Store ordered values and learn where slices fit."
 ---
-
-Arrays and slices hold ordered values. Use them when position or sequence matters more than a field name.
+Arrays and slices hold ordered collections. They fit lists of people in a queue, payments on a statement, animals in a shelter, or checkpoints on a route.
 
 {{snippet:chapter-arrays-and-slices}}
 
-## Reading Model
+Order is part of the meaning. If the order does not matter, the collection may still be an array for convenience, but the code should not rely on accidental positions.
 
-Read the example from top to bottom. The first visible name gives the reader a handle, the following expressions show how values move, and the final expression shows what leaves the example.
+## Working with many values
 
-## Practical Rule
+Most collection code asks one of a few questions: transform every item, keep the matching items, find one item, or combine the items into a summary. Name the helper functions after those questions.
 
-Use this form when it makes value movement clearer than copying habits from another language. Prefer the smallest form that still tells the reader where names, types, effects, and boundaries live.
+## Indexes are fragile
 
-Continue to [Patterns](/learn/book/data/modeling/patterns).
+An index is useful when position is the rule, such as the third seat or the next checkpoint. If the position only happens to work today, prefer a search by field or a named lookup.
+
+Data chapters teach the shape of a room before anyone moves through it. A record is a labeled card, an array is an ordered row, a variant is a set of named doors, and a pattern is a safe way to open one door at a time.
+
+Most data bugs start when one shape is asked to mean too many things. If a value can be absent, use an absent-value shape. If a value has named parts, use a record. If a value can be one of several cases, use data variants.

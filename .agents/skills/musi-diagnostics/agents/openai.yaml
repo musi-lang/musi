@@ -1,0 +1,4 @@
+interface:
+  display_name: "Musi Diagnostics"
+  short_description: "Write precise Musi compiler diagnostics"
+  default_prompt: "Use this skill when adding or reviewing Musi diagnostics."

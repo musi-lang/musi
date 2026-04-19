@@ -1,33 +1,31 @@
 ---
 title: "Null, Option, and Result"
-description: "Translate C# nullable reference habits into Musi Option and Result values."
+description: "Read Null, Option, and Result as a C# habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "C# Developers"
 order: 7
 slug: "null-option-result"
-summary: "Use Option for maybe-present values and Result for success-or-error data."
+summary: "Translate the C# habit, then use the Musi Book for the full rule."
 ---
 
-C# nullable references make absence visible in the type:
+A C# reader brings habits from nullable flow analysis, records, LINQ, async tasks, extension methods, interfaces, namespaces, and attributes. That helps with domain code through named APIs and tooling feedback, but the Musi page asks a narrower question: what contract should this absence and failure branches example make visible?
 
-```csharp
-static int? LookupPort(string name) =>
-    name == "admin" ? 9000 : null;
+{{compare:csharp-null-option-result}}
 
-var port = LookupPort("web") ?? 8080;
-port;
-```
+## Reading Null, Option, and Result from C#
 
-Musi uses `Option` to make the same absence explicit.
+On the Musi side, Musi uses `option.someOf` and `option.noneOf` when absence is expected, so callers handle the empty branch deliberately. Read the shared example through C# eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-{{snippet:csharp-null-option}}
+## False friend
 
-The function reports whether a value exists. The caller chooses the fallback.
+Do not translate null, nil, None, or undefined as a quiet ordinary value. For a C# reader, the trap is mapping Musi classes to object classes or service containers; Musi `class` is a typeclass-style behavior contract, not a CLR class with fields, constructors, and inheritance.
 
-## Result for ordinary failure
+## When this pays off
 
-When a C# API would return a success value or an error value, Musi can use `Result`.
+Use Option when a badge, ticket, receipt, search result, or lookup may honestly be missing. The C# instinct still helps here: Keep the C# habit of making api shape readable at the call site.
 
-{{snippet:csharp-result-value}}
+## Keep close
 
-Use `Option` for maybe-present values. Use `Result` when the failure carries information.
+- [Data definitions](/learn/book/data/data-definitions)
+- [Patterns](/learn/book/data/patterns)
+- [Effects](/learn/book/effects-runtime/effects)

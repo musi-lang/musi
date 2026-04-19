@@ -10,6 +10,7 @@ Current public entrypoints by crate. Keep this list high-signal. Do not mirror e
 ## Compiler libraries
 
 - `music_syntax` — lex/parse entrypoints and syntax tree exports
+- `music_builtin` — builtin type and intrinsic catalog used by compiler/runtime layers
 - `music_resolve` — resolved module model
 - `music_sema` — `check_module`, semantic surface, diagnostics, effect rows
 - `music_ir` — IR model and sema-to-IR lowering
@@ -18,7 +19,7 @@ Current public entrypoints by crate. Keep this list high-signal. Do not mirror e
 
 ## Runtime libraries
 
-- `music_seam` — SEAM artifact encode/decode, text builder, instruction/types surface
+- `music_seam` — SEAM artifact encode/decode, SEAM HIL model/verifier, lowered `.seam` text, instruction/types surface
 - `musi_vm` — `Program`, `Vm`, runtime `Value`, value inspection views, host/loader traits, VM errors
 - `musi_native` — `NativeHost`, native test report types
 - `musi_rt` — `Runtime`, `RuntimeOptions`, runtime errors
@@ -27,6 +28,7 @@ Current public entrypoints by crate. Keep this list high-signal. Do not mirror e
 ## Project and tooling libraries
 
 - `musi_project` — project load, workspace/package compile entrypoints
+- `musi_fmt` — `FormatOptions`, source formatter, path formatter, formatter errors
 - `musi_tooling` — diagnostics collection, hover, artifact helpers
 - `musi_lsp` — `MusiLanguageServer`
 

@@ -1,36 +1,31 @@
 ---
 title: "Exceptions, Results, and Effects"
-description: "Translate Python exceptions and outside work into Musi Result values and effectful boundaries."
+description: "Read Exceptions, Results, and Effects as a Python habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Python Developers"
 order: 8
 slug: "exceptions-effects"
-summary: "Use Result for recoverable failure and effects or stdlib helpers for requested outside work."
+summary: "Translate the Python habit, then use the Musi Book for the full rule."
 ---
 
-Python exceptions can carry a failure out of the ordinary return path:
+Python None is useful but quiet. Musi Option makes absence a branch the caller sees before touching the value.
 
-```python
-def parse_port(text: str) -> int:
-    try:
-        return int(text)
-    except ValueError:
-        return 3000
+{{compare:python-exceptions-effects}}
 
-port = parse_port("abc")
-port
-```
+## Reading Exceptions, Results, and Effects from Python
 
-Musi keeps ordinary failure in a `Result` value. That makes the fallback decision visible.
+On the Musi side, Musi uses `option.someOf` and `option.noneOf` when absence is expected, so callers handle the empty branch deliberately. Read the shared example through Python eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-{{snippet:python-exceptions-results}}
+## False friend
 
-Use this when failure is a normal part of the domain: bad input, missing config, or a rejected request.
+Do not translate null, nil, None, or undefined as a quiet ordinary value. For a Python reader, the trap is trusting runtime convention where Musi expects a visible type or effect; Musi `class` is closer to an explicit protocol/typeclass than a Python class with attributes and methods.
 
-## Outside work
+## When this pays off
 
-Python `input`, file access, time, and network calls reach outside the pure calculation. Musi keeps those edges explicit through stdlib modules and effects.
+Use Option when a badge, ticket, receipt, search result, or lookup may honestly be missing. The Python instinct still helps here: Keep the Python habit of naming the real-world thing first.
 
-{{snippet:python-effect-boundary}}
+## Keep close
 
-The import tells readers where outside work comes from. The call site shows that the program is asking the runtime for input and output.
+- [Effects](/learn/book/effects-runtime/effects)
+- [Using](/learn/book/effects-runtime/using)
+- [Handlers](/learn/book/effects-runtime/handlers)

@@ -115,24 +115,12 @@ impl CheckPass<'_, '_, '_> {
         ty: HirTyId,
         fallback: HirTyId,
     ) {
-        let record_fields = match self.ty(ty).kind {
-            HirTyKind::Record { fields } => self
-                .ty_fields(fields)
-                .into_iter()
-                .map(|field| (field.name, field.ty))
-                .collect::<BTreeMap<_, _>>(),
-            HirTyKind::Range { bound } | HirTyKind::ClosedRange { bound } => BTreeMap::from([
-                (self.intern("lowerBound"), bound),
-                (self.intern("upperBound"), bound),
-            ]),
-            HirTyKind::PartialRangeFrom { bound } => {
-                BTreeMap::from([(self.intern("lowerBound"), bound)])
-            }
-            HirTyKind::PartialRangeUpTo { bound } | HirTyKind::PartialRangeThru { bound } => {
-                BTreeMap::from([(self.intern("upperBound"), bound)])
-            }
-            _ => BTreeMap::new(),
-        };
+        let record_fields = self
+            .record_like_fields(ty)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(name, ty)| (self.intern(name.as_ref()), ty))
+            .collect::<BTreeMap<_, _>>();
         for field in self.record_pat_fields(fields) {
             let field_ty = record_fields
                 .get(&field.name.name)

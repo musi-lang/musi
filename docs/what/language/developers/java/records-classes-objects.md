@@ -1,27 +1,31 @@
 ---
 title: "Records, Classes, and Objects"
-description: "Translate Java records and classes into Musi records, variants, methods, and behavior contracts."
+description: "Read Records, Classes, and Objects as a Java habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Java Developers"
 order: 5
 slug: "records-classes-objects"
-summary: "Separate data shape from behavior so construction and updates stay visible."
+summary: "Translate the Java habit, then use the Musi Book for the full rule."
 ---
 
-# Records, Classes, and Objects
+Java classes often gather identity, fields, behavior, validation, and lifecycle in one noun. Musi asks first whether the noun is just shape; if so, records or data are enough.
 
-Java 17 records make small immutable data carriers concise:
+{{compare:java-records-classes-objects}}
 
-```java
-record Endpoint(String host, int port, boolean secure) {}
+## Reading Records, Classes, and Objects from Java
 
-var local = new Endpoint("localhost", 8080, false);
-var publicEndpoint = new Endpoint("api.example.com", local.port(), true);
-```
+On the Musi side, Musi records and data variants describe stored shape. Behavior belongs in functions or classes/instances, not inside an object by default. Read the shared example through Java eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-Musi record-style data keeps the field names visible at construction and update sites.
+## False friend
 
-{{snippet:java-records-classes-objects}}
+Do not read `class` as object shape. If the page is about a pet, invoice, room, or vehicle, start with fields or variants. For a Java reader, the trap is reading Musi `class` as a nominal object type with constructors and fields; Musi `class` is a behavior contract supplied by instances; records and data model object shape.
 
-Java classes combine state and behavior. Musi separates the data shape from functions, methods, classes, and instances so each part stays visible.
+## When this pays off
 
+Use records when names like `owner`, `age`, `amount`, or `route` are the point of the value. The Java instinct still helps here: Keep the Java habit of naming APIs for future readers.
+
+## Keep close
+
+- [Records](/learn/book/data/records)
+- [Classes](/learn/book/abstractions/classes)
+- [Patterns](/learn/book/data/patterns)

@@ -7,9 +7,9 @@ mod ty;
 pub use expr::{
     HirAccessKind, HirArg, HirArrayItem, HirAttr, HirAttrArg, HirBinaryOp, HirBinder,
     HirConstraint, HirConstraintKind, HirEffectItem, HirEffectSet, HirExportMod, HirExpr,
-    HirExprKind, HirFieldDef, HirForeignMod, HirHandleClause, HirLetMods, HirLetReceiver, HirLit,
-    HirLitKind, HirMatchArm, HirMemberDef, HirMemberKind, HirMods, HirParam, HirPartialRangeKind,
-    HirPrefixOp, HirQuoteKind, HirRecordItem, HirSpliceKind, HirTemplatePart, HirVariantDef,
+    HirExprKind, HirFieldDef, HirForeignMod, HirHandleClause, HirLetMods, HirLit, HirLitKind,
+    HirMatchArm, HirMemberDef, HirMemberKind, HirMods, HirParam, HirPartialRangeKind, HirPrefixOp,
+    HirQuoteKind, HirReceiverDecl, HirRecordItem, HirSpliceKind, HirTemplatePart, HirVariantDef,
     HirVariantFieldDef,
 };
 pub use module::{HirExprId, HirLitId, HirModule, HirPatId, HirStore, HirTyId};

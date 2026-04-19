@@ -1,0 +1,3 @@
+type Box<T> = { value: T };
+
+const boxedName: Box<string> = { value: "Nora" };

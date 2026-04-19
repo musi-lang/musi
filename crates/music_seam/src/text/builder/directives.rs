@@ -239,8 +239,8 @@ impl TextBuilder {
             if part == "export" {
                 export = true;
             } else {
-                let method_name = parse_symbol(part)?;
-                initializer = Some(self.ensure_method_symbol(&method_name));
+                let procedure_name = parse_symbol(part)?;
+                initializer = Some(self.ensure_procedure_symbol(&procedure_name));
             }
         }
         let id = self.ensure_global_symbol(&name);
@@ -410,7 +410,7 @@ impl TextBuilder {
     pub(crate) fn parse_export(&mut self, parts: &[String]) -> AssemblyResult {
         if parts.len() < 3 {
             return Err(AssemblyError::TextParseFailed(
-                "expected `.export $Name <method|global|foreign|type|effect|class> [opaque]`"
+                "expected `.export $Name <procedure|global|foreign|type|effect|class> [opaque]`"
                     .into(),
             ));
         }
@@ -422,7 +422,7 @@ impl TextBuilder {
         }
         let name_id = self.intern_string(&name);
         let target = match kind {
-            "method" => ExportTarget::Method(self.ensure_method_symbol(&name)),
+            "procedure" => ExportTarget::Procedure(self.ensure_procedure_symbol(&name)),
             "global" => ExportTarget::Global(self.ensure_global_symbol(&name)),
             "foreign" => {
                 let foreign = *self.foreigns.get(&name).ok_or_else(|| {
@@ -450,7 +450,7 @@ impl TextBuilder {
             }
             _ => {
                 return Err(AssemblyError::TextParseFailed(
-                    "expected `.export $Name <method|global|foreign|type|effect|class> [opaque]`"
+                    "expected `.export $Name <procedure|global|foreign|type|effect|class> [opaque]`"
                         .into(),
                 ));
             }

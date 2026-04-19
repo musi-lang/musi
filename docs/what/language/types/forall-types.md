@@ -7,17 +7,20 @@ order: 22
 slug: "forall-types"
 summary: "Use `forall` when a type expression must bind a type variable explicitly."
 ---
-
-`forall` writes polymorphism as a type. Use it when the type itself must say that one callable works for every type parameter.
+`forall` types describe code that works for every type matching the shape. They are the type-level version of saying, “I do not care what is in the box; I only promise to handle the box consistently.”
 
 {{snippet:chapter-forall-types}}
 
-## Reading Model
+This is useful for reusable helpers whose behavior does not depend on the specific value type. The more a function truly ignores the details, the stronger the promise becomes.
 
-Read the example from top to bottom. The first visible name gives the reader a handle, the following expressions show how values move, and the final expression shows what leaves the example.
+## Universal promises
 
-## Practical Rule
+An identity function can return whatever it receives. A wrapper can store any value and give it back. These promises are broad, but they are also strict: the code cannot secretly depend on a specific type.
 
-Use this form when it makes value movement clearer than copying habits from another language. Prefer the smallest form that still tells the reader where names, types, effects, and boundaries live.
+## Read the quantifier as a boundary
 
-Continue to [Dependent Types](/learn/book/types/foundations/dependent-types).
+When you see `forall`, ask what information the function has refused to know. That refusal is what makes the function reusable.
+
+Types are labels that prevent later guesswork. A ticket number, room name, function value, and generic box can all be written as values, but type notes say which promises the code expects to keep.
+
+Do not add type detail as decoration. Add it when it helps a reader, fixes an edge, explains a public surface, or lets generic code say exactly which kind of value it can accept.

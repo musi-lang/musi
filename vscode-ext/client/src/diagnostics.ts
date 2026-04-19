@@ -5,7 +5,7 @@ import {
 	activeDocumentUri,
 	findOwningManifestPathForUri,
 	loadPackageRoot,
-} from "./manifest.ts";
+} from "./manifest/manifest.ts";
 import {
 	type DiagnosticLabelPayload,
 	type DiagnosticPayload,
@@ -114,13 +114,9 @@ function toDiagnostic(
 		payload.file ?? payload.labels?.[0]?.file,
 	);
 	const range = toRange(primaryRange);
-	const messageParts = [payload.message, ...(payload.notes ?? [])];
-	if (payload.hint) {
-		messageParts.push(`Hint: ${payload.hint}`);
-	}
 	const diagnostic = new vscode.Diagnostic(
 		range,
-		messageParts.join("\n"),
+		payload.message,
 		toSeverity(payload.severity ?? payload.level),
 	);
 	diagnostic.source = "musi";
@@ -129,11 +125,24 @@ function toDiagnostic(
 	}
 	diagnostic.relatedInformation = relatedInformation(
 		pkg,
-		payload.labels,
+		relatedLabels(payload),
 		filePath,
 		range,
 	);
 	return { filePath, diagnostic };
+}
+
+function relatedLabels(
+	payload: DiagnosticPayload,
+): readonly DiagnosticLabelPayload[] | undefined {
+	const labels = [...(payload.labels ?? [])];
+	for (const note of payload.notes ?? []) {
+		labels.push({ message: note });
+	}
+	if (payload.hint) {
+		labels.push({ message: `hint: ${payload.hint}` });
+	}
+	return labels.length === 0 ? undefined : labels;
 }
 
 export class DiagnosticsController {
@@ -149,7 +158,14 @@ export class DiagnosticsController {
 	}
 
 	setMode(mode: DiagnosticsMode) {
+		if (this.#mode === mode) {
+			return;
+		}
 		this.#mode = mode;
+		if (mode !== "full") {
+			this.#collection.clear();
+			this.#trackedFiles.clear();
+		}
 	}
 
 	mode() {

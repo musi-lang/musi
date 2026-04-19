@@ -131,16 +131,31 @@ export const docParts = partDocs.map((part) => {
 	} satisfies DocPart;
 });
 
-export const docGroups = docParts.map((part) => {
-	const pages = childrenByParentId.get(part.id) ?? [];
-	return {
-		group: part.title,
-		path: part.path,
-		summaryHtml: part.summaryHtml,
-		pages,
-		locale: part.locale,
-	} satisfies DocGroup;
-});
+export const docGroups = docParts
+	.map((part) => {
+		const pages = childrenByParentId.get(part.id) ?? [];
+		return {
+			group: part.title,
+			path: part.path,
+			summaryHtml: part.summaryHtml,
+			pages,
+			locale: part.locale,
+		} satisfies DocGroup;
+	})
+	.filter((group) => group.group !== "Musi for Developers");
+
+export const guideGroups = docParts
+	.filter((part) => part.id === "developers")
+	.map((part) => {
+		const pages = childrenByParentId.get(part.id) ?? [];
+		return {
+			group: part.title,
+			path: part.path,
+			summaryHtml: part.summaryHtml,
+			pages,
+			locale: part.locale,
+		} satisfies DocGroup;
+	});
 
 export const docQuestionIndex: Array<{
 	label: string;
@@ -243,7 +258,7 @@ function languageGuideSiblings(id: string) {
 		return null;
 	}
 	const parent = docsById.get(page.parentId);
-	if (parent?.parentId !== "developers-guides") {
+	if (parent?.partId !== "developers" || parent.kind !== "section") {
 		return null;
 	}
 	return (childrenByParentId.get(parent.id) ?? []).filter(

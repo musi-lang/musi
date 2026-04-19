@@ -1,36 +1,31 @@
 ---
 title: "Classes, Objects, and Shared Behavior"
-description: "Translate JavaScript classes and TypeScript interfaces into Musi classes and instances."
+description: "Read Classes, Objects, and Shared Behavior as a JavaScript and TypeScript habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "JavaScript and TypeScript Developers"
 order: 11
 slug: "classes-behavior"
-summary: "Use Musi classes for shared behavior contracts, not as object constructors."
+summary: "Translate the JavaScript and TypeScript habit, then use the Musi Book for the full rule."
 ---
 
-JavaScript classes often combine construction with behavior:
+TypeScript structural objects make shape feel lightweight. Musi keeps that benefit, but record shape does not also imply methods, prototype behavior, or package identity.
 
-```javascript
-class Car {
-  wheels() {
-    return 4;
-  }
-}
+{{compare:javascript-typescript-classes-behavior}}
 
-const car = new Car();
-car.wheels();
-```
+## Reading Classes, Objects, and Shared Behavior from JavaScript/TypeScript
 
-TypeScript can describe the behavior through an interface:
+On the Musi side, Musi records and data variants describe stored shape. Behavior belongs in functions or classes/instances, not inside an object by default. Read the shared example through JavaScript/TypeScript eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-```typescript
-interface Vehicle {
-  wheels(): number;
-}
-```
+## False friend
 
-Musi separates data from shared behavior.
+Do not read `class` as object shape. If the page is about a pet, invoice, room, or vehicle, start with fields or variants. For a TypeScript reader, the trap is assuming runtime object shape and compile-time behavior contract are the same thing; Musi `class` is not a JS constructor or TS class; it is a behavior contract implemented separately from record/data shape.
 
-{{snippet:js-ts-class-instance}}
+## When this pays off
 
-Use `data` for the value shape. Use `class` and `instance` when several types need the same behavior.
+Use records when names like `owner`, `age`, `amount`, or `route` are the point of the value. The JavaScript/TypeScript instinct still helps here: Keep the TypeScript habit of reading the shape before reading implementation details.
+
+## Keep close
+
+- [Records](/learn/book/data/records)
+- [Classes](/learn/book/abstractions/classes)
+- [Patterns](/learn/book/data/patterns)

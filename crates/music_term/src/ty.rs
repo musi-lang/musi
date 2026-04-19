@@ -92,6 +92,12 @@ pub enum TypeTermKind {
     Mut {
         inner: Box<TypeTerm>,
     },
+    AnyClass {
+        class: Box<TypeTerm>,
+    },
+    SomeClass {
+        class: Box<TypeTerm>,
+    },
     Record {
         fields: Box<[TypeField]>,
     },
@@ -325,6 +331,8 @@ impl Display for TypeTerm {
                 output,
             } => write!(f, "using {effect} ({input} -> {output})"),
             TypeTermKind::Mut { inner } => write!(f, "mut {inner}"),
+            TypeTermKind::AnyClass { class } => write!(f, "any {class}"),
+            TypeTermKind::SomeClass { class } => write!(f, "some {class}"),
             TypeTermKind::Record { fields } => fmt_record_type_term(f, fields),
             TypeTermKind::Error
             | TypeTermKind::Unknown
@@ -517,9 +525,14 @@ impl<'a> Parser<'a> {
         }
         Ok(left)
     }
+}
 
+impl Parser<'_> {
     fn parse_prefix(&mut self) -> TypeTermResult<TypeTerm> {
         if let Some(term) = self.parse_mut_prefix()? {
+            return Ok(term);
+        }
+        if let Some(term) = self.parse_existential_prefix()? {
             return Ok(term);
         }
         if let Some(term) = self.parse_handler_prefix()? {
@@ -530,7 +543,9 @@ impl<'a> Parser<'a> {
         }
         self.parse_atom()
     }
+}
 
+impl Parser<'_> {
     fn parse_atom(&mut self) -> TypeTermResult<TypeTerm> {
         self.skip_ws();
         if self.consume("(") {
@@ -574,7 +589,9 @@ impl<'a> Parser<'a> {
             args: args.into_boxed_slice(),
         }))
     }
+}
 
+impl Parser<'_> {
     fn parse_mut_prefix(&mut self) -> TypeTermResult<Option<TypeTerm>> {
         self.skip_ws();
         if !self.consume("mut") {
@@ -585,6 +602,27 @@ impl<'a> Parser<'a> {
         Ok(Some(TypeTerm::new(TypeTermKind::Mut {
             inner: Box::new(inner),
         })))
+    }
+
+    fn parse_existential_prefix(&mut self) -> TypeTermResult<Option<TypeTerm>> {
+        self.skip_ws();
+        let kind = if self.consume("any") {
+            Some("any")
+        } else if self.consume("some") {
+            Some("some")
+        } else {
+            None
+        };
+        let Some(kind) = kind else {
+            return Ok(None);
+        };
+        self.require_ws()?;
+        let class = Box::new(self.parse_prefix()?);
+        let term_kind = match kind {
+            "any" => TypeTermKind::AnyClass { class },
+            _ => TypeTermKind::SomeClass { class },
+        };
+        Ok(Some(TypeTerm::new(term_kind)))
     }
 
     fn parse_handler_prefix(&mut self) -> TypeTermResult<Option<TypeTerm>> {
@@ -638,7 +676,9 @@ impl<'a> Parser<'a> {
             Ok(false)
         }
     }
+}
 
+impl Parser<'_> {
     fn parse_tuple_atom(&mut self) -> TypeTermResult<TypeTerm> {
         let mut items = Vec::new();
         loop {
@@ -720,7 +760,9 @@ impl<'a> Parser<'a> {
         }
         Ok(TypeDim::Name(self.parse_ident()?.into()))
     }
+}
 
+impl<'a> Parser<'a> {
     fn parse_nat_lit(&mut self) -> Option<u64> {
         self.skip_ws();
         let start = self.pos;

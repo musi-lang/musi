@@ -54,90 +54,20 @@ pub fn emit<W: Write>(
     sources: &SourceMap,
     use_color: bool,
 ) -> io::Result<()> {
-    let paint = |color: DiagColor, text: &str| -> String {
-        if use_color {
-            format!(
-                "{}{text}{}",
-                color.ansi_code(),
-                DiagColor::Reset.ansi_code()
-            )
-        } else {
-            String::from(text)
-        }
-    };
-
     for label in diag.labels() {
-        if let Some(source) = sources.get(label.source_id()) {
-            let span = label.span();
-            let (line, col) = source.line_col(span.start);
-            let path_display = source.path().display();
-
-            let loc = format!("{path_display}:{line}:{col}:");
-            let level = diag.code().map_or_else(
-                || String::from(diag.level().label()),
-                |code| format!("{}[{code}]", diag.level().label()),
-            );
-            writeln!(
-                writer,
-                "{} {}: {}",
-                paint(DiagColor::Bold, loc.as_str()),
-                paint(diag.level().color(), level.as_str()),
-                paint(DiagColor::Bold, diag.message()),
-            )?;
-
-            if let Some(line_text) = source.line_text(line) {
-                let line_num = format!("{line}");
-                let padding = " ".repeat(line_num.len());
-
-                writeln!(writer, "{padding} |")?;
-                writeln!(writer, "{line_num} | {line_text}")?;
-
-                let byte_col = col.saturating_sub(1).min(line_text.len());
-                let caret_offset = line_text
-                    .char_indices()
-                    .take_while(|&(i, _)| i < byte_col)
-                    .count();
-                let total_chars = line_text.chars().count();
-                let remaining = total_chars.saturating_sub(caret_offset);
-                let span_len = usize::try_from(span.len()).unwrap_or(1).max(1);
-                let caret_count = span_len.min(remaining.max(1)).max(1);
-                let caret_padding = " ".repeat(caret_offset);
-                let carets = "^".repeat(caret_count);
-
-                let caret_text = if label.message().is_empty() {
-                    carets
-                } else {
-                    format!("{carets} {}", label.message())
-                };
-
-                writeln!(
-                    writer,
-                    "{padding} | {caret_padding}{}",
-                    paint(diag.level().color(), caret_text.as_str()),
-                )?;
-            }
-        }
+        emit_label(writer, diag, sources, label, use_color)?;
     }
 
     if diag.labels().is_empty() {
-        let level = diag.code().map_or_else(
-            || String::from(diag.level().label()),
-            |code| format!("{}[{code}]", diag.level().label()),
-        );
-        writeln!(
-            writer,
-            "{}: {}",
-            paint(diag.level().color(), level.as_str()),
-            paint(DiagColor::Bold, diag.message()),
-        )?;
+        emit_headline_without_labels(writer, diag, use_color)?;
     }
 
     if let Some(hint) = diag.hint() {
         writeln!(
             writer,
             "{}: {}",
-            paint(DiagColor::Cyan, "help"),
-            paint(DiagColor::Bold, hint),
+            paint(use_color, DiagColor::Cyan, "help"),
+            paint(use_color, DiagColor::Bold, hint),
         )?;
     }
 
@@ -145,12 +75,135 @@ pub fn emit<W: Write>(
         writeln!(
             writer,
             "{}: {}",
-            paint(DiagColor::Cyan, "note"),
-            paint(DiagColor::Bold, note_msg.as_str()),
+            paint(use_color, DiagColor::Cyan, "note"),
+            paint(use_color, DiagColor::Bold, note_msg.as_str()),
         )?;
     }
 
+    for fix in diag.fixes() {
+        if let Some(source) = sources.get(fix.source_id()) {
+            let (line, col) = source.line_col(fix.span().start);
+            writeln!(
+                writer,
+                "{}: replace at {}:{} with `{}`",
+                paint(use_color, DiagColor::Cyan, "fix-it"),
+                line,
+                col,
+                fix.replacement(),
+            )?;
+        }
+    }
+
     Ok(())
+}
+
+fn emit_label<W: Write>(
+    writer: &mut W,
+    diag: &Diag,
+    sources: &SourceMap,
+    label: &DiagLabel,
+    use_color: bool,
+) -> io::Result<()> {
+    let Some(source) = sources.get(label.source_id()) else {
+        return Ok(());
+    };
+    let span = label.span();
+    let (line, col) = source.line_col(span.start);
+    let path_display = source.path().display();
+    let loc = format!("{path_display}:{line}:{col}:");
+    writeln!(
+        writer,
+        "{} {}: {}",
+        paint(use_color, DiagColor::Bold, loc.as_str()),
+        paint(use_color, diag.level().color(), level_label(diag).as_str()),
+        paint(use_color, DiagColor::Bold, diag.message()),
+    )?;
+    if let Some(line_text) = source.line_text(line) {
+        emit_label_line(writer, diag, label, line, col, line_text, use_color)?;
+    }
+    Ok(())
+}
+
+fn emit_label_line<W: Write>(
+    writer: &mut W,
+    diag: &Diag,
+    label: &DiagLabel,
+    line: usize,
+    col: usize,
+    line_text: &str,
+    use_color: bool,
+) -> io::Result<()> {
+    let line_num = format!("{line}");
+    let padding = " ".repeat(line_num.len());
+    writeln!(writer, "{padding} |")?;
+    writeln!(writer, "{line_num} | {line_text}")?;
+    let caret_text = label_caret_text(label, col, line_text);
+    let caret_offset = caret_offset(col, line_text);
+    let caret_padding = " ".repeat(caret_offset);
+    writeln!(
+        writer,
+        "{padding} | {caret_padding}{}",
+        paint(use_color, diag.level().color(), caret_text.as_str()),
+    )
+}
+
+fn emit_headline_without_labels<W: Write>(
+    writer: &mut W,
+    diag: &Diag,
+    use_color: bool,
+) -> io::Result<()> {
+    writeln!(
+        writer,
+        "{}: {}",
+        paint(use_color, diag.level().color(), level_label(diag).as_str()),
+        paint(use_color, DiagColor::Bold, diag.message()),
+    )
+}
+
+fn label_caret_text(label: &DiagLabel, col: usize, line_text: &str) -> String {
+    let remaining = line_text
+        .chars()
+        .count()
+        .saturating_sub(caret_offset(col, line_text));
+    let span_len = usize::try_from(label.span().len()).unwrap_or(1).max(1);
+    let caret_count = span_len.min(remaining.max(1)).max(1);
+    let marker = match label.kind() {
+        DiagLabelKind::Primary => '^',
+        DiagLabelKind::Secondary => '~',
+    };
+    let carets = marker.to_string().repeat(caret_count);
+    if label.message().is_empty() {
+        carets
+    } else {
+        format!("{carets} {}", label.message())
+    }
+}
+
+fn caret_offset(col: usize, line_text: &str) -> usize {
+    let byte_col = col.saturating_sub(1).min(line_text.len());
+    line_text
+        .char_indices()
+        .take_while(|&(i, _)| i < byte_col)
+        .count()
+}
+
+fn level_label(diag: &Diag) -> String {
+    diag.code().map_or_else(
+        || String::from(diag.level().label()),
+        |code| format!("{}[{code}]", diag.level().label()),
+    )
+}
+
+fn paint(use_color: bool, color: DiagColor, text: &str) -> String {
+    if use_color {
+        format!(
+            "{}{text}{}",
+            color.ansi_code(),
+            DiagColor::Reset.ansi_code()
+        )
+    } else {
+        String::from(text)
+    }
 }
 
 /// Emit a diagnostic to stderr, auto-detecting color support.

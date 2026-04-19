@@ -1,8 +1,8 @@
 ---
-import { App } from "../site-app";
-import { buildStructuredData, canonicalUrl } from "../seo";
-import siteInteractionsScript from "../static-main.inline.js?raw";
 import type { AppRoute } from "../routes";
+import { buildStructuredData, canonicalUrl } from "../seo";
+import { App } from "../site-app";
+import siteInteractionsScript from "../static-main.inline.js?raw";
 import "../app.scss";
 
 interface Props {
@@ -12,23 +12,12 @@ interface Props {
 const { route } = Astro.props;
 ---
 <!doctype html>
-<html lang={route.locale}>
+<html lang={route.locale} data-mx-root data-mx-theme="warm" class="mx-root">
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<meta name="color-scheme" content="light dark" />
+		<meta name="color-scheme" content="light" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<script is:inline>
-			(() => {
-				const key = "musi-color-scheme";
-				const stored = window.localStorage.getItem(key);
-				const scheme = stored === "light" || stored === "dark" || stored === "system" ? stored : "system";
-				const resolved = scheme === "system" ? window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light" : scheme;
-				document.documentElement.dataset.colorScheme = scheme;
-				document.documentElement.dataset.mantineColorScheme = resolved;
-				document.documentElement.style.colorScheme = resolved;
-			})();
-		</script>
 		<title>{route.title}</title>
 		<meta name="description" content={route.description} />
 		<link rel="canonical" href={canonicalUrl(route)} />

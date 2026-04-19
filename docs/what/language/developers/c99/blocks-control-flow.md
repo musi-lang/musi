@@ -1,43 +1,31 @@
 ---
 title: "Blocks and Control Flow"
-description: "Translate C99 blocks, branch statements, and loops into Musi block expressions, match, and recursion."
+description: "Read Blocks and Control Flow as a C99 habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "C Developers"
 order: 3
 slug: "blocks-control-flow"
-summary: "Use blocks as values and model small state-machine loops with recursion."
+summary: "Translate the C99 habit, then use the Musi Book for the full rule."
 ---
 
-# Blocks and Control Flow
+A C reader brings habits from headers, translation units, pointers, arrays, `errno`, sentinel returns, and small functions that trust callers. That helps with cost, layout, and the exact boundary where bytes cross into code, but the Musi page asks a narrower question: what contract should this branching and block results example make visible?
 
-C99 blocks group statements and return explicitly when a value leaves a function:
+{{compare:c99-blocks-control-flow}}
 
-```c
-int invoice_total(void) {
-    int base_price = 1200;
-    int fee = 45;
-    return base_price + fee;
-}
-```
+## Reading Blocks and Control Flow from C99
 
-Musi blocks can produce the final value directly.
+On the Musi side, Musi blocks and matches are expressions when they produce a value; the branch answer matters more than the statement container. Read the shared example through C99 eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-{{snippet:c99-block-expression}}
+## False friend
 
-C loops commonly mutate loop state:
+Do not carry over temporary variables whose only job was to smuggle a branch result out of a statement block. For a C reader, the trap is treating convention as a contract; Musi `class` is not a C struct with function pointers; records/data carry shape, classes name behavior a type can provide.
 
-```c
-int total_seats(int groups) {
-    int seats = 0;
-    for (int remaining = groups; remaining > 0; remaining -= 1) {
-        seats += 4;
-    }
-    return seats;
-}
-```
+## When this pays off
 
-Musi uses recursion when the loop is a small state machine.
+Use this shape when a route fee, access decision, or small rule table chooses one value from several cases. The C99 instinct still helps here: Keep the C habit of asking where memory, symbols, and failures come from.
 
-{{snippet:c99-recursive-control-flow}}
+## Keep close
 
-For collections, prefer library traversal and pipelines. For changing counters or accumulators, make state explicit in recursive parameters.
+- [Blocks and expressions](/learn/book/start/blocks-and-expressions)
+- [Patterns](/learn/book/data/patterns)
+- [Operators](/learn/book/core/operators)

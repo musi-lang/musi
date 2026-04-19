@@ -5,8 +5,54 @@ use std::ops::Range;
 pub enum TriviaKind {
     Whitespace,
     Newline,
-    LineComment { doc: bool },
-    BlockComment { doc: bool },
+    LineComment,
+    LineDocComment,
+    LineModuleDocComment,
+    BlockComment,
+    BlockDocComment,
+    BlockModuleDocComment,
+}
+
+impl TriviaKind {
+    #[must_use]
+    pub const fn is_comment(self) -> bool {
+        matches!(
+            self,
+            Self::LineComment
+                | Self::LineDocComment
+                | Self::LineModuleDocComment
+                | Self::BlockComment
+                | Self::BlockDocComment
+                | Self::BlockModuleDocComment
+        )
+    }
+
+    #[must_use]
+    pub const fn is_line_comment(self) -> bool {
+        matches!(
+            self,
+            Self::LineComment | Self::LineDocComment | Self::LineModuleDocComment
+        )
+    }
+
+    #[must_use]
+    pub const fn is_doc_comment(self) -> bool {
+        matches!(
+            self,
+            Self::LineDocComment
+                | Self::LineModuleDocComment
+                | Self::BlockDocComment
+                | Self::BlockModuleDocComment
+        )
+    }
+
+    #[must_use]
+    pub const fn is_module_doc_comment(self) -> bool {
+        matches!(
+            self,
+            Self::LineModuleDocComment | Self::BlockModuleDocComment
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

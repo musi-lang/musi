@@ -137,6 +137,8 @@ impl PassBase<'_, '_, '_> {
                 self.render_ty(*output)
             ),
             HirTyKind::Mut { inner } => format!("mut {}", self.render_ty(*inner)),
+            HirTyKind::AnyClass { class } => format!("any {}", self.render_ty(*class)),
+            HirTyKind::SomeClass { class } => format!("some {}", self.render_ty(*class)),
             HirTyKind::Record { fields } => self.render_record_ty(fields.clone()),
             _ => return None,
         })
@@ -225,12 +227,31 @@ impl PassBase<'_, '_, '_> {
         if self.ty_matches(expected, found) {
             return;
         }
-        let label = format!(
-            "expected {}, found {}",
-            self.render_ty(expected),
-            self.render_ty(found)
+        let expected = self.render_ty(expected);
+        let found = self.render_ty(found);
+        let message = format!("value expected `{expected}`, found `{found}`");
+        let label = format!("value has type `{found}` here");
+        self.diag_message(origin.span, DiagKind::TypeMismatch, message, label);
+    }
+
+    pub fn type_mismatch_for(
+        &mut self,
+        subject: &str,
+        origin: HirOrigin,
+        expected: HirTyId,
+        found: HirTyId,
+    ) {
+        if self.ty_matches(expected, found) {
+            return;
+        }
+        let expected = self.render_ty(expected);
+        let found = self.render_ty(found);
+        self.diag_message(
+            origin.span,
+            DiagKind::TypeMismatch,
+            format!("{subject} expected `{expected}`, found `{found}`"),
+            format!("{subject} has type `{found}` here"),
         );
-        self.diag(origin.span, DiagKind::TypeMismatch, &label);
     }
 
     pub fn ty_matches(&self, expected: HirTyId, found: HirTyId) -> bool {
@@ -379,7 +400,9 @@ impl PassBase<'_, '_, '_> {
                 HirTyKind::PartialRangeThru { bound: left },
                 HirTyKind::PartialRangeThru { bound: right },
             )
-            | (HirTyKind::Mut { inner: left }, HirTyKind::Mut { inner: right }) => {
+            | (HirTyKind::Mut { inner: left }, HirTyKind::Mut { inner: right })
+            | (HirTyKind::AnyClass { class: left }, HirTyKind::AnyClass { class: right })
+            | (HirTyKind::SomeClass { class: left }, HirTyKind::SomeClass { class: right }) => {
                 self.ty_matches(*left, *right)
             }
             _ => false,
@@ -623,6 +646,22 @@ impl PassBase<'_, '_, '_> {
                 let origin = self.expr(expr).origin;
                 let inner = self.lower_type_expr(expr, origin);
                 self.alloc_ty(HirTyKind::Mut { inner })
+            }
+            HirExprKind::Prefix {
+                op: HirPrefixOp::Any,
+                expr,
+            } => {
+                let origin = self.expr(expr).origin;
+                let class = self.lower_type_expr(expr, origin);
+                self.alloc_ty(HirTyKind::AnyClass { class })
+            }
+            HirExprKind::Prefix {
+                op: HirPrefixOp::Some,
+                expr,
+            } => {
+                let origin = self.expr(expr).origin;
+                let class = self.lower_type_expr(expr, origin);
+                self.alloc_ty(HirTyKind::SomeClass { class })
             }
             _ => return None,
         })

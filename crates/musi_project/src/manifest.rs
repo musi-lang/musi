@@ -203,12 +203,71 @@ impl TaskConfig {
 pub struct FmtConfig {
     pub include: Vec<String>,
     pub exclude: Vec<String>,
+    pub profile: Option<FmtProfile>,
     pub use_tabs: Option<bool>,
     pub line_width: Option<u32>,
     pub indent_width: Option<u32>,
-    pub semi_colons: Option<bool>,
-    pub trailing_commas: Option<String>,
-    pub brace_position: Option<String>,
+    pub trailing_commas: Option<FmtTrailingCommas>,
+    pub brace_position: Option<FmtBracePosition>,
+    pub match_arm_indent: Option<FmtMatchArmIndent>,
+    pub match_arm_arrow_alignment: Option<FmtMatchArmArrowAlignment>,
+    pub call_argument_layout: Option<FmtGroupLayout>,
+    pub declaration_parameter_layout: Option<FmtGroupLayout>,
+    pub record_field_layout: Option<FmtGroupLayout>,
+    pub effect_member_parameter_layout: Option<FmtGroupLayout>,
+    pub operator_break: Option<FmtOperatorBreak>,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum FmtProfile {
+    Standard,
+    Compact,
+    Expanded,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum FmtTrailingCommas {
+    Never,
+    Always,
+    MultiLine,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum FmtBracePosition {
+    SameLine,
+    NextLine,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum FmtMatchArmIndent {
+    PipeAligned,
+    Block,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum FmtMatchArmArrowAlignment {
+    None,
+    Consecutive,
+    Block,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum FmtGroupLayout {
+    Auto,
+    Block,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum FmtOperatorBreak {
+    Before,
+    After,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]

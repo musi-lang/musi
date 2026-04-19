@@ -7,7 +7,7 @@ semantic = "auto"
 
 [workspace]
 include = ["**/*.rs"]
-exclude = ["target/**", ".git/**"]
+exclude = ["target/**", ".git/**", "**/diag_catalog_gen.rs"]
 
 [output]
 format = "text"

@@ -2,13 +2,13 @@ use music_arena::Idx;
 
 use crate::artifact::StringId;
 use crate::descriptor::{
-    ClassDescriptor, EffectDescriptor, ForeignDescriptor, GlobalDescriptor, MethodDescriptor,
+    ClassDescriptor, EffectDescriptor, ForeignDescriptor, GlobalDescriptor, ProcedureDescriptor,
     TypeDescriptor,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExportTarget {
-    Method(Idx<MethodDescriptor>),
+    Procedure(Idx<ProcedureDescriptor>),
     Global(Idx<GlobalDescriptor>),
     Foreign(Idx<ForeignDescriptor>),
     Type(Idx<TypeDescriptor>),

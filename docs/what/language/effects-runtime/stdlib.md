@@ -3,21 +3,24 @@ title: "Stdlib"
 description: "Place the standard library on top of foundation and runtime so the layering stays clear."
 group: "Effects and Runtime"
 section: "Effects and Runtime"
-order: 29
+order: 30
 slug: "stdlib"
 summary: "Reach for @std modules first in ordinary application code."
 ---
-
-The standard library packages common language patterns behind flat ES6-style imports. It gives everyday code names for options, results, lists, paths, bytes, testing, environment access, OS facts, low-level target facts, FFI helpers, and more.
+The standard library gives common names to common shapes. It is where code should find option values, result values, text helpers, collections, and everyday building blocks instead of redefining them in every package.
 
 {{snippet:chapter-stdlib}}
 
-Read `import "@std/option"` as a module import. Use lower-case module aliases such as `option`, `result`, `path`, and `fs`; reserve PascalCase for public types such as `Option`, `Result`, `Path`, and `Bytes`.
+Using the standard library keeps examples and projects speaking the same dialect. A reader should not have to learn a new `Maybe`, `Outcome`, or `TextResult` type in every guide.
 
-Prefer domain types at API boundaries. `@std/path.Path`, `@std/bytes.Bytes`, `@std/env.Key`, `@std/process.ExitCode`, and `@std/time.Duration` avoid raw strings or integers where the meaning matters.
+## Shared vocabulary
 
-Use `@std/os` for typed platform checks in ordinary code. Use `@std/sys` only when a low-level wrapper needs raw target facts such as `sys.os`, `sys.arch`, `sys.family`, or `sys.jit`. Those facts reflect the Rust-supported platform universe and the future Cranelift JIT subset.
+`Option` says a value may be absent. `Result` says an operation may succeed or fail. Those names are small, but they carry a lot of shared expectation. Reuse them when they match the idea.
 
-Many helpers keep the subject as the first argument so module calls and receiver calls can share one reading order when the compiler supports the receiver form.
+## Do not copy the library into examples
 
-Continue to [Attributes](/learn/book/advanced/interop/attributes).
+Examples should teach the feature under discussion, not rebuild the world around it. If an example needs optional data, import or use the standard optional shape. If it needs failure, use the standard result shape.
+
+Effect chapters draw a line between local calculation and outside answers. Adding prices is local. Reading time, asking a process, or writing a log needs an answer from outside the expression.
+
+A useful test is to ask whether the result could be known from the input alone. If yes, keep the function plain. If no, name the request and make the effect boundary visible.

@@ -1,39 +1,31 @@
 ---
 title: "Exceptions, Results, and Effects"
-description: "Translate C# exceptions, async tasks, and outside work into Musi Result values and effectful boundaries."
+description: "Read Exceptions, Results, and Effects as a C# habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "C# Developers"
 order: 8
 slug: "exceptions-effects"
-summary: "Use Result for recoverable failure and effects or stdlib helpers for requested outside work."
+summary: "Translate the C# habit, then use the Musi Book for the full rule."
 ---
 
-C# exceptions can move failure out of the return path:
+A C# reader brings habits from nullable flow analysis, records, LINQ, async tasks, extension methods, interfaces, namespaces, and attributes. That helps with domain code through named APIs and tooling feedback, but the Musi page asks a narrower question: what contract should this absence and failure branches example make visible?
 
-```csharp
-static int ParsePort(string text)
-{
-    try
-    {
-        return int.Parse(text);
-    }
-    catch (FormatException)
-    {
-        return 3000;
-    }
-}
-```
+{{compare:csharp-exceptions-effects}}
 
-Musi keeps ordinary failure in a `Result` value.
+## Reading Exceptions, Results, and Effects from C#
 
-{{snippet:csharp-exceptions-results}}
+On the Musi side, Musi uses `option.someOf` and `option.noneOf` when absence is expected, so callers handle the empty branch deliberately. Read the shared example through C# eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-Use this when bad input is part of normal use, not a crash.
+## False friend
 
-## Async and outside work
+Do not translate null, nil, None, or undefined as a quiet ordinary value. For a C# reader, the trap is mapping Musi classes to object classes or service containers; Musi `class` is a typeclass-style behavior contract, not a CLR class with fields, constructors, and inheritance.
 
-C# `Task`, `async`, I/O, timers, and process calls reach outside a pure calculation. Musi keeps those edges visible through stdlib modules and effects.
+## When this pays off
 
-{{snippet:csharp-effect-boundary}}
+Use Option when a badge, ticket, receipt, search result, or lookup may honestly be missing. The C# instinct still helps here: Keep the C# habit of making api shape readable at the call site.
 
-The import names the outside capability. The call site shows where input and output happen.
+## Keep close
+
+- [Effects](/learn/book/effects-runtime/effects)
+- [Using](/learn/book/effects-runtime/using)
+- [Handlers](/learn/book/effects-runtime/handlers)

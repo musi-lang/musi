@@ -4,9 +4,9 @@ export const csharpDeveloperSnippets = [
 	{
 		id: "csharp-values-methods-expressions",
 		language: "musi",
-		sourceText: `let total (basePrice : Int, fee : Int) : Int := basePrice + fee;
+		sourceText: `let parkingTotal (baseFee : Int, nightFee : Int) : Int := baseFee + nightFee;
 
-let answer := total(1200, 45);
+let answer := parkingTotal(1200, 45);
 answer;`,
 		evidence: {
 			path: "docs/what/language/developers/csharp/values-methods-expressions.md",
@@ -18,7 +18,7 @@ answer;`,
 		language: "musi",
 		sourceText: `let render (port : Int, secure : Bool) : Int := port;
 
-let selected := render(port := 8080, secure := 0 = 0);
+let selected := render(port := 8080, secure := 1 = 1);
 selected;`,
 		evidence: {
 			path: "docs/what/language/developers/csharp/values-methods-expressions.md",
@@ -59,11 +59,11 @@ totalSeats(3, 0);`,
 	{
 		id: "csharp-variables-mutation",
 		language: "musi",
-		sourceText: `let visits := mut 0;
-visits := visits + 1;
+		sourceText: `let queueDepth := mut 0;
+queueDepth := queueDepth + 1;
 
-let nextVisits := visits + 1;
-nextVisits;`,
+let nextQueueDepth := queueDepth + 1;
+nextQueueDepth;`,
 		evidence: {
 			path: "docs/what/language/developers/csharp/variables-mutation.md",
 			line: 1,
@@ -107,8 +107,8 @@ publicEndpoint.port;`,
 		language: "musi",
 		sourceText: `let iter := import "@std/iter";
 
-let ports := [3000, 8080];
-let visible := ports
+let ticketIds := [3000, 8080];
+let visible := ticketIds
   |> iter.append[Int](9000)
   |> iter.collect[Int]();
 visible;`,
@@ -122,15 +122,15 @@ visible;`,
 		language: "musi",
 		sourceText: `let option := import "@std/option";
 
-let lookupPort (name : String) : option.Option[Int] :=
+let lookupDock (name : String) : option.Option[Int] :=
   match name (
-  | "admin" => option.some[Int](9000)
-  | _ => option.none[Int]()
+  | "admin" => option.someOf[Int](9000)
+  | _ => option.noneOf[Int]()
   );
 
-let port := lookupPort("web")
+let dock := lookupDock("web")
   |> option.unwrapOr[Int](8080);
-port;`,
+dock;`,
 		evidence: {
 			path: "docs/what/language/developers/csharp/null-option-result.md",
 			line: 1,
@@ -141,15 +141,15 @@ port;`,
 		language: "musi",
 		sourceText: `let result := import "@std/result";
 
-let parsePort (text : String) : result.Result[Int, String] :=
+let parseWeight (text : String) : result.Result[Int, String] :=
   match text (
-  | "8080" => result.ok[Int, String](8080)
-  | _ => result.err[Int, String]("invalid port")
+  | "450" => result.ok[Int, String](450)
+  | _ => result.err[Int, String]("invalid weight")
   );
 
-let port := parsePort("abc")
-  |> result.unwrapOr[Int, String](3000);
-port;`,
+let weight := parseWeight("abc")
+  |> result.unwrapOr[Int, String](0);
+weight;`,
 		evidence: {
 			path: "docs/what/language/developers/csharp/null-option-result.md",
 			line: 1,
@@ -211,8 +211,8 @@ match state (
 		language: "musi",
 		sourceText: `let identity[T] (input : T) : T := input;
 
-let port := identity[Int](8080);
-port;`,
+let dock := identity[Int](8080);
+dock;`,
 		evidence: {
 			path: "docs/what/language/developers/csharp/generics-interfaces-laws.md",
 			line: 1,
@@ -241,10 +241,10 @@ let carVehicle := instance Vehicle[Car] {
 	{
 		id: "csharp-extension-methods-and-calls",
 		language: "musi",
-		sourceText: `let (port : Int).withOffset (offset : Int) : Int := port + offset;
+		sourceText: `let (dock : Int).withOffset (offset : Int) : Int := dock + offset;
 
-let publicPort := 8080.withOffset(1);
-publicPort;`,
+let publicDock := 8080.withOffset(1);
+publicDock;`,
 		evidence: {
 			path: "docs/what/language/developers/csharp/extension-methods-and-calls.md",
 			line: 1,
@@ -253,7 +253,7 @@ publicPort;`,
 	{
 		id: "csharp-module-export",
 		language: "musi",
-		sourceText: "export let defaultPort () : Int := 8080;",
+		sourceText: "export let defaultDock () : Int := 8080;",
 		evidence: {
 			path: "docs/what/language/developers/csharp/namespaces-modules-packages.md",
 			line: 1,
@@ -264,8 +264,8 @@ publicPort;`,
 		language: "musi",
 		sourceText: `let Defaults := import "./defaults";
 
-let port := Defaults.defaultPort();
-port;`,
+let dock := Defaults.defaultDock();
+dock;`,
 		evidence: {
 			path: "docs/what/language/developers/csharp/namespaces-modules-packages.md",
 			line: 1,
@@ -276,12 +276,12 @@ port;`,
 		language: "musi",
 		sourceText: `let testing := import "@std/testing";
 
-let defaultPort () : Int := 8080;
+let defaultDock () : Int := 8080;
 
 export let test () :=
   (
-    testing.describe("ports");
-    testing.it("default port is http alt", testing.toBe(defaultPort(), 8080));
+    testing.describe("shipping defaults");
+    testing.it("default dock is http alt", testing.toBe(defaultDock(), 8080));
     testing.endDescribe()
   );`,
 		evidence: {

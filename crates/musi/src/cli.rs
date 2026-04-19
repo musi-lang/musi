@@ -1,11 +1,37 @@
 use std::path::PathBuf;
 
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum DiagnosticsFormatArg {
     Text,
     Json,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum FmtProfileArg {
+    Standard,
+    Compact,
+    Expanded,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum FmtMatchArmIndentArg {
+    PipeAligned,
+    Block,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum FmtMatchArmArrowAlignmentArg {
+    None,
+    Consecutive,
+    Block,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum FmtOperatorBreakArg {
+    Before,
+    After,
 }
 
 #[derive(Debug, Parser)]
@@ -21,6 +47,52 @@ pub struct ReservedCommandArgs {
     pub args: Vec<String>,
 }
 
+#[derive(Debug, Args)]
+pub struct FmtArgs {
+    #[arg(long, action = ArgAction::Count)]
+    pub all: u8,
+    #[arg(long, action = ArgAction::Count)]
+    pub check: u8,
+    #[arg(long)]
+    pub config: Option<PathBuf>,
+    #[arg(long, action = ArgAction::Count)]
+    pub no_config: u8,
+    #[arg(long)]
+    pub ext: Option<String>,
+    #[arg(long)]
+    pub line_width: Option<usize>,
+    #[arg(long)]
+    pub indent_width: Option<usize>,
+    #[arg(long)]
+    pub profile: Option<FmtProfileArg>,
+    #[arg(long)]
+    pub match_arm_indent: Option<FmtMatchArmIndentArg>,
+    #[arg(long)]
+    pub match_arm_arrow_alignment: Option<FmtMatchArmArrowAlignmentArg>,
+    #[arg(long)]
+    pub operator_break: Option<FmtOperatorBreakArg>,
+    #[arg(long, action = ArgAction::Count)]
+    pub use_tabs: u8,
+    #[arg(long, action = ArgAction::Count)]
+    pub use_spaces: u8,
+    #[arg(long = "ignore")]
+    pub ignore: Vec<String>,
+    #[arg(long = "watch", action = ArgAction::Count)]
+    pub watch: u8,
+    #[arg(long = "watch-exclude")]
+    pub watch_exclude: Vec<String>,
+    #[arg(long = "no-clear-screen", action = ArgAction::Count)]
+    pub no_clear_screen: u8,
+    #[arg(long, action = ArgAction::Count)]
+    pub permit_no_files: u8,
+    #[arg(
+        value_name = "PATH",
+        trailing_var_arg = true,
+        allow_hyphen_values = true
+    )]
+    pub paths: Vec<PathBuf>,
+}
+
 #[derive(Debug, Subcommand)]
 pub enum Command {
     Init {
@@ -28,11 +100,15 @@ pub enum Command {
     },
     Check {
         target: Option<PathBuf>,
+        #[arg(long, action = ArgAction::Count)]
+        workspace: u8,
         #[arg(long, value_enum, default_value = "text")]
         diagnostics_format: DiagnosticsFormatArg,
     },
     Build {
         target: Option<PathBuf>,
+        #[arg(long, action = ArgAction::Count)]
+        workspace: u8,
         #[arg(long)]
         out: Option<PathBuf>,
         #[arg(long)]
@@ -45,6 +121,8 @@ pub enum Command {
     },
     Test {
         target: Option<PathBuf>,
+        #[arg(long, action = ArgAction::Count)]
+        workspace: u8,
     },
     Task {
         name: String,
@@ -55,7 +133,7 @@ pub enum Command {
     },
     Lsp,
     Compile(ReservedCommandArgs),
-    Fmt(ReservedCommandArgs),
+    Fmt(FmtArgs),
     Lint(ReservedCommandArgs),
     Bench(ReservedCommandArgs),
     Doc(ReservedCommandArgs),

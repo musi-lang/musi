@@ -38,8 +38,85 @@ pub fn format_text(artifact: &Artifact) -> String {
     format_globals(&mut out, artifact);
     format_exports(&mut out, artifact);
     format_meta(&mut out, artifact);
-    format_methods(&mut out, artifact);
+    format_procedures(&mut out, artifact);
 
+    out
+}
+
+#[must_use]
+pub fn format_hil_projection(artifact: &Artifact) -> String {
+    let mut out = String::new();
+
+    out.push_str("module @seam.projection {\n");
+    for (_, descriptor) in artifact.types.iter() {
+        out.push_str("  type @");
+        out.push_str(artifact.string_text(descriptor.name));
+        out.push_str(" = ");
+        push_quoted(&mut out, artifact.string_text(descriptor.term));
+        out.push('\n');
+    }
+    for (_, descriptor) in artifact.data.iter() {
+        out.push_str("  data @");
+        out.push_str(artifact.string_text(descriptor.name));
+        out.push_str(" {\n");
+        for variant in &descriptor.variants {
+            out.push_str("    .");
+            out.push_str(artifact.string_text(variant.name));
+            out.push('(');
+            for (index, ty) in variant.field_tys.iter().enumerate() {
+                if index != 0 {
+                    out.push_str(", ");
+                }
+                out.push_str(artifact.type_name(*ty));
+            }
+            out.push_str(")\n");
+        }
+        out.push_str("  }\n");
+    }
+    for (_, procedure) in artifact.procedures.iter() {
+        out.push_str("  fn @");
+        out.push_str(artifact.string_text(procedure.name));
+        out.push('(');
+        for index in 0..procedure.params {
+            if index != 0 {
+                out.push_str(", ");
+            }
+            out.push('%');
+            out.push_str(&index.to_string());
+            out.push_str(": _");
+        }
+        out.push_str(") -> _");
+        if procedure.hot {
+            out.push_str(" @hot");
+        }
+        if procedure.cold {
+            out.push_str(" @cold");
+        }
+        out.push_str(" {\n");
+        out.push_str("  entry:\n");
+        out.push_str("    seam {\n");
+        for entry in &procedure.code {
+            match entry {
+                CodeEntry::Label(label) => {
+                    out.push_str("      ");
+                    out.push_str(artifact.string_text(procedure.labels[usize::from(label.id)]));
+                    out.push_str(":\n");
+                }
+                CodeEntry::Instruction(instruction) => {
+                    out.push_str("      ");
+                    out.push_str(instruction.opcode.mnemonic());
+                    if !matches!(instruction.operand, Operand::None) {
+                        out.push(' ');
+                        format_operand(&mut out, artifact, procedure, &instruction.operand);
+                    }
+                    out.push('\n');
+                }
+            }
+        }
+        out.push_str("    }\n");
+        out.push_str("  }\n");
+    }
+    out.push_str("}\n");
     out
 }
 
@@ -167,28 +244,28 @@ fn format_meta(out: &mut String, artifact: &Artifact) {
     }
 }
 
-fn format_methods(out: &mut String, artifact: &Artifact) {
-    for (_, method) in artifact.methods.iter() {
-        out.push_str(".method ");
-        push_symbol_ref(out, artifact.string_text(method.name));
+fn format_procedures(out: &mut String, artifact: &Artifact) {
+    for (_, procedure) in artifact.procedures.iter() {
+        out.push_str(".procedure ");
+        push_symbol_ref(out, artifact.string_text(procedure.name));
         out.push_str(" params ");
-        out.push_str(&method.params.to_string());
+        out.push_str(&procedure.params.to_string());
         out.push_str(" locals ");
-        out.push_str(&method.locals.to_string());
-        if method.export {
+        out.push_str(&procedure.locals.to_string());
+        if procedure.export {
             out.push_str(" export");
         }
-        if method.hot {
+        if procedure.hot {
             out.push_str(" hot");
         }
-        if method.cold {
+        if procedure.cold {
             out.push_str(" cold");
         }
         out.push('\n');
-        for entry in &method.code {
+        for entry in &procedure.code {
             match entry {
                 CodeEntry::Label(label) => {
-                    out.push_str(artifact.string_text(method.labels[usize::from(label.id)]));
+                    out.push_str(artifact.string_text(procedure.labels[usize::from(label.id)]));
                     out.push_str(":\n");
                 }
                 CodeEntry::Instruction(instruction) => {
@@ -196,7 +273,7 @@ fn format_methods(out: &mut String, artifact: &Artifact) {
                     out.push_str(instruction.opcode.mnemonic());
                     if !matches!(instruction.operand, Operand::None) {
                         out.push(' ');
-                        format_operand(out, artifact, method, &instruction.operand);
+                        format_operand(out, artifact, procedure, &instruction.operand);
                     }
                     out.push('\n');
                 }
@@ -244,9 +321,12 @@ fn format_globals(out: &mut String, artifact: &Artifact) {
         if descriptor.export {
             out.push_str(" export");
         }
-        if let Some(method) = descriptor.initializer {
+        if let Some(procedure) = descriptor.initializer {
             out.push(' ');
-            push_symbol_ref(out, artifact.string_text(artifact.methods.get(method).name));
+            push_symbol_ref(
+                out,
+                artifact.string_text(artifact.procedures.get(procedure).name),
+            );
         }
         out.push('\n');
     }
@@ -258,7 +338,7 @@ fn format_exports(out: &mut String, artifact: &Artifact) {
         push_symbol_ref(out, artifact.string_text(descriptor.name));
         out.push(' ');
         match descriptor.target {
-            ExportTarget::Method(_) => out.push_str("method"),
+            ExportTarget::Procedure(_) => out.push_str("procedure"),
             ExportTarget::Global(_) => out.push_str("global"),
             ExportTarget::Foreign(_) => out.push_str("foreign"),
             ExportTarget::Type(_) => out.push_str("type"),
@@ -275,7 +355,7 @@ fn format_exports(out: &mut String, artifact: &Artifact) {
 fn format_operand(
     out: &mut String,
     artifact: &Artifact,
-    method: &MethodDescriptor,
+    procedure: &ProcedureDescriptor,
     operand: &Operand,
 ) {
     match operand {
@@ -295,14 +375,14 @@ fn format_operand(
         Operand::Global(id) => {
             push_symbol_ref(out, artifact.string_text(artifact.globals.get(*id).name));
         }
-        Operand::Method(id) => {
-            push_symbol_ref(out, artifact.string_text(artifact.methods.get(*id).name));
+        Operand::Procedure(id) => {
+            push_symbol_ref(out, artifact.string_text(artifact.procedures.get(*id).name));
         }
-        Operand::WideMethodCaptures {
-            method: id,
+        Operand::WideProcedureCaptures {
+            procedure: id,
             captures,
         } => {
-            push_symbol_ref(out, artifact.string_text(artifact.methods.get(*id).name));
+            push_symbol_ref(out, artifact.string_text(artifact.procedures.get(*id).name));
             out.push(' ');
             out.push_str(&captures.to_string());
         }
@@ -320,7 +400,7 @@ fn format_operand(
             push_symbol_ref(out, artifact.string_text(effect.name));
         }
         Operand::Label(id) => {
-            out.push_str(artifact.string_text(method.labels[usize::from(*id)]));
+            out.push_str(artifact.string_text(procedure.labels[usize::from(*id)]));
         }
         Operand::TypeLen { ty, len } => {
             push_symbol_ref(out, artifact.string_text(artifact.types.get(*ty).name));
@@ -332,7 +412,7 @@ fn format_operand(
                 if idx != 0 {
                     out.push_str(", ");
                 }
-                out.push_str(artifact.string_text(method.labels[usize::from(label)]));
+                out.push_str(artifact.string_text(procedure.labels[usize::from(label)]));
             }
         }
     }

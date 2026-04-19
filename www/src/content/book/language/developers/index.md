@@ -8,26 +8,10 @@ slug: "developers"
 summary: "Translate familiar habits into Musi without carrying over syntax that does not fit."
 ---
 
-This part is for readers who already write software in another language.
-Each guide starts from habits you already have, then shows how Musi writes the same idea with expressions, `let`, data constructors, pattern matching, effects, packages, and explicit unsafe boundaries.
+Musi for Developers is not the main Musi Book. It is a translation shelf for readers who already know another language and want to map existing habits into Musi terms.
 
-Rust and JavaScript/TypeScript get deeper comparisons because their common habits hide different questions.
-Rust needs a slower translation for value-based mutation and type-driven boundaries.
-JavaScript and TypeScript need a slower translation for objects, nullable values, promises, discriminated unions, modules, and TypeScript 5.9 type habits.
+Use these guides when you are thinking, "I know how I would do this in Rust, C, JavaScript, Python, Java, Go, Lua, C#, C, or C++; what is the Musi shape?" Each guide compares familiar source-language ideas with Musi's expression, data, type, effect, package, testing, and native-boundary model.
 
-## Choose Your Starting Point
+The main book teaches Musi in its own order. These guides are different. They are useful when another language is already in your head and you need help avoiding false friends. A Rust trait is not exactly a Musi class. A C pointer is not a Musi slice. A Java exception habit maps better to explicit result or effect boundaries. A JavaScript object may become a record, variant, class instance, or plain module depending on what it means.
 
-Pick the language you use most often.
-The guide will not teach that language back to you; it names the habits that usually transfer well and the ones that need a different Musi shape.
-
-## Shared Musi Model
-
-Musi code reads as values flowing through expressions.
-Blocks produce values, `match` chooses by shape, records keep named fields, and `request` asks an effect handler for work.
-There is no `return` keyword in ordinary function bodies.
-The final expression is the value.
-
-## Guides
-
-- [Musi for JavaScript and TypeScript Developers](/learn/book/developers/guides/javascript-typescript)
-- [Musi for Rust Developers](/learn/book/developers/guides/rust)
+Start with the guide for the language you use most, then jump to the topic that matches the work in front of you. If the guide starts to feel like it is teaching the language from scratch, switch back to Musi Book. The book owns the learning path; these pages own comparison.

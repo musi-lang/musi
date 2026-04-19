@@ -3,10 +3,12 @@ import type { DocSearchEntry } from "../docs";
 interface DocsSearchProps {
 	entries: readonly DocSearchEntry[];
 	heading?: string;
+	inputLabel?: string;
 	lede?: string;
 	className?: string;
 	initialLimit?: number;
 	queryLimit?: number;
+	showHeader?: boolean;
 	variant?: "panel" | "disclosure";
 }
 
@@ -20,42 +22,53 @@ export function DocsSearch(props: DocsSearchProps) {
 	const queryLimit = props.queryLimit ?? initialLimit;
 	const visibleEntries = props.entries.slice(0, initialLimit);
 	const heading = props.heading ?? "Find docs";
+	const inputLabel = props.inputLabel ?? "Search docs";
+	const showHeader = props.showHeader ?? true;
 	const variant = props.variant ?? "panel";
 	const searchBody = (
 		<>
-			<div className="docs-search-header">
-				<div>
-					<div className="eyebrow">{heading}</div>
-					{props.lede ? <p className="muted">{props.lede}</p> : null}
+			{showHeader ? (
+				<div className="docs-search__header">
+					<div>
+						<div className="mx-kicker">{heading}</div>
+						{props.lede ? (
+							<p className="site-copy site-copy--small">{props.lede}</p>
+						) : null}
+					</div>
 				</div>
-			</div>
-			<label className="docs-search-field">
-				<span className="sr-only">Search docs</span>
+			) : null}
+			<label className="mx-field docs-search__field">
+				<span className="mx-field__label">{inputLabel}</span>
 				<input
 					type="search"
 					placeholder="Search chapters, guides, questions..."
 					data-docs-search-input={true}
-					aria-label="Search docs"
+					aria-label={inputLabel}
 				/>
 			</label>
-			<div className="docs-search-results" data-docs-search-results={true}>
+			<div className="docs-search__results" data-docs-search-results={true}>
 				{props.entries.map((entry, index) => (
 					<a
 						key={entry.id}
 						href={entry.path}
-						className="docs-search-result"
+						className="mx-action-card mx-action-card--quiet docs-search__result"
 						data-docs-search-entry={true}
 						data-search-text={entry.searchText}
 						hidden={index >= visibleEntries.length}
 					>
-						<span className="doc-row-meta">{entryKicker(entry)}</span>
-						<strong>{entry.title}</strong>
-						<span>{entry.summary}</span>
+						<span className="mx-action-card__head">
+							<span className="mx-action-card__kicker">
+								{entryKicker(entry)}
+							</span>
+							<span className="mx-action-card__action">Open</span>
+						</span>
+						<strong className="mx-action-card__title">{entry.title}</strong>
+						<span className="mx-action-card__body">{entry.summary}</span>
 					</a>
 				))}
 			</div>
 			<p
-				className="muted docs-search-empty"
+				className="site-copy site-copy--small docs-search__empty"
 				data-docs-search-empty={true}
 				hidden={true}
 			>
@@ -65,23 +78,21 @@ export function DocsSearch(props: DocsSearchProps) {
 	);
 	return (
 		<search
-			className={`docs-search docs-search-${variant}${props.className ? ` ${props.className}` : ""}`}
+			className={`docs-search docs-search--${variant}${props.className ? ` ${props.className}` : ""}`}
 			data-docs-search={true}
 			data-docs-search-initial-limit={initialLimit}
 			data-docs-search-query-limit={queryLimit}
 		>
 			{variant === "disclosure" ? (
 				<details
-					className="docs-search-disclosure"
+					className="docs-search__disclosure mx-card"
 					data-docs-search-details={true}
 				>
-					<summary className="docs-search-summary">
-						<span className="eyebrow">{heading}</span>
-						<span className="docs-search-summary-cue" aria-hidden={true}>
-							⌄
-						</span>
+					<summary className="mx-card__title docs-search__summary">
+						<span>{heading}</span>
+						<span aria-hidden={true}>⌄</span>
 					</summary>
-					<div className="docs-search-drawer">{searchBody}</div>
+					<div className="mx-card__body docs-search__drawer">{searchBody}</div>
 				</details>
 			) : (
 				searchBody

@@ -14,17 +14,19 @@ use musi_foundation::runtime as foundation_runtime;
 use musi_native::NativeHost;
 use musi_vm::{EffectCall, Value, VmError, VmErrorKind};
 
+use crate::output::RuntimeOutputSinkCell;
+
 type RandomStateCell = Rc<RefCell<u64>>;
 
 mod env;
 mod process;
 mod time_random;
 
-pub fn register_runtime_handlers(host: &mut NativeHost) {
+pub fn register_runtime_handlers(host: &mut NativeHost, output: &RuntimeOutputSinkCell) {
     env::register(host);
     process::register(host);
     time_random::register(host);
-    register_log_io_handlers(host);
+    register_log_io_handlers(host, output);
     register_fs_handlers(host);
     register_text_handlers(host);
     register_path_handlers(host);
@@ -32,50 +34,72 @@ pub fn register_runtime_handlers(host: &mut NativeHost) {
     register_encoding_handlers(host);
 }
 
-fn register_log_io_handlers(host: &mut NativeHost) {
+fn register_log_io_handlers(host: &mut NativeHost, output: &RuntimeOutputSinkCell) {
+    let log_info_output = Rc::clone(output);
     host.register_effect_handler(
         foundation_runtime::EFFECT,
         foundation_runtime::LOG_INFO_OP,
-        |effect, args| {
+        move |effect, args| {
             let [Value::String(message)] = args else {
                 return Err(invalid_runtime_effect(effect, "invalid logInfo args"));
             };
-            eprintln!("[musi:runtime] {}", message.as_ref());
+            let line = format!("[musi:runtime] {}", message.as_ref());
+            log_info_output
+                .borrow_mut()
+                .write_stderr(&line, true)
+                .map_err(|error| {
+                    invalid_runtime_effect(effect, format!("logInfo failed (`{error}`)"))
+                })?;
             Ok(Value::Unit)
         },
     );
 
+    let log_write_output = Rc::clone(output);
     host.register_effect_handler(
         foundation_runtime::EFFECT,
         foundation_runtime::LOG_WRITE_OP,
-        |effect, args| {
+        move |effect, args| {
             let [Value::Int(level), Value::String(message)] = args else {
                 return Err(invalid_runtime_effect(effect, "invalid logWrite args"));
             };
-            eprintln!("[std:{level}] {}", message.as_ref());
+            let line = format!("[std:{level}] {}", message.as_ref());
+            log_write_output
+                .borrow_mut()
+                .write_stderr(&line, true)
+                .map_err(|error| {
+                    invalid_runtime_effect(effect, format!("logWrite failed (`{error}`)"))
+                })?;
             Ok(Value::Unit)
         },
     );
 
+    let stdout_output = Rc::clone(output);
     host.register_effect_handler(
         foundation_runtime::EFFECT,
         foundation_runtime::IO_PRINT_OP,
-        |effect, args| write_stream(effect, args, StreamKind::Stdout, false),
+        move |effect, args| write_stream(effect, args, StreamKind::Stdout, false, &stdout_output),
     );
+    let stdout_line_output = Rc::clone(output);
     host.register_effect_handler(
         foundation_runtime::EFFECT,
         foundation_runtime::IO_PRINT_LINE_OP,
-        |effect, args| write_stream(effect, args, StreamKind::Stdout, true),
+        move |effect, args| {
+            write_stream(effect, args, StreamKind::Stdout, true, &stdout_line_output)
+        },
     );
+    let stderr_output = Rc::clone(output);
     host.register_effect_handler(
         foundation_runtime::EFFECT,
         foundation_runtime::IO_PRINT_ERROR_OP,
-        |effect, args| write_stream(effect, args, StreamKind::Stderr, false),
+        move |effect, args| write_stream(effect, args, StreamKind::Stderr, false, &stderr_output),
     );
+    let stderr_line_output = Rc::clone(output);
     host.register_effect_handler(
         foundation_runtime::EFFECT,
         foundation_runtime::IO_PRINT_ERROR_LINE_OP,
-        |effect, args| write_stream(effect, args, StreamKind::Stderr, true),
+        move |effect, args| {
+            write_stream(effect, args, StreamKind::Stderr, true, &stderr_line_output)
+        },
     );
     host.register_effect_handler(
         foundation_runtime::EFFECT,
@@ -469,6 +493,7 @@ fn write_stream(
     args: &[Value],
     stream: StreamKind,
     line: bool,
+    output: &RuntimeOutputSinkCell,
 ) -> Result<Value, VmError> {
     let [Value::String(text)] = args else {
         let op = match (stream, line) {
@@ -479,22 +504,19 @@ fn write_stream(
         };
         return Err(invalid_runtime_effect(effect, format!("invalid {op} args")));
     };
-    match (stream, line) {
-        (StreamKind::Stdout, true) => println!("{}", text.as_ref()),
-        (StreamKind::Stderr, true) => eprintln!("{}", text.as_ref()),
-        (StreamKind::Stdout, false) => {
-            print!("{}", text.as_ref());
-            io::stdout().flush().map_err(|error| {
-                invalid_runtime_effect(effect, format!("ioPrint failed (`{error}`)"))
-            })?;
-        }
-        (StreamKind::Stderr, false) => {
-            eprint!("{}", text.as_ref());
-            io::stderr().flush().map_err(|error| {
-                invalid_runtime_effect(effect, format!("ioPrintError failed (`{error}`)"))
-            })?;
-        }
-    }
+    let write_result = match stream {
+        StreamKind::Stdout => output.borrow_mut().write_stdout(text.as_ref(), line),
+        StreamKind::Stderr => output.borrow_mut().write_stderr(text.as_ref(), line),
+    };
+    write_result.map_err(|error| {
+        let op = match (stream, line) {
+            (StreamKind::Stdout, false) => "ioPrint",
+            (StreamKind::Stdout, true) => "ioPrintLine",
+            (StreamKind::Stderr, false) => "ioPrintError",
+            (StreamKind::Stderr, true) => "ioPrintErrorLine",
+        };
+        invalid_runtime_effect(effect, format!("{op} failed (`{error}`)"))
+    })?;
     Ok(Value::Unit)
 }
 

@@ -1,31 +1,31 @@
 ---
 title: "Data Variants and Pattern Matching"
-description: "Translate Python match and tagged object habits into Musi data variants and match arms."
+description: "Read Data Variants and Pattern Matching as a Python habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Python Developers"
 order: 9
 slug: "data-variants-patterns"
-summary: "Use data variants when each case has a name and a different payload."
+summary: "Translate the Python habit, then use the Musi Book for the full rule."
 ---
 
-Python `match` can branch on object shape, strings, tuples, or classes:
+A Python reader brings habits from names, dictionaries, classes, protocols, exceptions, None, imports, and duck typing. That helps with code around domain words before machinery, but the Musi page asks a narrower question: what contract should this named cases and pattern matching example make visible?
 
-```python
-state = {"kind": "running", "id": 42}
+{{compare:python-data-variants-patterns}}
 
-match state:
-    case {"kind": "running", "id": task_id}:
-        selected = task_id
-    case {"kind": "waiting"}:
-        selected = 0
-    case _:
-        selected = -1
+## Reading Data Variants and Pattern Matching from Python
 
-selected
-```
+On the Musi side, Musi data variants name the cases directly, and `match` reads the case split at the point where the answer is chosen. Read the shared example through Python eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-Musi names the cases directly with `data` variants. The payload label says what travels with that case.
+## False friend
 
-{{snippet:python-data-variants-patterns}}
+Do not keep integer tags, string unions, subclass checks, or table marker fields when a data variant is the real shape. For a Python reader, the trap is trusting runtime convention where Musi expects a visible type or effect; Musi `class` is closer to an explicit protocol/typeclass than a Python class with attributes and methods.
 
-Use variants when a plain dictionary would make readers remember which string tags and fields are valid.
+## When this pays off
+
+Use data variants when an order, animal, traffic light, payment state, or parser result has a closed set of cases. The Python instinct still helps here: Keep the Python habit of naming the real-world thing first.
+
+## Keep close
+
+- [Data definitions](/learn/book/data/data-definitions)
+- [Patterns](/learn/book/data/patterns)
+- [Records](/learn/book/data/records)

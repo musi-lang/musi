@@ -1,43 +1,31 @@
 ---
 title: "Blocks, Branching, and Loops"
-description: "Translate Go block statements, switches, and loops into Musi block expressions, match, recursion, and pipelines."
+description: "Read Blocks, Branching, and Loops as a Go habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Go Developers"
 order: 3
 slug: "blocks-branching-loops"
-summary: "Use blocks as values and model repetition with recursion or library traversal."
+summary: "Translate the Go habit, then use the Musi Book for the full rule."
 ---
 
-# Blocks, Branching, and Loops
+A Go reader brings habits from packages, structs, slices, nil, multiple returns, interfaces, goroutines, channels, and explicit errors. That helps with small named operations and direct data flow, but the Musi page asks a narrower question: what contract should this branching and block results example make visible?
 
-Go blocks group statements and return explicitly when a value leaves a function:
+{{compare:go-blocks-branching-loops}}
 
-```go
-func invoiceTotal() int {
-    basePrice := 1200
-    fee := 45
-    return basePrice + fee
-}
-```
+## Reading Blocks, Branching, and Loops from Go
 
-Musi blocks can produce the final value directly.
+On the Musi side, Musi blocks and matches are expressions when they produce a value; the branch answer matters more than the statement container. Read the shared example through Go eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-{{snippet:go-block-expression}}
+## False friend
 
-Go loops commonly mutate loop state:
+Do not carry over temporary variables whose only job was to smuggle a branch result out of a statement block. For a Go reader, the trap is using absence or failure as a side channel because Go makes that cheap; Musi `class` is closer to an explicit interface constraint with instances; it is not a struct and not a method set attached by package convention.
 
-```go
-func totalSeats(groups int) int {
-    seats := 0
-    for remaining := groups; remaining > 0; remaining -= 1 {
-        seats += 4
-    }
-    return seats
-}
-```
+## When this pays off
 
-Musi uses recursion when the loop is a small state machine.
+Use this shape when a route fee, access decision, or small rule table chooses one value from several cases. The Go instinct still helps here: Keep the Go habit of writing the small thing first and naming package boundaries clearly.
 
-{{snippet:go-recursive-control-flow}}
+## Keep close
 
-For collections, prefer library traversal and pipelines. For changing counters or accumulators, make the state explicit in recursive parameters.
+- [Blocks and expressions](/learn/book/start/blocks-and-expressions)
+- [Patterns](/learn/book/data/patterns)
+- [Operators](/learn/book/core/operators)

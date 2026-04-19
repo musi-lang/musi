@@ -59,9 +59,25 @@ impl Display for DiagCode {
 /// A source annotation pointing to a span with a message.
 #[derive(Debug, Clone)]
 pub struct DiagLabel {
+    kind: DiagLabelKind,
     span: Span,
     source_id: SourceId,
     message: String,
+}
+
+/// Source annotation role in diagnostic output.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiagLabelKind {
+    Primary,
+    Secondary,
+}
+
+/// Exact source replacement suggestion.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiagFix {
+    span: Span,
+    source_id: SourceId,
+    replacement: String,
 }
 
 /// A diagnostic paired with owned source-path and source-text data.
@@ -103,13 +119,36 @@ impl Display for OwnedSourceDiag {
 impl DiagLabel {
     #[must_use]
     pub fn new(span: Span, source_id: SourceId, message: impl Into<String>) -> Self {
+        Self::primary(span, source_id, message)
+    }
+
+    #[must_use]
+    pub fn primary(span: Span, source_id: SourceId, message: impl Into<String>) -> Self {
         let message = message.into();
         style::validate(message.as_str());
         Self {
+            kind: DiagLabelKind::Primary,
             span,
             source_id,
             message,
         }
+    }
+
+    #[must_use]
+    pub fn secondary(span: Span, source_id: SourceId, message: impl Into<String>) -> Self {
+        let message = message.into();
+        style::validate(message.as_str());
+        Self {
+            kind: DiagLabelKind::Secondary,
+            span,
+            source_id,
+            message,
+        }
+    }
+
+    #[must_use]
+    pub const fn kind(&self) -> DiagLabelKind {
+        self.kind
     }
 
     #[must_use]
@@ -128,6 +167,32 @@ impl DiagLabel {
     }
 }
 
+impl DiagFix {
+    #[must_use]
+    pub fn new(span: Span, source_id: SourceId, replacement: impl Into<String>) -> Self {
+        Self {
+            span,
+            source_id,
+            replacement: replacement.into(),
+        }
+    }
+
+    #[must_use]
+    pub const fn span(&self) -> Span {
+        self.span
+    }
+
+    #[must_use]
+    pub const fn source_id(&self) -> SourceId {
+        self.source_id
+    }
+
+    #[must_use]
+    pub const fn replacement(&self) -> &str {
+        self.replacement.as_str()
+    }
+}
+
 /// A compiler diagnostic with severity, message, labels, and notes.
 #[derive(Debug, Clone)]
 pub struct Diag {
@@ -137,6 +202,7 @@ pub struct Diag {
     hint: Option<String>,
     labels: Vec<DiagLabel>,
     notes: Vec<String>,
+    fixes: Vec<DiagFix>,
 }
 
 impl Diag {
@@ -150,6 +216,7 @@ impl Diag {
             hint: None,
             labels: Vec::new(),
             notes: Vec::new(),
+            fixes: Vec::new(),
         }
     }
 
@@ -181,7 +248,34 @@ impl Diag {
         source_id: SourceId,
         message: impl Into<String>,
     ) -> Self {
-        self.labels.push(DiagLabel::new(span, source_id, message));
+        self.labels
+            .push(DiagLabel::primary(span, source_id, message));
+        self
+    }
+
+    /// Attach a primary source label to this diagnostic.
+    #[must_use]
+    pub fn with_primary_label(
+        mut self,
+        span: Span,
+        source_id: SourceId,
+        message: impl Into<String>,
+    ) -> Self {
+        self.labels
+            .push(DiagLabel::primary(span, source_id, message));
+        self
+    }
+
+    /// Attach a secondary source label to this diagnostic.
+    #[must_use]
+    pub fn with_secondary_label(
+        mut self,
+        span: Span,
+        source_id: SourceId,
+        message: impl Into<String>,
+    ) -> Self {
+        self.labels
+            .push(DiagLabel::secondary(span, source_id, message));
         self
     }
 
@@ -207,6 +301,18 @@ impl Diag {
         let message = message.into();
         style::validate(message.as_str());
         self.notes.push(message);
+        self
+    }
+
+    /// Attach exact source replacement.
+    #[must_use]
+    pub fn with_replacement(
+        mut self,
+        span: Span,
+        source_id: SourceId,
+        replacement: impl Into<String>,
+    ) -> Self {
+        self.fixes.push(DiagFix::new(span, source_id, replacement));
         self
     }
 
@@ -238,5 +344,10 @@ impl Diag {
     #[must_use]
     pub const fn notes(&self) -> &[String] {
         self.notes.as_slice()
+    }
+
+    #[must_use]
+    pub const fn fixes(&self) -> &[DiagFix] {
+        self.fixes.as_slice()
     }
 }

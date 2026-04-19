@@ -1,63 +1,42 @@
 ---
 title: "Overview"
-description: "Translate Python 3.14 habits into Musi code with side-by-side examples."
+description: "Map Python 3.14 habits to the Musi Book without repeating every construct example."
 group: "Musi for Developers"
 section: "Python Developers"
 order: 1
 slug: "overview"
-summary: "Start from Python habits, then read the equivalent Musi expression, data, effect, and package shapes."
+summary: "Use this guide when Python habits make Musi feel surprising."
 ---
 
-Python 3.14 is the comparison point for this guide. Each page starts with Python code, then shows Musi code with the same names and the same job.
+Python favors readable names, dictionaries, classes, exceptions, None, imports, and duck typing. Musi keeps the readable domain-first style, but asks more facts to be written down: records/data for shape, classes/instances for promised behavior, Option for expected absence, and effects for work that Python often hides behind a call that may raise.
 
-Python readers often rely on indentation, dynamic objects, `None`, exceptions, and flexible imports. Musi keeps the same practical goals, but makes value flow, data shape, and outside work visible in the code.
+Use this guide as a translation journal for Python code. Start with the familiar habit, then ask which Musi construct owns the same promise. A page is successful when it tells you which old instinct to keep and which old shortcut to drop.
 
-## First translation
+## Start from the habit that hurts
 
-Python often starts with a small function and a result binding:
+- [Values, Functions, and Final Expressions](/learn/guides/python/values-functions) - values habits get translated once, then the Musi Book owns the details.
+- [Blocks, Control Flow, and Repetition](/learn/guides/python/blocks-control-flow) - blocks habits get translated once, then the Musi Book owns the details.
+- [Names, Mutation, and Fresh Values](/learn/guides/python/names-mutation) - mutation habits get translated once, then the Musi Book owns the details.
+- [Records, Objects, and Dictionaries](/learn/guides/python/records-objects-dicts) - records habits get translated once, then the Musi Book owns the details.
+- [Collections and Pipelines](/learn/guides/python/collections-pipelines) - arrays habits get translated once, then the Musi Book owns the details.
+- [None, Option, and Result](/learn/guides/python/none-option-result) - absence and failure stop being side channels.
+- [Exceptions, Results, and Effects](/learn/guides/python/exceptions-effects) - outside work becomes a named request.
+- [Data Variants and Pattern Matching](/learn/guides/python/data-variants-patterns) - patterns habits get translated once, then the Musi Book owns the details.
+- [Types, Generics, and Protocols](/learn/guides/python/types-generics-protocols) - generics habits get translated once, then the Musi Book owns the details.
+- [Modules and Packages](/learn/guides/python/modules-packages) - package boundaries replace compatibility-era habits.
+- [Testing and Tooling](/learn/guides/python/testing-tooling) - testing habits get translated once, then the Musi Book owns the details.
+- [Native Boundaries, Unsafe, and FFI](/learn/guides/python/native-unsafe-ffi) - native edges stay narrow enough to audit.
 
-```python
-def total(base: int, fee: int) -> int:
-    return base + fee
+## Habits that still help
 
-answer = total(1200, 45)
-answer
-```
+- Keep the Python habit of naming the real-world thing first.
+- Drop implicit duck-typing and None sentinels when the Musi type can say the branch upfront.
+- Keep examples tied to ordinary work: receipts, routes, files, animals, people, rooms, and services.
 
-Musi writes the same calculation as a `let` function. The final expression leaves the value.
+## First false friend
 
-{{snippet:python-values-functions}}
+Musi `class` is closer to an explicit protocol/typeclass than a Python class with attributes and methods. If you need a person, car, invoice, or package, start with records or data. If you need any type that can compare, show, encode, or step, use a class with instances.
 
-Read it like a kitchen ticket: inputs enter the named station, the expression at the end is the dish that leaves.
+## When to switch to the Musi Book
 
-## Reading path
-
-- [Values, Functions, and Final Expressions](/learn/book/developers/guides/python/values-functions)
-- [Blocks, Control Flow, and Repetition](/learn/book/developers/guides/python/blocks-control-flow)
-- [Names, Mutation, and Fresh Values](/learn/book/developers/guides/python/names-mutation)
-- [Records, Objects, and Dictionaries](/learn/book/developers/guides/python/records-objects-dicts)
-- [Collections and Pipelines](/learn/book/developers/guides/python/collections-pipelines)
-- [`None`, Option, and Result](/learn/book/developers/guides/python/none-option-result)
-- [Exceptions, Results, and Effects](/learn/book/developers/guides/python/exceptions-effects)
-- [Data Variants and Pattern Matching](/learn/book/developers/guides/python/data-variants-patterns)
-- [Types, Generics, and Protocols](/learn/book/developers/guides/python/types-generics-protocols)
-- [Modules and Packages](/learn/book/developers/guides/python/modules-packages)
-- [Testing and Tooling](/learn/book/developers/guides/python/testing-tooling)
-- [Native Boundaries, Unsafe, and FFI](/learn/book/developers/guides/python/native-unsafe-ffi)
-
-## Python habits that transfer
-
-- name functions after domain work
-- keep data close to behavior that reads it
-- use tests as executable examples
-- make package boundaries clear
-- prefer readable code over clever compression
-
-## Python habits to translate
-
-- `return` becomes the final expression
-- indentation blocks become expression blocks with braces or parentheses
-- `None` becomes `Option`
-- exceptions become `Result` when failure is ordinary data
-- async and outside work become effect requests or stdlib runtime helpers
-- duck typing and `Protocol` become classes, instances, and laws when behavior needs rules
+Stay in this guide while a Python habit is getting in the way. Switch to [Values and let](/learn/book/start/values-and-let), [Records](/learn/book/data/records), [Patterns](/learn/book/data/patterns), [Generics](/learn/book/types/generics), [Classes](/learn/book/abstractions/classes), and [Effects](/learn/book/effects-runtime/effects) when you need the source-of-truth rule.

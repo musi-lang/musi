@@ -8,6 +8,12 @@ pub enum DiagnosticsFormatArg {
     Json,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum DisasmLevelArg {
+    Hil,
+    Seam,
+}
+
 #[derive(Debug, Parser)]
 #[command(name = "music")]
 pub struct Cli {
@@ -37,5 +43,7 @@ pub enum Command {
     },
     Disasm {
         path: PathBuf,
+        #[arg(long, value_enum, default_value = "hil")]
+        level: DisasmLevelArg,
     },
 }

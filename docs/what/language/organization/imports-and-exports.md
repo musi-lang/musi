@@ -7,17 +7,22 @@ order: 17
 slug: "imports-and-exports"
 summary: "Bring code in explicitly and expose only what other files need."
 ---
-
-Imports bring another module exported names into reach. Exports decide which names leave the current module.
+Imports say what this file depends on. Exports say what this file offers to others. Together they form the public hallway between rooms in the package.
 
 {{snippet:chapter-imports-and-exports}}
 
-## Reading Model
+A clean import list helps readers see the file's outside needs before reading the body. A clean export list keeps accidental helpers from becoming promises.
 
-Read the example from top to bottom. The first visible name gives the reader a handle, the following expressions show how values move, and the final expression shows what leaves the example.
+## Imports should feel boring
 
-## Practical Rule
+If an import surprises you, the file may be doing work from the wrong layer. A receipt formatter importing low-level runtime operations is a smell unless formatting truly owns that boundary.
 
-Use this form when it makes value movement clearer than copying habits from another language. Prefer the smallest form that still tells the reader where names, types, effects, and boundaries live.
+## Exports create commitments
 
-Continue to [Type Annotations](/learn/book/types/foundations/type-annotations).
+Once another file uses an exported name, changing it becomes a package-wide decision. Export the stable idea, not every helper that made the idea possible.
+
+Imports and exports are also the first map a new reader gets. A file that imports payment, clock, and logging code announces that it crosses a boundary. A file that exports only `formatReceipt` announces that the rest is private craft.
+
+Organization chapters are about where code lives. A package is like a small shop, files are shelves, imports are items brought in from another shelf, and exports are items placed at the counter for other code to use.
+
+Messy organization usually starts when every file reaches for every name. Keep imports narrow, export only the names another file needs, and let file names explain the job before a reader opens them.

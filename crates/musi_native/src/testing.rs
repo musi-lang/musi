@@ -28,6 +28,8 @@ impl NativeTestCaseResult {
 pub struct NativeTestReport {
     pub module: Box<str>,
     pub cases: Box<[NativeTestCaseResult]>,
+    pub stdout: Box<str>,
+    pub stderr: Box<str>,
 }
 
 impl NativeTestReport {
@@ -36,7 +38,16 @@ impl NativeTestReport {
         Self {
             module: module.into(),
             cases,
+            stdout: Box::default(),
+            stderr: Box::default(),
         }
+    }
+
+    #[must_use]
+    pub fn with_output(mut self, stdout: Box<str>, stderr: Box<str>) -> Self {
+        self.stdout = stdout;
+        self.stderr = stderr;
+        self
     }
 }
 

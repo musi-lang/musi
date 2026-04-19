@@ -1,60 +1,64 @@
 import { siteCopy } from "../../lib/site-copy";
 import type { AppRoute } from "../../routes";
 import { ActionStrip, InlineAction, SecondaryAction } from "../../ui/actions";
-import { Surface } from "../../ui/surface";
+import { MachinesActionCard, MachinesPanel } from "../../ui/machines";
 
 export function PlaygroundPage(_props: { route: AppRoute }) {
 	const copy = siteCopy.playground;
 	const statusCards = [
 		{
-			label: "Current",
-			title: "Browser runner not public",
-			copy: "Use the source install path for real checks and tests today.",
+			label: "Local install",
+			title: "Use local runner",
+			copy: "Use source install for checks and tests.",
 			href: "/install",
-			action: "Install locally",
+			action: "Install",
 		},
 		{
-			label: "Fallback",
-			title: "Read runnable examples",
-			copy: "The book keeps examples close to supported syntax and commands.",
+			label: "Examples",
+			title: "Read examples",
+			copy: "Open runnable examples and commands.",
 			href: "/learn/book",
 			action: "Open book",
 		},
 		{
-			label: "Track work",
-			title: "Follow implementation status",
-			copy: "Issues and repository links show current playground and runtime work.",
+			label: "Status",
+			title: "Track work",
+			copy: "Follow playground and runtime work in public issues.",
 			href: "/community",
-			action: "Open community",
+			action: "Community",
 		},
 	];
 	return (
-		<div className="page-stack">
-			<Surface tone="hero" className="section-panel portal-status-panel">
-				<div className="eyebrow">{copy.eyebrow}</div>
-				<h1>{copy.statusTitle}</h1>
-				<p className="muted">{copy.statusCopy}</p>
-				<ActionStrip>
-					<SecondaryAction href="/install">
-						{siteCopy.nav.install}
-					</SecondaryAction>
-					<InlineAction href="/community">
-						{siteCopy.nav.community}
-					</InlineAction>
-				</ActionStrip>
-			</Surface>
-			<section className="portal-grid" aria-label="Playground paths">
+		<div className="site-stack">
+			<MachinesPanel title={copy.eyebrow}>
+				<div className="site-heading__body">
+					<div>
+						<h1 className="site-title site-title--page">{copy.statusTitle}</h1>
+						<p className="site-copy">{copy.statusCopy}</p>
+					</div>
+					<ActionStrip>
+						<SecondaryAction href="/install">
+							{siteCopy.nav.install}
+						</SecondaryAction>
+						<InlineAction href="/community">
+							{siteCopy.nav.community}
+						</InlineAction>
+					</ActionStrip>
+				</div>
+			</MachinesPanel>
+			<section
+				className="mx-grid site-grid--three"
+				aria-label="Playground paths"
+			>
 				{statusCards.map((card) => (
-					<Surface
+					<MachinesActionCard
 						key={card.title}
-						tone="raised"
-						className="portal-card portal-card-raised portal-card-task"
-					>
-						<div className="eyebrow">{card.label}</div>
-						<h2>{card.title}</h2>
-						<p>{card.copy}</p>
-						<InlineAction href={card.href}>{card.action}</InlineAction>
-					</Surface>
+						href={card.href}
+						kicker={card.label}
+						title={card.title}
+						description={card.copy}
+						action={card.action}
+					/>
 				))}
 			</section>
 		</div>

@@ -5,7 +5,7 @@ use music_hir::{HirExprId, HirExprKind, HirHandleClause, HirOrigin, HirTyId, Hir
 use music_names::{Ident, Symbol};
 
 use super::super::exprs::check_expr;
-use super::super::{CheckPass, DiagKind, ResumeCtx};
+use super::super::{CheckPass, DiagKind, EffectDef, EffectOpDef, ResumeCtx};
 use crate::api::ExprFacts;
 use crate::effects::{EffectKey, EffectRow};
 
@@ -63,7 +63,14 @@ impl CheckPass<'_, '_, '_> {
         let _ = self.pop_expected_ty();
         let Some((effect_name, input_ty, result_ty)) = self.handler_contract(checked_handler.ty)
         else {
-            self.diag(origin.span, DiagKind::InvalidCallTarget, "");
+            let found = self.render_ty(checked_handler.ty);
+            let handler_span = self.expr(handler).origin.span;
+            self.diag_message(
+                handler_span,
+                DiagKind::InvalidCallTarget,
+                format!("handler expression lacks handler type `{found}`"),
+                format!("handler expression has type `{found}` here"),
+            );
             let mut effects = handled_facts.effects;
             effects.union_with(&checked_handler.effects);
             return ExprFacts::new(self.builtins().unknown, effects);
@@ -130,86 +137,180 @@ impl CheckPass<'_, '_, '_> {
         &mut self,
         origin: HirOrigin,
         effect_name: &str,
-        effect: &super::super::EffectDef,
+        effect: &EffectDef,
         clauses: SliceRange<HirHandleClause>,
         input_ty: HirTyId,
     ) -> (HirTyId, EffectRow) {
-        let value_name = "value";
-        let mut result_ty = self.builtins().unknown;
-        let mut clause_effects = EffectRow::empty();
-        let mut seen_value = 0usize;
-        let mut seen_ops = BTreeSet::new();
         let clauses_vec = self.handle_clauses(clauses);
+        let mut clause_effects = EffectRow::empty();
+        let (result_ty, seen_value) =
+            self.check_handler_value_clauses(&clauses_vec, input_ty, &mut clause_effects);
+        let seen_ops = self.check_handler_op_clauses(
+            origin,
+            effect,
+            clauses_vec,
+            result_ty,
+            &mut clause_effects,
+        );
+        self.validate_handler_clause_coverage(origin, effect, seen_value, &seen_ops);
+        let _ = effect_name;
+        (result_ty, clause_effects)
+    }
 
-        for clause in &clauses_vec {
-            let clause_name: Box<str> = self.resolve_symbol(clause.op.name).into();
-            if clause_name.as_ref() == value_name {
+    fn check_handler_value_clauses(
+        &mut self,
+        clauses: &[HirHandleClause],
+        input_ty: HirTyId,
+        clause_effects: &mut EffectRow,
+    ) -> (HirTyId, usize) {
+        let mut result_ty = self.builtins().unknown;
+        let mut seen_value = 0usize;
+        for clause in clauses {
+            if self.resolve_symbol(clause.op.name) == "value" {
                 seen_value = seen_value.saturating_add(1);
-                if let Some(binding) = self.binding_id_for_decl(clause.op) {
-                    self.insert_binding_type(binding, input_ty);
-                }
+                self.bind_handler_value_clause(clause, input_ty);
                 let facts = check_expr(self, clause.body);
                 clause_effects.union_with(&facts.effects);
                 result_ty = facts.ty;
             }
         }
+        (result_ty, seen_value)
+    }
 
-        for clause in clauses_vec {
-            let clause_name: Box<str> = self.resolve_symbol(clause.op.name).into();
-            if clause_name.as_ref() == value_name {
-                continue;
-            }
-            if !seen_ops.insert(clause_name.clone()) {
-                self.diag_message(
-                    origin.span,
-                    DiagKind::DuplicateHandlerClause,
-                    format!("duplicate handler clause `{clause_name}`"),
-                    format!("duplicate handler clause `{clause_name}`"),
-                );
-            }
-            let Some(op_def) = effect.op(clause_name.as_ref()).cloned() else {
-                self.diag_message(
-                    origin.span,
-                    DiagKind::UnknownEffectOp,
-                    format!("unknown effect operation `{clause_name}`"),
-                    format!("unknown effect operation `{clause_name}`"),
-                );
-                continue;
-            };
-            let params = self.idents(clause.params);
-            if params.len() != op_def.params().len().saturating_add(1) {
-                self.diag(origin.span, DiagKind::HandlerClauseArityMismatch, "");
-            }
-            let (args, cont) = if params.is_empty() {
-                (Vec::<Ident>::new(), None)
-            } else {
-                let split = params.len().saturating_sub(1);
-                (params[0..split].to_vec(), params.last().copied())
-            };
-            for (ident, ty) in args.into_iter().zip(op_def.params().iter().copied()) {
-                if let Some(binding) = self.binding_id_for_decl(ident) {
-                    self.insert_binding_type(binding, ty);
-                }
-            }
-            if let Some(cont) = cont
-                && let Some(binding) = self.binding_id_for_decl(cont)
-            {
-                let params = self.alloc_ty_list([op_def.result()]);
-                let cont_ty = self.alloc_ty(HirTyKind::Arrow {
-                    params,
-                    ret: result_ty,
-                    is_effectful: true,
-                });
-                self.insert_binding_type(binding, cont_ty);
-            }
-            self.push_resume(ResumeCtx::new(op_def.result(), result_ty));
-            let body = check_expr(self, clause.body);
-            let _ = self.pop_resume();
-            let body_origin = self.expr(clause.body).origin;
-            self.type_mismatch(body_origin, result_ty, body.ty);
-            clause_effects.union_with(&body.effects);
+    fn bind_handler_value_clause(&mut self, clause: &HirHandleClause, input_ty: HirTyId) {
+        if let Some(binding) = self.binding_id_for_decl(clause.op) {
+            self.insert_binding_type(binding, input_ty);
         }
+    }
 
+    fn check_handler_op_clauses(
+        &mut self,
+        origin: HirOrigin,
+        effect: &EffectDef,
+        clauses: Vec<HirHandleClause>,
+        result_ty: HirTyId,
+        clause_effects: &mut EffectRow,
+    ) -> BTreeSet<Box<str>> {
+        let mut seen_ops = BTreeSet::new();
+        for clause in clauses {
+            let clause_name: Box<str> = self.resolve_symbol(clause.op.name).into();
+            if clause_name.as_ref() == "value" {
+                continue;
+            }
+            self.record_handler_op_clause(origin, &clause_name, &mut seen_ops);
+            if let Some(op_def) = self.handler_clause_op_def(origin, effect, &clause_name) {
+                self.check_handler_op_clause(origin, &clause, &op_def, result_ty, clause_effects);
+            }
+        }
+        seen_ops
+    }
+
+    fn record_handler_op_clause(
+        &mut self,
+        origin: HirOrigin,
+        clause_name: &str,
+        seen_ops: &mut BTreeSet<Box<str>>,
+    ) {
+        if !seen_ops.insert(clause_name.into()) {
+            self.diag_message(
+                origin.span,
+                DiagKind::DuplicateHandlerClause,
+                format!("duplicate handler clause `{clause_name}`"),
+                format!("duplicate handler clause `{clause_name}`"),
+            );
+        }
+    }
+
+    fn handler_clause_op_def(
+        &mut self,
+        origin: HirOrigin,
+        effect: &EffectDef,
+        clause_name: &str,
+    ) -> Option<EffectOpDef> {
+        let op_def = effect.op(clause_name).cloned();
+        if op_def.is_none() {
+            self.diag_message(
+                origin.span,
+                DiagKind::UnknownEffectOp,
+                format!("unknown effect operation `{clause_name}`"),
+                format!("unknown effect operation `{clause_name}`"),
+            );
+        }
+        op_def
+    }
+
+    fn check_handler_op_clause(
+        &mut self,
+        origin: HirOrigin,
+        clause: &HirHandleClause,
+        op_def: &EffectOpDef,
+        result_ty: HirTyId,
+        clause_effects: &mut EffectRow,
+    ) {
+        let (args, cont) = self.handler_clause_params(origin, clause, op_def);
+        self.bind_handler_clause_args(args, op_def);
+        self.bind_handler_clause_cont(cont, op_def.result(), result_ty);
+        self.push_resume(ResumeCtx::new(op_def.result(), result_ty));
+        let body = check_expr(self, clause.body);
+        let _ = self.pop_resume();
+        let body_origin = self.expr(clause.body).origin;
+        self.type_mismatch(body_origin, result_ty, body.ty);
+        clause_effects.union_with(&body.effects);
+    }
+
+    fn handler_clause_params(
+        &mut self,
+        origin: HirOrigin,
+        clause: &HirHandleClause,
+        op_def: &EffectOpDef,
+    ) -> (Vec<Ident>, Option<Ident>) {
+        let params = self.idents(clause.params);
+        if params.len() != op_def.params().len().saturating_add(1) {
+            self.diag(origin.span, DiagKind::HandlerClauseArityMismatch, "");
+        }
+        if params.is_empty() {
+            return (Vec::new(), None);
+        }
+        let split = params.len().saturating_sub(1);
+        (params[0..split].to_vec(), params.last().copied())
+    }
+
+    fn bind_handler_clause_args(&mut self, args: Vec<Ident>, op_def: &EffectOpDef) {
+        for (ident, ty) in args.into_iter().zip(op_def.params().iter().copied()) {
+            if let Some(binding) = self.binding_id_for_decl(ident) {
+                self.insert_binding_type(binding, ty);
+            }
+        }
+    }
+
+    fn bind_handler_clause_cont(
+        &mut self,
+        cont: Option<Ident>,
+        op_result: HirTyId,
+        result_ty: HirTyId,
+    ) {
+        let Some(cont) = cont else {
+            return;
+        };
+        let Some(binding) = self.binding_id_for_decl(cont) else {
+            return;
+        };
+        let params = self.alloc_ty_list([op_result]);
+        let cont_ty = self.alloc_ty(HirTyKind::Arrow {
+            params,
+            ret: result_ty,
+            is_effectful: true,
+        });
+        self.insert_binding_type(binding, cont_ty);
+    }
+
+    fn validate_handler_clause_coverage(
+        &mut self,
+        origin: HirOrigin,
+        effect: &EffectDef,
+        seen_value: usize,
+        seen_ops: &BTreeSet<Box<str>>,
+    ) {
         if seen_value != 1 {
             self.diag(origin.span, DiagKind::HandleRequiresSingleValueClause, "");
         }
@@ -218,8 +319,6 @@ impl CheckPass<'_, '_, '_> {
                 self.diag(origin.span, DiagKind::HandlerMissingOperationClause, "");
             }
         }
-        let _ = effect_name;
-        (result_ty, clause_effects)
     }
 
     fn make_handler_ty(
@@ -307,7 +406,7 @@ pub(super) fn require_declared_effects(
 fn effect_op_call(
     ctx: &CheckPassRef<'_, '_, '_>,
     expr: HirExprId,
-) -> Option<(Box<str>, super::super::EffectOpDef)> {
+) -> Option<(Box<str>, EffectOpDef)> {
     let HirExprKind::Call { callee, args: _ } = ctx.expr(expr).kind else {
         return None;
     };

@@ -212,6 +212,14 @@ where
         Ident::new(sym, span)
     }
 
+    const fn is_ident_token_kind(kind: TokenKind) -> bool {
+        matches!(kind, TokenKind::Ident)
+    }
+
+    const fn is_name_token_kind(kind: TokenKind) -> bool {
+        matches!(kind, TokenKind::Ident | TokenKind::OpIdent)
+    }
+
     fn placeholder_ident(&mut self, span: Span) -> Ident {
         Ident::new(self.interner.intern("_"), span)
     }

@@ -8,30 +8,12 @@ slug: "types"
 summary: "Introduce types gradually: explicit first, inferred second, generic third."
 ---
 
-This part adds type information gradually.
-You start with explicit annotations, then see where inference reduces repetition, then use generics to reuse one definition across many types.
-The emphasis stays on readable, practical code rather than an abstract type-system tour.
+Types are the promises Musi code makes about values. Some promises are written down as annotations. Some are inferred from nearby code. Some become generic so the same shape can work for many value types.
 
-Think of types as labels, molds, and rules.
-Some pages name the label on one value, some pages show the mold that fits many values, and some pages show the rule sheet that keeps callers honest.
+Read this part after the basic expression and data chapters. Types make more sense when you already have values to talk about: a `Person`, a `Payment`, a `Cart`, a `Clock`, a `Route`, or a `Result`. The annotation is not decoration. It tells the compiler and the next reader what kind of value belongs at that point.
 
-## Path Through This Part
+Use annotations where a boundary matters. Exported functions, effect operations, class members, and reusable helpers should say what they accept and return. Use inference where the answer is close and obvious. A short local value built from a clear expression often does not need extra noise.
 
-This section teaches three related tools: annotations for explicit boundaries, inference for obvious cases, and generics for reusable typed definitions.
-It introduces callable type spelling such as `T -> U` and `T ~> U`, so readers can connect type chapters back to functions and effects.
-It also makes the `:` story explicit: annotations use `:`, constraints use `where`, and named variant payloads use constructor-style declarations such as `| Configured(port : Int)`.
+Generics and callable types are about reusable shape. A box can hold different things. A filter can accept different rules. A result can describe success and failure for many domains. Advanced forms such as `forall` and dependent types appear later because they are strongest when the ordinary type story is already stable.
 
-## What This Part Solves
-
-Users need enough type detail to write and read real code, but too much theory too early causes drop-off.
-This section aims for decision-making help: when should I annotate, when can I omit, when is a generic definition worth it, and how do callable types fit into effectful code?
-That is more useful than a giant catalog of type features.
-
-## How to Read It
-
-Learn one move at a time.
-Add types where clarity rises, remove only what surrounding code makes obvious, and introduce generic parameters only after you can already read annotated functions comfortably.
-Keep examples small enough that every type choice still has an obvious reason.
-
-
-After `forall`, the section introduces practical dependent types: value parameters in type lists, indexed variant results, `partial` for runtime-only definitions, and `~=` for type equality.
+By the end of this part, you should know how to make type information helpful instead of loud. Good types explain the edge of a function, the shape of a collection, and the reason a helper can be reused.

@@ -37,6 +37,7 @@ impl NameSite {
 pub enum NameBindingKind {
     Prelude,
     Let,
+    AttachedMethod,
     Param,
     PiBinder,
     TypeParam,

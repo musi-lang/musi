@@ -11,9 +11,6 @@ export interface SiteCopy {
 	};
 	utilityLabels: {
 		github: string;
-		themeLight: string;
-		themeDark: string;
-		themeSystem: string;
 	};
 	ui: {
 		sample: string;
@@ -53,13 +50,6 @@ export interface SiteCopy {
 		tertiaryCta: string;
 		statusItems: Array<{ label: string; value: string; copy: string }>;
 		taskBoards: Array<{
-			label: string;
-			title: string;
-			copy: string;
-			href: string;
-			actionLabel: string;
-		}>;
-		paths: Array<{
 			label: string;
 			title: string;
 			copy: string;
@@ -119,9 +109,6 @@ export const siteCopy = {
 	},
 	utilityLabels: {
 		github: "GitHub repository",
-		themeLight: "Switch from light theme to dark theme",
-		themeDark: "Switch from dark theme to system theme",
-		themeSystem: "Switch from system theme to light theme",
 	},
 	ui: {
 		sample: "Sample",
@@ -184,14 +171,14 @@ export const siteCopy = {
 		taskBoards: [
 			{
 				label: "Start here",
-				title: "First file path",
-				copy: "Begin with setup, one value, one function, and one result.",
-				href: "/learn/book/start/getting-started",
-				actionLabel: "Open first chapter",
+				title: "Read Musi Book",
+				copy: "Begin with setup, then move through syntax, data, types, effects, and tooling.",
+				href: "/learn/book",
+				actionLabel: "Open book",
 			},
 			{
 				label: "I know what I need",
-				title: "Install and commands",
+				title: "Install and Commands",
 				copy: "Go straight to prerequisites, bootstrap commands, and command lanes.",
 				href: "/install",
 				actionLabel: "Open install path",
@@ -202,29 +189,6 @@ export const siteCopy = {
 				copy: "Find project links, unsafe/FFI docs, and current community tracking.",
 				href: "/community",
 				actionLabel: "Open project links",
-			},
-		],
-		paths: [
-			{
-				label: "Learn",
-				title: "Read Musi Book",
-				copy: "Start with setup, then move through syntax, types, effects, and tooling.",
-				href: "/learn/book",
-				actionLabel: "Read Musi Book",
-			},
-			{
-				label: "Install",
-				title: "Build from source",
-				copy: "Review prerequisites, build steps, PATH setup, and command lanes.",
-				href: "/install",
-				actionLabel: "Open install guide",
-			},
-			{
-				label: "Community",
-				title: "Join the project",
-				copy: "Find contribution notes, issue tracking, and discussion links.",
-				href: "/community",
-				actionLabel: "Open community links",
 			},
 		],
 		sections: [

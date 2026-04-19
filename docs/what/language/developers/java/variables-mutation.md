@@ -1,38 +1,31 @@
 ---
 title: "Variables and Mutation"
-description: "Translate Java reassignment into explicit Musi mutation and fresh values."
+description: "Read Variables and Mutation as a Java habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Java Developers"
 order: 4
 slug: "variables-mutation"
-summary: "Use mutable bindings for real changing state and fresh names for calculation stages."
+summary: "Translate the Java habit, then use the Musi Book for the full rule."
 ---
 
-# Variables and Mutation
+A Java reader brings habits from packages, classes, records, interfaces, exceptions, annotations, streams, and long-lived APIs. That helps with contracts, visibility, and maintainable names, but the Musi page asks a narrower question: what contract should this fresh values and mutation example make visible?
 
-Java local variables can be reassigned unless they are `final`:
+{{compare:java-variables-mutation}}
 
-```java
-int visits = 0;
-visits = visits + 1;
+## Reading Variables and Mutation from Java
 
-int nextVisits = visits + 1;
-```
+On the Musi side, Musi makes mutation explicit with `mut` and assignment; ordinary `let` names read as stable facts. Read the shared example through Java eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-Musi marks the binding that can change.
+## False friend
 
-{{snippet:java-variables-mutation}}
+Do not translate every rebinding habit into mutation. A new receipt, label, or counter snapshot can be a fresh name. For a Java reader, the trap is reading Musi `class` as a nominal object type with constructors and fields; Musi `class` is a behavior contract supplied by instances; records and data model object shape.
 
-## Fresh values
+## When this pays off
 
-Java developers often use `final` to make calculation stages stable:
+Use mutation when the domain really changes over time, such as queue depth or a buffer cursor. The Java instinct still helps here: Keep the Java habit of naming APIs for future readers.
 
-```java
-final int basePrice = 1200;
-final int total = basePrice + 45;
-```
+## Keep close
 
-Musi bindings are stable by default, so fresh names fit ordinary calculations.
-
-{{snippet:java-fresh-value}}
-
+- [Mutation](/learn/book/start/mutation)
+- [Values and let](/learn/book/start/values-and-let)
+- [Blocks and expressions](/learn/book/start/blocks-and-expressions)

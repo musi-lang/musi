@@ -1,43 +1,31 @@
 ---
 title: "Generics and Type Constructors"
-description: "Translate Rust generic functions and generic data into Musi type parameters."
+description: "Read Generics and Type Constructors as a Rust habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Rust Developers"
 order: 7
 slug: "generics"
-summary: "Rust generic functions and structs map to Musi bracketed type parameters and constructor-style data."
+summary: "Translate the Rust habit, then use the Musi Book for the full rule."
 ---
 
-Rust generic functions name the type parameter before the function parameters:
+A Rust reader brings habits from ownership, enums, traits, Result, modules, pattern matching, and explicit unsafe blocks. That helps with the type that carries the invariant, but the Musi page asks a narrower question: what contract should this field-shaped data example make visible?
 
-```rust
-fn identity<T>(input: T) -> T {
-    input
-}
+{{compare:rust-generics}}
 
-let port = identity::<u16>(8080);
-port
-```
+## Reading Generics and Type Constructors from Rust
 
-Musi uses bracketed type parameters on the `let` function.
+On the Musi side, Musi records and data variants describe stored shape. Behavior belongs in functions or classes/instances, not inside an object by default. Read the shared example through Rust eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-{{snippet:rust-generic-function}}
+## False friend
 
-Generic data follows the same bracketed shape:
+Do not read `class` as object shape. If the page is about a pet, invoice, room, or vehicle, start with fields or variants. For a Rust reader, the trap is expecting Musi syntax to mirror Rust even when the ideas are separated differently; Musi `class` is closest to a Rust trait plus law text; instances play the role of implementations for behavior.
 
-```rust
-struct Box1<T> {
-    value: T,
-}
+## When this pays off
 
-let boxed = Box1 { value: 8080 };
-boxed.value
-```
+Use records when names like `owner`, `age`, `amount`, or `route` are the point of the value. The Rust instinct still helps here: Keep the Rust habit of asking which type carries the invariant.
 
-{{snippet:rust-generic-data}}
+## Keep close
 
-The Musi match reads the payload back out through the constructor shape.
-
-When a class receives a type constructor, Musi can name that constructor in the type parameter list.
-
-{{snippet:rust-type-constructor-class}}
+- [Generics](/learn/book/types/generics)
+- [Classes](/learn/book/abstractions/classes)
+- [Laws](/learn/book/abstractions/laws)

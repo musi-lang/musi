@@ -1,3 +1,5 @@
+#![allow(unused_imports)]
+
 use music_base::SourceId;
 use music_base::diag::{Diag, DiagCode};
 use music_ir::{IrModule, lower_module};
@@ -47,9 +49,9 @@ fn emit_module(src: &str) -> Result<EmittedModule, EmitDiagList> {
 fn emitted_opcodes(emitted: &EmittedModule) -> Vec<Opcode> {
     emitted
         .artifact
-        .methods
+        .procedures
         .iter()
-        .flat_map(|(_, method)| method.code.iter())
+        .flat_map(|(_, procedure)| procedure.code.iter())
         .filter_map(|entry| match entry {
             CodeEntry::Instruction(instruction) => Some(instruction.opcode),
             CodeEntry::Label(_) => None,
@@ -66,10 +68,13 @@ fn assert_module_opcodes(src: &str, expected: &[Opcode]) {
     }
 }
 
-#[test]
-fn emits_artifact_for_literal_exports_and_metadata() {
-    let ir = lower_ir(
-        r#"
+mod success {
+    use super::*;
+
+    #[test]
+    fn emits_artifact_for_literal_exports_and_metadata() {
+        let ir = lower_ir(
+            r#"
         let Option := data { | Some(Int) | None };
         foreign "c" (
           let puts (value : CString) : Int;
@@ -77,66 +82,86 @@ fn emits_artifact_for_literal_exports_and_metadata() {
         export let answer : Int := 42;
         export let forty_two () : Int := 42;
     "#,
-        "main",
-    );
+            "main",
+        );
 
-    let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
-    assert!(emitted.artifact.validate().is_ok());
-    assert_eq!(emitted.exports.len(), 2);
-    assert!(!emitted.artifact.types.is_empty());
-    assert_eq!(emitted.artifact.foreigns.len(), 1);
-}
+        let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
+        assert!(emitted.artifact.validate().is_ok());
+        assert_eq!(emitted.exports.len(), 2);
+        assert!(!emitted.artifact.types.is_empty());
+        assert_eq!(emitted.artifact.foreigns.len(), 1);
+    }
 
-#[test]
-fn emits_merged_program_for_reachable_modules() {
-    let dep = lower_ir(
-        r"
+    #[test]
+    fn emits_merged_program_for_reachable_modules() {
+        let dep = lower_ir(
+            r"
         export let base : Int := 41;
     ",
-        "dep",
-    );
-    let main = lower_ir(
-        r#"
+            "dep",
+        );
+        let main = lower_ir(
+            r#"
         import "dep";
         export let answer : Int := 42;
     "#,
-        "main",
-    );
+            "main",
+        );
 
-    let program = lower_ir_program(&[dep, main], &ModuleKey::new("main"), EmitOptions)
-        .expect("program emit should succeed");
-    assert!(program.artifact.validate().is_ok());
-    assert_eq!(program.modules.len(), 2);
-}
+        let program = lower_ir_program(&[dep, main], &ModuleKey::new("main"), EmitOptions)
+            .expect("program emit should succeed");
+        assert!(program.artifact.validate().is_ok());
+        assert_eq!(program.modules.len(), 2);
+    }
 
-#[test]
-fn emits_float_tuple_array_and_type_apply() {
-    let ir = lower_ir(
-        r"
+    #[test]
+    fn emits_module_entry_for_top_level_expression_statement() {
+        let emitted = emit_module(
+            r"
+        let answer () : Int := 42;
+        answer();
+    ",
+        )
+        .expect("emit should succeed");
+        let entry_procedure = emitted.entry_procedure.expect("module entry expected");
+        let entry = emitted.artifact.procedures.get(entry_procedure);
+
+        assert!(entry.code.iter().any(|entry| {
+            matches!(
+                entry,
+                CodeEntry::Instruction(instruction) if instruction.opcode == Opcode::Call
+            )
+        }));
+    }
+
+    #[test]
+    fn emits_float_tuple_array_and_type_apply() {
+        let ir = lower_ir(
+            r"
         let id[T] (x : T) : T := x;
         export let pair := (1, 2);
         export let items := [1, 2, 3];
         export let pi : Float := 3.5;
         export let answer () : Int := id[Int](42);
     ",
-        "main",
-    );
+            "main",
+        );
 
-    let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
-    assert!(emitted.artifact.validate().is_ok());
-    assert!(
-        emitted
-            .artifact
-            .constants
-            .iter()
-            .any(|(_, constant)| matches!(constant.value, ConstantValue::Float(_)))
-    );
-}
+        let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
+        assert!(emitted.artifact.validate().is_ok());
+        assert!(
+            emitted
+                .artifact
+                .constants
+                .iter()
+                .any(|(_, constant)| matches!(constant.value, ConstantValue::Float(_)))
+        );
+    }
 
-#[test]
-fn emits_globals_locals_assignment_index_and_case() {
-    assert_module_opcodes(
-        r"
+    #[test]
+    fn emits_globals_locals_assignment_index_and_case() {
+        assert_module_opcodes(
+            r"
         export let base : Int := 41;
         export let answer (x : Int) : Int := (
           let items := mut [1, 2, 3];
@@ -144,47 +169,46 @@ fn emits_globals_locals_assignment_index_and_case() {
           match x (| 0 => items.[0] | value => value + base);
         );
     ",
-        &[
-            Opcode::LdGlob,
-            Opcode::StGlob,
-            Opcode::SeqGet,
-            Opcode::SeqSet,
-            Opcode::BrFalse,
-        ],
-    );
-}
+            &[
+                Opcode::LdGlob,
+                Opcode::StGlob,
+                Opcode::SeqGet,
+                Opcode::SeqSet,
+                Opcode::BrFalse,
+            ],
+        );
+    }
 
-#[test]
-fn emits_multi_index_get_set_and_dynamic_import() {
-    assert_module_opcodes(
-        r"
+    #[test]
+    fn emits_multi_index_get_set() {
+        assert_module_opcodes(
+            r"
         export let touch (name : String, grid : mut [2][2]Int) : Int := (
-          let loaded := import name;
           grid.[0, 1] := 7;
           grid.[0, 1]
         );
     ",
-        &[Opcode::ModLoad, Opcode::SeqGetN, Opcode::SeqSetN],
-    );
-}
+            &[Opcode::SeqGetN, Opcode::SeqSetN],
+        );
+    }
 
-#[test]
-fn emits_dynamic_module_export_lookup() {
-    assert_module_opcodes(
-        r"
+    #[test]
+    fn emits_dynamic_module_export_lookup() {
+        assert_module_opcodes(
+            r"
         export let read (name : String) : Any := (
           let loaded := import name;
           loaded.answer
         );
     ",
-        &[Opcode::ModLoad, Opcode::ModGet],
-    );
-}
+            &[Opcode::ModLoad, Opcode::ModGet],
+        );
+    }
 
-#[test]
-fn emits_case_tuple_and_array_patterns() {
-    let emitted = emit_module(
-        r"
+    #[test]
+    fn emits_case_tuple_and_array_patterns() {
+        let emitted = emit_module(
+            r"
         export let answer () : Int := (
           let pair := (1, 2);
           let items := [3, 4];
@@ -193,63 +217,63 @@ fn emits_case_tuple_and_array_patterns() {
           p + q
         );
     ",
-    )
-    .expect("emit should succeed");
-    assert!(emitted.artifact.validate().is_ok());
-    let opcodes = emitted_opcodes(&emitted);
-    assert!(opcodes.contains(&Opcode::SeqGet));
-    assert!(opcodes.contains(&Opcode::SeqLen));
-    assert!(opcodes.contains(&Opcode::BrFalse));
-}
+        )
+        .expect("emit should succeed");
+        assert!(emitted.artifact.validate().is_ok());
+        let opcodes = emitted_opcodes(&emitted);
+        assert!(opcodes.contains(&Opcode::SeqGet));
+        assert!(opcodes.contains(&Opcode::SeqLen));
+        assert!(opcodes.contains(&Opcode::BrFalse));
+    }
 
-#[test]
-fn emits_quote_as_syntax_constant() {
-    let ir = lower_ir(
-        r"
+    #[test]
+    fn emits_quote_as_syntax_constant() {
+        let ir = lower_ir(
+            r"
         export let quoted : Syntax := quote (#(1 + 2));
     ",
-        "main",
-    );
+            "main",
+        );
 
-    let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
-    assert!(emitted.artifact.validate().is_ok());
-    assert!(emitted.artifact.constants.iter().any(|(_, constant)| {
-        matches!(
-            constant.value,
-            ConstantValue::Syntax { shape: music_term::SyntaxShape::Expr, text }
-                if emitted.artifact.string_text(text).contains("#(1 + 2)")
-        )
-    }));
-}
+        let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
+        assert!(emitted.artifact.validate().is_ok());
+        assert!(emitted.artifact.constants.iter().any(|(_, constant)| {
+            matches!(
+                constant.value,
+                ConstantValue::Syntax { shape: music_term::SyntaxShape::Expr, text }
+                    if emitted.artifact.string_text(text).contains("#(1 + 2)")
+            )
+        }));
+    }
 
-#[test]
-fn emits_named_type_values_as_ty_id() {
-    let ir = lower_ir(
-        r"
+    #[test]
+    fn emits_named_type_values_as_ty_id() {
+        let ir = lower_ir(
+            r"
         export let ty : Type := Int;
     ",
-        "main",
-    );
+            "main",
+        );
 
-    let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
-    assert!(emitted.artifact.validate().is_ok());
-    assert!(
-        emitted
-            .artifact
-            .methods
-            .iter()
-            .flat_map(|(_, method)| method.code.iter())
-            .any(|entry| matches!(
-                entry,
-                CodeEntry::Instruction(instruction) if instruction.opcode == Opcode::TyId
-            ))
-    );
-}
+        let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
+        assert!(emitted.artifact.validate().is_ok());
+        assert!(
+            emitted
+                .artifact
+                .procedures
+                .iter()
+                .flat_map(|(_, procedure)| procedure.code.iter())
+                .any(|entry| matches!(
+                    entry,
+                    CodeEntry::Instruction(instruction) if instruction.opcode == Opcode::TyId
+                ))
+        );
+    }
 
-#[test]
-fn emits_records_with_projection_and_update() {
-    let emitted = emit_module(
-        r"
+    #[test]
+    fn emits_records_with_projection_and_update() {
+        let emitted = emit_module(
+            r"
         export let answer () : Int := (
           let r := { y := 2, x := 1 };
           let a : Int := r.x;
@@ -257,37 +281,37 @@ fn emits_records_with_projection_and_update() {
           a + s.x
         );
     ",
-    )
-    .expect("emit should succeed");
-    assert!(emitted.artifact.validate().is_ok());
-    let opcodes = emitted_opcodes(&emitted);
-    assert!(opcodes.contains(&Opcode::DataNew));
-    assert!(opcodes.contains(&Opcode::DataGet));
-}
+        )
+        .expect("emit should succeed");
+        assert!(emitted.artifact.validate().is_ok());
+        let opcodes = emitted_opcodes(&emitted);
+        assert!(opcodes.contains(&Opcode::DataNew));
+        assert!(opcodes.contains(&Opcode::DataGet));
+    }
 
-#[test]
-fn emits_foreign_calls() {
-    let emitted = emit_module(
-        r#"
+    #[test]
+    fn emits_foreign_calls() {
+        let emitted = emit_module(
+            r#"
         foreign "c" (
           let puts (value : Int) : Int;
         );
         export let answer () : Int := unsafe { puts(1); };
     "#,
-    )
-    .expect("emit should succeed");
-    assert!(emitted.artifact.validate().is_ok());
-    assert!(
-        emitted_opcodes(&emitted)
-            .into_iter()
-            .any(|opcode| opcode == Opcode::FfiCall)
-    );
-}
+        )
+        .expect("emit should succeed");
+        assert!(emitted.artifact.validate().is_ok());
+        assert!(
+            emitted_opcodes(&emitted)
+                .into_iter()
+                .any(|opcode| opcode == Opcode::FfiCall)
+        );
+    }
 
-#[test]
-fn emits_closures_and_higher_order_calls() {
-    let ir = lower_ir(
-        r"
+    #[test]
+    fn emits_closures_and_higher_order_calls() {
+        let ir = lower_ir(
+            r"
         let apply (f : Int -> Int, x : Int) : Int := f(x);
 
         export let answer (x : Int) : Int := (
@@ -296,80 +320,79 @@ fn emits_closures_and_higher_order_calls() {
           apply(add_base, x);
         );
     ",
-        "main",
-    );
+            "main",
+        );
 
-    let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
-    assert!(emitted.artifact.validate().is_ok());
+        let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
+        assert!(emitted.artifact.validate().is_ok());
 
-    let mut has_indirect_call = false;
-    let mut has_capturing_closure = false;
-    for (_, method) in emitted.artifact.methods.iter() {
-        for entry in &method.code {
-            let CodeEntry::Instruction(instruction) = entry else {
-                continue;
-            };
-            if instruction.opcode == Opcode::CallCls {
-                has_indirect_call = true;
-            }
-            if instruction.opcode == Opcode::ClsNew {
-                if let music_seam::Operand::WideMethodCaptures { captures, .. } =
-                    &instruction.operand
-                {
-                    if *captures != 0 {
-                        has_capturing_closure = true;
+        let mut has_indirect_call = false;
+        let mut has_capturing_closure = false;
+        for (_, procedure) in emitted.artifact.procedures.iter() {
+            for entry in &procedure.code {
+                let CodeEntry::Instruction(instruction) = entry else {
+                    continue;
+                };
+                if instruction.opcode == Opcode::CallCls {
+                    has_indirect_call = true;
+                }
+                if instruction.opcode == Opcode::ClsNew {
+                    if let music_seam::Operand::WideProcedureCaptures { captures, .. } =
+                        &instruction.operand
+                    {
+                        if *captures != 0 {
+                            has_capturing_closure = true;
+                        }
                     }
                 }
             }
         }
+
+        assert!(has_indirect_call);
+        assert!(has_capturing_closure);
     }
 
-    assert!(has_indirect_call);
-    assert!(has_capturing_closure);
-}
-
-#[test]
-fn emits_local_recursive_callable_lets() {
-    let ir = lower_ir(
-        r"
+    #[test]
+    fn emits_local_recursive_callable_lets() {
+        let ir = lower_ir(
+            r"
         export let answer (n : Int) : Int := (
           let rec loop (x : Int) : Int := match x (| 0 => 0 | _ => loop(x - 1));
           loop(n)
         );
     ",
-        "main",
-    );
+            "main",
+        );
 
-    let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
-    assert!(emitted.artifact.validate().is_ok());
-    assert!(
-        emitted
-            .artifact
-            .methods
-            .iter()
-            .any(|(_, method)| emitted.artifact.string_text(method.name).contains("loop"))
-    );
-}
+        let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
+        assert!(emitted.artifact.validate().is_ok());
+        assert!(emitted.artifact.procedures.iter().any(|(_, procedure)| {
+            emitted
+                .artifact
+                .string_text(procedure.name)
+                .contains("loop")
+        }));
+    }
 
-#[test]
-fn emits_type_test_and_cast() {
-    let emitted = emit_module(
-        r"
+    #[test]
+    fn emits_type_test_and_cast() {
+        let emitted = emit_module(
+            r"
         export let check (x : Any) : Bool := x :? Int;
         export let cast (x : Any) : Int := x :?> Int;
     ",
-    )
-    .expect("emit should succeed");
-    assert!(emitted.artifact.validate().is_ok());
-    let opcodes = emitted_opcodes(&emitted);
-    assert!(opcodes.contains(&Opcode::TyChk));
-    assert!(opcodes.contains(&Opcode::TyCast));
-}
+        )
+        .expect("emit should succeed");
+        assert!(emitted.artifact.validate().is_ok());
+        let opcodes = emitted_opcodes(&emitted);
+        assert!(opcodes.contains(&Opcode::TyChk));
+        assert!(opcodes.contains(&Opcode::TyCast));
+    }
 
-#[test]
-fn emits_type_values_record_patterns_and_capturing_recursion() {
-    let emitted = emit_module(
-        r"
+    #[test]
+    fn emits_type_values_record_patterns_and_capturing_recursion() {
+        let emitted = emit_module(
+            r"
         export let answer (n : Int) : Int := (
           let base := 1;
           let rec loop (x : Int) : Int := match x (| 0 => base | _ => loop(x - 1));
@@ -378,41 +401,53 @@ fn emits_type_values_record_patterns_and_capturing_recursion() {
           picked + loop(n)
         );
     ",
-    )
-    .expect("emit should succeed");
-    assert!(emitted.artifact.validate().is_ok());
-    let opcodes = emitted_opcodes(&emitted);
-    assert!(opcodes.contains(&Opcode::DataGet));
-    assert!(opcodes.contains(&Opcode::CallCls));
+        )
+        .expect("emit should succeed");
+        assert!(emitted.artifact.validate().is_ok());
+        let opcodes = emitted_opcodes(&emitted);
+        assert!(opcodes.contains(&Opcode::DataGet));
+        assert!(opcodes.contains(&Opcode::CallCls));
 
-    assert!(
-        emitted.artifact.methods.iter().any(|(_, method)| {
-            method.code.iter().any(|entry| {
-                matches!(
-                    entry,
-                    CodeEntry::Instruction(music_seam::Instruction {
-                        opcode: Opcode::ClsNew,
-                        operand: music_seam::Operand::WideMethodCaptures { captures, .. },
-                    }) if *captures > 0
-                )
-            })
-        }),
-        "expected capturing recursive closure"
-    );
-}
+        assert!(
+            emitted.artifact.procedures.iter().any(|(_, procedure)| {
+                procedure.code.iter().any(|entry| {
+                    matches!(
+                        entry,
+                        CodeEntry::Instruction(music_seam::Instruction {
+                            opcode: Opcode::ClsNew,
+                            operand: music_seam::Operand::WideProcedureCaptures { captures, .. },
+                        }) if *captures > 0
+                    )
+                })
+            }),
+            "expected capturing recursive closure"
+        );
+    }
 
-#[test]
-fn emit_diag_kind_extracts_every_known_emit_code() {
-    for code in 3500u16..=3517u16 {
-        let diag = Diag::error("emit failure").with_code(DiagCode::new(code));
-        let kind = emit_diag_kind(&diag).expect("all emit diagnostic codes must map to a kind");
-        assert_eq!(kind.code().raw(), code);
+    #[test]
+    fn emit_diag_kind_extracts_every_known_emit_code() {
+        for code in 3500u16..=3517u16 {
+            let diag = Diag::error("emit failure").with_code(DiagCode::new(code));
+            let kind = emit_diag_kind(&diag).expect("all emit diagnostic codes must map to a kind");
+            assert_eq!(kind.code().raw(), code);
+        }
+    }
+
+    #[test]
+    fn emit_diag_kind_is_code_based_not_message_based() {
+        let diag = Diag::error("plain text").with_code(EmitDiagKind::UnknownEffect.code());
+        let kind = emit_diag_kind(&diag).expect("emit diagnostic code should map");
+        assert_eq!(kind, EmitDiagKind::UnknownEffect);
     }
 }
 
-#[test]
-fn emit_diag_kind_is_code_based_not_message_based() {
-    let diag = Diag::error("plain text").with_code(EmitDiagKind::UnknownEffect.code());
-    let kind = emit_diag_kind(&diag).expect("emit diagnostic code should map");
-    assert_eq!(kind, EmitDiagKind::UnknownEffect);
+mod failure {
+    use super::*;
+
+    #[test]
+    fn emit_diag_kind_rejects_unknown_emit_code() {
+        let diag = Diag::error("unknown emit failure").with_code(DiagCode::new(3999));
+
+        assert_eq!(emit_diag_kind(&diag), None);
+    }
 }

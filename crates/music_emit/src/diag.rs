@@ -1,8 +1,11 @@
-use music_base::diag::{Diag, DiagCode};
+use music_base::diag::{Diag, DiagCode, DiagLevel, DiagnosticKind};
+
+#[path = "diag_catalog_gen.rs"]
+mod diag_catalog_gen;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EmitDiagKind {
-    ExportTargetMissing,
+    MissingExportTarget,
     UnknownTypeValue,
     UnknownTypeNameForOp,
     UnsupportedBinaryOperator,
@@ -25,114 +28,59 @@ pub enum EmitDiagKind {
 }
 
 impl EmitDiagKind {
-    const INFO: [(Self, u16, &'static str); 20] = [
-        (Self::ExportTargetMissing, 3500, "export target missing"),
-        (Self::UnknownTypeValue, 3501, "unknown emitted type value"),
-        (
-            Self::UnknownTypeNameForOp,
-            3502,
-            "unknown operation type name",
-        ),
-        (
-            Self::UnsupportedBinaryOperator,
-            3503,
-            "binary operator has no emitted form",
-        ),
-        (
-            Self::CaseVariantDispatchRequiresSingleDataType,
-            3504,
-            "case variant dispatch requires single data type",
-        ),
-        (Self::UnknownDataType, 3505, "unknown emitted data type"),
-        (
-            Self::SpreadCallArgsNotEmitted,
-            3506,
-            "spread call arguments have no emitted form",
-        ),
-        (
-            Self::UnknownClosureTarget,
-            3507,
-            "unknown emitted closure target",
-        ),
-        (Self::UnknownEffect, 3508, "unknown emitted effect"),
-        (
-            Self::UnknownHandlerType,
-            3509,
-            "unknown emitted handler type",
-        ),
-        (Self::UnknownRecordType, 3510, "unknown emitted record type"),
-        (
-            Self::RecordLiteralMissingFieldValue,
-            3511,
-            "record literal missing field value",
-        ),
-        (
-            Self::RecordUpdateMissingFieldValue,
-            3512,
-            "record update missing field value",
-        ),
-        (
-            Self::UnknownSequenceType,
-            3513,
-            "unknown emitted sequence type",
-        ),
-        (Self::InvalidSyntaxLiteral, 3514, "invalid syntax literal"),
-        (Self::InvalidIntegerLiteral, 3515, "invalid integer literal"),
-        (Self::InvalidFloatLiteral, 3516, "invalid float literal"),
-        (
-            Self::UnsupportedNameRef,
-            3517,
-            "name reference has no emitted form",
-        ),
-        (
-            Self::UnsupportedAssignTarget,
-            3518,
-            "assignment target has no emitted form",
-        ),
-        (Self::EmitInvariantViolated, 3519, "emit invariant violated"),
-    ];
-
-    fn info(self) -> (u16, &'static str) {
-        Self::INFO
-            .iter()
-            .find_map(|(kind, code, message)| {
-                if *kind == self {
-                    Some((*code, *message))
-                } else {
-                    None
-                }
-            })
-            .expect("missing emit diagnostic info")
+    #[must_use]
+    pub fn code(self) -> DiagCode {
+        DiagCode::new(diag_catalog_gen::code(self))
     }
 
     #[must_use]
-    pub fn code(&self) -> DiagCode {
-        DiagCode::new(self.info().0)
+    pub fn message(self) -> &'static str {
+        diag_catalog_gen::message(self)
     }
 
     #[must_use]
-    pub fn message(&self) -> &'static str {
-        self.info().1
+    pub fn label(self) -> &'static str {
+        diag_catalog_gen::primary(self)
     }
 
     #[must_use]
-    pub fn label(&self) -> &'static str {
-        self.message()
+    pub fn hint(self) -> Option<&'static str> {
+        diag_catalog_gen::help(self)
     }
 
     #[must_use]
     pub fn from_code(code: DiagCode) -> Option<Self> {
-        Self::INFO.iter().find_map(|(kind, raw, _)| {
-            if *raw == code.raw() {
-                Some(*kind)
-            } else {
-                None
-            }
-        })
+        diag_catalog_gen::from_code(code.raw())
     }
 
     #[must_use]
     pub fn from_diag(diag: &Diag) -> Option<Self> {
-        Self::from_code(diag.code()?)
+        diag.code().and_then(Self::from_code)
+    }
+}
+
+impl DiagnosticKind for EmitDiagKind {
+    fn code(self) -> DiagCode {
+        self.code()
+    }
+
+    fn phase(self) -> &'static str {
+        "emit"
+    }
+
+    fn level(self) -> DiagLevel {
+        DiagLevel::Error
+    }
+
+    fn message(self) -> &'static str {
+        self.message()
+    }
+
+    fn primary(self) -> &'static str {
+        self.label()
+    }
+
+    fn help(self) -> Option<&'static str> {
+        self.hint()
     }
 }

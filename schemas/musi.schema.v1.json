@@ -461,16 +461,12 @@
         "lineWidth": {
           "type": "integer",
           "minimum": 1,
-          "default": 100
+          "default": 80
         },
         "indentWidth": {
           "type": "integer",
           "minimum": 1,
-          "default": 4
-        },
-        "semiColons": {
-          "type": "boolean",
-          "default": true
+          "default": 2
         },
         "trailingCommas": {
           "enum": [

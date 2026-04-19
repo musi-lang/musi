@@ -18,11 +18,11 @@ pub use api::{
     ComptimeEffectValue, ComptimeForeignValue, ComptimeModuleValue, ComptimeSeqValue,
     ComptimeTypeValue, ComptimeValue, ComptimeValueList, ConstraintEvidence, ConstraintKey,
     ConstraintKind, ConstraintSurface, DataSurface, DataVariantSurface, DefinitionKey,
-    EffectOpSurface, EffectSurface, ExportedValue, InstanceFacts, InstanceSurface, LawFacts,
-    LawParamFacts, LawParamSurface, LawSurface, ModuleSurface, SemaDataDef, SemaDataVariantDef,
-    SemaDiagList, SemaEffectDef, SemaEffectOpDef, SemaEnv, SemaModule, SemaOptions, SurfaceDim,
-    SurfaceEffectItem, SurfaceEffectRow, SurfaceTy, SurfaceTyField, SurfaceTyId, SurfaceTyKind,
-    TargetInfo, sema_diag_kind,
+    EffectOpSurface, EffectSurface, ExportedValue, ExprMemberFact, ExprMemberKind, InstanceFacts,
+    InstanceSurface, JitTargetInfo, LawFacts, LawParamFacts, LawParamSurface, LawSurface,
+    ModuleSurface, SemaDataDef, SemaDataVariantDef, SemaDiagList, SemaEffectDef, SemaEffectOpDef,
+    SemaEnv, SemaModule, SemaOptions, SurfaceDim, SurfaceEffectItem, SurfaceEffectRow, SurfaceTy,
+    SurfaceTyField, SurfaceTyId, SurfaceTyKind, TargetInfo, sema_diag_kind,
 };
 pub use checker::check_module;
 pub use checker::schemes::BindingScheme;
@@ -46,7 +46,8 @@ pub(crate) struct SemaFactsBuild {
     pub expr_module_targets: HashMap<HirExprId, ModuleKey>,
     pub type_test_targets: HashMap<HirExprId, HirTyId>,
     pub expr_evidence: HashMap<HirExprId, Box<[ConstraintEvidence]>>,
-    pub expr_attached_bindings: HashMap<HirExprId, NameBindingId>,
+    pub expr_dot_callable_bindings: HashMap<HirExprId, NameBindingId>,
+    pub expr_member_facts: HashMap<HirExprId, ExprMemberFact>,
     pub expr_comptime_values: HashMap<HirExprId, ComptimeValue>,
 }
 

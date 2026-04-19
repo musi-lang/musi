@@ -225,7 +225,7 @@ impl Vm {
             .collect();
         match Value::continuation(frames, handlers) {
             Value::Continuation(continuation) => Ok(continuation),
-            _ => Err(VmError::new(VmErrorKind::ProgramShapeInvalid {
+            _ => Err(VmError::new(VmErrorKind::InvalidProgramShape {
                 detail: "continuation construction failed".into(),
             })),
         }
@@ -262,12 +262,12 @@ impl Vm {
                 stack: VmStackKind::CallFrame,
             })
         })?;
-        let method = self
+        let procedure = self
             .module(frame.module_slot)?
             .program
-            .loaded_method(frame.method)?;
+            .loaded_procedure(frame.procedure)?;
         let mut depth = 0usize;
-        for (index, instruction) in method.instructions.iter().enumerate().skip(frame.ip) {
+        for (index, instruction) in procedure.instructions.iter().enumerate().skip(frame.ip) {
             match instruction.opcode {
                 Opcode::HdlPush => depth = depth.saturating_add(1),
                 Opcode::HdlPop if depth == 0 => return Ok(index),
@@ -275,21 +275,33 @@ impl Vm {
                 _ => {}
             }
         }
-        Err(VmError::new(VmErrorKind::MatchingHandlerPopMissing {
-            method: method.name.clone(),
+        Err(VmError::new(VmErrorKind::MissingMatchingHandlerPop {
+            procedure: procedure.name.clone(),
         }))
     }
 }
 
 impl From<ContinuationFrame> for CallFrame {
     fn from(frame: ContinuationFrame) -> Self {
-        Self::new(frame.module_slot, frame.method, frame.locals, frame.stack).with_ip(frame.ip)
+        Self::new(
+            frame.module_slot,
+            frame.procedure,
+            frame.locals,
+            frame.stack,
+        )
+        .with_ip(frame.ip)
     }
 }
 
 impl From<CallFrame> for ContinuationFrame {
     fn from(frame: CallFrame) -> Self {
-        Self::new(frame.module_slot, frame.method, frame.locals, frame.stack).with_ip(frame.ip)
+        Self::new(
+            frame.module_slot,
+            frame.procedure,
+            frame.locals,
+            frame.stack,
+        )
+        .with_ip(frame.ip)
     }
 }
 

@@ -1,46 +1,31 @@
 ---
 title: "Blocks and Control Flow"
-description: "Translate Java statement blocks and loops into Musi block expressions, match, recursion, and pipelines."
+description: "Read Blocks and Control Flow as a Java habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Java Developers"
 order: 3
 slug: "blocks-control-flow"
-summary: "Use blocks as values and model repetition with recursion or library traversal."
+summary: "Translate the Java habit, then use the Musi Book for the full rule."
 ---
 
-# Blocks and Control Flow
+A Java reader brings habits from packages, classes, records, interfaces, exceptions, annotations, streams, and long-lived APIs. That helps with contracts, visibility, and maintainable names, but the Musi page asks a narrower question: what contract should this branching and block results example make visible?
 
-Java blocks group statements and usually require `return` for produced values:
+{{compare:java-blocks-control-flow}}
 
-```java
-static int invoiceTotal() {
-    int basePrice = 1200;
-    int fee = 45;
-    return basePrice + fee;
-}
-```
+## Reading Blocks and Control Flow from Java
 
-Musi blocks can produce the final value directly.
+On the Musi side, Musi blocks and matches are expressions when they produce a value; the branch answer matters more than the statement container. Read the shared example through Java eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-{{snippet:java-block-expression}}
+## False friend
 
-## Repetition
+Do not carry over temporary variables whose only job was to smuggle a branch result out of a statement block. For a Java reader, the trap is reading Musi `class` as a nominal object type with constructors and fields; Musi `class` is a behavior contract supplied by instances; records and data model object shape.
 
-Java loop state is commonly mutated:
+## When this pays off
 
-```java
-static int totalSeats(int groups) {
-    int seats = 0;
-    for (int remaining = groups; remaining > 0; remaining -= 1) {
-        seats += 4;
-    }
-    return seats;
-}
-```
+Use this shape when a route fee, access decision, or small rule table chooses one value from several cases. The Java instinct still helps here: Keep the Java habit of naming APIs for future readers.
 
-Musi can make the changing state visible through recursive parameters.
+## Keep close
 
-{{snippet:java-recursive-control-flow}}
-
-Use library traversal and pipelines for collection work. Use `let rec` when the loop is really a small state machine.
-
+- [Blocks and expressions](/learn/book/start/blocks-and-expressions)
+- [Patterns](/learn/book/data/patterns)
+- [Operators](/learn/book/core/operators)

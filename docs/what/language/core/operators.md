@@ -7,17 +7,20 @@ order: 7
 slug: "operators"
 summary: "Read arithmetic, comparison, and logic in ordinary expressions."
 ---
-
-Operators are calls written in operator position. `=` compares; `:=` binds or assigns depending on surrounding form. Use names when punctuation would hide domain meaning.
+Operators are compact names for common operations. Arithmetic, comparison, and logical operators are useful because people already read them quickly.
 
 {{snippet:chapter-operators}}
 
-## Reading Model
+Compact syntax is only helpful when it stays obvious. A price comparison like `subtotal < limit` is clear. A dense expression with mixed operators can hide the rule it is trying to enforce.
 
-Read the example from top to bottom. The first visible name gives the reader a handle, the following expressions show how values move, and the final expression shows what leaves the example.
+## Make precedence boring
 
-## Practical Rule
+Parentheses are not a failure. If grouping matters to a business rule, show the grouping. A discount formula should not make a reader remember an operator table before trusting the answer.
 
-Use this form when it makes value movement clearer than copying habits from another language. Prefer the smallest form that still tells the reader where names, types, effects, and boundaries live.
+## Operators and domain language
 
-Continue to [Ranges](/learn/book/core/expressions/ranges).
+Some domains naturally use operators: ranges, totals, equality checks, and ordering. For more specific actions, a named function often reads better than a clever operator expression.
+
+Core forms are the small hand tools of the language. Literals are raw materials, calls ask for work, operators join values, ranges mark spans, and lambdas carry a small action around. Each form should feel boring before you rely on it inside larger data or effect code.
+
+When a core form feels hard, place it in a plain story. A ticket price plus a fee, a room number in a range, a message sent through a callable, or a small action saved as a lambda is enough. The syntax matters because it keeps that story exact.

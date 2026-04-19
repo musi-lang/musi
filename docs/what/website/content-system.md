@@ -6,6 +6,7 @@ title: Website Content System
 
 The website uses a repo-backed content system.
 Markdown files stay in the repository, TypeScript manifests describe routing and grouping, snippets and examples carry checked code, and the generator emits the runtime content registry used by the static site.
+Generation is deterministic: the same registry and markdown inputs always produce the same checked-in JSON artifacts.
 
 ## Collections
 
@@ -50,3 +51,8 @@ Local Docs Studio edits those Markdown roots from `http://127.0.0.1:4322`.
 It is a local editor for repository files, with Git review as the publishing gate.
 It rejects paths outside the allowed docs roots.
 Run it with `bun run docs:studio`.
+
+Before publishing docs changes:
+
+- Run `bun run validate:language-docs` to validate frontmatter, placeholder references, and raw-fence rules.
+- Run `bun run generate:content` to refresh deterministic generated artifacts.

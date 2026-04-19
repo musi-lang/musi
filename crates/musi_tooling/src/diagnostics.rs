@@ -412,7 +412,7 @@ fn project_diag(error: &ProjectError) -> CliDiagnostic {
         | ProjectError::MissingManifestAncestor { path }
         | ProjectError::MissingPackageRoot { path }
         | ProjectError::MissingModule { path }
-        | ProjectError::ManifestJsonInvalid { path, .. }
+        | ProjectError::InvalidManifestJson { path, .. }
         | ProjectError::ProjectIoFailed { path, .. }
         | ProjectError::MissingFrozenLockfile { path }
         | ProjectError::FrozenLockfileOutOfDate { path } => Some(path.display().to_string()),
@@ -421,7 +421,7 @@ fn project_diag(error: &ProjectError) -> CliDiagnostic {
         | ProjectError::DuplicatePackageName { .. }
         | ProjectError::MissingPackageVersion { .. }
         | ProjectError::NoRootPackage
-        | ProjectError::PackageEntryModuleMissing { .. }
+        | ProjectError::MissingPackageEntryModule { .. }
         | ProjectError::UnknownTask { .. }
         | ProjectError::TaskDependencyCycle { .. }
         | ProjectError::PackageDependencyCycle { .. }

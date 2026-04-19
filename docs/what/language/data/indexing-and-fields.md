@@ -7,17 +7,22 @@ order: 14
 slug: "indexing-and-fields"
 summary: "Use `.field` for named data and `.[index]` for positional access."
 ---
-
-Field access reads named record data. Indexing reads position-based data. Use the form that matches how a reader should find the value.
+Indexing selects by position. Field access selects by name. Both are ways to move from a larger value to the part needed for the next expression.
 
 {{snippet:chapter-indexing-and-fields}}
 
-## Reading Model
+Choose the access style that matches the data. A row in a timetable may be indexed by slot. A booking record should use fields because the pieces have names.
 
-Read the example from top to bottom. The first visible name gives the reader a handle, the following expressions show how values move, and the final expression shows what leaves the example.
+## The reader's question
 
-## Practical Rule
+When reading `customer.address`, the question is answered immediately: this code needs the address. When reading `items.[2]`, the reader asks why the third item matters. Good code answers that question nearby.
 
-Use this form when it makes value movement clearer than copying habits from another language. Prefer the smallest form that still tells the reader where names, types, effects, and boundaries live.
+## Keep paths short
 
-Continue to [Data Definitions](/learn/book/data/modeling/data-definitions).
+Long chains of fields and indexes can make ownership unclear. If a path is important, name the intermediate value: `shippingAddress`, `firstPet`, or `primaryContact`.
+
+Short paths also improve diagnostics and hovers. When an editor can highlight `shippingAddress.city` as a record field rather than a vague nested expression, the code becomes easier to inspect. Names are not only for humans; they give tools better handles too.
+
+Data chapters teach the shape of a room before anyone moves through it. A record is a labeled card, an array is an ordered row, a variant is a set of named doors, and a pattern is a safe way to open one door at a time.
+
+Most data bugs start when one shape is asked to mean too many things. If a value can be absent, use an absent-value shape. If a value has named parts, use a record. If a value can be one of several cases, use data variants.

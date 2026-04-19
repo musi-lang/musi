@@ -1,37 +1,31 @@
 ---
 title: "Variables, Short Declarations, and Mutation"
-description: "Translate Go `:=` and reassignment into explicit Musi bindings and mutation."
+description: "Read Variables, Short Declarations, and Mutation as a Go habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Go Developers"
 order: 4
 slug: "variables-short-declarations-mutation"
-summary: "Use mutable bindings for real changing state and fresh names for calculation stages."
+summary: "Translate the Go habit, then use the Musi Book for the full rule."
 ---
 
-# Variables, Short Declarations, and Mutation
+A Go reader brings habits from packages, structs, slices, nil, multiple returns, interfaces, goroutines, channels, and explicit errors. That helps with small named operations and direct data flow, but the Musi page asks a narrower question: what contract should this fresh values and mutation example make visible?
 
-Go uses `:=` for new locals and `=` for reassignment:
+{{compare:go-variables-short-declarations-mutation}}
 
-```go
-visits := 0
-visits = visits + 1
+## Reading Variables, Short Declarations, and Mutation from Go
 
-nextVisits := visits + 1
-```
+On the Musi side, Musi makes mutation explicit with `mut` and assignment; ordinary `let` names read as stable facts. Read the shared example through Go eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-Musi marks the binding that can change.
+## False friend
 
-{{snippet:go-variables-mutation}}
+Do not translate every rebinding habit into mutation. A new receipt, label, or counter snapshot can be a fresh name. For a Go reader, the trap is using absence or failure as a side channel because Go makes that cheap; Musi `class` is closer to an explicit interface constraint with instances; it is not a struct and not a method set attached by package convention.
 
-## Fresh values
+## When this pays off
 
-Go often uses new names for calculation stages:
+Use mutation when the domain really changes over time, such as queue depth or a buffer cursor. The Go instinct still helps here: Keep the Go habit of writing the small thing first and naming package boundaries clearly.
 
-```go
-basePrice := 1200
-total := basePrice + 45
-```
+## Keep close
 
-Musi bindings are stable unless marked mutable, so fresh names fit ordinary calculations.
-
-{{snippet:go-fresh-value}}
+- [Mutation](/learn/book/start/mutation)
+- [Values and let](/learn/book/start/values-and-let)
+- [Blocks and expressions](/learn/book/start/blocks-and-expressions)

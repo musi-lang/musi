@@ -513,18 +513,18 @@ impl Project {
         let Some(id) = &self.workspace.root_package else {
             return Err(self.root_manifest_source.error_with_hint(
                 DiagCode::new(3610),
-                "root package entry missing",
+                "missing root package entry",
                 self.root_manifest_source.insertion_span(),
-                "`name` field missing",
+                "missing `name` field",
                 "add `name` and `version`, or target workspace member explicitly",
             ));
         };
         self.workspace.packages.get(id).ok_or_else(|| {
             self.root_manifest_source.error_with_hint(
                 DiagCode::new(3610),
-                "root package entry missing",
+                "missing root package entry",
                 self.root_manifest_source.insertion_span(),
-                "root package record missing",
+                "missing root package record",
                 "declare `name` and `version` in `musi.json`",
             )
         })
@@ -569,7 +569,7 @@ impl Project {
     /// Returns [`ProjectError`] when the resolved lockfile cannot be serialized or written.
     pub fn write_lockfile(&self) -> ProjectResult {
         let text = serde_json::to_string_pretty(&self.resolved_lockfile).map_err(|source| {
-            ProjectError::ManifestJsonInvalid {
+            ProjectError::InvalidManifestJson {
                 path: self.lockfile_path.clone(),
                 source,
             }
@@ -813,7 +813,7 @@ fn manifest_path_for(path: &Path) -> ProjectResult<PathBuf> {
         path.join("musi.json")
     };
     if manifest_path.is_file() {
-        Ok(manifest_path)
+        Ok(normalize_lookup_path(&manifest_path))
     } else {
         Err(ProjectError::MissingManifest {
             path: manifest_path,
@@ -841,7 +841,7 @@ fn manifest_ancestor_path_for(path: &Path) -> ProjectResult<PathBuf> {
     for ancestor in start_dir.ancestors() {
         let manifest_path = ancestor.join("musi.json");
         if manifest_path.is_file() {
-            return Ok(manifest_path);
+            return Ok(normalize_lookup_path(&manifest_path));
         }
     }
 
@@ -895,7 +895,7 @@ fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> Pro
             .unwrap_or_else(|| source.insertion_span());
         return Err(source.error(
             DiagCode::new(3606),
-            "publish value invalid",
+            "invalid publish value",
             span,
             "`publish` boolean must be false",
         ));
@@ -909,11 +909,12 @@ fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> Pro
             .unwrap_or_else(|| source.insertion_span());
         return Err(source.error(
             DiagCode::new(3606),
-            "musiModulesDir value invalid",
+            "invalid musiModulesDir value",
             span,
             "`musiModulesDir` boolean must be false",
         ));
     }
+    validate_fmt_config(manifest, source)?;
     for (export_name, export_path) in manifest.export_map() {
         if export_name != "." && !export_name.starts_with("./") {
             let pointer = format!("/exports/{}", escape_pointer_segment(&export_name));
@@ -923,7 +924,7 @@ fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> Pro
                 .unwrap_or_else(|| source.insertion_span());
             return Err(source.error(
                 DiagCode::new(3606),
-                format!("export key `{export_name}` invalid"),
+                format!("invalid export key `{export_name}`"),
                 span,
                 "export key must be `.` or start with `./`",
             ));
@@ -936,7 +937,7 @@ fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> Pro
                 .unwrap_or_else(|| source.insertion_span());
             return Err(source.error(
                 DiagCode::new(3606),
-                format!("export target `{export_path}` invalid"),
+                format!("invalid export target `{export_path}`"),
                 span,
                 "export target must start with `./`",
             ));
@@ -944,6 +945,65 @@ fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> Pro
     }
     validate_task_graph(manifest, source)?;
     Ok(())
+}
+
+fn validate_fmt_config(manifest: &PackageManifest, source: &ManifestSource) -> ProjectResult {
+    let Some(config) = manifest.fmt.as_ref() else {
+        return Ok(());
+    };
+    if matches!(config.line_width, Some(0)) {
+        let span = source
+            .value_span(&json_pointer(&["fmt", "lineWidth"]))
+            .unwrap_or_else(|| source.insertion_span());
+        return Err(source.error(
+            DiagCode::new(3606),
+            "invalid fmt.lineWidth value",
+            span,
+            "`fmt.lineWidth` must be at least 1",
+        ));
+    }
+    if matches!(config.indent_width, Some(0)) {
+        let span = source
+            .value_span(&json_pointer(&["fmt", "indentWidth"]))
+            .unwrap_or_else(|| source.insertion_span());
+        return Err(source.error(
+            DiagCode::new(3606),
+            "invalid fmt.indentWidth value",
+            span,
+            "`fmt.indentWidth` must be at least 1",
+        ));
+    }
+    if let Some(pattern) = first_duplicate(&config.include) {
+        let span = source
+            .value_span(&json_pointer(&["fmt", "include"]))
+            .unwrap_or_else(|| source.insertion_span());
+        return Err(source.error(
+            DiagCode::new(3606),
+            format!("duplicate fmt.include pattern `{pattern}`"),
+            span,
+            "`fmt.include` patterns must be unique",
+        ));
+    }
+    if let Some(pattern) = first_duplicate(&config.exclude) {
+        let span = source
+            .value_span(&json_pointer(&["fmt", "exclude"]))
+            .unwrap_or_else(|| source.insertion_span());
+        return Err(source.error(
+            DiagCode::new(3606),
+            format!("duplicate fmt.exclude pattern `{pattern}`"),
+            span,
+            "`fmt.exclude` patterns must be unique",
+        ));
+    }
+    Ok(())
+}
+
+fn first_duplicate(items: &[String]) -> Option<&str> {
+    let mut seen = BTreeSet::new();
+    items
+        .iter()
+        .find(|item| !seen.insert(item.as_str()))
+        .map(String::as_str)
 }
 
 fn seed_builtin_std_package(
@@ -1043,7 +1103,7 @@ fn embedded_module(
                 spec: spec.as_str().to_owned(),
                 span: site.span,
             }),
-            ImportSiteKind::Dynamic | ImportSiteKind::InvalidStringLit => None,
+            ImportSiteKind::NonLiteral | ImportSiteKind::InvalidStringLit => None,
         })
         .collect::<Vec<_>>();
     let module = LoadedModule {
@@ -1115,7 +1175,7 @@ fn load_lockfile(path: &Path) -> ProjectResult<Lockfile> {
         path: path.to_path_buf(),
         source,
     })?;
-    serde_json::from_str(&text).map_err(|source| ProjectError::ManifestJsonInvalid {
+    serde_json::from_str(&text).map_err(|source| ProjectError::InvalidManifestJson {
         path: path.to_path_buf(),
         source,
     })
@@ -1605,7 +1665,7 @@ fn package_entry_missing(
         .and_then(|_| manifest_source.value_span(&json_pointer(&["entry"])))
         .unwrap_or_else(|| manifest_source.insertion_span());
     let label = entry_target.map_or_else(
-        || "`entry` field missing and `index.ms` not found".into(),
+        || "missing `entry` field and root `index.ms`".into(),
         |target| format!("entry target `{target}` does not resolve"),
     );
     let hint = match entry_target {
@@ -1614,7 +1674,7 @@ fn package_entry_missing(
     };
     manifest_source.error_with_hint(
         DiagCode::new(3611),
-        format!("package `{package_name}` entry module missing"),
+        format!("missing entry module for package `{package_name}`"),
         span,
         label,
         hint,

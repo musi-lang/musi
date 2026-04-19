@@ -1,12 +1,18 @@
 use std::vec;
 
 use music_arena::Idx;
-use thiserror::Error;
+use std::error::Error;
+use std::fmt::{self, Display, Formatter};
+
+use music_base::diag::{CatalogDiagnostic, DiagContext};
+
+use crate::SeamDiagKind;
+use crate::diag::artifact_error_kind;
 
 use crate::descriptor::{
     ClassDescriptor, ConstantDescriptor, ConstantValue, DataDescriptor, EffectDescriptor,
     ExportDescriptor, ExportTarget, ForeignDescriptor, GlobalDescriptor, MetaDescriptor,
-    MethodDescriptor, TypeDescriptor,
+    ProcedureDescriptor, TypeDescriptor,
 };
 use crate::instruction::{CodeEntry, Instruction, Label, LabelId, Operand, OperandShape};
 
@@ -20,7 +26,7 @@ pub enum SectionTag {
     Types = 2,
     Constants = 3,
     Globals = 4,
-    Methods = 5,
+    Procedures = 5,
     Effects = 6,
     Classes = 7,
     Foreigns = 8,
@@ -119,7 +125,7 @@ pub type StringId = Idx<StringRecord>;
 pub type TypeId = Idx<TypeDescriptor>;
 pub type ConstantId = Idx<ConstantDescriptor>;
 pub type GlobalId = Idx<GlobalDescriptor>;
-pub type MethodId = Idx<MethodDescriptor>;
+pub type ProcedureId = Idx<ProcedureDescriptor>;
 pub type EffectId = Idx<EffectDescriptor>;
 pub type ClassId = Idx<ClassDescriptor>;
 pub type ForeignId = Idx<ForeignDescriptor>;
@@ -133,7 +139,7 @@ pub struct Artifact {
     pub types: Table<TypeDescriptor>,
     pub constants: Table<ConstantDescriptor>,
     pub globals: Table<GlobalDescriptor>,
-    pub methods: Table<MethodDescriptor>,
+    pub procedures: Table<ProcedureDescriptor>,
     pub effects: Table<EffectDescriptor>,
     pub classes: Table<ClassDescriptor>,
     pub foreigns: Table<ForeignDescriptor>,
@@ -142,19 +148,45 @@ pub struct Artifact {
     pub meta: Table<MetaDescriptor>,
 }
 
-#[derive(Debug, Error, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ArtifactError {
-    #[error("table reference out of bounds: {table}")]
     InvalidReference { table: &'static str },
-    #[error("duplicate label definition in method {method}")]
-    DuplicateLabel { method: String },
-    #[error("missing label reference in method {method}")]
-    MissingLabel { method: String },
-    #[error("invalid effect op reference")]
+    DuplicateLabel { procedure: String },
+    MissingLabel { procedure: String },
     InvalidEffectOp,
-    #[error("operand shape mismatch for opcode {opcode}")]
     OperandShapeMismatch { opcode: &'static str },
 }
+
+impl ArtifactError {
+    #[must_use]
+    pub const fn diag_kind(&self) -> SeamDiagKind {
+        artifact_error_kind(self)
+    }
+
+    #[must_use]
+    pub fn diagnostic(&self) -> CatalogDiagnostic<SeamDiagKind> {
+        CatalogDiagnostic::new(self.diag_kind(), self.diag_context())
+    }
+
+    fn diag_context(&self) -> DiagContext {
+        match self {
+            Self::InvalidReference { table } => DiagContext::new().with("table", *table),
+            Self::DuplicateLabel { procedure } | Self::MissingLabel { procedure } => {
+                DiagContext::new().with("procedure", procedure)
+            }
+            Self::InvalidEffectOp => DiagContext::new(),
+            Self::OperandShapeMismatch { opcode } => DiagContext::new().with("opcode", *opcode),
+        }
+    }
+}
+
+impl Display for ArtifactError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(&self.diagnostic(), f)
+    }
+}
+
+impl Error for ArtifactError {}
 
 impl Artifact {
     #[must_use]
@@ -163,6 +195,17 @@ impl Artifact {
     }
 
     pub fn intern_string(&mut self, text: &str) -> StringId {
+        if let Some((id, _)) = self
+            .strings
+            .iter()
+            .find(|(_, record)| record.text.as_ref() == text)
+        {
+            return id;
+        }
+        self.push_string_record(text)
+    }
+
+    pub(crate) fn push_string_record(&mut self, text: &str) -> StringId {
         self.strings.alloc(StringRecord { text: text.into() })
     }
 
@@ -200,7 +243,7 @@ impl Artifact {
 }
 
 impl Artifact {
-    /// Validates descriptor references, instruction operand shapes, and method label usage.
+    /// Validates descriptor references, instruction operand shapes, and procedure label usage.
     ///
     /// # Errors
     ///
@@ -215,35 +258,35 @@ impl Artifact {
         self.validate_foreigns()?;
         self.validate_data()?;
         self.validate_exports()?;
-        self.validate_methods()?;
+        self.validate_procedures()?;
         self.validate_meta()?;
         Ok(())
     }
 
-    fn validate_method(&self, method: &MethodDescriptor) -> Result<(), ArtifactError> {
-        self.require_string(method.name)?;
-        let mut defined = vec![false; method.labels.len()];
-        for label in &method.labels {
+    fn validate_procedure(&self, procedure: &ProcedureDescriptor) -> Result<(), ArtifactError> {
+        self.require_string(procedure.name)?;
+        let mut defined = vec![false; procedure.labels.len()];
+        for label in &procedure.labels {
             self.require_string(*label)?;
         }
-        for entry in &method.code {
+        for entry in &procedure.code {
             match entry {
                 CodeEntry::Label(Label { id }) => {
                     let index = usize::from(*id);
                     let Some(slot) = defined.get_mut(index) else {
                         return Err(ArtifactError::MissingLabel {
-                            method: self.string_text(method.name).to_owned(),
+                            procedure: self.string_text(procedure.name).to_owned(),
                         });
                     };
                     if *slot {
                         return Err(ArtifactError::DuplicateLabel {
-                            method: self.string_text(method.name).to_owned(),
+                            procedure: self.string_text(procedure.name).to_owned(),
                         });
                     }
                     *slot = true;
                 }
                 CodeEntry::Instruction(instruction) => {
-                    self.validate_instruction(method, instruction)?;
+                    self.validate_instruction(procedure, instruction)?;
                 }
             }
         }
@@ -252,7 +295,7 @@ impl Artifact {
 
     fn validate_instruction(
         &self,
-        method: &MethodDescriptor,
+        procedure: &ProcedureDescriptor,
         instruction: &Instruction,
     ) -> Result<(), ArtifactError> {
         if !operand_matches_shape(&instruction.operand, instruction.opcode.operand_shape()) {
@@ -260,12 +303,12 @@ impl Artifact {
                 opcode: instruction.opcode.mnemonic(),
             });
         }
-        self.validate_instruction_operand(method, &instruction.operand)
+        self.validate_instruction_operand(procedure, &instruction.operand)
     }
 
     fn validate_instruction_operand(
         &self,
-        method: &MethodDescriptor,
+        procedure: &ProcedureDescriptor,
         operand: &Operand,
     ) -> Result<(), ArtifactError> {
         match operand {
@@ -282,13 +325,14 @@ impl Artifact {
             Operand::Global(id) => {
                 self.require_global(*id)?;
             }
-            Operand::Method(id) => {
-                self.require_method(*id)?;
+            Operand::Procedure(id) => {
+                self.require_procedure(*id)?;
             }
-            Operand::WideMethodCaptures {
-                method: method_id, ..
+            Operand::WideProcedureCaptures {
+                procedure: procedure_id,
+                ..
             } => {
-                self.require_method(*method_id)?;
+                self.require_procedure(*procedure_id)?;
             }
             Operand::Foreign(id) => {
                 self.require_foreign(*id)?;
@@ -304,14 +348,14 @@ impl Artifact {
                 self.require_effect(*effect)?;
             }
             Operand::Label(id) => {
-                require_label(method, *id)?;
+                require_label(procedure, *id)?;
             }
             Operand::TypeLen { ty, .. } => {
                 self.require_type(*ty)?;
             }
             Operand::BranchTable(labels) => {
                 for label in labels.iter().copied() {
-                    require_label(method, label)?;
+                    require_label(procedure, label)?;
                 }
             }
         }
@@ -341,8 +385,8 @@ impl Artifact {
     fn validate_globals(&self) -> Result<(), ArtifactError> {
         for (_, descriptor) in self.globals.iter() {
             self.require_string(descriptor.name)?;
-            if let Some(method) = descriptor.initializer {
-                self.require_method(method)?;
+            if let Some(procedure) = descriptor.initializer {
+                self.require_procedure(procedure)?;
             }
         }
         Ok(())
@@ -411,7 +455,7 @@ impl Artifact {
 
     fn validate_export_target(&self, target: ExportTarget) -> Result<(), ArtifactError> {
         match target {
-            ExportTarget::Method(method) => self.require_method(method),
+            ExportTarget::Procedure(procedure) => self.require_procedure(procedure),
             ExportTarget::Global(global) => self.require_global(global),
             ExportTarget::Foreign(foreign) => self.require_foreign(foreign),
             ExportTarget::Type(ty) => self.require_type(ty),
@@ -420,9 +464,9 @@ impl Artifact {
         }
     }
 
-    fn validate_methods(&self) -> Result<(), ArtifactError> {
-        for (_, descriptor) in self.methods.iter() {
-            self.validate_method(descriptor)?;
+    fn validate_procedures(&self) -> Result<(), ArtifactError> {
+        for (_, descriptor) in self.procedures.iter() {
+            self.validate_procedure(descriptor)?;
         }
         Ok(())
     }
@@ -465,12 +509,14 @@ impl Artifact {
         Ok(())
     }
 
-    fn require_method(&self, id: MethodId) -> Result<(), ArtifactError> {
+    fn require_procedure(&self, id: ProcedureId) -> Result<(), ArtifactError> {
         let _ = self
-            .methods
+            .procedures
             .as_slice()
             .get(usize::try_from(id.raw()).unwrap_or(usize::MAX))
-            .ok_or(ArtifactError::InvalidReference { table: "methods" })?;
+            .ok_or(ArtifactError::InvalidReference {
+                table: "procedures",
+            })?;
         Ok(())
     }
 
@@ -519,13 +565,13 @@ fn source_name(name: &str) -> &str {
     name.rsplit_once("::").map_or(name, |(_, tail)| tail)
 }
 
-fn require_label(method: &MethodDescriptor, id: LabelId) -> Result<(), ArtifactError> {
+fn require_label(procedure: &ProcedureDescriptor, id: LabelId) -> Result<(), ArtifactError> {
     let index = usize::from(id);
-    if method.labels.get(index).is_some() {
+    if procedure.labels.get(index).is_some() {
         Ok(())
     } else {
         Err(ArtifactError::MissingLabel {
-            method: id.to_string(),
+            procedure: id.to_string(),
         })
     }
 }
@@ -540,10 +586,10 @@ const fn operand_matches_shape(operand: &Operand, shape: OperandShape) -> bool {
             | (Operand::Type(_), OperandShape::Type)
             | (Operand::Constant(_), OperandShape::Constant)
             | (Operand::Global(_), OperandShape::Global)
-            | (Operand::Method(_), OperandShape::Method)
+            | (Operand::Procedure(_), OperandShape::Procedure)
             | (
-                Operand::WideMethodCaptures { .. },
-                OperandShape::WideMethodCaptures
+                Operand::WideProcedureCaptures { .. },
+                OperandShape::WideProcedureCaptures
             )
             | (Operand::Foreign(_), OperandShape::Foreign)
             | (Operand::Effect { .. }, OperandShape::Effect)

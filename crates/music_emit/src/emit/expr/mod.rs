@@ -12,7 +12,7 @@ mod storage;
 mod support;
 
 pub(super) fn compile_expr(
-    emitter: &mut MethodEmitter<'_, '_>,
+    emitter: &mut ProcedureEmitter<'_, '_>,
     expr: &IrExpr,
     keep_result: bool,
     diags: &mut EmitDiagList,
@@ -20,7 +20,7 @@ pub(super) fn compile_expr(
     emitter.compile_expr(expr, keep_result, diags);
 }
 
-impl MethodEmitter<'_, '_> {
+impl ProcedureEmitter<'_, '_> {
     pub(super) fn compile_expr(
         &mut self,
         expr: &IrExpr,
@@ -187,7 +187,7 @@ impl MethodEmitter<'_, '_> {
         diags: &mut EmitDiagList,
     ) -> bool {
         match &expr.kind {
-            IrExprKind::DynamicImport { spec } => {
+            IrExprKind::ModuleLoad { spec } => {
                 self.compile_expr(spec, true, diags);
                 self.code.push(CodeEntry::Instruction(Instruction::new(
                     Opcode::ModLoad,

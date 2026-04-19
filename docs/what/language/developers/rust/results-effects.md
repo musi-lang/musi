@@ -1,42 +1,31 @@
 ---
 title: "Results, I/O, and Effects"
-description: "Translate Rust `Result` and I/O boundary habits into Musi stdlib results and I/O."
+description: "Read Results, I/O, and Effects as a Rust habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Rust Developers"
 order: 8
 slug: "results-effects"
-summary: "Rust `Result` maps to `@std/result`; standard input starts with `@std/io`."
+summary: "Translate the Rust habit, then use the Musi Book for the full rule."
 ---
 
-Rust often uses `Result` for recoverable failure:
+Rust readers already know Option and Result. In Musi examples, focus less on the concept and more on the syntax: `option.someOf`, `option.noneOf`, and pattern-shaped callers.
 
-```rust
-fn read_port(text: &str) -> Result<u16, String> {
-    text.parse::<u16>().map_err(|_| String::from("bad port"))
-}
+{{compare:rust-results-effects}}
 
-let parsed = Ok(8080);
-parsed
-```
+## Reading Results, I/O, and Effects from Rust
 
-Musi uses `@std/result` for the same recoverable shape.
+On the Musi side, Musi uses `option.someOf` and `option.noneOf` when absence is expected, so callers handle the empty branch deliberately. Read the shared example through Rust eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-{{snippet:rust-result-data}}
+## False friend
 
-That keeps recoverable failure in the value, with helpers for fallback or mapping.
+Do not translate null, nil, None, or undefined as a quiet ordinary value. For a Rust reader, the trap is expecting Musi syntax to mirror Rust even when the ideas are separated differently; Musi `class` is closest to a Rust trait plus law text; instances play the role of implementations for behavior.
 
-Rust also uses `Result` for outside work such as reading from standard input:
+## When this pays off
 
-```rust
-fn read_line() -> std::result::Result<String, std::io::Error> {
-    let mut line = String::new();
-    std::io::stdin().read_line(&mut line)?;
-    Ok(line)
-}
-```
+Use Option when a badge, ticket, receipt, search result, or lookup may honestly be missing. The Rust instinct still helps here: Keep the Rust habit of asking which type carries the invariant.
 
-Musi user code reaches for `@std/io` first. The runtime request stays under that wrapper.
+## Keep close
 
-{{snippet:rust-effect-request}}
-
-Use stdlib results when the value itself can be one of several outcomes. Use stdlib I/O for ordinary terminal boundaries. Define custom effects when the program needs a capability that is not already in the standard library.
+- [Effects](/learn/book/effects-runtime/effects)
+- [Using](/learn/book/effects-runtime/using)
+- [Handlers](/learn/book/effects-runtime/handlers)

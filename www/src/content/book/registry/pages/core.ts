@@ -67,10 +67,14 @@ export const corePages = [
 		questions: [],
 	},
 	{
-		id: "methods",
+		id: "dot-calls",
 		partId: "core",
-		path: "/docs/book/core/methods",
-		aliases: ["/docs/language/core/methods", "/learn/language/core/methods"],
+		path: "/docs/book/core/dot-calls",
+		aliases: [
+			"/docs/book/core/methods",
+			"/docs/language/core/methods",
+			"/learn/language/core/methods",
+		],
 		sourcePath: "docs/what/language/core/methods.md",
 		questions: [],
 	},

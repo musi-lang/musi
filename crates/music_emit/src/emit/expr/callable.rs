@@ -1,7 +1,7 @@
 use super::super::*;
 use crate::EmitDiagKind;
 
-impl MethodEmitter<'_, '_> {
+impl ProcedureEmitter<'_, '_> {
     pub(super) fn compile_intrinsic_call(
         &mut self,
         symbol: &str,
@@ -26,7 +26,7 @@ impl MethodEmitter<'_, '_> {
                 self.module_key,
                 origin,
                 EmitDiagKind::UnknownTypeNameForOp,
-                format!("unknown intrinsic foreign type for `{symbol}`"),
+                format!("unknown type name for intrinsic `{symbol}`"),
             );
             emit_zero(self);
             return;
@@ -149,10 +149,11 @@ impl MethodEmitter<'_, '_> {
                 )));
                 return;
             }
-            if let Some(method) = self.resolve_method(*binding, name, module_target.as_ref()) {
+            if let Some(procedure) = self.resolve_procedure(*binding, name, module_target.as_ref())
+            {
                 self.code.push(CodeEntry::Instruction(Instruction::new(
                     Opcode::Call,
-                    Operand::Method(method),
+                    Operand::Procedure(procedure),
                 )));
                 return;
             }
@@ -210,10 +211,11 @@ impl MethodEmitter<'_, '_> {
                 )));
                 return;
             }
-            if let Some(method) = self.resolve_method(*binding, name, module_target.as_ref()) {
+            if let Some(procedure) = self.resolve_procedure(*binding, name, module_target.as_ref())
+            {
                 self.code.push(CodeEntry::Instruction(Instruction::new(
                     Opcode::CallSeq,
-                    Operand::Method(method),
+                    Operand::Procedure(procedure),
                 )));
                 return;
             }
@@ -242,7 +244,7 @@ impl MethodEmitter<'_, '_> {
         for cap in captures {
             self.compile_expr(cap, true, diags);
         }
-        let Some(method) = self.resolve_method(
+        let Some(procedure) = self.resolve_procedure(
             callee.binding,
             callee.name.as_ref(),
             callee.module_target.as_ref(),
@@ -267,7 +269,10 @@ impl MethodEmitter<'_, '_> {
         let captures = u8::try_from(captures.len()).unwrap_or(u8::MAX);
         self.code.push(CodeEntry::Instruction(Instruction::new(
             Opcode::ClsNew,
-            Operand::WideMethodCaptures { method, captures },
+            Operand::WideProcedureCaptures {
+                procedure,
+                captures,
+            },
         )));
     }
 }

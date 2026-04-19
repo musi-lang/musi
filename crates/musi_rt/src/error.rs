@@ -1,8 +1,11 @@
-use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::error::Error;
+use std::fmt::{self, Display, Formatter, Result as FmtResult};
 
 use musi_vm::{VmError, VmValueKind};
+use music_base::diag::{CatalogDiagnostic, DiagContext};
 use music_session::SessionError;
-use thiserror::Error;
+
+use crate::{RuntimeDiagKind, diag::runtime_error_kind};
 
 pub type RuntimeResult<T = ()> = Result<T, RuntimeError>;
 
@@ -32,7 +35,7 @@ impl Display for RuntimeSessionPhase {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RuntimeErrorKind {
     RootModuleRequired,
-    ModuleSourceMissing {
+    MissingModuleSource {
         spec: Box<str>,
     },
     InvalidSyntaxValue {
@@ -45,8 +48,7 @@ pub enum RuntimeErrorKind {
     VmExecutionFailed(VmError),
 }
 
-#[derive(Debug, Error)]
-#[error("{kind}")]
+#[derive(Debug)]
 pub struct RuntimeError {
     kind: RuntimeErrorKind,
 }
@@ -61,22 +63,53 @@ impl RuntimeError {
     pub const fn kind(&self) -> &RuntimeErrorKind {
         &self.kind
     }
+
+    #[must_use]
+    pub fn diagnostic(&self) -> CatalogDiagnostic<RuntimeDiagKind> {
+        self.kind.diagnostic()
+    }
 }
 
 impl Display for RuntimeErrorKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        Display::fmt(&self.diagnostic(), f)
+    }
+}
+
+impl RuntimeErrorKind {
+    #[must_use]
+    pub fn diagnostic(&self) -> CatalogDiagnostic<RuntimeDiagKind> {
+        CatalogDiagnostic::new(self.diag_kind(), self.diag_context())
+    }
+
+    const fn diag_kind(&self) -> RuntimeDiagKind {
+        runtime_error_kind(self)
+    }
+
+    fn diag_context(&self) -> DiagContext {
         match self {
-            Self::RootModuleRequired => f.write_str("root module required"),
-            Self::ModuleSourceMissing { spec } => {
-                write!(f, "module source missing for `{spec}`")
-            }
-            Self::InvalidSyntaxValue { found } => {
-                write!(f, "syntax value required, found `{found}`")
-            }
-            Self::SessionFailed { phase, detail } => {
-                write!(f, "session {phase} failed (`{detail}`)")
-            }
-            Self::VmExecutionFailed(err) => err.fmt(f),
+            Self::MissingModuleSource { spec } => DiagContext::new().with("spec", spec),
+            Self::InvalidSyntaxValue { found } => DiagContext::new().with("found", found),
+            Self::SessionFailed { phase, detail } => DiagContext::new()
+                .with("phase", phase)
+                .with("detail", detail),
+            Self::VmExecutionFailed(source) => DiagContext::new().with("source", source),
+            Self::RootModuleRequired => DiagContext::new(),
+        }
+    }
+}
+
+impl Display for RuntimeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(&self.diagnostic(), f)
+    }
+}
+
+impl Error for RuntimeError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match &self.kind {
+            RuntimeErrorKind::VmExecutionFailed(source) => Some(source),
+            _ => None,
         }
     }
 }

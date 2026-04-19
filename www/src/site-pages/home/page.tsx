@@ -1,5 +1,5 @@
 import { homeSampleHtml } from "../../content";
-import { docGroups, docSearchEntries } from "../../docs";
+import { docParts, docSearchEntries } from "../../docs";
 import { siteCopy } from "../../lib/site-copy";
 import type { AppRoute } from "../../routes";
 import {
@@ -8,31 +8,36 @@ import {
 	PrimaryAction,
 	SecondaryAction,
 } from "../../ui/actions";
-import { DocListGroup } from "../../ui/doc-list";
+import { DocPartTile } from "../../ui/doc-list";
 import { DocsSearch } from "../../ui/docs-search";
 import { HtmlSnippet } from "../../ui/html-snippet";
-import { Surface } from "../../ui/surface";
+import {
+	MachinesActionCard,
+	MachinesCodeFrame,
+	MachinesGroupbox,
+	MachinesPanel,
+	MachinesSection,
+	MachinesTile,
+} from "../../ui/machines";
 
 export function HomePage(_props: { route: AppRoute }) {
 	const copy = siteCopy.home;
 	return (
-		<div className="page-stack page-home">
-			<section className="home-board" aria-labelledby="home-title">
-				<div className="home-board-titlebar">
-					<span>{copy.eyebrow}</span>
-				</div>
-				<div className="home-board-grid">
-					<div className="home-board-cell home-board-main">
-						<h1
-							id="home-title"
-							className="page-header-title page-header-title-page"
-						>
+		<div className="site-stack page-home">
+			<MachinesPanel
+				title={copy.eyebrow}
+				className="home-hero-panel"
+				aria-labelledby="home-title"
+			>
+				<div className="site-hero-grid">
+					<div className="site-hero-copy">
+						<h1 id="home-title" className="site-title site-title--page">
 							{copy.title}
 						</h1>
-						<div className="page-copy page-header-copy">{copy.description}</div>
-						<ul className="hero-summary-list">
+						<div className="site-copy">{copy.description}</div>
+						<ul className="site-summary-list">
 							{copy.summary.map((item) => (
-								<li key={item} className="hero-summary-item">
+								<li key={item} className="site-summary-item">
 									{item}
 								</li>
 							))}
@@ -47,119 +52,118 @@ export function HomePage(_props: { route: AppRoute }) {
 							<InlineAction href="/community">{copy.tertiaryCta}</InlineAction>
 						</ActionStrip>
 					</div>
-					<div className="home-board-cell home-board-sample">
-						<div className="home-board-subtitle">{siteCopy.ui.sample}</div>
-						<HtmlSnippet className="docs-content" html={homeSampleHtml} />
+					<div className="home-hero-sample-stack">
+						<div className="home-sample-copy site-copy site-copy--small">
+							<p>
+								Start with one value, one function, and one final result. This
+								matches Musi's beginner path.
+							</p>
+							<p>
+								Musi reads top to bottom. Bind values with <code>let</code>,
+								define small functions the same way, then end with the result
+								you want.
+							</p>
+						</div>
+						<MachinesCodeFrame
+							title={siteCopy.ui.sample}
+							className="home-hero-sample"
+						>
+							<HtmlSnippet html={homeSampleHtml} />
+						</MachinesCodeFrame>
 					</div>
 				</div>
-			</section>
+			</MachinesPanel>
 
-			<section className="status-strip" aria-label={siteCopy.ui.status}>
-				{copy.statusItems.map((item) => (
-					<Surface key={item.label} tone="panel" className="status-card">
-						<div className="doc-row-meta">{item.label}</div>
-						<strong>{item.value}</strong>
-						<span>{item.copy}</span>
-					</Surface>
-				))}
-			</section>
-
-			<section className="portal-board" aria-label={siteCopy.ui.primaryPaths}>
-				<div className="section-heading-row section-heading-bar">
-					<div>
-						<div className="eyebrow">{siteCopy.ui.primaryPaths}</div>
-						<h2>Choose a path</h2>
-					</div>
+			<MachinesGroupbox
+				legend={siteCopy.ui.status}
+				className="mx-groupbox--compact home-status-group"
+				aria-label={siteCopy.ui.status}
+			>
+				<div className="site-grid site-grid--three">
+					{copy.statusItems.map((item) => (
+						<MachinesTile
+							key={item.label}
+							kicker={item.label}
+							title={item.value}
+						>
+							<span>{item.copy}</span>
+						</MachinesTile>
+					))}
 				</div>
-				<div className="portal-grid">
+			</MachinesGroupbox>
+
+			<MachinesSection
+				kicker={siteCopy.ui.primaryPaths}
+				title="Choose a path"
+				aria-label={siteCopy.ui.primaryPaths}
+			>
+				<div className="mx-grid site-grid--three">
 					{copy.taskBoards.map((link) => (
-						<Surface
+						<MachinesActionCard
 							key={link.title}
-							tone="raised"
-							className="portal-card portal-card-raised portal-card-task"
-						>
-							<div className="eyebrow">{link.label}</div>
-							<h2>{link.title}</h2>
-							<p>{link.copy}</p>
-							<InlineAction href={link.href}>{link.actionLabel}</InlineAction>
-						</Surface>
-					))}
-				</div>
-			</section>
-
-			<Surface tone="well" className="section-panel section-panel-structured">
-				<DocsSearch
-					entries={docSearchEntries}
-					heading={siteCopy.ui.findDocs}
-					lede="Search chapters, language guides, effects, types, and command questions."
-					initialLimit={4}
-					queryLimit={8}
-				/>
-			</Surface>
-
-			<section className="portal-grid" aria-label={siteCopy.ui.primaryPaths}>
-				{copy.paths.map((link) => (
-					<Surface
-						key={link.title}
-						tone="raised"
-						className="portal-card portal-card-raised"
-					>
-						<div className="eyebrow">{link.label}</div>
-						<h2>{link.title}</h2>
-						<p>{link.copy}</p>
-						<InlineAction href={link.href}>{link.actionLabel}</InlineAction>
-					</Surface>
-				))}
-			</section>
-
-			<Surface
-				tone="well"
-				className="section-panel section-panel-structured why-panel"
-			>
-				<div className="section-heading-row section-heading-bar">
-					<div>
-						<div className="eyebrow">{siteCopy.ui.learnSection}</div>
-						<h2>{copy.sectionsTitle}</h2>
-					</div>
-				</div>
-				<div className="feature-grid feature-grid-separated">
-					{copy.sections.map((section) => (
-						<Surface
-							key={section.title}
-							tone="raised"
-							className="feature-card feature-card-raised"
-						>
-							<div className="eyebrow">{section.title}</div>
-							<p>{section.copy}</p>
-						</Surface>
-					))}
-				</div>
-			</Surface>
-
-			<Surface
-				tone="well"
-				className="section-panel section-panel-structured learn-map-panel"
-			>
-				<div className="section-heading-row section-heading-bar">
-					<div>
-						<div className="eyebrow">{siteCopy.ui.learnSection}</div>
-						<h2>{siteCopy.learn.partsTitle}</h2>
-					</div>
-					<InlineAction href="/learn/book">{siteCopy.nav.learn}</InlineAction>
-				</div>
-				<div className="doc-groups-grid doc-groups-grid-separated">
-					{docGroups.map((group) => (
-						<DocListGroup
-							key={group.group}
-							group={group.group}
-							path={group.path}
-							summaryHtml={group.summaryHtml}
-							pages={group.pages}
-							linkLabel={siteCopy.ui.openSection}
+							href={link.href}
+							kicker={link.label}
+							title={link.title}
+							description={link.copy}
+							action={link.actionLabel}
 						/>
 					))}
 				</div>
-			</Surface>
+			</MachinesSection>
+
+			<MachinesSection
+				kicker={siteCopy.ui.learnSection}
+				title={siteCopy.ui.findDocs}
+			>
+				<p className="site-copy site-copy--small">
+					Search chapters, language guides, effects, types, and command
+					questions.
+				</p>
+				<DocsSearch
+					entries={docSearchEntries}
+					heading={siteCopy.ui.findDocs}
+					showHeader={false}
+					initialLimit={4}
+					queryLimit={8}
+				/>
+			</MachinesSection>
+
+			<MachinesSection
+				kicker={siteCopy.ui.learnSection}
+				title={copy.sectionsTitle}
+			>
+				<div className="mx-grid site-grid--two">
+					{copy.sections.map((section) => (
+						<MachinesGroupbox
+							key={section.title}
+							legend={section.title}
+							className="mx-groupbox--compact"
+						>
+							<p>{section.copy}</p>
+						</MachinesGroupbox>
+					))}
+				</div>
+			</MachinesSection>
+
+			<MachinesSection
+				kicker={siteCopy.ui.learnSection}
+				title={siteCopy.learn.partsTitle}
+				action={
+					<InlineAction href="/learn/book">{siteCopy.nav.learn}</InlineAction>
+				}
+			>
+				<div className="mx-grid site-parts-grid">
+					{docParts.map((part) => (
+						<DocPartTile
+							key={part.id}
+							title={part.title}
+							path={part.path}
+							summaryHtml={part.summaryHtml}
+							chapterCount={part.chapters.length}
+						/>
+					))}
+				</div>
+			</MachinesSection>
 		</div>
 	);
 }

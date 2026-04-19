@@ -1,31 +1,31 @@
 ---
 title: "`let`, `const`, and Mutable State"
-description: "Translate JavaScript and TypeScript binding habits into Musi value mutation."
+description: "Read `let`, `const`, and Mutable State as a JavaScript and TypeScript habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "JavaScript and TypeScript Developers"
 order: 3
 slug: "state"
-summary: "`const`-style names stay ordinary; changing values use explicit mutable values."
+summary: "Translate the JavaScript and TypeScript habit, then use the Musi Book for the full rule."
 ---
 
-JavaScript separates rebinding from fixed binding with `let` and `const`:
+A TypeScript reader brings habits from objects, structural types, unions, undefined, promises, imports, npm packages, and prototype-shaped history. That helps with flexible shapes and fast feedback from type tooling, but the Musi page asks a narrower question: what contract should this fresh values and mutation example make visible?
 
-```javascript
-let visits = 0;
-visits = visits + 1;
-visits;
-```
+{{compare:javascript-typescript-state}}
 
-Musi keeps the name ordinary and puts mutability on the value.
+## Reading `let`, `const`, and Mutable State from JavaScript/TypeScript
 
-{{snippet:js-ts-mutable-state}}
+On the Musi side, Musi makes mutation explicit with `mut` and assignment; ordinary `let` names read as stable facts. Read the shared example through JavaScript/TypeScript eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-Use mutation when the same local value changes over time. Use a new `let` when a step produces a new value.
+## False friend
 
-```javascript
-const base = 1200;
-const total = base + 45;
-total;
-```
+Do not translate every rebinding habit into mutation. A new receipt, label, or counter snapshot can be a fresh name. For a TypeScript reader, the trap is assuming runtime object shape and compile-time behavior contract are the same thing; Musi `class` is not a JS constructor or TS class; it is a behavior contract implemented separately from record/data shape.
 
-{{snippet:js-ts-fresh-value}}
+## When this pays off
+
+Use mutation when the domain really changes over time, such as queue depth or a buffer cursor. The JavaScript/TypeScript instinct still helps here: Keep the TypeScript habit of reading the shape before reading implementation details.
+
+## Keep close
+
+- [Mutation](/learn/book/start/mutation)
+- [Values and let](/learn/book/start/values-and-let)
+- [Blocks and expressions](/learn/book/start/blocks-and-expressions)

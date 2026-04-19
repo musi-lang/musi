@@ -10,6 +10,7 @@ publish.workspace = true
 [dependencies]
 music_base = { path = "../music_base" }
 music_arena = { path = "../music_arena" }
+music_builtin = { path = "../music_builtin" }
 
 [lints]
 workspace = true

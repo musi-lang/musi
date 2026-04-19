@@ -25,7 +25,7 @@ impl Vm {
             (
                 module.spec.clone(),
                 module.state,
-                module.program.entry_method(),
+                module.program.entry_procedure(),
             )
         };
         match state {
@@ -39,7 +39,7 @@ impl Vm {
         self.module_mut(slot)?.state = ModuleState::Initializing;
         let base_depth = self.frames.len();
         let result = entry.map_or(Ok(()), |entry| {
-            self.invoke_method_in_context(slot, entry, ValueList::new(), base_depth)
+            self.invoke_procedure_in_context(slot, entry, ValueList::new(), base_depth)
                 .map(|_| ())
         });
         match result {
@@ -89,7 +89,7 @@ impl Vm {
     ) -> VmResult<Value> {
         let module_name = self.module(slot)?.spec.clone();
         match target {
-            ExportTarget::Method(method) => Ok(Value::closure(slot, method, Vec::new())),
+            ExportTarget::Procedure(procedure) => Ok(Value::closure(slot, procedure, Vec::new())),
             ExportTarget::Global(global) => {
                 let globals = &self.module(slot)?.globals;
                 let raw_slot = usize::try_from(global.raw()).unwrap_or(usize::MAX);

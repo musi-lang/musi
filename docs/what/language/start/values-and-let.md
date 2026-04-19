@@ -3,25 +3,24 @@ title: "Values and Let"
 description: "Learn what `let` means in Musi, how names are introduced, and when `let rec` matters."
 group: "Start"
 section: "Start"
-order: 3
+order: 4
 slug: "values-and-let"
 summary: "Use `let` to name values, define callables, and understand when recursion needs `let rec`."
 ---
-
-`let` introduces a name. That one idea carries plain values, functions, data definitions, effects, classes, and many other declarations.
+Values are the nouns of a Musi program. A `let` declaration gives one of those nouns a stable name so later code can talk about it without repeating the whole expression. If a program is a small cafe, `menuPrice`, `tableNumber`, and `receiptText` are easier to follow than the arithmetic and string building repeated everywhere.
 
 {{snippet:chapter-values-and-let}}
 
-Read `let port := 8080;` as "bind the name `port` to this value." The later binding can use it because the first binding is already in scope. Nothing here mutates `port`; a new name receives the next value.
+Names are also a way to mark intent. A number named `3` tells you almost nothing; a value named `retryLimit` tells you how the number is used. That makes the compiler's work easier to explain and a reader's work much easier to finish.
 
-A spreadsheet analogy helps: one cell names an input, another cell derives from it, and the formula tells you which value depends on which.
+## When the name refers back to itself
 
-## Recursive Names
-
-Use `let rec` when a definition must refer to itself while being defined. That is how repeated work can be expressed without making loops the first tool.
+Some values are defined in terms of a smaller version of the same problem. Counting boxes in a nested shipment, walking a family tree, or computing a countdown all have that shape. Musi uses `let rec` when a declaration needs to call itself.
 
 {{snippet:recursive-case}}
 
-`loop` can call itself because the definition starts with `let rec`. Read the match arms as the two roads through the calculation: stop at zero, or call `loop` again with a smaller number.
+Recursive declarations need a visible smaller step. If each call gets closer to the simple case, the definition reads like a set of instructions. If the next call repeats the same input, the program is like a delivery driver circling the same block.
 
-Continue to [Blocks and Expressions](/learn/book/start/foundations/blocks-and-expressions).
+Read this chapter like a short errand. First find the names, then find the value each name holds, then ask what the last expression gives back. A cafe ticket, a room card, a pet tag, and a bus route all become easier when each useful fact has a clear name.
+
+A common mistake is to race toward large examples. Stay small until the form feels normal. One file, one value, one block, and one changed value teach more than a page full of clever tricks.

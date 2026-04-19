@@ -1,7 +1,7 @@
 use super::super::*;
 use crate::EmitDiagKind;
 
-impl MethodEmitter<'_, '_> {
+impl ProcedureEmitter<'_, '_> {
     pub(super) fn compile_let(
         &mut self,
         binding: Option<NameBindingId>,
@@ -93,7 +93,7 @@ impl MethodEmitter<'_, '_> {
                     self.module_key,
                     &value.origin,
                     EmitDiagKind::UnsupportedAssignTarget,
-                    format!("assignment target `{name}` has no emitted form"),
+                    format!("unsupported assignment target `{name}`"),
                 );
                 emit_zero(self);
             }

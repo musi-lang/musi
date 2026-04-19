@@ -96,7 +96,7 @@ impl Vm {
                 Ok(StepOutcome::Continue)
             }
             _ => Err(super::VmError::new(
-                super::VmErrorKind::ProgramShapeInvalid {
+                super::VmErrorKind::InvalidProgramShape {
                     detail: format!(
                         "host opcode family mismatch for `{}`",
                         instruction.opcode.mnemonic()

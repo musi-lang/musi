@@ -13,6 +13,16 @@ export interface TerminalConfig {
 	readonly reuseTerminal: boolean;
 }
 
+export type ParameterNameInlayHints = "none" | "literals" | "all";
+
+export interface InlayHintsConfig {
+	readonly enabled: boolean;
+	readonly parameterNames: ParameterNameInlayHints;
+	readonly parameterNamesSuppressWhenArgumentMatchesName: boolean;
+	readonly variableTypes: boolean;
+	readonly variableTypesSuppressWhenTypeMatchesName: boolean;
+}
+
 export interface RunConfiguration {
 	readonly name: string;
 	readonly entry?: string;
@@ -27,7 +37,10 @@ export interface RunConfiguration {
 export interface Config {
 	readonly cliPath: string;
 	readonly lspPath: string;
+	readonly lspEnabled: boolean;
 	readonly checkOnSave: boolean;
+	readonly hoverMaximumLength: number;
+	readonly inlayHints: InlayHintsConfig;
 	readonly runtime: RuntimeConfig;
 	readonly terminal: TerminalConfig;
 	readonly runConfigurations: RunConfiguration[];
@@ -46,10 +59,21 @@ const TERMINAL_DEFAULTS: TerminalConfig = {
 	reuseTerminal: true,
 };
 
+const INLAY_HINTS_DEFAULTS: InlayHintsConfig = {
+	enabled: true,
+	parameterNames: "none",
+	parameterNamesSuppressWhenArgumentMatchesName: true,
+	variableTypes: false,
+	variableTypesSuppressWhenTypeMatchesName: true,
+};
+
 export const CONFIG_DEFAULTS: Config = {
 	cliPath: "musi",
 	lspPath: "musi_lsp",
+	lspEnabled: true,
 	checkOnSave: true,
+	hoverMaximumLength: 500,
+	inlayHints: INLAY_HINTS_DEFAULTS,
 	runtime: RUNTIME_DEFAULTS,
 	terminal: TERMINAL_DEFAULTS,
 	runConfigurations: [],
@@ -61,7 +85,31 @@ export function getConfig(): Config {
 	return {
 		cliPath: cfg.get("cliPath", CONFIG_DEFAULTS.cliPath),
 		lspPath: cfg.get("lspPath", CONFIG_DEFAULTS.lspPath),
+		lspEnabled: cfg.get("lsp.enabled", CONFIG_DEFAULTS.lspEnabled),
 		checkOnSave: cfg.get("checkOnSave", CONFIG_DEFAULTS.checkOnSave),
+		hoverMaximumLength: cfg.get(
+			"hover.maximumLength",
+			CONFIG_DEFAULTS.hoverMaximumLength,
+		),
+		inlayHints: {
+			enabled: cfg.get("inlayHints.enabled", INLAY_HINTS_DEFAULTS.enabled),
+			parameterNames: cfg.get(
+				"inlayHints.parameterNames.enabled",
+				INLAY_HINTS_DEFAULTS.parameterNames,
+			),
+			parameterNamesSuppressWhenArgumentMatchesName: cfg.get(
+				"inlayHints.parameterNames.suppressWhenArgumentMatchesName",
+				INLAY_HINTS_DEFAULTS.parameterNamesSuppressWhenArgumentMatchesName,
+			),
+			variableTypes: cfg.get(
+				"inlayHints.variableTypes.enabled",
+				INLAY_HINTS_DEFAULTS.variableTypes,
+			),
+			variableTypesSuppressWhenTypeMatchesName: cfg.get(
+				"inlayHints.variableTypes.suppressWhenTypeMatchesName",
+				INLAY_HINTS_DEFAULTS.variableTypesSuppressWhenTypeMatchesName,
+			),
+		},
 		runtime: {
 			args: cfg.get("runtime.args", RUNTIME_DEFAULTS.args),
 			env: cfg.get("runtime.env", RUNTIME_DEFAULTS.env),

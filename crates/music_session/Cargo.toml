@@ -25,7 +25,6 @@ music_sema = { path = "../music_sema" }
 music_syntax = { path = "../music_syntax" }
 music_term = { path = "../music_term" }
 musi_vm = { path = "../musi_vm" }
-thiserror = { workspace = true }
 
 [lints]
 workspace = true

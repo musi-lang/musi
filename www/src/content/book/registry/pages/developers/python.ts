@@ -4,7 +4,7 @@ export const pythonDeveloperPages = [
 	{
 		id: "python-overview",
 		partId: "developers",
-		path: "/docs/book/developers/python/overview",
+		path: "/docs/guides/python/overview",
 		aliases: [
 			"/docs/language/developers/python/overview",
 			"/learn/language/developers/python/overview",
@@ -15,7 +15,7 @@ export const pythonDeveloperPages = [
 	{
 		id: "python-values-functions",
 		partId: "developers",
-		path: "/docs/book/developers/python/values-functions",
+		path: "/docs/guides/python/values-functions",
 		aliases: [
 			"/docs/language/developers/python/values-functions",
 			"/learn/language/developers/python/values-functions",
@@ -26,7 +26,7 @@ export const pythonDeveloperPages = [
 	{
 		id: "python-blocks-control-flow",
 		partId: "developers",
-		path: "/docs/book/developers/python/blocks-control-flow",
+		path: "/docs/guides/python/blocks-control-flow",
 		aliases: [
 			"/docs/language/developers/python/blocks-control-flow",
 			"/learn/language/developers/python/blocks-control-flow",
@@ -37,7 +37,7 @@ export const pythonDeveloperPages = [
 	{
 		id: "python-names-mutation",
 		partId: "developers",
-		path: "/docs/book/developers/python/names-mutation",
+		path: "/docs/guides/python/names-mutation",
 		aliases: [
 			"/docs/language/developers/python/names-mutation",
 			"/learn/language/developers/python/names-mutation",
@@ -48,7 +48,7 @@ export const pythonDeveloperPages = [
 	{
 		id: "python-records-objects-dicts",
 		partId: "developers",
-		path: "/docs/book/developers/python/records-objects-dicts",
+		path: "/docs/guides/python/records-objects-dicts",
 		aliases: [
 			"/docs/language/developers/python/records-objects-dicts",
 			"/learn/language/developers/python/records-objects-dicts",
@@ -59,7 +59,7 @@ export const pythonDeveloperPages = [
 	{
 		id: "python-collections-pipelines",
 		partId: "developers",
-		path: "/docs/book/developers/python/collections-pipelines",
+		path: "/docs/guides/python/collections-pipelines",
 		aliases: [
 			"/docs/language/developers/python/collections-pipelines",
 			"/learn/language/developers/python/collections-pipelines",
@@ -70,7 +70,7 @@ export const pythonDeveloperPages = [
 	{
 		id: "python-none-option-result",
 		partId: "developers",
-		path: "/docs/book/developers/python/none-option-result",
+		path: "/docs/guides/python/none-option-result",
 		aliases: [
 			"/docs/language/developers/python/none-option-result",
 			"/learn/language/developers/python/none-option-result",
@@ -81,7 +81,7 @@ export const pythonDeveloperPages = [
 	{
 		id: "python-exceptions-effects",
 		partId: "developers",
-		path: "/docs/book/developers/python/exceptions-effects",
+		path: "/docs/guides/python/exceptions-effects",
 		aliases: [
 			"/docs/language/developers/python/exceptions-effects",
 			"/learn/language/developers/python/exceptions-effects",
@@ -92,7 +92,7 @@ export const pythonDeveloperPages = [
 	{
 		id: "python-data-variants-patterns",
 		partId: "developers",
-		path: "/docs/book/developers/python/data-variants-patterns",
+		path: "/docs/guides/python/data-variants-patterns",
 		aliases: [
 			"/docs/language/developers/python/data-variants-patterns",
 			"/learn/language/developers/python/data-variants-patterns",
@@ -104,7 +104,7 @@ export const pythonDeveloperPages = [
 	{
 		id: "python-types-generics-protocols",
 		partId: "developers",
-		path: "/docs/book/developers/python/types-generics-protocols",
+		path: "/docs/guides/python/types-generics-protocols",
 		aliases: [
 			"/docs/language/developers/python/types-generics-protocols",
 			"/learn/language/developers/python/types-generics-protocols",
@@ -116,7 +116,7 @@ export const pythonDeveloperPages = [
 	{
 		id: "python-modules-packages",
 		partId: "developers",
-		path: "/docs/book/developers/python/modules-packages",
+		path: "/docs/guides/python/modules-packages",
 		aliases: [
 			"/docs/language/developers/python/modules-packages",
 			"/learn/language/developers/python/modules-packages",
@@ -127,7 +127,7 @@ export const pythonDeveloperPages = [
 	{
 		id: "python-testing-tooling",
 		partId: "developers",
-		path: "/docs/book/developers/python/testing-tooling",
+		path: "/docs/guides/python/testing-tooling",
 		aliases: [
 			"/docs/language/developers/python/testing-tooling",
 			"/learn/language/developers/python/testing-tooling",
@@ -138,7 +138,7 @@ export const pythonDeveloperPages = [
 	{
 		id: "python-native-unsafe-ffi",
 		partId: "developers",
-		path: "/docs/book/developers/python/native-unsafe-ffi",
+		path: "/docs/guides/python/native-unsafe-ffi",
 		aliases: [
 			"/docs/language/developers/python/native-unsafe-ffi",
 			"/learn/language/developers/python/native-unsafe-ffi",

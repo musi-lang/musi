@@ -1,31 +1,31 @@
 ---
 title: "Extension Methods and Calls"
-description: "Translate C# extension method call habits into Musi receiver methods and ordinary calls."
+description: "Read Extension Methods and Calls as a C# habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "C# Developers"
 order: 11
 slug: "extension-methods-and-calls"
-summary: "Use receiver methods when a call should read from the value outward."
+summary: "Translate the C# habit, then use the Musi Book for the full rule."
 ---
 
-C# extension methods let a static function read like a method on the receiver:
+A C# reader brings habits from nullable flow analysis, records, LINQ, async tasks, extension methods, interfaces, namespaces, and attributes. That helps with domain code through named APIs and tooling feedback, but the Musi page asks a narrower question: what contract should this local values and calls example make visible?
 
-```csharp
-public static class PortExtensions
-{
-    public static int WithOffset(this int port, int offset) => port + offset;
-}
+{{compare:csharp-extension-methods-and-calls}}
 
-var publicPort = 8080.WithOffset(1);
-publicPort;
-```
+## Reading Extension Methods and Calls from C#
 
-Musi receiver methods serve the same reading goal.
+On the Musi side, Musi lets a calculation be a `let`, a function, or a final expression without wrapping it in an object or framework first. Read the shared example through C# eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-{{snippet:csharp-extension-methods-and-calls}}
+## False friend
 
-Use a receiver method when the left-side value is the thing being described.
+Do not preserve call ceremony just because the source language needs it for methods, receivers, overloads, or closures. For a C# reader, the trap is mapping Musi classes to object classes or service containers; Musi `class` is a typeclass-style behavior contract, not a CLR class with fields, constructors, and inheritance.
 
-## Ordinary calls still fit
+## When this pays off
 
-Not every helper should be a method. If the operation belongs to a module or package rather than one receiver value, keep it as a plain function call.
+Use this shape when a receipt total, label, distance, or score is pure data moving through named calls. The C# instinct still helps here: Keep the C# habit of making api shape readable at the call site.
+
+## Keep close
+
+- [Calls](/learn/book/core/calls)
+- [Dot calls](/learn/book/core/dot-calls)
+- [Functions](/learn/book/core/functions)

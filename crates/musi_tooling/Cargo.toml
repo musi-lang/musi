@@ -26,7 +26,6 @@ music_session = { path = "../music_session" }
 music_syntax = { path = "../music_syntax" }
 serde = { workspace = true }
 serde_json = { workspace = true }
-thiserror = { workspace = true }
 
 [lints]
 workspace = true

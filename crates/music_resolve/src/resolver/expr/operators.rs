@@ -29,6 +29,8 @@ where
             TokenKind::Minus => HirPrefixOp::Neg,
             TokenKind::KwComptime => HirPrefixOp::Comptime,
             TokenKind::KwMut => HirPrefixOp::Mut,
+            TokenKind::KwAny => HirPrefixOp::Any,
+            TokenKind::KwSome => HirPrefixOp::Some,
             _ => HirPrefixOp::Not,
         };
         let expr = self.lower_opt_expr(origin, node.child_nodes().next());

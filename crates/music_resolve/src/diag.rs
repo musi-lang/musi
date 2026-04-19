@@ -1,4 +1,7 @@
-use music_base::diag::{Diag, DiagCode};
+use music_base::diag::{Diag, DiagCode, DiagLevel, DiagnosticKind};
+
+#[path = "diag_catalog_gen.rs"]
+mod diag_catalog_gen;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ResolveDiagKind {
@@ -11,47 +14,58 @@ pub enum ResolveDiagKind {
 
 impl ResolveDiagKind {
     #[must_use]
-    pub const fn code(self) -> DiagCode {
-        DiagCode::new(match self {
-            Self::ExpectedName => 3200,
-            Self::InvalidStmt => 3201,
-            Self::UnboundName => 3202,
-            Self::ImportResolveFailed => 3203,
-            Self::InvalidImportSpec => 3204,
-        })
+    pub fn code(self) -> DiagCode {
+        DiagCode::new(diag_catalog_gen::code(self))
     }
 
     #[must_use]
-    pub const fn message(self) -> &'static str {
-        match self {
-            Self::ExpectedName => "expected name",
-            Self::InvalidStmt => "statement invalid here",
-            Self::UnboundName => "unbound name",
-            Self::ImportResolveFailed => "import resolve failed",
-            Self::InvalidImportSpec => "invalid import specifier",
-        }
+    pub fn message(self) -> &'static str {
+        diag_catalog_gen::message(self)
     }
 
     #[must_use]
-    pub const fn label(self) -> &'static str {
-        match self {
-            Self::ExpectedName => "name starts here",
-            Self::InvalidStmt => "statement not valid here",
-            Self::UnboundName => "name is not bound in this scope",
-            Self::ImportResolveFailed => "import is not resolved here",
-            Self::InvalidImportSpec => "import specifier must be string literal",
-        }
+    pub fn label(self) -> &'static str {
+        diag_catalog_gen::primary(self)
+    }
+
+    #[must_use]
+    pub fn hint(self) -> Option<&'static str> {
+        diag_catalog_gen::help(self)
+    }
+
+    #[must_use]
+    pub fn from_code(code: DiagCode) -> Option<Self> {
+        diag_catalog_gen::from_code(code.raw())
     }
 
     #[must_use]
     pub fn from_diag(diag: &Diag) -> Option<Self> {
-        match diag.code()?.raw() {
-            3200 => Some(Self::ExpectedName),
-            3201 => Some(Self::InvalidStmt),
-            3202 => Some(Self::UnboundName),
-            3203 => Some(Self::ImportResolveFailed),
-            3204 => Some(Self::InvalidImportSpec),
-            _ => None,
-        }
+        diag.code().and_then(Self::from_code)
+    }
+}
+
+impl DiagnosticKind for ResolveDiagKind {
+    fn code(self) -> DiagCode {
+        self.code()
+    }
+
+    fn phase(self) -> &'static str {
+        "resolve"
+    }
+
+    fn level(self) -> DiagLevel {
+        DiagLevel::Error
+    }
+
+    fn message(self) -> &'static str {
+        self.message()
+    }
+
+    fn primary(self) -> &'static str {
+        self.label()
+    }
+
+    fn help(self) -> Option<&'static str> {
+        self.hint()
     }
 }

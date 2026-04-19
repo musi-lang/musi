@@ -200,6 +200,12 @@ pub(super) fn render_ty_name(sema: &SemaModule, ty: HirTyId, interner: &Interner
         HirTyKind::Mut { inner } => {
             format!("mut {}", render_ty_name(sema, *inner, interner)).into()
         }
+        HirTyKind::AnyClass { class } => {
+            format!("any {}", render_ty_name(sema, *class, interner)).into()
+        }
+        HirTyKind::SomeClass { class } => {
+            format!("some {}", render_ty_name(sema, *class, interner)).into()
+        }
         HirTyKind::Record { fields } => render_record_ty_name(sema, fields, interner),
         _ => invalid_lowering_path("invalid type name kind"),
     }

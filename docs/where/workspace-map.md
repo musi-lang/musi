@@ -5,6 +5,7 @@ This workspace splits language pipeline, runtime, tooling, and user-facing binar
 ## Compiler pipeline
 
 - `music_base` — shared source spans, diagnostics, source maps
+- `music_builtin` — hidden builtin type, intrinsic, std/foundation registry
 - `music_names` — symbol interning and known-name support
 - `music_syntax` — lexer, parser, syntax tree
 - `music_module` — module keys, import maps, module syntax helpers
@@ -16,7 +17,7 @@ This workspace splits language pipeline, runtime, tooling, and user-facing binar
 
 ## Runtime and host
 
-- `music_seam` — SEAM artifact, text, binary, opcodes
+- `music_seam` — SEAM artifact, SEAM HIL, lowered `.seam` text, binary, opcodes
 - `musi_vm` — VM program loading, values, execution
 - `musi_native_ffi` — libffi-backed native call bridge
 - `musi_native` — host effect and foreign dispatch
@@ -26,6 +27,7 @@ This workspace splits language pipeline, runtime, tooling, and user-facing binar
 ## Project and tooling
 
 - `musi_project` — package manifests, workspace graph, registry, project compile entrypoints
+- `musi_fmt` — Musi source formatting options, source formatting, and path formatting
 - `musi_tooling` — CLI-facing diagnostics, hover, direct tooling helpers
 - `musi_lsp` — language server
 

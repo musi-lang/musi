@@ -1,36 +1,28 @@
-let runtime := import "musi:runtime";
+let core := import "./_core.ms";
 
-/// Platform path value.
-export opaque let Path := data {
-  | Path(value : String)
-};
+--- Platform path value.
+export let Path := core.Path;
 
-/// Build a path from raw text.
-export let fromString (value : String) : Path := .Path(value := value);
+--- Build a path from raw text.
+export let fromString := core.fromString;
 
-/// Return raw path text.
-export let (self : Path).toString () : String :=
-  match self (
-  | .Path(value := value) => value
-  );
+--- Return raw path text.
+export let(self : Path).toString () : String := core.toString(self);
 
-/// Join two paths.
-export let (self : Path).join (other : Path) : Path :=
-  fromString(runtime.pathJoin(toString(self), toString(other)));
+--- Join two paths.
+export let(self : Path).join (other : Path) : Path := core.join(self, other);
 
-/// Normalize a path.
-export let (self : Path).normalize () : Path :=
-  fromString(runtime.pathNormalize(toString(self)));
+--- Normalize a path.
+export let(self : Path).normalize () : Path := core.normalize(self);
 
-/// Parent directory name.
-export let (self : Path).dirName () : Path :=
-  fromString(runtime.pathDirname(toString(self)));
+--- Parent directory name.
+export let(self : Path).dirName () : Path := core.dirName(self);
 
-/// Base file name.
-export let (self : Path).baseName () : String := runtime.pathBasename(toString(self));
+--- Base file name.
+export let(self : Path).baseName () : String := core.baseName(self);
 
-/// Extension name, including leading dot when present.
-export let (self : Path).extName () : String := runtime.pathExtname(toString(self));
+--- Extension name, including leading `.` when present.
+export let(self : Path).extName () : String := core.extName(self);
 
-/// Returns true for absolute paths.
-export let (self : Path).isAbsolute () : Bool := runtime.pathIsAbsolute(toString(self)) > 0;
+--- Returns true for absolute paths.
+export let(self : Path).isAbsolute () : Bool := core.isAbsolute(self);

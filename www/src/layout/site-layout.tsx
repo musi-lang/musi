@@ -1,66 +1,27 @@
 import type { ReactNode } from "preact/compat";
 import { type DocPage, docChildren, docForPath, docParts } from "../docs";
-import {
-	DesktopIcon,
-	GithubIcon,
-	MenuIcon,
-	MoonIcon,
-	MusiMarkIcon,
-	SunIcon,
-} from "../icons";
+import { GithubIcon, MenuIcon } from "../icons";
 import { siteCopy } from "../lib/site-copy";
 import type { AppRoute } from "../routes";
 import { isDocsRoute, primaryRoutes } from "../routes";
-import { ThemeToggleButton } from "../ui/actions";
-
-export type ColorScheme = "light" | "dark" | "system";
-
-const schemeOrder: readonly ColorScheme[] = ["light", "dark", "system"];
-
-export function nextScheme(current: ColorScheme): ColorScheme {
-	const index = schemeOrder.indexOf(current);
-	return schemeOrder[(index + 1) % schemeOrder.length] ?? "system";
-}
 
 function HeaderLinks(props: { route: AppRoute }) {
 	return (
 		<>
 			{primaryRoutes.map((route) => (
-				<a
-					key={route.id}
-					href={route.path}
-					className={`header-link${props.route.section === route.section ? " is-active" : ""}`}
-				>
-					{route.label}
-				</a>
+				<li key={route.id}>
+					<a
+						href={route.path}
+						className="mx-tab"
+						aria-current={
+							props.route.section === route.section ? "page" : undefined
+						}
+					>
+						{route.label}
+					</a>
+				</li>
 			))}
 		</>
-	);
-}
-
-function ThemeControl() {
-	const labels = siteCopy.utilityLabels;
-	return (
-		<ThemeToggleButton
-			aria-label={labels.themeSystem}
-			title={labels.themeSystem}
-			data-theme-toggle={true}
-			data-label-light={labels.themeLight}
-			data-label-dark={labels.themeDark}
-			data-label-system={labels.themeSystem}
-			data-scheme="system"
-		>
-			<span data-theme-icon="light" hidden={true} aria-hidden="true">
-				<SunIcon size={18} />
-			</span>
-			<span data-theme-icon="dark" hidden={true} aria-hidden="true">
-				<MoonIcon size={18} />
-			</span>
-			<span data-theme-icon="system" aria-hidden="true">
-				<DesktopIcon size={18} />
-			</span>
-			<span className="sr-only theme-toggle-label">{labels.themeSystem}</span>
-		</ThemeToggleButton>
 	);
 }
 
@@ -92,7 +53,7 @@ function DocsSidebar(props: { route: AppRoute }) {
 	};
 
 	return (
-		<nav aria-label="Documentation" className="docs-sidebar-nav">
+		<nav aria-label="Documentation sections" className="docs-sidebar-nav">
 			{docParts.map((part) => (
 				<section key={part.id} className="docs-sidebar-group">
 					<a
@@ -119,12 +80,12 @@ export function SiteLayout(props: { route: AppRoute; children: ReactNode }) {
 			<a href="#main-content" className="skip-link">
 				{siteCopy.skipToContent}
 			</a>
-			<header className="site-header">
-				<div className="site-header-inner">
+			<header className="site-header mx-header">
+				<div className="site-header-inner mx-header__inner mx-shell">
 					<div className="site-brand-row">
 						<button
 							type="button"
-							className="menu-toggle"
+							className="menu-toggle site-icon-button mx-button mx-button--ghost"
 							aria-label={siteCopy.menu}
 							title={siteCopy.menu}
 							aria-expanded="false"
@@ -134,9 +95,12 @@ export function SiteLayout(props: { route: AppRoute; children: ReactNode }) {
 							<MenuIcon size={18} />
 							<span className="sr-only">{siteCopy.menu}</span>
 						</button>
-						<a href="/" className="site-logo">
-							<span className="site-logo-mark" aria-hidden="true">
-								<MusiMarkIcon size={28} />
+						<a href="/" className="site-logo mx-brand">
+							<span
+								className="site-logo-mark mx-brand__mark"
+								aria-hidden="true"
+							>
+								<img src="/favicon.svg" alt="" className="site-logo-image" />
 							</span>
 							<span className="site-logo-title">MUSI</span>
 						</a>
@@ -146,21 +110,22 @@ export function SiteLayout(props: { route: AppRoute; children: ReactNode }) {
 							href="https://github.com/musi-lang/musi"
 							target="_blank"
 							rel="noreferrer"
-							className="header-icon-control utility-icon"
+							className="site-icon-button mx-button mx-button--ghost"
 							aria-label={siteCopy.utilityLabels.github}
 							title={siteCopy.utilityLabels.github}
 						>
 							<GithubIcon size={18} />
 							<span className="sr-only">{siteCopy.utilityLabels.github}</span>
 						</a>
-						<ThemeControl />
 					</div>
 				</div>
 				<nav
 					aria-label="Primary"
-					className="site-header-tabbar site-header-nav site-header-nav-desktop"
+					className="site-header-nav-desktop mx-nav-rail"
 				>
-					<HeaderLinks route={props.route} />
+					<ul className="mx-nav-tabs">
+						<HeaderLinks route={props.route} />
+					</ul>
 				</nav>
 				<div id={drawerId} className="site-drawer">
 					<div className="site-drawer-panel">
@@ -168,18 +133,15 @@ export function SiteLayout(props: { route: AppRoute; children: ReactNode }) {
 							<DocsSidebar route={props.route} />
 						) : (
 							<nav aria-label="Primary" className="site-header-nav">
-								<HeaderLinks route={props.route} />
+								<ul className="mx-nav-tabs site-drawer-nav">
+									<HeaderLinks route={props.route} />
+								</ul>
 							</nav>
 						)}
 					</div>
 				</div>
 			</header>
 			<div className="site-frame">
-				{docsMode ? (
-					<aside className="docs-sidebar" aria-label="Documentation sections">
-						<DocsSidebar route={props.route} />
-					</aside>
-				) : null}
 				<main id="main-content" className="site-main">
 					{props.children}
 				</main>

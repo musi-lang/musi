@@ -28,7 +28,7 @@ export interface BookPageQuestion {
 export interface BookPageDefinition {
 	id: string;
 	partId: string;
-	sectionId: string;
+	sectionId: string | null;
 	path: string;
 	aliases: string[];
 	sourcePath: string;

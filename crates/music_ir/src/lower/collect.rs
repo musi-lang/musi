@@ -75,7 +75,7 @@ impl<'a> SyntheticNameSetMut<'a> {
             | IrExprKind::TyTest { base, .. }
             | IrExprKind::TyCast { base, .. }
             | IrExprKind::Not { expr: base }
-            | IrExprKind::DynamicImport { spec: base } => self.collect_used(base),
+            | IrExprKind::ModuleLoad { spec: base } => self.collect_used(base),
             IrExprKind::Sequence { exprs }
             | IrExprKind::Tuple { items: exprs, .. }
             | IrExprKind::Array { items: exprs, .. }
@@ -245,7 +245,7 @@ fn collect_used_bindings_nested(expr: &IrExpr, out: BoundNameSetMut<'_>) {
         | IrExprKind::TyTest { base, .. }
         | IrExprKind::TyCast { base, .. }
         | IrExprKind::Not { expr: base }
-        | IrExprKind::DynamicImport { spec: base } => collect_used_bindings(base, out),
+        | IrExprKind::ModuleLoad { spec: base } => collect_used_bindings(base, out),
         IrExprKind::Sequence { exprs }
         | IrExprKind::Tuple { items: exprs, .. }
         | IrExprKind::Array { items: exprs, .. }
@@ -338,7 +338,7 @@ fn collect_local_decl_bindings_nested(expr: &IrExpr, out: BoundNameSetMut<'_>) {
         | IrExprKind::TyTest { base, .. }
         | IrExprKind::TyCast { base, .. }
         | IrExprKind::Not { expr: base }
-        | IrExprKind::DynamicImport { spec: base } => collect_local_decl_bindings(base, out),
+        | IrExprKind::ModuleLoad { spec: base } => collect_local_decl_bindings(base, out),
         IrExprKind::Sequence { exprs }
         | IrExprKind::Tuple { items: exprs, .. }
         | IrExprKind::Array { items: exprs, .. }

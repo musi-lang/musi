@@ -7,27 +7,18 @@ order: 1
 slug: "getting-started"
 summary: "Install tools, install Musi, and learn the two command lanes."
 ---
+Musi starts well as a small-file language. You can write one file, run it, and keep the whole program in your head. When the file becomes a package, the same habits still work: name the parts, import only what the file uses, and let `musi.json` describe the project instead of hiding settings in an editor.
 
-Getting started in Musi has two tracks: direct file work and package work. The commands are separate because they answer different questions.
+Think of the first program like labeling boxes before moving house. A single box can be carried by hand. A room full of boxes needs labels, a path through the hallway, and a rule for where each box lands. Musi's command-line tools give you that path without changing the language underneath.
 
 {{snippet:chapter-getting-started}}
 
-`music` is the direct-file tool. Use it when one entry file is enough. It is the fast lane for learning syntax and testing a small idea.
+The command you choose depends on the question you are asking. Use a direct run when you want to know whether a file still behaves. Use project commands when imports, generated output, package metadata, or formatter settings matter. In both cases, the useful habit is to keep source code ordinary and repeatable: a teammate should be able to check out the package and get the same answer.
 
-`musi` is the package tool. Use it when a directory has `musi.json`, package imports, standard-library helpers, tests, targets, and project-level configuration.
+## A tiny working loop
 
-Think of it like a notebook and a workshop. `music check index.ms` is the notebook: one page, one idea, fast feedback. `musi check` and `musi test` are the workshop: project layout, tests, and repeatable commands.
+Start with one exported value or function, run it, then add the next piece. If the program is about a grocery list, do not start with a full store model. Start with `Item`, then `Cart`, then one function that totals a cart. Each step should leave a shape that can be named.
 
-## First File
+## Moving from file to package
 
-Create `index.ms` with a few bindings and a final expression. That final expression is the value the file leaves behind; there is no required `main` function.
-
-## Package Start
-
-Use `musi init hello` when the code needs a manifest. From that point, prefer `musi check` and `musi test` inside the package.
-
-## Mistake to Avoid
-
-Do not treat `music` and `musi` as duplicate spellings. Pick by scope: one file uses `music`; one package uses `musi`.
-
-Continue to [First Program](/learn/book/start/foundations/first-program).
+A package becomes useful when the program has more than one reason to change. Payment code, address formatting, and invoice printing belong in separate files because they answer separate questions. Imports make those boundaries visible, and exports decide what the rest of the package may use.

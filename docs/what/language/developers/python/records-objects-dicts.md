@@ -1,32 +1,31 @@
 ---
 title: "Records, Objects, and Dictionaries"
-description: "Translate Python dictionaries and dataclass-style data into Musi records and data definitions."
+description: "Read Records, Objects, and Dictionaries as a Python habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Python Developers"
 order: 5
 slug: "records-objects-dicts"
-summary: "Use records for named fields and data definitions when the shape deserves a name."
+summary: "Translate the Python habit, then use the Musi Book for the full rule."
 ---
 
-Python dictionaries are quick named bags of data:
+Python dicts and objects make it easy to grow shape as code runs. Musi examples write the shape before using it, so a pet, receipt, or route has fields readers can trust.
 
-```python
-local = {
-    "host": "localhost",
-    "port": 8080,
-    "secure": False,
-}
+{{compare:python-records-objects-dicts}}
 
-public = {**local, "host": "api.example.com", "secure": True}
-public["host"]
-```
+## Reading Records, Objects, and Dictionaries from Python
 
-Musi records keep the same named-field idea. A `data` definition names the expected shape, and record spread updates selected fields.
+On the Musi side, Musi records and data variants describe stored shape. Behavior belongs in functions or classes/instances, not inside an object by default. Read the shared example through Python eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-{{snippet:python-records-objects-dicts}}
+## False friend
 
-Use records like a shipping label: every field name tells the reader what the slot means.
+Do not read `class` as object shape. If the page is about a pet, invoice, room, or vehicle, start with fields or variants. For a Python reader, the trap is trusting runtime convention where Musi expects a visible type or effect; Musi `class` is closer to an explicit protocol/typeclass than a Python class with attributes and methods.
 
-## Dataclass habit
+## When this pays off
 
-Python dataclasses give a stable shape to object-like data. In Musi, a `data` definition is the stable shape; the record literal is the value that fills it.
+Use records when names like `owner`, `age`, `amount`, or `route` are the point of the value. The Python instinct still helps here: Keep the Python habit of naming the real-world thing first.
+
+## Keep close
+
+- [Records](/learn/book/data/records)
+- [Classes](/learn/book/abstractions/classes)
+- [Patterns](/learn/book/data/patterns)

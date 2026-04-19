@@ -1,41 +1,31 @@
 ---
 title: "Generics, Interfaces, and Laws"
-description: "Translate C# generics, interfaces, and constraints into Musi type parameters, classes, instances, and laws."
+description: "Read Generics, Interfaces, and Laws as a C# habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "C# Developers"
 order: 10
 slug: "generics-interfaces-laws"
-summary: "Use generics for reusable shape and classes with laws for shared behavior with rules."
+summary: "Translate the C# habit, then use the Musi Book for the full rule."
 ---
 
-C# generics let one function keep the same shape for many types:
+C# interfaces, extension methods, and generics can all describe shared operations. Musi uses one lane for that idea: a class names the operation and instances provide it for concrete types.
 
-```csharp
-static T Identity<T>(T input) => input;
+{{compare:csharp-generics-interfaces-laws}}
 
-var port = Identity<int>(8080);
-port;
-```
+## Reading Generics, Interfaces, and Laws from C#
 
-Musi writes type parameters beside the function name.
+On the Musi side, Musi classes name behavior a type can provide, instances provide it, and laws document promises callers rely on. Read the shared example through C# eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-{{snippet:csharp-generic-function}}
+## False friend
 
-The function promises to return the same type it receives.
+Do not confuse a Musi class with stored object state, inheritance, or a metatable. Shape and behavior are separate. For a C# reader, the trap is mapping Musi classes to object classes or service containers; Musi `class` is a typeclass-style behavior contract, not a CLR class with fields, constructors, and inheritance.
 
-## Interfaces and laws
+## When this pays off
 
-C# interfaces name behavior. Musi classes name behavior too, and laws can name rules that valid instances should satisfy.
+Use classes when many types share an operation such as compare, show, step, encode, or measure. The C# instinct still helps here: Keep the C# habit of making api shape readable at the call site.
 
-```csharp
-public interface IVehicle
-{
-    int Wheels { get; }
-}
-```
+## Keep close
 
-Musi separates the behavior from the instance that provides it.
-
-{{snippet:csharp-interface-class-law}}
-
-A car is a vehicle, and the law says what this model expects from valid vehicle instances.
+- [Generics](/learn/book/types/generics)
+- [Classes](/learn/book/abstractions/classes)
+- [Laws](/learn/book/abstractions/laws)

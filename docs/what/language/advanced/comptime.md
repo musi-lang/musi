@@ -7,47 +7,20 @@ order: 33
 slug: "comptime"
 summary: "Use value-position comptime for constants, specialization, and generated syntax."
 ---
+Compile-time code runs while the program is being prepared, not while the user is running it. It is useful for generating repetitive structure, checking facts early, or specializing code from known information.
 
 {{snippet:chapter-comptime}}
 
-`comptime` is a value-position prefix, like `mut` in parameter position.
-Read `comptime add(20, 22)` as "evaluate this expression while compiling, then use the result in the program."
-Do not write `comptime(expr)`: `comptime` is not a function call.
+Use compile-time work when it removes real repetition or catches real mistakes. Do not use it to hide simple code behind machinery.
 
-## Specialization
+## The bakery rule
 
-A parameter can be marked `comptime` when the callable needs that value during compilation.
-Calls to that function specialize by the compile-time argument value.
+If runtime is serving customers, compile time is preparing trays before the doors open. It can label pastries and arrange shelves, but it should not depend on which customer walks in next.
 
-{{snippet:comptime-parameter}}
+## Keep generated shapes readable
 
-## Values
+Generated declarations should still look like normal declarations when inspected. If a reader cannot understand what compile-time code produced, diagnostics and reviews become harder.
 
-Compile-time evaluation can produce ordinary values such as integers, strings, data variants, arrays, closures, and syntax.
-Type, module, foreign, effect, and class handles can also move through the compile-time value system.
-Continuations cannot escape compile-time evaluation.
+Advanced chapters are tools for edges: metadata, native calls, compile-time work, syntax values, and command-line use. They matter most when ordinary declarations are no longer enough to describe a boundary.
 
-## Generated Syntax
-
-`quote` produces `Syntax`.
-`comptime quote { ... }` expands quoted module items before the surrounding module finishes checking.
-Named `Syntax` values can be expanded with `comptime name;`.
-
-{{snippet:comptime-quote-module}}
-
-## Effects
-
-Handled effects can run inside `comptime`.
-Unhandled host effects need the effect operation marked `@comptimeSafe`, and the compiler session must provide a compile-time host for that operation.
-Direct foreign calls are rejected during compile-time evaluation.
-
-{{snippet:comptime-safe-effect}}
-
-## Mistake to Avoid
-
-Do not use `comptime` to hide runtime side effects.
-Use it for values the compiler must know, generated syntax, and small deterministic setup.
-
-## Next Page
-
-Continue to [Templates and splices](/learn/book/advanced/templates-and-splices) to separate text interpolation from syntax splicing.
+Use advanced forms like locked cabinets, not like kitchen drawers. Reach for them when a tool, runtime, foreign library, or build step truly needs the extra signal. Keep normal program logic in normal declarations.

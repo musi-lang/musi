@@ -1,3 +1,9 @@
+use std::error::Error;
+use std::fmt::{self, Display, Formatter};
+
+use crate::SessionDiagKind;
+use crate::diag::{session_error_kind, session_source_map_error_kind};
+use music_base::diag::{CatalogDiagnostic, DiagContext};
 use music_base::{Diag, SourceId, SourceMapError};
 use music_emit::EmitOptions;
 use music_module::{ImportMap, ImportSite, ModuleExportSummary, ModuleKey};
@@ -5,7 +11,6 @@ use music_seam::Artifact;
 use music_seam::AssemblyError;
 use music_sema::TargetInfo;
 use music_syntax::{LexError, ParseError};
-use thiserror::Error;
 
 pub type SessionDiagList = Box<[Diag]>;
 
@@ -206,48 +211,44 @@ impl LawSuiteModule {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug)]
 pub enum SessionError {
-    #[error("module `{key}` not registered")]
-    ModuleNotRegistered { key: ModuleKey },
-    #[error("source map update failed")]
-    SourceMapUpdateFailed { kind: SessionSourceMapError },
-    #[error("module `{module}` parse failed")]
+    ModuleNotRegistered {
+        key: ModuleKey,
+    },
+    SourceMapUpdateFailed {
+        kind: SessionSourceMapError,
+    },
     ModuleParseFailed {
         module: ModuleKey,
         syntax: SessionSyntaxErrors,
     },
-    #[error("module `{module}` resolve failed")]
     ModuleResolveFailed {
         module: ModuleKey,
         diags: SessionDiagList,
     },
-    #[error("module `{module}` semantic check failed")]
     ModuleSemanticCheckFailed {
         module: ModuleKey,
         diags: SessionDiagList,
     },
-    #[error("module `{module}` lowering failed")]
     ModuleLoweringFailed {
         module: ModuleKey,
         diags: SessionDiagList,
     },
-    #[error("module `{module}` emission failed")]
     ModuleEmissionFailed {
         module: ModuleKey,
         diags: SessionDiagList,
     },
-    #[error("module `{module}` law-suite synthesis failed")]
-    LawSuiteSynthesisFailed { module: ModuleKey, reason: Box<str> },
-    #[error("artifact transport failed")]
-    ArtifactTransportFailed(#[from] AssemblyError),
+    LawSuiteSynthesisFailed {
+        module: ModuleKey,
+        reason: Box<str>,
+    },
+    ArtifactTransportFailed(AssemblyError),
 }
 
-#[derive(Debug, Error, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SessionSourceMapError {
-    #[error("source registry overflow")]
     SourceRegistryOverflow,
-    #[error("source text too large ({len} bytes)")]
     SourceTooLarge { len: usize },
 }
 
@@ -267,3 +268,78 @@ impl From<SourceMapError> for SessionSourceMapError {
         }
     }
 }
+
+impl SessionError {
+    #[must_use]
+    pub const fn diag_kind(&self) -> SessionDiagKind {
+        session_error_kind(self)
+    }
+
+    #[must_use]
+    pub fn diagnostic(&self) -> CatalogDiagnostic<SessionDiagKind> {
+        CatalogDiagnostic::new(self.diag_kind(), self.diag_context())
+    }
+
+    fn diag_context(&self) -> DiagContext {
+        match self {
+            Self::ModuleNotRegistered { key } => DiagContext::new().with("key", key.as_str()),
+            Self::SourceMapUpdateFailed { kind } => DiagContext::new().with("kind", kind),
+            Self::ModuleParseFailed { module, .. }
+            | Self::ModuleResolveFailed { module, .. }
+            | Self::ModuleSemanticCheckFailed { module, .. }
+            | Self::ModuleLoweringFailed { module, .. }
+            | Self::ModuleEmissionFailed { module, .. } => {
+                DiagContext::new().with("module", module.as_str())
+            }
+            Self::LawSuiteSynthesisFailed { module, reason } => DiagContext::new()
+                .with("module", module.as_str())
+                .with("reason", reason.as_ref()),
+            Self::ArtifactTransportFailed(source) => DiagContext::new().with("source", source),
+        }
+    }
+}
+
+impl Display for SessionError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(&self.diagnostic(), f)
+    }
+}
+
+impl Error for SessionError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::ArtifactTransportFailed(source) => Some(source),
+            _ => None,
+        }
+    }
+}
+
+impl From<AssemblyError> for SessionError {
+    fn from(value: AssemblyError) -> Self {
+        Self::ArtifactTransportFailed(value)
+    }
+}
+
+impl SessionSourceMapError {
+    #[must_use]
+    pub const fn diag_kind(&self) -> SessionDiagKind {
+        session_source_map_error_kind(self)
+    }
+
+    #[must_use]
+    pub fn diagnostic(&self) -> CatalogDiagnostic<SessionDiagKind> {
+        let context = match self {
+            Self::SourceRegistryOverflow => DiagContext::new(),
+            Self::SourceTooLarge { len } => DiagContext::new().with("len", *len),
+        };
+        CatalogDiagnostic::new(self.diag_kind(), context)
+    }
+}
+
+impl Display for SessionSourceMapError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(&self.diagnostic(), f)
+    }
+}
+
+impl Error for SessionSourceMapError {}

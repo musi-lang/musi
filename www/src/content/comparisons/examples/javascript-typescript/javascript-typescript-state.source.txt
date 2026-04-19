@@ -1,0 +1,3 @@
+let queueDepth = 0;
+queueDepth += 1;
+const visibleDepth = queueDepth;

@@ -1,13 +1,16 @@
 import * as vscode from "vscode";
 import { getConfig } from "./config.ts";
 import type { DiagnosticsController } from "./diagnostics.ts";
+import { formatActiveDocumentWithCli } from "./formatter/formatter.ts";
+import type { LspController } from "./lsp.ts";
 import {
 	activeDocumentUri,
 	findOwningManifestPathForUri,
+	findWorkspaceManifestPathForUri,
 	loadPackageRoot,
 	taskPlan,
 	taskSpecs,
-} from "./manifest.ts";
+} from "./manifest/manifest.ts";
 import {
 	buildPackageExecutionRequest,
 	executePackageCommandInTerminal,
@@ -28,6 +31,16 @@ interface Commands {
 	selectRunConfiguration: CommandHandler;
 	runWithArgs: CommandHandler;
 	editRunConfigurations: CommandHandler;
+	fmt: CommandHandler;
+	showActions: CommandHandler;
+	restartLsp: CommandHandler;
+	startLsp: CommandHandler;
+	stopLsp: CommandHandler;
+	showLspOutput: CommandHandler;
+	checkWorkspace: CommandHandler;
+	buildWorkspace: CommandHandler;
+	runWorkspaceTests: CommandHandler;
+	fmtWorkspace: CommandHandler;
 }
 
 function activeUriFromArgs(args: readonly unknown[]): vscode.Uri | undefined {
@@ -61,7 +74,39 @@ async function packageRootFromArgs(args: readonly unknown[]) {
 	}
 }
 
-function createCommands(diagnostics: DiagnosticsController): Commands {
+async function workspacePackageRootFromArgs(args: readonly unknown[]) {
+	const manifestPath = findWorkspaceManifestPathForUri(activeUriFromArgs(args));
+	if (!manifestPath) {
+		vscode.window.showWarningMessage(
+			"No owning musi.json for the selected file.",
+		);
+		return undefined;
+	}
+	try {
+		return await loadPackageRoot(manifestPath);
+	} catch (error) {
+		vscode.window.showErrorMessage(
+			`Failed to read owning musi.json: ${String(error)}`,
+		);
+		return undefined;
+	}
+}
+
+function workspaceRequest(pkg: Awaited<ReturnType<typeof workspacePackageRootFromArgs>>) {
+	if (!pkg) {
+		return undefined;
+	}
+	return buildPackageExecutionRequest(pkg, {
+		name: "Workspace",
+		cliArgs: ["--workspace"],
+	});
+}
+
+function createCommands(
+	context: vscode.ExtensionContext,
+	diagnostics: DiagnosticsController,
+	lsp: LspController,
+): Commands {
 	return {
 		async runPackageEntry(...args: unknown[]) {
 			const pkg = await packageRootFromArgs(args);
@@ -226,6 +271,123 @@ function createCommands(diagnostics: DiagnosticsController): Commands {
 				"musi.runConfigurations",
 			);
 		},
+
+		async fmt() {
+			await formatActiveDocumentWithCli();
+		},
+
+		async showActions(...args: unknown[]) {
+			const items: Array<vscode.QuickPickItem & { command: string }> = [
+				{
+					label: "Restart LSP",
+					description: "Stop and start Musi language server",
+					command: "musi.restartLsp",
+				},
+				{
+					label: "Start LSP",
+					description: "Start Musi language server",
+					command: "musi.startLsp",
+				},
+				{
+					label: "Stop LSP",
+					description: "Stop Musi language server",
+					command: "musi.stopLsp",
+				},
+				{
+					label: "Show LSP Output",
+					description: "Open Musi LSP output channel",
+					command: "musi.showLspOutput",
+				},
+				{
+					label: "Check Package",
+					description: "Run package diagnostics",
+					command: "musi.checkPackage",
+				},
+				{
+					label: "Check Workspace",
+					description: "Run `musi check --workspace`",
+					command: "musi.checkWorkspace",
+				},
+				{
+					label: "Run Workspace Tests",
+					description: "Run `musi test --workspace`",
+					command: "musi.runWorkspaceTests",
+				},
+				{
+					label: "Build Workspace",
+					description: "Run `musi build --workspace`",
+					command: "musi.buildWorkspace",
+				},
+				{
+					label: "Format Workspace",
+					description: "Run `musi fmt --all`",
+					command: "musi.fmtWorkspace",
+				},
+			];
+			const pick = await vscode.window.showQuickPick(items, {
+				placeHolder: "Select Musi action",
+			});
+			if (pick) {
+				await vscode.commands.executeCommand(pick.command, ...args);
+			}
+		},
+
+		async restartLsp() {
+			const ok = await lsp.restart(context);
+			const message = ok ? "Musi LSP restarted." : "Musi LSP did not start.";
+			await vscode.window.showInformationMessage(message);
+		},
+
+		async startLsp() {
+			const ok = await lsp.start(context);
+			const message = ok ? "Musi LSP started." : "Musi LSP did not start.";
+			await vscode.window.showInformationMessage(message);
+		},
+
+		async stopLsp() {
+			await lsp.stop();
+			await vscode.window.showInformationMessage("Musi LSP stopped.");
+		},
+
+		showLspOutput() {
+			lsp.showOutput();
+		},
+
+		async checkWorkspace(...args: unknown[]) {
+			const request = workspaceRequest(await workspacePackageRootFromArgs(args));
+			if (!request) {
+				return;
+			}
+			await executePackageCommandInTerminal(request, "check");
+		},
+
+		async buildWorkspace(...args: unknown[]) {
+			const request = workspaceRequest(await workspacePackageRootFromArgs(args));
+			if (!request) {
+				return;
+			}
+			await executePackageCommandInTerminal(request, "build");
+		},
+
+		async runWorkspaceTests(...args: unknown[]) {
+			const request = workspaceRequest(await workspacePackageRootFromArgs(args));
+			if (!request) {
+				return;
+			}
+			await executePackageCommandInTerminal(request, "test");
+		},
+
+		async fmtWorkspace(...args: unknown[]) {
+			const pkg = await workspacePackageRootFromArgs(args);
+			if (!pkg) {
+				return;
+			}
+			const request = buildPackageExecutionRequest(pkg, {
+				name: "Format Workspace",
+				cliArgs: ["--all"],
+			});
+			await executePackageCommandInTerminal(request, "fmt");
+		},
 	};
 }
 
@@ -236,8 +398,9 @@ export function clearCliCache() {
 export function registerCommands(
 	context: vscode.ExtensionContext,
 	diagnostics: DiagnosticsController,
+	lsp: LspController,
 ) {
-	const commands = createCommands(diagnostics);
+	const commands = createCommands(context, diagnostics, lsp);
 
 	context.subscriptions.push(
 		vscode.commands.registerCommand(
@@ -264,5 +427,18 @@ export function registerCommands(
 			"musi.editRunConfigurations",
 			commands.editRunConfigurations,
 		),
+		vscode.commands.registerCommand("musi.fmt", commands.fmt),
+		vscode.commands.registerCommand("musi.showActions", commands.showActions),
+		vscode.commands.registerCommand("musi.restartLsp", commands.restartLsp),
+		vscode.commands.registerCommand("musi.startLsp", commands.startLsp),
+		vscode.commands.registerCommand("musi.stopLsp", commands.stopLsp),
+		vscode.commands.registerCommand("musi.showLspOutput", commands.showLspOutput),
+		vscode.commands.registerCommand("musi.checkWorkspace", commands.checkWorkspace),
+		vscode.commands.registerCommand("musi.buildWorkspace", commands.buildWorkspace),
+		vscode.commands.registerCommand(
+			"musi.runWorkspaceTests",
+			commands.runWorkspaceTests,
+		),
+		vscode.commands.registerCommand("musi.fmtWorkspace", commands.fmtWorkspace),
 	);
 }

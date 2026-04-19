@@ -1,7 +1,7 @@
 use crate::descriptor::{
     ClassDescriptor, ConstantDescriptor, ConstantValue, DataDescriptor, DataVariantDescriptor,
     EffectDescriptor, EffectOpDescriptor, ExportDescriptor, ExportTarget, ForeignDescriptor,
-    GlobalDescriptor, MetaDescriptor, MethodDescriptor, TypeDescriptor,
+    GlobalDescriptor, MetaDescriptor, ProcedureDescriptor, TypeDescriptor,
 };
 use crate::{
     Artifact, BINARY_VERSION, CodeEntry, Instruction, Label, Opcode, Operand, SEAM_MAGIC,
@@ -25,7 +25,7 @@ pub fn encode_binary(artifact: &Artifact) -> AssemblyResult<Vec<u8>> {
     encode_types(&mut out, artifact);
     encode_constants(&mut out, artifact);
     encode_globals(&mut out, artifact);
-    encode_methods(&mut out, artifact);
+    encode_procedures(&mut out, artifact);
     encode_effects(&mut out, artifact);
     encode_classes(&mut out, artifact);
     encode_foreigns(&mut out, artifact);
@@ -49,7 +49,7 @@ pub fn decode_binary(bytes: &[u8]) -> AssemblyResult<Artifact> {
     }
     let version = cursor.read_u16()?;
     if version != BINARY_VERSION {
-        return Err(AssemblyError::BinaryVersionUnsupported(version));
+        return Err(AssemblyError::UnsupportedBinaryVersion(version));
     }
 
     let mut artifact = Artifact::new();
@@ -57,7 +57,7 @@ pub fn decode_binary(bytes: &[u8]) -> AssemblyResult<Artifact> {
     decode_types(&mut cursor, &mut artifact)?;
     decode_constants(&mut cursor, &mut artifact)?;
     decode_globals(&mut cursor, &mut artifact)?;
-    decode_methods(&mut cursor, &mut artifact)?;
+    decode_procedures(&mut cursor, &mut artifact)?;
     decode_effects(&mut cursor, &mut artifact)?;
     decode_classes(&mut cursor, &mut artifact)?;
     decode_foreigns(&mut cursor, &mut artifact)?;
@@ -168,13 +168,13 @@ fn encode_globals(out: &mut Vec<u8>, artifact: &Artifact) {
     }
 }
 
-fn encode_methods(out: &mut Vec<u8>, artifact: &Artifact) {
-    push_section_tag(out, SectionTag::Methods);
+fn encode_procedures(out: &mut Vec<u8>, artifact: &Artifact) {
+    push_section_tag(out, SectionTag::Procedures);
     push_u32(
         out,
-        u32::try_from(artifact.methods.len()).expect("section overflow"),
+        u32::try_from(artifact.procedures.len()).expect("section overflow"),
     );
-    for (_, entry) in artifact.methods.iter() {
+    for (_, entry) in artifact.procedures.iter() {
         push_u32(out, entry.name.raw());
         push_u16(out, entry.params);
         push_u16(out, entry.locals);
@@ -282,7 +282,7 @@ fn encode_exports(out: &mut Vec<u8>, artifact: &Artifact) {
     for (_, entry) in artifact.exports.iter() {
         push_u32(out, entry.name.raw());
         match entry.target {
-            ExportTarget::Method(id) => {
+            ExportTarget::Procedure(id) => {
                 out.push(0);
                 push_u32(out, id.raw());
             }
@@ -410,13 +410,16 @@ fn encode_operand(out: &mut Vec<u8>, operand: &Operand) {
             out.push(6);
             push_u32(out, id.raw());
         }
-        Operand::Method(id) => {
+        Operand::Procedure(id) => {
             out.push(7);
             push_u32(out, id.raw());
         }
-        Operand::WideMethodCaptures { method, captures } => {
+        Operand::WideProcedureCaptures {
+            procedure,
+            captures,
+        } => {
             out.push(13);
-            push_u32(out, method.raw());
+            push_u32(out, procedure.raw());
             out.push(*captures);
         }
         Operand::Foreign(id) => {
@@ -460,7 +463,7 @@ fn decode_strings(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyR
         let bytes = cursor.read_bytes()?;
         let text = String::from_utf8(bytes)
             .map_err(|err| AssemblyError::TextParseFailed(err.to_string()))?;
-        let _ = artifact.intern_string(&text);
+        let _ = artifact.push_string_record(&text);
     }
     Ok(())
 }
@@ -529,8 +532,8 @@ fn decode_globals(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyR
     Ok(())
 }
 
-fn decode_methods(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyResult {
-    require_section(cursor, SectionTag::Methods)?;
+fn decode_procedures(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyResult {
+    require_section(cursor, SectionTag::Procedures)?;
     for _ in 0..cursor.read_u32()? {
         let name = cursor.read_idx()?;
         let params = cursor.read_u16()?;
@@ -554,7 +557,7 @@ fn decode_methods(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyR
                 1 => {
                     let opcode_code = cursor.read_u16()?;
                     let Some(opcode) = Opcode::from_wire_code(opcode_code) else {
-                        return Err(AssemblyError::OpcodeUnknown(opcode_code));
+                        return Err(AssemblyError::UnknownOpcode(opcode_code));
                     };
                     let operand = decode_operand(cursor)?;
                     CodeEntry::Instruction(Instruction::new(opcode, operand))
@@ -567,8 +570,8 @@ fn decode_methods(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyR
             };
             code.push(entry);
         }
-        let _ = artifact.methods.alloc(
-            MethodDescriptor::new(name, params, locals, code.into_boxed_slice())
+        let _ = artifact.procedures.alloc(
+            ProcedureDescriptor::new(name, params, locals, code.into_boxed_slice())
                 .with_export(export)
                 .with_hot(hot)
                 .with_cold(cold)
@@ -655,7 +658,7 @@ fn decode_exports(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyR
         let kind = cursor.read_u8()?;
         let target_raw = cursor.read_u32()?;
         let target = match kind {
-            0 => ExportTarget::Method(Idx::from_raw(target_raw)),
+            0 => ExportTarget::Procedure(Idx::from_raw(target_raw)),
             1 => ExportTarget::Global(Idx::from_raw(target_raw)),
             2 => ExportTarget::Foreign(Idx::from_raw(target_raw)),
             3 => ExportTarget::Type(Idx::from_raw(target_raw)),
@@ -755,10 +758,10 @@ fn decode_operand(cursor: &mut Cursor<'_>) -> AssemblyResult<Operand> {
         4 => Operand::Type(cursor.read_idx()?),
         5 => Operand::Constant(cursor.read_idx()?),
         6 => Operand::Global(cursor.read_idx()?),
-        7 => Operand::Method(cursor.read_idx()?),
+        7 => Operand::Procedure(cursor.read_idx()?),
         8 => Operand::Foreign(cursor.read_idx()?),
-        13 => Operand::WideMethodCaptures {
-            method: cursor.read_idx()?,
+        13 => Operand::WideProcedureCaptures {
+            procedure: cursor.read_idx()?,
             captures: cursor.read_u8()?,
         },
         9 => Operand::Effect {
@@ -792,7 +795,7 @@ fn require_section(cursor: &mut Cursor<'_>, tag: SectionTag) -> AssemblyResult {
     if found == section_tag_byte(tag) {
         Ok(())
     } else {
-        Err(AssemblyError::SectionTagUnknown(found))
+        Err(AssemblyError::UnknownSectionTag(found))
     }
 }
 
@@ -802,7 +805,7 @@ const fn section_tag_byte(tag: SectionTag) -> u8 {
         SectionTag::Types => 2,
         SectionTag::Constants => 3,
         SectionTag::Globals => 4,
-        SectionTag::Methods => 5,
+        SectionTag::Procedures => 5,
         SectionTag::Effects => 6,
         SectionTag::Classes => 7,
         SectionTag::Foreigns => 8,

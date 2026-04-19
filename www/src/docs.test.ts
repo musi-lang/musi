@@ -36,122 +36,87 @@ describe("docs", () => {
 	});
 
 	it("keeps non-guide chapter neighbors in book order", () => {
+		const readingNeighbors = docNeighbors("reading-musi-code");
+		expect(readingNeighbors.previous?.id).toBe("first-program");
+		expect(readingNeighbors.next?.id).toBe("values-and-let");
+
 		const neighbors = docNeighbors("values-and-let");
-		expect(neighbors.previous?.id).toBe("first-program");
+		expect(neighbors.previous?.id).toBe("reading-musi-code");
 		expect(neighbors.next?.id).toBe("blocks-and-expressions");
 	});
 
 	it("finds docs by current route path", () => {
-		expect(docForPath("/learn/book/types/foundations")?.kind).toBe("section");
-		expect(
-			docForPath("/learn/book/types/foundations/type-annotations")?.kind,
-		).toBe("chapter");
+		expect(docForPath("/learn/book/types/foundations")).toBeUndefined();
+		expect(docForPath("/learn/book/types/type-annotations")?.kind).toBe(
+			"chapter",
+		);
 		expect(docForPath("/learn/book/types/type-annotations")?.title).toBe(
 			"Type Annotations",
 		);
-		expect(docForPath("/learn/language/core/methods")?.title).toBe("Methods");
-		expect(docForPath("/learn/book/developers/rust")?.kind).toBe("section");
-		expect(docForPath("/learn/book/developers/guides/rust")?.kind).toBe(
+		expect(docForPath("/learn/language/core/methods")?.title).toBe("Dot Calls");
+		expect(docForPath("/learn/book/developers/rust")).toBeUndefined();
+		expect(docForPath("/learn/guides/rust")?.kind).toBe("section");
+		expect(docForPath("/learn/guides/rust/overview")?.kind).toBe("chapter");
+		expect(docForPath("/learn/book/developers/rust/overview")).toBeUndefined();
+		expect(docForPath("/learn/book/developers/rust/mutation")).toBeUndefined();
+		expect(docForPath("/docs/book/developers/mutation")).toBeUndefined();
+		expect(docForPath("/learn/guides/rust/mutation")?.title).toBe("Mutation");
+		expect(docForPath("/docs/guides/rust/mutation")?.title).toBe("Mutation");
+		expect(docForPath("/learn/guides/javascript-typescript")?.kind).toBe(
 			"section",
 		);
 		expect(
-			docForPath("/learn/book/developers/guides/rust/overview")?.kind,
+			docForPath("/learn/guides/javascript-typescript/overview")?.kind,
 		).toBe("chapter");
-		expect(docForPath("/learn/book/developers/rust/overview")?.kind).toBe(
-			"chapter",
-		);
-		expect(docForPath("/learn/book/developers/rust/mutation")?.title).toBe(
-			"Mutation",
-		);
+		expect(docForPath("/learn/guides/c99")?.kind).toBe("section");
+		expect(docForPath("/learn/guides/c99/overview")?.kind).toBe("chapter");
+		expect(docForPath("/learn/guides/cpp17")?.kind).toBe("section");
+		expect(docForPath("/learn/guides/cpp17/overview")?.kind).toBe("chapter");
 		expect(
-			docForPath("/learn/book/developers/guides/rust/mutation")?.title,
-		).toBe("Mutation");
-		expect(
-			docForPath("/learn/book/developers/guides/javascript-typescript")?.kind,
-		).toBe("section");
-		expect(
-			docForPath("/learn/book/developers/guides/javascript-typescript/overview")
-				?.kind,
-		).toBe("chapter");
-		expect(docForPath("/learn/book/developers/guides/c99")?.kind).toBe(
-			"section",
+			docForPath("/learn/book/developers/c/null-option-result"),
+		).toBeUndefined();
+		expect(docForPath("/learn/guides/c/null-option-result")?.title).toBe(
+			"Null, Option, and Result",
 		);
-		expect(docForPath("/learn/book/developers/guides/c99/overview")?.kind).toBe(
-			"chapter",
-		);
-		expect(docForPath("/learn/book/developers/guides/cpp17")?.kind).toBe(
-			"section",
-		);
+		expect(docForPath("/learn/guides/csharp")?.kind).toBe("section");
+		expect(docForPath("/learn/guides/csharp/overview")?.kind).toBe("chapter");
 		expect(
-			docForPath("/learn/book/developers/guides/cpp17/overview")?.kind,
-		).toBe("chapter");
+			docForPath("/learn/book/developers/csharp/null-option-result"),
+		).toBeUndefined();
+		expect(docForPath("/learn/guides/go")?.kind).toBe("section");
+		expect(docForPath("/learn/guides/go/overview")?.kind).toBe("chapter");
 		expect(
-			docForPath("/learn/book/developers/c/null-option-result")?.title,
-		).toBe("Null, Option, and Result");
-		expect(docForPath("/learn/book/developers/guides/csharp")?.kind).toBe(
-			"section",
-		);
+			docForPath("/learn/book/developers/go/nil-option-result"),
+		).toBeUndefined();
+		expect(docForPath("/learn/guides/java")?.kind).toBe("section");
+		expect(docForPath("/learn/guides/java/overview")?.kind).toBe("chapter");
 		expect(
-			docForPath("/learn/book/developers/guides/csharp/overview")?.kind,
-		).toBe("chapter");
+			docForPath("/learn/book/developers/java/null-option-result"),
+		).toBeUndefined();
+		expect(docForPath("/learn/guides/lua")?.kind).toBe("section");
+		expect(docForPath("/learn/guides/lua/overview")?.kind).toBe("chapter");
 		expect(
-			docForPath("/learn/book/developers/csharp/null-option-result")?.title,
-		).toBe("Null, Option, and Result");
-		expect(docForPath("/learn/book/developers/guides/go")?.kind).toBe(
-			"section",
-		);
-		expect(docForPath("/learn/book/developers/guides/go/overview")?.kind).toBe(
-			"chapter",
-		);
+			docForPath("/learn/book/developers/lua/nil-option-result"),
+		).toBeUndefined();
+		expect(docForPath("/learn/guides/python")?.kind).toBe("section");
+		expect(docForPath("/learn/guides/python/overview")?.kind).toBe("chapter");
 		expect(
-			docForPath("/learn/book/developers/go/nil-option-result")?.title,
-		).toBe("Nil, Option, and Result");
-		expect(docForPath("/learn/book/developers/guides/java")?.kind).toBe(
-			"section",
-		);
-		expect(
-			docForPath("/learn/book/developers/guides/java/overview")?.kind,
-		).toBe("chapter");
-		expect(
-			docForPath("/learn/book/developers/java/null-option-result")?.title,
-		).toBe("Null, Option, and Result");
-		expect(docForPath("/learn/book/developers/guides/lua")?.kind).toBe(
-			"section",
-		);
-		expect(docForPath("/learn/book/developers/guides/lua/overview")?.kind).toBe(
-			"chapter",
-		);
-		expect(
-			docForPath("/learn/book/developers/lua/nil-option-result")?.title,
-		).toBe("Nil, Option, and Result");
-		expect(docForPath("/learn/book/developers/guides/python")?.kind).toBe(
-			"section",
-		);
-		expect(
-			docForPath("/learn/book/developers/guides/python/overview")?.kind,
-		).toBe("chapter");
-		expect(
-			docForPath("/learn/book/developers/python/none-option-result")?.title,
-		).toBe("None, Option, and Result");
-		expect(docForPath("/learn/book/developers/javascript")?.kind).toBe(
-			"section",
-		);
-		expect(docForPath("/learn/book/developers/typescript")?.kind).toBe(
-			"section",
-		);
+			docForPath("/learn/book/developers/python/none-option-result"),
+		).toBeUndefined();
+		expect(docForPath("/learn/book/developers/javascript")).toBeUndefined();
+		expect(docForPath("/learn/book/developers/typescript")).toBeUndefined();
 	});
 
 	it("builds breadcrumbs for deep developer pages", () => {
 		expect(docBreadcrumb("rust-mutation").map((page) => page.slug)).toEqual([
 			"developers",
-			"guides",
 			"rust",
 			"mutation",
 		]);
 	});
 
 	it("keeps adjusted guides visible in alphabetical order under language guides", () => {
-		const titles = docChildren("developers-guides").map((page) => page.title);
+		const titles = docChildren("developers").map((page) => page.title);
 		expect(titles).toEqual([
 			"Musi for C Developers",
 			"Musi for C++ Developers",
@@ -172,7 +137,7 @@ describe("docs", () => {
 		).toBe(true);
 		expect(
 			docGroups.some((group) => group.group === "Musi for Developers"),
-		).toBe(true);
+		).toBe(false);
 	});
 
 	it("extracts headings for page toc", () => {

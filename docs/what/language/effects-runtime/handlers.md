@@ -3,17 +3,24 @@ title: "Handlers"
 description: "Handle effects after the effect and using model are already clear."
 group: "Effects and Runtime"
 section: "Effects and Runtime"
-order: 26
+order: 27
 slug: "handlers"
 summary: "Resolve requested effects at the boundary where policy belongs."
 ---
-
-A handler interprets requested operations. It decides what a request means at a particular boundary.
+Handlers answer effect requests. If effects are service desks, handlers are the people behind the counters deciding what answer to give.
 
 {{snippet:chapter-handlers}}
 
-Read `handle Clock.tick() using Clock { ... }` as running an expression while interpreting clock requests with this handler. `value => value;` covers normal completion. `tick(k) => resume 1;` answers one requested operation and continues the suspended computation.
+A handler can talk to the real runtime, return fixed test data, or translate one effect into another. The calling code does not need to know which strategy was chosen.
 
-A handler is a local policy desk: request asks for help; handler says what help means here.
+## Real handlers and test handlers
 
-Continue to [Foundation](/learn/book/effects-runtime/runtime-model/foundation).
+Production code may answer `Clock.now` with the machine's current time. A test can answer the same request with Monday morning every time. That keeps the rule being tested stable while still using the same effect shape.
+
+## Keep handler policy clear
+
+Handlers are powerful because they sit at the boundary. Keep policy visible there. A payment handler that retries failed network calls should make that retry rule easy to find, not hide it behind unrelated formatting code.
+
+Effect chapters draw a line between local calculation and outside answers. Adding prices is local. Reading time, asking a process, or writing a log needs an answer from outside the expression.
+
+A useful test is to ask whether the result could be known from the input alone. If yes, keep the function plain. If no, name the request and make the effect boundary visible.

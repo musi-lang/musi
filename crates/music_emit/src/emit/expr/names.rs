@@ -1,7 +1,7 @@
 use super::super::*;
 use crate::EmitDiagKind;
 
-impl MethodEmitter<'_, '_> {
+impl ProcedureEmitter<'_, '_> {
     pub(super) fn compile_name(
         &mut self,
         binding: Option<NameBindingId>,
@@ -33,11 +33,11 @@ impl MethodEmitter<'_, '_> {
             )));
             return;
         }
-        if let Some(method) = self.resolve_method(binding, name, module_target) {
+        if let Some(procedure) = self.resolve_procedure(binding, name, module_target) {
             self.code.push(CodeEntry::Instruction(Instruction::new(
                 Opcode::ClsNew,
-                Operand::WideMethodCaptures {
-                    method,
+                Operand::WideProcedureCaptures {
+                    procedure,
                     captures: 0,
                 },
             )));
@@ -55,20 +55,20 @@ impl MethodEmitter<'_, '_> {
             self.module_key,
             &expr.origin,
             EmitDiagKind::UnsupportedNameRef,
-            format!("name reference `{name}` has no emitted form"),
+            format!("unsupported name reference `{name}`"),
         );
         emit_zero(self);
     }
 
-    pub(super) fn resolve_method(
+    pub(super) fn resolve_procedure(
         &self,
         binding: Option<NameBindingId>,
         name: &str,
         module_target: Option<&ModuleKey>,
-    ) -> Option<MethodId> {
+    ) -> Option<ProcedureId> {
         if module_target.is_none_or(|target| target == self.module_key) {
-            if let Some(method) = self.layout.callables_by_name.get(name).copied() {
-                return Some(method);
+            if let Some(procedure) = self.layout.callables_by_name.get(name).copied() {
+                return Some(procedure);
             }
         }
         resolve_named_binding(
@@ -76,8 +76,8 @@ impl MethodEmitter<'_, '_> {
             name,
             module_target,
             &self.layout.callables,
-            &self.tables.qualified.methods,
-            &self.tables.unique.methods,
+            &self.tables.qualified.procedures,
+            &self.tables.unique.procedures,
         )
     }
 
@@ -122,10 +122,11 @@ fn resolve_named_binding<T: Copy>(
     qualified: &HashMap<(ModuleKey, Box<str>), T>,
     unique: &HashMap<Box<str>, T>,
 ) -> Option<T> {
-    binding
-        .and_then(|binding| locals.get(&binding).copied())
-        .or_else(|| {
-            module_target.and_then(|target| qualified.get(&(target.clone(), name.into())).copied())
-        })
-        .or_else(|| unique.get(name).copied())
+    if let Some(target) = binding.and_then(|binding| locals.get(&binding).copied()) {
+        return Some(target);
+    }
+    if let Some(target) = module_target {
+        return qualified.get(&(target.clone(), name.into())).copied();
+    }
+    unique.get(name).copied()
 }

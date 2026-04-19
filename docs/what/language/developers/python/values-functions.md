@@ -1,43 +1,31 @@
 ---
 title: "Values, Functions, and Final Expressions"
-description: "Translate Python def, annotations, and return into Musi let functions and final expressions."
+description: "Read Values, Functions, and Final Expressions as a Python habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Python Developers"
 order: 2
 slug: "values-functions"
-summary: "Use let functions and final expressions where Python uses def and return."
+summary: "Translate the Python habit, then use the Musi Book for the full rule."
 ---
 
-Python `def` introduces a function. A type annotation helps readers and tools, but `return` still marks the value that leaves the function.
+A Python reader brings habits from names, dictionaries, classes, protocols, exceptions, None, imports, and duck typing. That helps with code around domain words before machinery, but the Musi page asks a narrower question: what contract should this local values and calls example make visible?
 
-```python
-def total(base: int, fee: int) -> int:
-    return base + fee
+{{compare:python-values-functions}}
 
-answer = total(1200, 45)
-answer
-```
+## Reading Values, Functions, and Final Expressions from Python
 
-Musi uses `let` for named values and named functions. The function body can be one expression.
+On the Musi side, Musi lets a calculation be a `let`, a function, or a final expression without wrapping it in an object or framework first. Read the shared example through Python eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-{{snippet:python-values-functions}}
+## False friend
 
-The important habit change is where the result sits. Python says `return base + fee`; Musi lets `base + fee` be the body itself.
+Do not preserve call ceremony just because the source language needs it for methods, receivers, overloads, or closures. For a Python reader, the trap is trusting runtime convention where Musi expects a visible type or effect; Musi `class` is closer to an explicit protocol/typeclass than a Python class with attributes and methods.
 
-## Named calls
+## When this pays off
 
-Python keyword arguments help a call site read like a form:
+Use this shape when a receipt total, label, distance, or score is pure data moving through named calls. The Python instinct still helps here: Keep the Python habit of naming the real-world thing first.
 
-```python
-def render(port: int, secure: bool) -> int:
-    return port
+## Keep close
 
-selected = render(port=8080, secure=True)
-selected
-```
-
-Musi supports the same readability with named arguments.
-
-{{snippet:python-named-calls}}
-
-Use named calls when position alone would make the call hard to read.
+- [Values and let](/learn/book/start/values-and-let)
+- [Functions](/learn/book/core/functions)
+- [Calls](/learn/book/core/calls)

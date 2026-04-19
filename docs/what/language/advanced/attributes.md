@@ -7,74 +7,20 @@ order: 30
 slug: "attributes"
 summary: "Attributes describe metadata, boundaries, and build-time intent without changing Musi into a macro language."
 ---
+Attributes attach extra information to declarations. They are useful when tools, generated code, foreign boundaries, or known built-ins need metadata that is not part of the ordinary value expression.
 
 {{snippet:chapter-attributes}}
 
-Attributes let you attach structured metadata to declarations.
-They are not a replacement for ordinary language design, and they are not a free-form escape hatch for every feature.
-They exist to carry information that matters at compile time, runtime boundaries, layout, tooling, or documentation.
+An attribute should be treated like a label on a file folder. It helps a tool handle the declaration correctly, but it should not become a secret second language for normal program logic.
 
-## Boundary Tool
+## Metadata with a job
 
-The built-in attribute families you will see most often are:
+Use attributes for facts a compiler, formatter, runtime bridge, or documentation tool must know. If the fact is ordinary domain data, put it in a value instead.
 
-- compiler and foundation identity: `@known`, `@intrinsic`
-- foreign boundary: `@link`, `@when`
-- compile-time host boundary: `@comptimeSafe`
-- data layout and freezing: `@repr`, `@layout`, `@frozen`
-- hotness and optimization hints: `@hot`, `@cold`
-- lifecycle metadata: `@deprecated`, `@since`
+## Keep labels rare
 
-There can also be non-reserved metadata attributes that survive as inert data for tooling or documentation.
+Too many attributes make code feel like a form full of stamps. Prefer normal declarations unless the extra metadata changes how tooling must treat the declaration.
 
-## When to Reach for It
+Advanced chapters are tools for edges: metadata, native calls, compile-time work, syntax values, and command-line use. They matter most when ordinary declarations are no longer enough to describe a boundary.
 
-If the docs only say "attributes exist", users still do not know which ones are ordinary metadata, which ones affect code generation, and which ones are only valid in special places.
-This chapter should answer three practical questions:
-
-1. what family is this attribute in?
-2. what kind of declaration can it attach to?
-3. what does the compiler or runtime do with it?
-
-## Read the Boundary
-
-Read attributes from the outside in:
-
-- the path, such as `@link` or `@layout`
-- the named arguments, such as `name := "c"`
-- the declaration the attribute is attached to
-
-A short catalog of common meanings:
-
-- `@known(name := "Bool")`: this exported item is one canonical built-in surface
-- `@intrinsic(name := "ptr.load")`: implementation comes from compiler/runtime intrinsic machinery
-- `@link(name := "c")`: foreign declaration links against host symbol provider
-- `@when(...)`: gate foreign declarations by normalized target facts such as `os`, `arch`, `family`, `archFamily`, `pointerWidth`, `endian`, `env`, `abi`, `vendor`, or `feature`
-- `@comptimeSafe`: effect operation may be handled by a compile-time host when requested inside `comptime`
-- `@repr(...)`, `@layout(...)`: influence data representation details
-- `@frozen`: exported data layout should not drift casually
-- `@hot`, `@cold`: codegen-facing temperature hint
-- `@deprecated`, `@since`: consumer-facing lifecycle metadata
-
-## What Musi does not do here
-
-Musi attributes are not the metaprogramming system.
-Use `quote`, `Syntax`, and value-position `comptime` for generated syntax.
-Attributes do not replace normal functions, data definitions, or effects.
-If you need ordinary behavior, write ordinary Musi code first.
-Reach for attributes when the information really is metadata.
-
-## Small Exercise
-
-- Read one `@link` declaration and identify every named argument.
-- Compare one layout-related attribute with one lifecycle attribute.
-- Ask whether the information belongs in ordinary code or in metadata.
-
-## Mistake to Avoid
-
-Do not treat attributes as a generic place to hide behavior.
-If a concept changes how code runs, it usually deserves a language or library construct first.
-
-## Next Page
-
-Continue to [Foreign](/learn/book/advanced/foreign) to see how the FFI-related attributes fit into real declarations.
+Use advanced forms like locked cabinets, not like kitchen drawers. Reach for them when a tool, runtime, foreign library, or build step truly needs the extra signal. Keep normal program logic in normal declarations.

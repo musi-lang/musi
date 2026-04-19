@@ -88,14 +88,14 @@ export let CString := CString;
 @known(name := "CPtr")
 export let CPtr := CPtr;
 
-export opaque let Option[T] := data {
+export opaque let Option [T] := data {
   | Some(T)
   | None
 };
 
-export let some [T] (value : T) : Option[T] := .Some(value);
+export let someOf [T] (value : T) : Option[T] := .Some(value);
 
-export let none [T] () : Option[T] := .None;
+export let noneOf [T] () : Option[T] := .None;
 
 export let isSome [T] (value : Option[T]) : Bool :=
   match value (
@@ -134,14 +134,11 @@ export opaque let RangeBounds[T] := class {
 
 export instance Rangeable[Int] {
   let compare (left : Int, right : Int) : Int := left - right;
-
-  let next (value : Int) : Option[Int] := some[Int](value + 1);
-
-  let prev (value : Int) : Option[Int] := some[Int](value - 1);
+  let next (value : Int) : Option[Int] := someOf[Int] (value + 1);
+  let prev (value : Int) : Option[Int] := someOf[Int](value - 1);
 };
 
 export instance RangeBounds[Int] {
-  let defaultLowerBound () : Int := -1000000;
-
+  let defaultLowerBound () : Int := - 1000000;
   let defaultUpperBound () : Int := 1000000;
 };

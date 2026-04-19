@@ -1,11 +1,15 @@
+#![allow(unused_imports)]
+
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
 use musi_foundation::register_modules;
 use music_module::ModuleKey;
-use music_seam::Artifact;
-use music_seam::descriptor::{DataDescriptor, DataVariantDescriptor, TypeDescriptor};
+use music_seam::descriptor::{
+    DataDescriptor, DataVariantDescriptor, ProcedureDescriptor, TypeDescriptor,
+};
+use music_seam::{Artifact, CodeEntry, Instruction, Opcode, Operand};
 use music_seam::{StringId, TypeId};
 use music_session::{Session, SessionOptions};
 use music_term::{TypeTerm, TypeTermKind};
@@ -112,437 +116,24 @@ fn compile_program(modules: &[(&str, &str)], entry: &str) -> Program {
     Program::from_bytes(&output.bytes).expect("program load should succeed")
 }
 
-#[test]
-fn loads_program_and_lists_exports() {
-    let program = compile_program(
-        &[(
-            "main",
-            "export let answer () : Int := 42; export let base : Int := 1;",
-        )],
-        "main",
-    );
-
-    assert_eq!(program.export_count(), 2);
-    assert!(
-        program
-            .exports()
-            .iter()
-            .any(|export| export.name.as_ref() == "answer")
-    );
-}
-
-#[test]
-fn initializes_and_calls_export() {
-    let program = compile_program(&[("main", "export let answer () : Int := 40 + 2;")], "main");
-
-    let mut vm = Vm::with_rejecting_host(program, VmOptions);
-    vm.initialize().expect("vm init should succeed");
-    let value = vm
-        .call_export("answer", &[])
-        .expect("export call should succeed");
-
-    assert_eq!(value, Value::Int(42));
-}
-
-#[test]
-fn executes_closure_and_recursive_callable() {
-    let program = compile_program(
+fn compile_runaway_program() -> Program {
+    compile_program(
         &[(
             "main",
             r"
-            let apply (f : Int -> Int, x : Int) : Int := f(x);
-            export let answer (n : Int) : Int := (
-              let base : Int := 1;
-              let rec loop (x : Int) : Int := match x (| 0 => base | _ => loop(x - 1));
-              let add_base (y : Int) : Int := y + 41;
-              apply(add_base, loop(n))
-            );
-        ",
+            let rec loop (x : Int) : Int := loop(x + 1);
+            export let answer () : Int := loop(0);
+            ",
         )],
         "main",
-    );
+    )
+}
 
-    let mut vm = Vm::with_rejecting_host(program, VmOptions);
+fn call_answer_error(source: &str, options: VmOptions, reason: &str) -> VmError {
+    let program = compile_program(&[("main", source)], "main");
+    let mut vm = Vm::with_rejecting_host(program, options);
     vm.initialize().expect("vm init should succeed");
-    let value = vm
-        .call_export("answer", &[Value::Int(3)])
-        .expect("recursive closure call should succeed");
-
-    assert_eq!(value, Value::Int(42));
-}
-
-#[test]
-fn executes_record_projection_and_update() {
-    let program = compile_program(
-        &[(
-            "main",
-            r"
-            export let answer () : Int := (
-              let point := { x := 1, y := 2 };
-              let updated := { ...point, x := 40 };
-              updated.x + point.y
-            );
-        ",
-        )],
-        "main",
-    );
-
-    let mut vm = Vm::with_rejecting_host(program, VmOptions);
-    vm.initialize().expect("vm init should succeed");
-    let value = vm
-        .call_export("answer", &[])
-        .expect("record call should succeed");
-
-    assert_eq!(value, Value::Int(42));
-}
-
-#[test]
-fn executes_string_order_comparisons() {
-    let program = compile_program(
-        &[(
-            "main",
-            r#"
-            export let less () : Bool := "a" < "b";
-            export let greater () : Bool := "é" > "z";
-            export let equal () : Bool := "same" <= "same";
-        "#,
-        )],
-        "main",
-    );
-
-    let mut vm = Vm::with_rejecting_host(program, VmOptions);
-    vm.initialize().expect("vm init should succeed");
-
-    let less = vm.call_export("less", &[]).expect("less");
-    assert_eq!(
-        render_value_view(vm.inspect(&less)).as_deref(),
-        Some(".True")
-    );
-    let greater = vm.call_export("greater", &[]).expect("greater");
-    assert_eq!(
-        render_value_view(vm.inspect(&greater)).as_deref(),
-        Some(".True")
-    );
-    let equal = vm.call_export("equal", &[]).expect("equal");
-    assert_eq!(
-        render_value_view(vm.inspect(&equal)).as_deref(),
-        Some(".True")
-    );
-}
-
-#[test]
-fn executes_multi_index_get_and_set() {
-    let program = compile_program(
-        &[(
-            "main",
-            r"
-            export let touch (grid : mut [2][2]Int) : Int := (
-              grid.[0, 1] := 42;
-              grid.[0, 1]
-            );
-        ",
-        )],
-        "main",
-    );
-
-    let outer_ty = program
-        .artifact()
-        .types
-        .iter()
-        .next()
-        .map(|(id, _)| id)
-        .expect("type id");
-    let mut vm = Vm::with_rejecting_host(program, VmOptions);
-    vm.initialize().expect("vm init should succeed");
-    let inner = Value::sequence(outer_ty, vec![Value::Int(1), Value::Int(2)]);
-    let grid = Value::sequence(outer_ty, vec![inner.clone(), inner]);
-    let value = vm
-        .call_export("touch", &[grid])
-        .expect("multi-index call should succeed");
-
-    assert_eq!(value, Value::Int(42));
-}
-
-#[test]
-fn loads_dynamic_module_through_host() {
-    let dep = compile_program(
-        &[(
-            "dep",
-            "export let answer () : Int := 42; export let base : Int := 41;",
-        )],
-        "dep",
-    );
-    let main = compile_program(&[("main", "export let root () : Int := 0;")], "main");
-
-    let mut loader = TestLoader::default();
-    let _ = loader.modules.insert("dep".into(), dep);
-    let mut vm = Vm::new(main, loader, TestHost, VmOptions);
-    vm.initialize().expect("vm init should succeed");
-    let module = vm
-        .load_module("dep")
-        .expect("dynamic import should succeed");
-
-    assert_eq!(
-        vm.lookup_module_export(&module, "base")
-            .expect("module global export should resolve"),
-        Value::Int(41)
-    );
-    assert_eq!(
-        vm.call_module_export(&module, "answer", &[])
-            .expect("module callable export should succeed"),
-        Value::Int(42)
-    );
-    assert_eq!(
-        vm.load_module("dep")
-            .expect("cached dynamic load should succeed"),
-        module
-    );
-}
-
-#[test]
-fn rejects_opaque_exports_from_root_and_dynamic_modules() {
-    let dep = compile_program(
-        &[(
-            "dep",
-            "export opaque let Hidden := data { | Hidden(Int) }; export let answer () : Int := 42;",
-        )],
-        "dep",
-    );
-    let main = compile_program(
-        &[(
-            "main",
-            "export opaque let Secret := data { | Secret(Int) }; export let root () : Int := 0;",
-        )],
-        "main",
-    );
-
-    let mut loader = TestLoader::default();
-    let _ = loader.modules.insert("dep".into(), dep);
-    let mut vm = Vm::new(main, loader, TestHost, VmOptions);
-    vm.initialize().expect("vm init should succeed");
-
-    let err = vm.lookup_export("Secret").unwrap_err();
-    assert!(matches!(
-        err.kind(),
-        VmErrorKind::OpaqueExport { module, export }
-            if module.as_ref() == "<root>" && export.as_ref() == "Secret"
-    ));
-
-    let module = vm
-        .load_module("dep")
-        .expect("dynamic import should succeed");
-    let err = vm.lookup_module_export(&module, "Hidden").unwrap_err();
-    assert!(matches!(
-        err.kind(),
-        VmErrorKind::OpaqueExport { module, export }
-            if module.as_ref() == "dep" && export.as_ref() == "Hidden"
-    ));
-}
-
-#[test]
-fn detects_module_init_cycle() {
-    let main = compile_program(&[("main", "export let root () : Int := 0;")], "main");
-    let dep = compile_program(
-        &[(
-            "dep",
-            r#"
-            let self_name : String := "dep";
-            export let answer : Int := (
-              let loaded := import self_name;
-              1
-            );
-        "#,
-        )],
-        "dep",
-    );
-
-    let mut loader = TestLoader::default();
-    let _ = loader.modules.insert("dep".into(), dep);
-    let mut vm = Vm::new(main, loader, TestHost, VmOptions);
-    vm.initialize().unwrap();
-    let err = vm.load_module("dep").unwrap_err();
-
-    assert!(matches!(err.kind(), VmErrorKind::ModuleInitCycle { .. }));
-}
-
-#[test]
-fn handles_effect_value_clause_and_resume() {
-    let program = compile_program(
-        &[(
-            "main",
-            r"
-            let Console := effect { let readLine () : Int; };
-            export let answer () : Int :=
-              handle request Console.readLine() using Console {
-                value => value + 1;
-                readLine(k) => resume 41;
-              };
-        ",
-        )],
-        "main",
-    );
-
-    let mut vm = Vm::with_rejecting_host(program, VmOptions);
-    vm.initialize().expect("vm init should succeed");
-    let value = vm
-        .call_export("answer", &[])
-        .expect("handled effect should succeed");
-
-    assert_eq!(value, Value::Int(42));
-}
-
-#[test]
-fn reuses_handler_value_and_executes_range_membership_and_spread() {
-    let program = compile_program(
-        &[(
-            "main",
-            r#"
-            let Core := import "musi:core";
-            let Bool := Core.Bool;
-            let Int := Core.Int;
-            let Rangeable := Core.Rangeable;
-            let Console := effect { let readLine () : Int; };
-            let ConsoleHandler := using Console {
-              value => value + 1;
-              readLine(k) => resume 41;
-            };
-            export let handled () : Int := handle request Console.readLine() using ConsoleHandler;
-            export let contains () : Bool := (
-              let span := 1 ..< 4;
-              2 in span
-            );
-            export let ranged () : Int := (
-              let span := 1 ..< 4;
-              let xs := [0, ...span, 4];
-              xs.[2]
-            );
-        "#,
-        )],
-        "main",
-    );
-
-    let mut vm = Vm::with_rejecting_host(program, VmOptions);
-    vm.initialize().expect("vm init should succeed");
-    let handled = vm
-        .call_export("handled", &[])
-        .expect("handler value call should succeed");
-    let contains = vm
-        .call_export("contains", &[])
-        .expect("range membership call should succeed");
-    let ranged = vm
-        .call_export("ranged", &[])
-        .expect("range call should succeed");
-
-    assert_eq!(handled, Value::Int(42));
-    assert_eq!(
-        render_value_view(vm.inspect(&contains)).as_deref(),
-        Some(".True")
-    );
-    assert_eq!(ranged, Value::Int(2));
-}
-
-#[test]
-fn exposes_typed_foreign_and_effect_signatures_to_host() {
-    let program = compile_program(
-        &[(
-            "main",
-            r#"
-            foreign "c" (
-              let puts (value : Int) : Int;
-            );
-            let Console := effect { @comptimeSafe let readLine (prompt : String) : Int; };
-            export let call_puts () : Int := unsafe { puts(1); };
-            export let call_readLine () : Int := request Console.readLine(">");
-        "#,
-        )],
-        "main",
-    );
-
-    let log = Rc::new(RefCell::new(SignatureLog::default()));
-    let host = SignatureHost {
-        log: Rc::clone(&log),
-    };
-    let mut vm = Vm::new(program, RejectingLoader, host, VmOptions);
-    vm.initialize().expect("vm init should succeed");
-
-    let foreign_value = vm
-        .call_export("call_puts", &[])
-        .expect("foreign call should succeed");
-    let effect_value = vm
-        .call_export("call_readLine", &[])
-        .expect("effect call should succeed");
-
-    assert_eq!(foreign_value, Value::Int(7));
-    assert_eq!(effect_value, Value::Int(42));
-    let log = log.borrow();
-    assert_eq!(log.foreign_calls.len(), 1);
-    assert_eq!(log.foreign_calls[0].0.as_ref(), "main::puts");
-    assert_eq!(log.foreign_calls[0].1.len(), 1);
-    assert_eq!(log.foreign_calls[0].1[0].as_ref(), "Int");
-    assert_eq!(log.foreign_calls[0].2.as_ref(), "Int");
-    assert_eq!(log.effect_calls.len(), 1);
-    assert_eq!(log.effect_calls[0].0.as_ref(), "main::Console");
-    assert_eq!(log.effect_calls[0].1.as_ref(), "readLine");
-    assert_eq!(log.effect_calls[0].2.len(), 1);
-    assert_eq!(log.effect_calls[0].2[0].as_ref(), "String");
-    assert_eq!(log.effect_calls[0].3.as_ref(), "Int");
-    assert!(log.effect_calls[0].4);
-}
-
-#[test]
-fn inspects_cptr_values() {
-    let program = compile_program(&[("main", "export let answer () : Int := 0;")], "main");
-    let vm = Vm::with_rejecting_host(program, VmOptions);
-    let value = Value::c_ptr(0xDEAD_BEEF);
-
-    assert!(matches!(vm.inspect(&value), ValueView::CPtr(0xDEAD_BEEF)));
-}
-
-#[test]
-fn renders_bool_values_as_variants() {
-    assert_eq!(
-        render_value_view(ValueView::Bool(true)).as_deref(),
-        Some(".True")
-    );
-    assert_eq!(
-        render_value_view(ValueView::Bool(false)).as_deref(),
-        Some(".False")
-    );
-}
-
-#[test]
-fn exposes_data_layout_descriptors_for_named_types() {
-    let program = compile_program(
-        &[(
-            "main",
-            r"
-            let Maybe := data { | Some(Int) | None };
-            export let answer () : Int := 0;
-        ",
-        )],
-        "main",
-    );
-
-    let maybe_ty = program
-        .artifact()
-        .types
-        .iter()
-        .find_map(|(id, descriptor)| {
-            (program.string_text(descriptor.name) == "main::Maybe").then_some(id)
-        })
-        .expect("type id for Maybe");
-    let layout = program
-        .type_data_layout(maybe_ty)
-        .expect("data layout for Maybe");
-    assert_eq!(layout.name.as_ref(), "main::Maybe");
-    assert_eq!(layout.variant_count, 2);
-    assert_eq!(layout.field_count, 1);
-    assert!(!layout.is_single_variant_product());
-    assert_eq!(layout.repr_kind, None);
-    assert_eq!(
-        program.type_abi_kind(maybe_ty),
-        ProgramTypeAbiKind::Unsupported
-    );
+    vm.call_export("answer", &[]).expect_err(reason)
 }
 
 fn alloc_named_type(artifact: &mut Artifact, full_name: &str) -> TypeId {
@@ -565,39 +156,6 @@ fn alloc_simple_type(artifact: &mut Artifact, name: &str, kind: TypeTermKind) ->
     let name_id = artifact.intern_string(name);
     let term = artifact.intern_string(&TypeTerm::new(kind).to_json());
     artifact.types.alloc(TypeDescriptor::new(name_id, term))
-}
-
-#[test]
-fn classifies_fixed_width_native_abi_kinds() {
-    let mut artifact = Artifact::new();
-    let int32 = alloc_simple_type(&mut artifact, "Int32", TypeTermKind::Int32);
-    let nat64 = alloc_simple_type(&mut artifact, "Nat64", TypeTermKind::Nat64);
-    let float32 = alloc_simple_type(&mut artifact, "Float32", TypeTermKind::Float32);
-    let float64 = alloc_simple_type(&mut artifact, "Float64", TypeTermKind::Float64);
-    let program = Program::from_artifact(artifact).expect("program load should succeed");
-
-    assert_eq!(
-        program.type_abi_kind(int32),
-        ProgramTypeAbiKind::Int {
-            signed: true,
-            bits: 32
-        }
-    );
-    assert_eq!(
-        program.type_abi_kind(nat64),
-        ProgramTypeAbiKind::Int {
-            signed: false,
-            bits: 64
-        }
-    );
-    assert_eq!(
-        program.type_abi_kind(float32),
-        ProgramTypeAbiKind::Float { bits: 32 }
-    );
-    assert_eq!(
-        program.type_abi_kind(float64),
-        ProgramTypeAbiKind::Float { bits: 64 }
-    );
 }
 
 fn alloc_named_data(
@@ -624,66 +182,627 @@ fn alloc_named_data(
     ty
 }
 
-#[test]
-fn classifies_named_data_native_abi_kinds() {
-    let mut artifact = Artifact::new();
-    let repr_c = artifact.intern_string("c");
-    let transparent = artifact.intern_string("transparent");
-    let point_variant_name = artifact.intern_string("Point");
-    let point_field_ty = alloc_named_type(&mut artifact, "main::Point");
-    let handle_variant_name = artifact.intern_string("Handle");
-    let handle_field_ty = alloc_named_type(&mut artifact, "main::Handle");
-    let none_variant_name = artifact.intern_string("None");
-    let some_variant_name = artifact.intern_string("Some");
-    let maybe_self_ty = alloc_named_type(&mut artifact, "main::Maybe");
-    let point_ty = alloc_named_data(
-        &mut artifact,
-        "main::Point",
-        Box::new([DataVariantDescriptor::new(
-            point_variant_name,
-            0,
-            Box::new([point_field_ty; 2]),
-        )]),
-        Some(repr_c),
-        Some(8),
-        Some(4),
-    );
-    let handle_ty = alloc_named_data(
-        &mut artifact,
-        "main::Handle",
-        Box::new([DataVariantDescriptor::new(
-            handle_variant_name,
-            0,
-            Box::new([handle_field_ty]),
-        )]),
-        Some(transparent),
-        None,
-        None,
-    );
-    let maybe_ty = alloc_named_data(
-        &mut artifact,
-        "main::Maybe",
-        Box::new([
-            DataVariantDescriptor::new(none_variant_name, 0, Box::new([])),
-            DataVariantDescriptor::new(some_variant_name, 1, Box::new([maybe_self_ty])),
-        ]),
-        Some(repr_c),
-        None,
-        None,
-    );
+mod success {
+    use super::*;
 
-    let program = Program::from_artifact(artifact).expect("program load should succeed");
+    #[test]
+    fn loads_program_and_lists_exports() {
+        let program = compile_program(
+            &[(
+                "main",
+                "export let answer () : Int := 42; export let base : Int := 1;",
+            )],
+            "main",
+        );
 
-    assert_eq!(
-        program.type_abi_kind(point_ty),
-        ProgramTypeAbiKind::DataReprCProduct
-    );
-    assert_eq!(
-        program.type_abi_kind(handle_ty),
-        ProgramTypeAbiKind::DataTransparent
-    );
-    assert_eq!(
-        program.type_abi_kind(maybe_ty),
-        ProgramTypeAbiKind::Unsupported
-    );
+        assert_eq!(program.export_count(), 2);
+        assert!(
+            program
+                .exports()
+                .iter()
+                .any(|export| export.name.as_ref() == "answer")
+        );
+    }
+
+    #[test]
+    fn initializes_and_calls_export() {
+        let program = compile_program(&[("main", "export let answer () : Int := 40 + 2;")], "main");
+
+        let mut vm = Vm::with_rejecting_host(program, VmOptions);
+        vm.initialize().expect("vm init should succeed");
+        let value = vm
+            .call_export("answer", &[])
+            .expect("export call should succeed");
+
+        assert_eq!(value, Value::Int(42));
+    }
+
+    #[test]
+    fn garbage_collection_preserves_returned_external_values() {
+        let program = compile_program(
+            &[("main", "export let answer () : [2]Int := [1, 2];")],
+            "main",
+        );
+
+        let mut vm = Vm::with_rejecting_host(program, VmOptions);
+        vm.initialize().expect("vm init should succeed");
+        let value = vm
+            .call_export("answer", &[])
+            .expect("array return should succeed");
+        let before = vm.heap_allocated_bytes();
+        let stats = vm.collect_garbage();
+
+        assert!(before > 0);
+        assert_eq!(stats.after_bytes, vm.heap_allocated_bytes());
+        let ValueView::Seq(seq) = vm.inspect(&value) else {
+            panic!("returned value should remain a sequence");
+        };
+        assert_eq!(seq.len(), 2);
+    }
+
+    #[test]
+    fn executes_closure_and_recursive_callable() {
+        let program = compile_program(
+            &[(
+                "main",
+                r"
+            let apply (f : Int -> Int, x : Int) : Int := f(x);
+            export let answer (n : Int) : Int := (
+              let base : Int := 1;
+              let rec loop (x : Int) : Int := match x (| 0 => base | _ => loop(x - 1));
+              let add_base (y : Int) : Int := y + 41;
+              apply(add_base, loop(n))
+            );
+        ",
+            )],
+            "main",
+        );
+
+        let mut vm = Vm::with_rejecting_host(program, VmOptions);
+        vm.initialize().expect("vm init should succeed");
+        let value = vm
+            .call_export("answer", &[Value::Int(3)])
+            .expect("recursive closure call should succeed");
+
+        assert_eq!(value, Value::Int(42));
+    }
+
+    #[test]
+    fn executes_record_projection_and_update() {
+        let program = compile_program(
+            &[(
+                "main",
+                r"
+            export let answer () : Int := (
+              let point := { x := 1, y := 2 };
+              let updated := { ...point, x := 40 };
+              updated.x + point.y
+            );
+        ",
+            )],
+            "main",
+        );
+
+        let mut vm = Vm::with_rejecting_host(program, VmOptions);
+        vm.initialize().expect("vm init should succeed");
+        let value = vm
+            .call_export("answer", &[])
+            .expect("record call should succeed");
+
+        assert_eq!(value, Value::Int(42));
+    }
+
+    #[test]
+    fn executes_string_order_comparisons() {
+        let program = compile_program(
+            &[(
+                "main",
+                r#"
+            export let less () : Bool := "a" < "b";
+            export let greater () : Bool := "é" > "z";
+            export let equal () : Bool := "same" <= "same";
+        "#,
+            )],
+            "main",
+        );
+
+        let mut vm = Vm::with_rejecting_host(program, VmOptions);
+        vm.initialize().expect("vm init should succeed");
+
+        let less = vm.call_export("less", &[]).expect("less");
+        assert_eq!(
+            render_value_view(vm.inspect(&less)).as_deref(),
+            Some(".True")
+        );
+        let greater = vm.call_export("greater", &[]).expect("greater");
+        assert_eq!(
+            render_value_view(vm.inspect(&greater)).as_deref(),
+            Some(".True")
+        );
+        let equal = vm.call_export("equal", &[]).expect("equal");
+        assert_eq!(
+            render_value_view(vm.inspect(&equal)).as_deref(),
+            Some(".True")
+        );
+    }
+
+    #[test]
+    fn executes_multi_index_get_and_set() {
+        let program = compile_program(
+            &[(
+                "main",
+                r"
+            export let touch (grid : mut [2][2]Int) : Int := (
+              grid.[0, 1] := 42;
+              grid.[0, 1]
+            );
+        ",
+            )],
+            "main",
+        );
+
+        let outer_ty = program
+            .artifact()
+            .types
+            .iter()
+            .next()
+            .map(|(id, _)| id)
+            .expect("type id");
+        let mut vm = Vm::with_rejecting_host(program, VmOptions);
+        vm.initialize().expect("vm init should succeed");
+        let inner = Value::sequence(outer_ty, vec![Value::Int(1), Value::Int(2)]);
+        let grid = Value::sequence(outer_ty, vec![inner.clone(), inner]);
+        let value = vm
+            .call_export("touch", &[grid])
+            .expect("multi-index call should succeed");
+
+        assert_eq!(value, Value::Int(42));
+    }
+
+    #[test]
+    fn loads_dynamic_module_through_host() {
+        let dep = compile_program(
+            &[(
+                "dep",
+                "export let answer () : Int := 42; export let base : Int := 41;",
+            )],
+            "dep",
+        );
+        let main = compile_program(&[("main", "export let root () : Int := 0;")], "main");
+
+        let mut loader = TestLoader::default();
+        let _ = loader.modules.insert("dep".into(), dep);
+        let mut vm = Vm::new(main, loader, TestHost, VmOptions);
+        vm.initialize().expect("vm init should succeed");
+        let module = vm
+            .load_module("dep")
+            .expect("non-literal import should succeed");
+
+        assert_eq!(
+            vm.lookup_module_export(&module, "base")
+                .expect("module global export should resolve"),
+            Value::Int(41)
+        );
+        assert_eq!(
+            vm.call_module_export(&module, "answer", &[])
+                .expect("module callable export should succeed"),
+            Value::Int(42)
+        );
+        assert_eq!(
+            vm.load_module("dep")
+                .expect("cached dynamic load should succeed"),
+            module
+        );
+    }
+
+    #[test]
+    fn handles_effect_value_clause_and_resume() {
+        let program = compile_program(
+            &[(
+                "main",
+                r"
+            let Console := effect { let readLine () : Int; };
+            export let answer () : Int :=
+              handle request Console.readLine() using Console {
+                value => value + 1;
+                readLine(k) => resume 41;
+              };
+        ",
+            )],
+            "main",
+        );
+
+        let mut vm = Vm::with_rejecting_host(program, VmOptions);
+        vm.initialize().expect("vm init should succeed");
+        let value = vm
+            .call_export("answer", &[])
+            .expect("handled effect should succeed");
+
+        assert_eq!(value, Value::Int(42));
+    }
+
+    #[test]
+    fn reuses_handler_value_and_executes_range_membership_and_spread() {
+        let program = compile_program(
+            &[(
+                "main",
+                r#"
+            let Core := import "musi:core";
+            let Bool := Core.Bool;
+            let Int := Core.Int;
+            let Rangeable := Core.Rangeable;
+            let Console := effect { let readLine () : Int; };
+            let ConsoleHandler := using Console {
+              value => value + 1;
+              readLine(k) => resume 41;
+            };
+            export let handled () : Int := handle request Console.readLine() using ConsoleHandler;
+            export let contains () : Bool := (
+              let span := 1 ..< 4;
+              2 in span
+            );
+            export let ranged () : Int := (
+              let span := 1 ..< 4;
+              let xs := [0, ...span, 4];
+              xs.[2]
+            );
+        "#,
+            )],
+            "main",
+        );
+
+        let mut vm = Vm::with_rejecting_host(program, VmOptions);
+        vm.initialize().expect("vm init should succeed");
+        let handled = vm
+            .call_export("handled", &[])
+            .expect("handler value call should succeed");
+        let contains = vm
+            .call_export("contains", &[])
+            .expect("range membership call should succeed");
+        let ranged = vm
+            .call_export("ranged", &[])
+            .expect("range call should succeed");
+
+        assert_eq!(handled, Value::Int(42));
+        assert_eq!(
+            render_value_view(vm.inspect(&contains)).as_deref(),
+            Some(".True")
+        );
+        assert_eq!(ranged, Value::Int(2));
+    }
+
+    #[test]
+    fn exposes_typed_foreign_and_effect_signatures_to_host() {
+        let program = compile_program(
+            &[(
+                "main",
+                r#"
+            foreign "c" (
+              let puts (value : Int) : Int;
+            );
+            let Console := effect { @comptimeSafe let readLine (prompt : String) : Int; };
+            export let call_puts () : Int := unsafe { puts(1); };
+            export let call_readLine () : Int := request Console.readLine(">");
+        "#,
+            )],
+            "main",
+        );
+
+        let log = Rc::new(RefCell::new(SignatureLog::default()));
+        let host = SignatureHost {
+            log: Rc::clone(&log),
+        };
+        let mut vm = Vm::new(program, RejectingLoader, host, VmOptions);
+        vm.initialize().expect("vm init should succeed");
+
+        let foreign_value = vm
+            .call_export("call_puts", &[])
+            .expect("foreign call should succeed");
+        let effect_value = vm
+            .call_export("call_readLine", &[])
+            .expect("effect call should succeed");
+
+        assert_eq!(foreign_value, Value::Int(7));
+        assert_eq!(effect_value, Value::Int(42));
+        let log = log.borrow();
+        assert_eq!(log.foreign_calls.len(), 1);
+        assert_eq!(log.foreign_calls[0].0.as_ref(), "main::puts");
+        assert_eq!(log.foreign_calls[0].1.len(), 1);
+        assert_eq!(log.foreign_calls[0].1[0].as_ref(), "Int");
+        assert_eq!(log.foreign_calls[0].2.as_ref(), "Int");
+        assert_eq!(log.effect_calls.len(), 1);
+        assert_eq!(log.effect_calls[0].0.as_ref(), "main::Console");
+        assert_eq!(log.effect_calls[0].1.as_ref(), "readLine");
+        assert_eq!(log.effect_calls[0].2.len(), 1);
+        assert_eq!(log.effect_calls[0].2[0].as_ref(), "String");
+        assert_eq!(log.effect_calls[0].3.as_ref(), "Int");
+        assert!(log.effect_calls[0].4);
+    }
+
+    #[test]
+    fn inspects_cptr_values() {
+        let program = compile_program(&[("main", "export let answer () : Int := 0;")], "main");
+        let vm = Vm::with_rejecting_host(program, VmOptions);
+        let value = Value::c_ptr(0xDEAD_BEEF);
+
+        assert!(matches!(vm.inspect(&value), ValueView::CPtr(0xDEAD_BEEF)));
+    }
+
+    #[test]
+    fn renders_bool_values_as_variants() {
+        assert_eq!(
+            render_value_view(ValueView::Bool(true)).as_deref(),
+            Some(".True")
+        );
+        assert_eq!(
+            render_value_view(ValueView::Bool(false)).as_deref(),
+            Some(".False")
+        );
+    }
+
+    #[test]
+    fn exposes_data_layout_descriptors_for_named_types() {
+        let program = compile_program(
+            &[(
+                "main",
+                r"
+            let Maybe := data { | Some(Int) | None };
+            export let answer () : Int := 0;
+        ",
+            )],
+            "main",
+        );
+
+        let maybe_ty = program
+            .artifact()
+            .types
+            .iter()
+            .find_map(|(id, descriptor)| {
+                (program.string_text(descriptor.name) == "main::Maybe").then_some(id)
+            })
+            .expect("type id for Maybe");
+        let layout = program
+            .type_data_layout(maybe_ty)
+            .expect("data layout for Maybe");
+        assert_eq!(layout.name.as_ref(), "main::Maybe");
+        assert_eq!(layout.variant_count, 2);
+        assert_eq!(layout.field_count, 1);
+        assert!(!layout.is_single_variant_product());
+        assert_eq!(layout.repr_kind, None);
+        assert_eq!(
+            program.type_abi_kind(maybe_ty),
+            ProgramTypeAbiKind::Unsupported
+        );
+    }
+
+    #[test]
+    fn classifies_fixed_width_native_abi_kinds() {
+        let mut artifact = Artifact::new();
+        let int32 = alloc_simple_type(&mut artifact, "Int32", TypeTermKind::Int32);
+        let nat64 = alloc_simple_type(&mut artifact, "Nat64", TypeTermKind::Nat64);
+        let float32 = alloc_simple_type(&mut artifact, "Float32", TypeTermKind::Float32);
+        let float64 = alloc_simple_type(&mut artifact, "Float64", TypeTermKind::Float64);
+        let program = Program::from_artifact(artifact).expect("program load should succeed");
+
+        assert_eq!(
+            program.type_abi_kind(int32),
+            ProgramTypeAbiKind::Int {
+                signed: true,
+                bits: 32
+            }
+        );
+        assert_eq!(
+            program.type_abi_kind(nat64),
+            ProgramTypeAbiKind::Int {
+                signed: false,
+                bits: 64
+            }
+        );
+        assert_eq!(
+            program.type_abi_kind(float32),
+            ProgramTypeAbiKind::Float { bits: 32 }
+        );
+        assert_eq!(
+            program.type_abi_kind(float64),
+            ProgramTypeAbiKind::Float { bits: 64 }
+        );
+    }
+
+    #[test]
+    fn classifies_named_data_native_abi_kinds() {
+        let mut artifact = Artifact::new();
+        let repr_c = artifact.intern_string("c");
+        let transparent = artifact.intern_string("transparent");
+        let point_variant_name = artifact.intern_string("Point");
+        let point_field_ty = alloc_named_type(&mut artifact, "main::Point");
+        let handle_variant_name = artifact.intern_string("Handle");
+        let handle_field_ty = alloc_named_type(&mut artifact, "main::Handle");
+        let none_variant_name = artifact.intern_string("None");
+        let some_variant_name = artifact.intern_string("Some");
+        let maybe_self_ty = alloc_named_type(&mut artifact, "main::Maybe");
+        let point_ty = alloc_named_data(
+            &mut artifact,
+            "main::Point",
+            Box::new([DataVariantDescriptor::new(
+                point_variant_name,
+                0,
+                Box::new([point_field_ty; 2]),
+            )]),
+            Some(repr_c),
+            Some(8),
+            Some(4),
+        );
+        let handle_ty = alloc_named_data(
+            &mut artifact,
+            "main::Handle",
+            Box::new([DataVariantDescriptor::new(
+                handle_variant_name,
+                0,
+                Box::new([handle_field_ty]),
+            )]),
+            Some(transparent),
+            None,
+            None,
+        );
+        let maybe_ty = alloc_named_data(
+            &mut artifact,
+            "main::Maybe",
+            Box::new([
+                DataVariantDescriptor::new(none_variant_name, 0, Box::new([])),
+                DataVariantDescriptor::new(some_variant_name, 1, Box::new([maybe_self_ty])),
+            ]),
+            Some(repr_c),
+            None,
+            None,
+        );
+
+        let program = Program::from_artifact(artifact).expect("program load should succeed");
+
+        assert_eq!(
+            program.type_abi_kind(point_ty),
+            ProgramTypeAbiKind::DataReprCProduct
+        );
+        assert_eq!(
+            program.type_abi_kind(handle_ty),
+            ProgramTypeAbiKind::DataTransparent
+        );
+        assert_eq!(
+            program.type_abi_kind(maybe_ty),
+            ProgramTypeAbiKind::Unsupported
+        );
+    }
+}
+
+mod failure {
+    use super::*;
+
+    #[test]
+    fn instruction_budget_stops_runaway_execution() {
+        let program = compile_runaway_program();
+
+        let mut vm = Vm::with_rejecting_host(program, VmOptions.with_instruction_budget(64));
+        vm.initialize().expect("vm init should succeed");
+        let error = vm
+            .call_export("answer", &[])
+            .expect_err("runaway execution should exhaust instruction budget");
+
+        assert!(matches!(
+            error.kind(),
+            VmErrorKind::InstructionBudgetExhausted { budget: 64 }
+        ));
+    }
+
+    #[test]
+    fn stack_frame_limit_stops_runaway_recursion() {
+        let program = compile_runaway_program();
+
+        let mut vm = Vm::with_rejecting_host(program, VmOptions.with_stack_frame_limit(8));
+        vm.initialize().expect("vm init should succeed");
+        let error = vm
+            .call_export("answer", &[])
+            .expect_err("runaway recursion should exceed stack frame limit");
+
+        assert!(matches!(
+            error.kind(),
+            VmErrorKind::StackFrameLimitExceeded {
+                frames: 9,
+                limit: 8
+            }
+        ));
+    }
+
+    #[test]
+    fn heap_object_limit_rejects_large_runtime_object() {
+        let error = call_answer_error(
+            r#"export let answer () : String := "abcdef";"#,
+            VmOptions.with_max_object_bytes(8),
+            "large string should exceed object limit",
+        );
+
+        assert!(matches!(
+            error.kind(),
+            VmErrorKind::HeapObjectTooLarge { limit: 8, .. }
+        ));
+    }
+
+    #[test]
+    fn heap_limit_rejects_live_graph_after_collection() {
+        let error = call_answer_error(
+            "export let answer () : [2]Int := [1, 2];",
+            VmOptions.with_heap_limit_bytes(16),
+            "live array should exceed heap limit",
+        );
+
+        assert!(matches!(
+            error.kind(),
+            VmErrorKind::HeapLimitExceeded { limit: 16, .. }
+        ));
+    }
+
+    #[test]
+    fn rejects_opaque_exports_from_root_and_dynamic_modules() {
+        let dep = compile_program(
+            &[(
+                "dep",
+                "export opaque let Hidden := data { | Hidden(Int) }; export let answer () : Int := 42;",
+            )],
+            "dep",
+        );
+        let main = compile_program(
+            &[(
+                "main",
+                "export opaque let Secret := data { | Secret(Int) }; export let root () : Int := 0;",
+            )],
+            "main",
+        );
+
+        let mut loader = TestLoader::default();
+        let _ = loader.modules.insert("dep".into(), dep);
+        let mut vm = Vm::new(main, loader, TestHost, VmOptions);
+        vm.initialize().expect("vm init should succeed");
+
+        let err = vm.lookup_export("Secret").unwrap_err();
+        assert!(matches!(
+            err.kind(),
+            VmErrorKind::OpaqueExport { module, export }
+                if module.as_ref() == "<root>" && export.as_ref() == "Secret"
+        ));
+
+        let module = vm
+            .load_module("dep")
+            .expect("non-literal import should succeed");
+        let err = vm.lookup_module_export(&module, "Hidden").unwrap_err();
+        assert!(matches!(
+            err.kind(),
+            VmErrorKind::OpaqueExport { module, export }
+                if module.as_ref() == "dep" && export.as_ref() == "Hidden"
+        ));
+    }
+
+    #[test]
+    fn detects_module_init_cycle() {
+        let main = compile_program(&[("main", "export let root () : Int := 0;")], "main");
+        let mut dep_artifact = Artifact::new();
+        let init_name = dep_artifact.intern_string("dep::__module_init");
+        let spec = dep_artifact.intern_string("dep");
+        let _ = dep_artifact.procedures.alloc(ProcedureDescriptor::new(
+            init_name,
+            0,
+            0,
+            Box::new([
+                CodeEntry::Instruction(Instruction::new(Opcode::LdStr, Operand::String(spec))),
+                CodeEntry::Instruction(Instruction::new(Opcode::ModLoad, Operand::None)),
+                CodeEntry::Instruction(Instruction::new(Opcode::Ret, Operand::None)),
+            ]),
+        ));
+        let dep = Program::from_artifact(dep_artifact).expect("program load should succeed");
+
+        let mut loader = TestLoader::default();
+        let _ = loader.modules.insert("dep".into(), dep);
+        let mut vm = Vm::new(main, loader, TestHost, VmOptions);
+        vm.initialize().unwrap();
+        let err = vm.load_module("dep").unwrap_err();
+
+        assert!(matches!(err.kind(), VmErrorKind::ModuleInitCycle { .. }));
+    }
 }

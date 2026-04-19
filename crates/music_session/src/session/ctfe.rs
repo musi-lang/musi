@@ -334,7 +334,7 @@ fn closure_to_comptime(
         .into_boxed_slice();
     Ok(ComptimeValue::Closure(ComptimeClosureValue {
         module,
-        name: program.method_source_name(closure.method()).into(),
+        name: program.procedure_source_name(closure.procedure()).into(),
         captures,
     }))
 }

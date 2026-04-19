@@ -109,6 +109,9 @@ fn validate_surface_ty(types: &[SurfaceTy], ty: &SurfaceTy, diags: &mut IrDiagLi
             validate_surface_ty_id(types, *output, diags);
         }
         SurfaceTyKind::Mut { inner } => validate_surface_ty_id(types, *inner, diags),
+        SurfaceTyKind::AnyClass { class } | SurfaceTyKind::SomeClass { class } => {
+            validate_surface_ty_id(types, *class, diags);
+        }
         SurfaceTyKind::Record { fields } => {
             for field in fields {
                 validate_surface_ty_id(types, field.ty, diags);

@@ -7,16 +7,12 @@ mod attrs;
 mod collect;
 mod const_eval;
 mod decls;
-mod expr_aggregates;
-mod expr_calls;
 mod exprs;
 mod normalize;
 mod pats;
 pub mod schemes;
 mod state;
 mod surface;
-mod surface_exports;
-mod surface_types;
 mod variant_payload;
 
 use state::{

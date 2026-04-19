@@ -1,8 +1,7 @@
 import { siteCopy } from "../../lib/site-copy";
 import type { AppRoute } from "../../routes";
-import { InlineAction } from "../../ui/actions";
-import { PageHeader } from "../../ui/page-header";
-import { Surface } from "../../ui/surface";
+import { MachinesGroupbox, MachinesSection } from "../../ui/machines";
+import { SiteHeading } from "../../ui/site-heading";
 
 export function CommunityPage(_props: { route: AppRoute }) {
 	const copy = siteCopy.community;
@@ -19,43 +18,40 @@ export function CommunityPage(_props: { route: AppRoute }) {
 		},
 	];
 	return (
-		<div className="page-stack">
-			<PageHeader
+		<div className="site-stack">
+			<SiteHeading
 				eyebrow={copy.eyebrow}
 				title={copy.title}
 				description={copy.description}
 			/>
-			<Surface tone="well" className="section-panel section-panel-structured">
-				<div className="section-heading-row section-heading-bar">
-					<div>
-						<div className="eyebrow">{copy.eyebrow}</div>
-						<h2>{siteCopy.ui.communityLinks}</h2>
-					</div>
-				</div>
+			<MachinesSection kicker={copy.eyebrow} title={siteCopy.ui.communityLinks}>
 				<section
-					className="portal-grid"
+					className="mx-grid site-grid--three"
 					aria-label={siteCopy.ui.communityLinks}
 				>
 					{copy.sections.map((section) => (
-						<Surface
+						<MachinesGroupbox
 							key={section.title}
-							tone="raised"
-							className="portal-card portal-card-raised"
+							legend={section.title}
+							className="community-link-group"
 						>
-							<div className="eyebrow">{section.title}</div>
-							<p>{section.copy}</p>
-							<InlineAction href={section.href}>{section.label}</InlineAction>
-						</Surface>
+							<a href={section.href} className="community-link-box">
+								<span className="mx-kicker">{section.label}</span>
+								<span>{section.copy}</span>
+							</a>
+						</MachinesGroupbox>
 					))}
 				</section>
-			</Surface>
-			<section className="status-strip" aria-label="Community notes">
+			</MachinesSection>
+			<section className="mx-grid site-grid--two" aria-label="Project notes">
 				{communityNotes.map((item) => (
-					<Surface key={item.label} tone="panel" className="status-card">
-						<div className="doc-row-meta">{item.label}</div>
-						<strong>{item.value}</strong>
-						<span>{item.copy}</span>
-					</Surface>
+					<MachinesGroupbox
+						key={item.label}
+						legend={item.value}
+						className="mx-groupbox--compact community-note-group"
+					>
+						<p>{item.copy}</p>
+					</MachinesGroupbox>
 				))}
 			</section>
 		</div>

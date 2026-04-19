@@ -1,39 +1,90 @@
 mod cli;
+mod diag;
 
+use std::error::Error;
+use std::fmt::{self, Display, Formatter};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::Parser;
-use cli::{Cli, Command, DiagnosticsFormatArg};
+use cli::{Cli, Command, DiagnosticsFormatArg, DisasmLevelArg};
+use diag::{MusicCliDiagKind, music_cli_error_kind};
 use musi_tooling::{
     CliDiagnosticsReport, DiagnosticsFormat, ToolingError, load_direct_graph, read_artifact_bytes,
     render_session_error, render_tooling_error, session_error_report, tooling_error_report,
     write_artifact_bytes,
 };
 use musi_vm::{Program, Value, Vm, VmError, VmOptions, render_value_view};
+use music_base::diag::{CatalogDiagnostic, DiagContext, display_catalog_or_source};
 use music_seam::descriptor::ExportTarget;
-use music_seam::{AssemblyError, BINARY_VERSION, decode_binary, format_text};
+use music_seam::{
+    AssemblyError, BINARY_VERSION, decode_binary, format_hil_projection, format_text,
+};
 use music_session::{Session, SessionError, SessionOptions};
-use thiserror::Error;
 
 type MusicResult<T = ()> = Result<T, MusicError>;
 
-#[derive(Debug, Error)]
+#[derive(Debug)]
 enum MusicError {
-    #[error(transparent)]
-    DirectToolingFailed(#[from] Box<ToolingError>),
-    #[error(transparent)]
-    SessionCompilationFailed(#[from] Box<SessionError>),
-    #[error(transparent)]
-    ArtifactTransportFailed(#[from] Box<AssemblyError>),
-    #[error(transparent)]
-    VmExecutionFailed(#[from] Box<VmError>),
-    #[error(transparent)]
-    JsonSerializationFailed(#[from] serde_json::Error),
-    #[error("run arguments unsupported")]
-    RunArgsUnsupported,
-    #[error("check command failed")]
+    DirectToolingFailed(Box<ToolingError>),
+    SessionCompilationFailed(Box<SessionError>),
+    ArtifactTransportFailed(Box<AssemblyError>),
+    VmExecutionFailed(Box<VmError>),
+    JsonSerializationFailed(serde_json::Error),
+    UnsupportedRunArgs { argument: String },
     CheckCommandFailed,
+}
+
+impl MusicError {
+    fn diagnostic(&self) -> Option<CatalogDiagnostic<MusicCliDiagKind>> {
+        Some(CatalogDiagnostic::new(
+            self.diag_kind()?,
+            self.diag_context(),
+        ))
+    }
+
+    const fn diag_kind(&self) -> Option<MusicCliDiagKind> {
+        music_cli_error_kind(self)
+    }
+
+    fn diag_context(&self) -> DiagContext {
+        match self {
+            Self::UnsupportedRunArgs { argument } => DiagContext::new().with("argument", argument),
+            _ => DiagContext::new(),
+        }
+    }
+}
+
+impl Display for MusicError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        display_catalog_or_source(
+            self.diagnostic(),
+            Error::source(self),
+            "music CLI diagnostic missing",
+            f,
+        )
+    }
+}
+
+impl Error for MusicError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        if let Self::DirectToolingFailed(source) = self {
+            return Some(source);
+        }
+        if let Self::SessionCompilationFailed(source) = self {
+            return Some(source);
+        }
+        if let Self::ArtifactTransportFailed(source) = self {
+            return Some(source);
+        }
+        if let Self::VmExecutionFailed(source) = self {
+            return Some(source);
+        }
+        if let Self::JsonSerializationFailed(source) = self {
+            return Some(source);
+        }
+        None
+    }
 }
 
 impl From<ToolingError> for MusicError {
@@ -60,6 +111,12 @@ impl From<VmError> for MusicError {
     }
 }
 
+impl From<serde_json::Error> for MusicError {
+    fn from(value: serde_json::Error) -> Self {
+        Self::JsonSerializationFailed(value)
+    }
+}
+
 fn main() -> ExitCode {
     match run() {
         Ok(()) => ExitCode::SUCCESS,
@@ -81,7 +138,7 @@ fn run() -> MusicResult {
         Command::Build { path, out } => build(&path, out.as_deref()),
         Command::Run { path, args } => run_target(&path, &args),
         Command::Info { path } => print_artifact_metadata(&path),
-        Command::Disasm { path } => disasm(&path),
+        Command::Disasm { path, level } => disasm(&path, level),
     }
 }
 
@@ -114,8 +171,10 @@ fn build(path: &Path, out: Option<&Path>) -> MusicResult {
 }
 
 fn run_target(path: &Path, args: &[String]) -> MusicResult {
-    if !args.is_empty() {
-        return Err(MusicError::RunArgsUnsupported);
+    if let Some(argument) = args.first() {
+        return Err(MusicError::UnsupportedRunArgs {
+            argument: argument.clone(),
+        });
     }
     if path.extension().is_some_and(|ext| ext == "seam") {
         let bytes = read_artifact_bytes(path)?;
@@ -145,7 +204,7 @@ fn print_artifact_metadata(path: &Path) -> MusicResult {
     println!("strings: {}", artifact.strings.len());
     println!("types: {}", artifact.types.len());
     println!("globals: {}", artifact.globals.len());
-    println!("methods: {}", artifact.methods.len());
+    println!("procedures: {}", artifact.procedures.len());
     println!("effects: {}", artifact.effects.len());
     println!("classes: {}", artifact.classes.len());
     println!("foreigns: {}", artifact.foreigns.len());
@@ -163,10 +222,13 @@ fn print_artifact_metadata(path: &Path) -> MusicResult {
     Ok(())
 }
 
-fn disasm(path: &Path) -> MusicResult {
+fn disasm(path: &Path, level: DisasmLevelArg) -> MusicResult {
     let bytes = artifact_bytes_for(path)?;
     let artifact = decode_binary(&bytes)?;
-    print!("{}", format_text(&artifact));
+    match level {
+        DisasmLevelArg::Hil => print!("{}", format_hil_projection(&artifact)),
+        DisasmLevelArg::Seam => print!("{}", format_text(&artifact)),
+    }
     Ok(())
 }
 
@@ -212,7 +274,7 @@ fn default_seam_path(path: &Path) -> PathBuf {
 
 const fn export_kind_name(target: ExportTarget) -> &'static str {
     match target {
-        ExportTarget::Method(_) => "method",
+        ExportTarget::Procedure(_) => "procedure",
         ExportTarget::Global(_) => "global",
         ExportTarget::Foreign(_) => "foreign",
         ExportTarget::Type(_) => "type",

@@ -24,6 +24,17 @@ export const effectsRuntimePages = [
 		questions: [],
 	},
 	{
+		id: "errors-and-recovery",
+		partId: "effects-runtime",
+		path: "/docs/book/effects-runtime/errors-and-recovery",
+		aliases: [
+			"/docs/language/effects-runtime/errors-and-recovery",
+			"/learn/language/effects-runtime/errors-and-recovery",
+		],
+		sourcePath: "docs/what/language/effects-runtime/errors-and-recovery.md",
+		questions: [],
+	},
+	{
 		id: "handlers",
 		partId: "effects-runtime",
 		path: "/docs/book/effects-runtime/handlers",

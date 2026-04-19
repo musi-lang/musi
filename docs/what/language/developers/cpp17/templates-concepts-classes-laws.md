@@ -1,39 +1,31 @@
 ---
 title: "Templates, Concepts, Classes, and Laws"
-description: "Translate C++17 templates and behavior constraints into Musi type parameters, classes, and laws."
+description: "Read Templates, Concepts, Classes, and Laws as a C++17 habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "C++ Developers"
 order: 10
 slug: "templates-concepts-classes-laws"
-summary: "Use type parameters for reusable values and classes for reusable behavior."
+summary: "Translate the C++17 habit, then use the Musi Book for the full rule."
 ---
 
-# Templates, Concepts, Classes, and Laws
+C++ templates and concepts can mix type construction, overload selection, and behavior requirements. Musi splits that apart: data builds values, classes name required behavior, instances supply it.
 
-C++17 templates express reusable value-level operations:
+{{compare:cpp17-templates-concepts-classes-laws}}
 
-```cpp
-template <class T>
-auto identity(T input) -> T {
-    return input;
-}
+## Reading Templates, Concepts, Classes, and Laws from C++17
 
-const auto answer = identity(21);
-```
+On the Musi side, Musi classes name behavior a type can provide, instances provide it, and laws document promises callers rely on. Read the shared example through C++17 eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-Musi uses type parameters for reusable values.
+## False friend
 
-{{snippet:cpp17-generic-function}}
+Do not confuse a Musi class with stored object state, inheritance, or a metatable. Shape and behavior are separate. For a C++ reader, the trap is turning every Musi value into a class-shaped design; Musi `class` is closer to a concept or trait than a C++ class; records/data store shape, instances satisfy behavior.
 
-C++ expresses required behavior through templates, traits, and concepts in later standards:
+## When this pays off
 
-```cpp
-template <class T>
-auto wheels(const T& vehicle) -> int {
-    return vehicle.wheels();
-}
-```
+Use classes when many types share an operation such as compare, show, step, encode, or measure. The C++17 instinct still helps here: Keep the C++ habit of asking which operation is generic and which value owns shape.
 
-Musi classes state the required operations and laws directly.
+## Keep close
 
-{{snippet:cpp17-concept-class-law}}
+- [Generics](/learn/book/types/generics)
+- [Classes](/learn/book/abstractions/classes)
+- [Laws](/learn/book/abstractions/laws)

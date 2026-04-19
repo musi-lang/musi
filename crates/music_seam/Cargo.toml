@@ -9,8 +9,8 @@ publish.workspace = true
 
 [dependencies]
 music_arena = { path = "../music_arena" }
+music_base = { path = "../music_base" }
 music_term = { path = "../music_term" }
-thiserror = { workspace = true }
 
 [lints]
 workspace = true

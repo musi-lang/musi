@@ -1,29 +1,31 @@
 ---
 title: "Testing and Tooling"
-description: "Translate Python test habits into Musi std testing helpers and command-line checks."
+description: "Read Testing and Tooling as a Python habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Python Developers"
 order: 12
 slug: "testing-tooling"
-summary: "Use @std/testing to keep tests close to the behavior they describe."
+summary: "Translate the Python habit, then use the Musi Book for the full rule."
 ---
 
-Python tests often name a small behavior and assert the result:
+A Python reader brings habits from names, dictionaries, classes, protocols, exceptions, None, imports, and duck typing. That helps with code around domain words before machinery, but the Musi page asks a narrower question: what contract should this tests as domain promises example make visible?
 
-```python
-def default_port() -> int:
-    return 8080
+{{compare:python-testing-tooling}}
 
-def test_default_port() -> None:
-    assert default_port() == 8080
-```
+## Reading Testing and Tooling from Python
 
-Musi uses `@std/testing` for named test suites and cases.
+On the Musi side, Musi tests should state the domain promise first, then check the function or value that proves it. Read the shared example through Python eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-{{snippet:python-testing-tooling}}
+## False friend
 
-A test should read like a receipt: name the behavior, run the check, and leave a pass or fail value.
+Do not write a test that only proves syntax can be called. Make the receipt, route, badge, or parser claim visible. For a Python reader, the trap is trusting runtime convention where Musi expects a visible type or effect; Musi `class` is closer to an explicit protocol/typeclass than a Python class with attributes and methods.
 
-## Tooling habit
+## When this pays off
 
-Python projects often separate formatting, type checks, and tests. Musi projects should do the same kind of loop with package checks and tests as the toolchain grows.
+Use this style when a future reader needs to know which behavior broke, not only which line failed. The Python instinct still helps here: Keep the Python habit of naming the real-world thing first.
+
+## Keep close
+
+- [Testing](/learn/book/advanced/testing)
+- [Running and tooling](/learn/book/advanced/running-and-tooling)
+- [Packages](/learn/book/organization/packages)

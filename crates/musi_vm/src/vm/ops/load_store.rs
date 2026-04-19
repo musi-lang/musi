@@ -19,7 +19,10 @@ impl Vm {
                 let Operand::Local(slot) = instruction.operand else {
                     return Err(Self::invalid_operand(instruction));
                 };
-                *self.local_mut(slot)? = self.pop_value()?;
+                let value = self.pop_value()?;
+                self.observe_heap_value(&value)?;
+                *self.local_mut(slot)? = value;
+                self.after_value_mutation()?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::LdGlob => {
@@ -48,6 +51,7 @@ impl Vm {
                 let value = self.pop_value()?;
                 let module_slot = self.current_module_slot()?;
                 let module_name = self.module(module_slot)?.spec.clone();
+                self.observe_heap_value(&value)?;
                 let globals = &mut self.module_mut(module_slot)?.globals;
                 let raw_slot = usize::try_from(slot.raw()).unwrap_or(usize::MAX);
                 let len = globals.len();
@@ -60,6 +64,7 @@ impl Vm {
                     })
                 })?;
                 *global = value;
+                self.after_value_mutation()?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::LdConst => {

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::iter::repeat_n;
 
-use music_seam::{EffectId, MethodId};
+use music_seam::{EffectId, ProcedureId};
 
 use super::{ContinuationValuePtr, Program, Value, ValueList};
 
@@ -29,7 +29,7 @@ pub struct LoadedModule {
 #[derive(Debug, Clone)]
 pub struct CallFrame {
     pub(crate) module_slot: usize,
-    pub(crate) method: MethodId,
+    pub(crate) procedure: ProcedureId,
     pub(crate) ip: usize,
     pub(crate) locals: ValueList,
     pub(crate) stack: ValueList,
@@ -39,13 +39,13 @@ impl CallFrame {
     #[must_use]
     pub const fn new(
         module_slot: usize,
-        method: MethodId,
+        procedure: ProcedureId,
         locals: ValueList,
         stack: ValueList,
     ) -> Self {
         Self {
             module_slot,
-            method,
+            procedure,
             ip: 0,
             locals,
             stack,

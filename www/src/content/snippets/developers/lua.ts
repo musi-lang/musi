@@ -4,25 +4,25 @@ export const luaDeveloperSnippets = [
 	{
 		id: "lua-values-locals-expressions",
 		language: "musi",
-		sourceText: `let total (basePrice : Int, fee : Int) : Int := basePrice + fee;
+		sourceText: `let orderTotal (basePrice : Int, rushFee : Int) : Int := basePrice + rushFee;
 
-let answer := total(1200, 45);
-answer;`,
+let charge := orderTotal(2400, 150);
+charge;`,
 		evidence: {
 			path: "docs/what/language/developers/lua/overview.md",
-			line: 27,
+			line: 1,
 		},
 	},
 	{
 		id: "lua-named-calls",
 		language: "musi",
-		sourceText: `let render (port : Int, secure : Bool) : Int := port;
+		sourceText: `let renderBadge (port : Int, secure : Bool) : Int := port;
 
-let selected := render(port := 8080, secure := 0 = 0);
-selected;`,
+let selectedPort := renderBadge(port := 8080, secure := 1 = 1);
+selectedPort;`,
 		evidence: {
 			path: "docs/what/language/developers/lua/values-locals-expressions.md",
-			line: 35,
+			line: 1,
 		},
 	},
 	{
@@ -36,38 +36,38 @@ let nextPort := addOne(8080);
 nextPort;`,
 		evidence: {
 			path: "docs/what/language/developers/lua/functions-closures-named-calls.md",
-			line: 28,
+			line: 1,
 		},
 	},
 	{
 		id: "lua-block-expression",
 		language: "musi",
-		sourceText: `let invoiceTotal () : Int :=
+		sourceText: `let receiptTotal () : Int :=
   (
-    let basePrice := 1200;
-    let fee := 45;
-    basePrice + fee
+    let subtotal := 1200;
+    let handling := 45;
+    subtotal + handling
   );
 
-invoiceTotal();`,
+receiptTotal();`,
 		evidence: {
 			path: "docs/what/language/developers/lua/blocks-branching-repetition.md",
-			line: 25,
+			line: 1,
 		},
 	},
 	{
 		id: "lua-recursive-control-flow",
 		language: "musi",
-		sourceText: `let rec totalSeats (remaining : Int, seats : Int) : Int :=
+		sourceText: `let rec countSeats (remaining : Int, seats : Int) : Int :=
   match remaining (
   | 0 => seats
-  | _ => totalSeats(remaining - 1, seats + 4)
+  | _ => countSeats(remaining - 1, seats + 4)
   );
 
-totalSeats(3, 0);`,
+countSeats(3, 0);`,
 		evidence: {
 			path: "docs/what/language/developers/lua/blocks-branching-repetition.md",
-			line: 41,
+			line: 1,
 		},
 	},
 	{
@@ -89,7 +89,7 @@ let publicEndpoint := { ...localEndpoint, host := "api.example.com", secure := 0
 publicEndpoint.port;`,
 		evidence: {
 			path: "docs/what/language/developers/lua/tables-records-field-updates.md",
-			line: 26,
+			line: 1,
 		},
 	},
 	{
@@ -104,7 +104,7 @@ let visible := ports
 visible;`,
 		evidence: {
 			path: "docs/what/language/developers/lua/arrays-sequences-maps-pipelines.md",
-			line: 22,
+			line: 1,
 		},
 	},
 	{
@@ -114,16 +114,16 @@ visible;`,
 
 let lookupPort (name : String) : option.Option[Int] :=
   match name (
-  | "admin" => option.some[Int](9000)
-  | "web" => option.some[Int](8080)
-  | _ => option.none[Int]()
+  | "admin" => option.someOf[Int](9000)
+  | "web" => option.someOf[Int](8080)
+  | _ => option.noneOf[Int]()
   );
 
 lookupPort("web")
   |> option.unwrapOr[Int](3000);`,
 		evidence: {
 			path: "docs/what/language/developers/lua/arrays-sequences-maps-pipelines.md",
-			line: 33,
+			line: 1,
 		},
 	},
 	{
@@ -133,8 +133,8 @@ lookupPort("web")
 
 let lookupPort (name : String) : option.Option[Int] :=
   match name (
-  | "admin" => option.some[Int](9000)
-  | _ => option.none[Int]()
+  | "admin" => option.someOf[Int](9000)
+  | _ => option.noneOf[Int]()
   );
 
 let port := lookupPort("web")
@@ -142,7 +142,7 @@ let port := lookupPort("web")
 port;`,
 		evidence: {
 			path: "docs/what/language/developers/lua/nil-option-result.md",
-			line: 25,
+			line: 1,
 		},
 	},
 	{
@@ -161,7 +161,7 @@ let port := parsePort("abc")
 port;`,
 		evidence: {
 			path: "docs/what/language/developers/lua/nil-option-result.md",
-			line: 40,
+			line: 1,
 		},
 	},
 	{
@@ -180,7 +180,7 @@ let port := parsePort("abc")
 port;`,
 		evidence: {
 			path: "docs/what/language/developers/lua/errors-pcall-effects.md",
-			line: 31,
+			line: 1,
 		},
 	},
 	{
@@ -192,7 +192,7 @@ let name := io.promptTrimmed("name> ");
 io.writeLine(name);`,
 		evidence: {
 			path: "docs/what/language/developers/lua/errors-pcall-effects.md",
-			line: 43,
+			line: 1,
 		},
 	},
 	{
@@ -206,7 +206,7 @@ let loadPort () using { PortSource } : Int :=
   request PortSource.loadPort();`,
 		evidence: {
 			path: "docs/what/language/developers/lua/coroutines-effect-boundaries.md",
-			line: 26,
+			line: 1,
 		},
 	},
 	{
@@ -222,7 +222,7 @@ handle PortSource.loadPort() using PortSource {
 };`,
 		evidence: {
 			path: "docs/what/language/developers/lua/coroutines-effect-boundaries.md",
-			line: 30,
+			line: 1,
 		},
 	},
 	{
@@ -242,7 +242,7 @@ let carVehicle := instance Vehicle[Car] {
 };`,
 		evidence: {
 			path: "docs/what/language/developers/lua/metatables-classes-instances-laws.md",
-			line: 28,
+			line: 1,
 		},
 	},
 	{
@@ -262,7 +262,7 @@ match state (
 );`,
 		evidence: {
 			path: "docs/what/language/developers/lua/pattern-matching-data-variants.md",
-			line: 25,
+			line: 1,
 		},
 	},
 	{
@@ -271,7 +271,7 @@ match state (
 		sourceText: "export let defaultPort () : Int := 8080;",
 		evidence: {
 			path: "docs/what/language/developers/lua/modules-imports-exports.md",
-			line: 27,
+			line: 1,
 		},
 	},
 	{
@@ -283,7 +283,7 @@ let port := Ports.defaultPort();
 port;`,
 		evidence: {
 			path: "docs/what/language/developers/lua/modules-imports-exports.md",
-			line: 38,
+			line: 1,
 		},
 	},
 	{
@@ -296,7 +296,7 @@ testing.it("default port", testing.equal[Int](8080, 8080));
 testing.endDescribe();`,
 		evidence: {
 			path: "docs/what/language/developers/lua/testing-tooling.md",
-			line: 25,
+			line: 1,
 		},
 	},
 	{
@@ -310,7 +310,7 @@ export let announce (message : ffi.CString) : ffi.CInt :=
   unsafe { puts(message); };`,
 		evidence: {
 			path: "docs/what/language/developers/lua/embedding-c-api-ffi.md",
-			line: 22,
+			line: 1,
 		},
 	},
 	{
@@ -323,7 +323,7 @@ let samePointer := unsafe { ffi.ptr.offset[Int](pointer, 0); };
 ffi.ptr.isNull[Int](samePointer);`,
 		evidence: {
 			path: "docs/what/language/developers/lua/embedding-c-api-ffi.md",
-			line: 35,
+			line: 1,
 		},
 	},
 ] satisfies readonly ContentSnippet[];

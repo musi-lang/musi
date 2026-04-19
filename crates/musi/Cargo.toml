@@ -13,7 +13,9 @@ categories.workspace = true
 publish.workspace = true
 
 [dependencies]
+musi_fmt = { path = "../musi_fmt" }
 clap = { workspace = true }
+music_base = { path = "../music_base" }
 music_session = { path = "../music_session" }
 musi_tooling = { path = "../musi_tooling" }
 musi_native = { path = "../musi_native" }
@@ -24,7 +26,6 @@ musi_vm = { path = "../musi_vm" }
 music_module = { path = "../music_module" }
 music_sema = { path = "../music_sema" }
 serde_json = { workspace = true }
-thiserror = { workspace = true }
 
 [lints]
 workspace = true

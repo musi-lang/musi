@@ -70,12 +70,13 @@ fn discover_modules_recursive(
                     spec: spec.as_str().to_owned(),
                     span: site.span,
                 }),
-                ImportSiteKind::Dynamic | ImportSiteKind::InvalidStringLit => None,
+                ImportSiteKind::NonLiteral | ImportSiteKind::InvalidStringLit => None,
             })
             .collect::<Vec<_>>();
+        let module_path = normalize_lookup_path(&path);
         let module = LoadedModule {
             key: key.clone(),
-            path: path.clone(),
+            path: module_path,
             package_relative: relative,
             local_scope_key: scope_key,
             text,

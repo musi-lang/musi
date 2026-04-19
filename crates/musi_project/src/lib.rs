@@ -1,4 +1,6 @@
 mod builtin_std;
+pub use diag::ProjectDiagKind;
+mod diag;
 mod errors;
 mod lock;
 pub mod manifest;

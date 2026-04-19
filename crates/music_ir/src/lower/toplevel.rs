@@ -16,8 +16,8 @@ use music_sema::{
 use super::closures::lower_user_params;
 use super::{LetItemInput, LowerCtx, TopLevelItems};
 use crate::api::{
-    IrCallable, IrDataDef, IrDataVariantDef, IrExpr, IrExprKind, IrForeignDef, IrGlobal, IrOrigin,
-    IrParam, IrRecordField,
+    IrCallable, IrDataDef, IrDataVariantDef, IrExpr, IrExprKind, IrForeignDef, IrGlobal,
+    IrModuleInitPart, IrNameRef, IrOrigin, IrParam, IrRecordField,
 };
 
 pub(super) fn collect_top_level_items(
@@ -61,9 +61,13 @@ pub(super) fn collect_top_level_items(
             );
         }
         HirExprKind::Instance { members, .. } => {
-            collect_instance_item(ctx, expr_id, members, exported, items);
+            _ = collect_instance_item(ctx, expr_id, members, exported, items);
         }
-        _ => {}
+        _ => {
+            items
+                .init_parts
+                .push(IrModuleInitPart::expr(super::lower_expr(ctx, expr_id)));
+        }
     }
 }
 
@@ -82,10 +86,8 @@ fn collect_let_item(ctx: &mut LowerCtx<'_>, input: LetItemInput, items: &mut Top
         return;
     };
     let binding = super::decl_binding_id(sema, name);
-    if let Some(binding) = binding {
-        if sema.is_gated_binding(binding) {
-            return;
-        }
+    if binding.is_some_and(|binding| sema.is_gated_binding(binding)) {
+        return;
     }
 
     if let Some(foreign) =
@@ -111,7 +113,7 @@ fn collect_let_item(ctx: &mut LowerCtx<'_>, input: LetItemInput, items: &mut Top
             module_target: module_target.clone(),
         },
     ) {
-        items.globals.push(global);
+        push_global_item(items, global);
         return;
     }
 
@@ -131,32 +133,39 @@ fn collect_let_item(ctx: &mut LowerCtx<'_>, input: LetItemInput, items: &mut Top
         return;
     }
 
-    if let HirExprKind::Instance { members, .. } = &sema.module().store.exprs.get(value).kind {
-        collect_instance_item(ctx, value, members, exported, items);
+    if collect_instance_let_item(
+        ctx,
+        InstanceLetInput {
+            binding,
+            name,
+            value,
+            exported,
+            effects: &effects,
+        },
+        items,
+    ) {
         return;
     }
 
-    if is_callable {
-        if has_comptime_params(ctx, params.clone()) {
-            return;
-        }
-        items.callables.push(lower_callable_item(
-            ctx,
-            CallableItemInput {
-                expr_id,
-                binding,
-                name,
-                params,
-                value,
-                exported,
-                effects,
-                module_target,
-            },
-        ));
+    if collect_callable_let_item(
+        ctx,
+        CallableLetInput {
+            expr_id,
+            binding,
+            name,
+            params: &params,
+            value,
+            is_callable,
+            exported,
+            effects: &effects,
+            module_target: module_target.as_ref(),
+        },
+        items,
+    ) {
         return;
     }
 
-    items.globals.push(lower_global_item(
+    let global = lower_global_item(
         ctx,
         GlobalItemInput {
             binding,
@@ -166,7 +175,90 @@ fn collect_let_item(ctx: &mut LowerCtx<'_>, input: LetItemInput, items: &mut Top
             effects,
             module_target,
         },
+    );
+    push_global_item(items, global);
+}
+
+fn push_global_item(items: &mut TopLevelItems, global: IrGlobal) {
+    items
+        .init_parts
+        .push(IrModuleInitPart::global(global.name.clone()));
+    items.globals.push(global);
+}
+
+#[derive(Clone, Copy)]
+struct CallableLetInput<'a> {
+    expr_id: HirExprId,
+    binding: Option<NameBindingId>,
+    name: Ident,
+    params: &'a SliceRange<HirParam>,
+    value: HirExprId,
+    is_callable: bool,
+    exported: bool,
+    effects: &'a EffectRow,
+    module_target: Option<&'a ModuleKey>,
+}
+
+fn collect_callable_let_item(
+    ctx: &mut LowerCtx<'_>,
+    input: CallableLetInput<'_>,
+    items: &mut TopLevelItems,
+) -> bool {
+    if !input.is_callable {
+        return false;
+    }
+    if has_comptime_params(ctx, input.params.clone()) {
+        return true;
+    }
+    items.callables.push(lower_callable_item(
+        ctx,
+        CallableItemInput {
+            expr_id: input.expr_id,
+            binding: input.binding,
+            name: input.name,
+            params: input.params.clone(),
+            value: input.value,
+            exported: input.exported,
+            effects: input.effects.clone(),
+            module_target: input.module_target.cloned(),
+        },
     ));
+    true
+}
+
+#[derive(Clone, Copy)]
+struct InstanceLetInput<'a> {
+    binding: Option<NameBindingId>,
+    name: Ident,
+    value: HirExprId,
+    exported: bool,
+    effects: &'a EffectRow,
+}
+
+fn collect_instance_let_item(
+    ctx: &mut LowerCtx<'_>,
+    input: InstanceLetInput<'_>,
+    items: &mut TopLevelItems,
+) -> bool {
+    let HirExprKind::Instance { members, .. } =
+        &ctx.sema.module().store.exprs.get(input.value).kind
+    else {
+        return false;
+    };
+    let provider_name = collect_instance_item(ctx, input.value, members, input.exported, items);
+    let global = lower_instance_alias_global(
+        ctx,
+        InstanceAliasGlobalInput {
+            binding: input.binding,
+            name: input.name,
+            value: input.value,
+            provider_name,
+            exported: input.exported,
+            effects: input.effects.clone(),
+        },
+    );
+    push_global_item(items, global);
+    true
 }
 
 fn collect_instance_item(
@@ -175,9 +267,9 @@ fn collect_instance_item(
     members: &SliceRange<HirMemberDef>,
     exported: bool,
     items: &mut TopLevelItems,
-) {
+) -> Box<str> {
     let Some(instance) = ctx.sema.instance_facts(expr_id).cloned() else {
-        return;
+        return Box::default();
     };
     let provider_name = instance_provider_name(ctx, &instance);
     items.data_defs.push(lower_instance_provider_data_def(
@@ -195,10 +287,36 @@ fn collect_instance_item(
     if exported {
         items.exports.push(lower_instance_provider_export(
             ctx.sema,
-            provider_name,
+            provider_name.clone(),
             &instance,
         ));
     }
+    provider_name
+}
+
+struct InstanceAliasGlobalInput {
+    binding: Option<NameBindingId>,
+    name: Ident,
+    value: HirExprId,
+    provider_name: Box<str>,
+    exported: bool,
+    effects: EffectRow,
+}
+
+fn lower_instance_alias_global(ctx: &LowerCtx<'_>, input: InstanceAliasGlobalInput) -> IrGlobal {
+    let interner = ctx.interner;
+    let origin = ctx.sema.module().store.exprs.get(input.value).origin;
+    let body = IrExpr::new(
+        IrOrigin::new(origin.source_id, origin.span),
+        IrExprKind::ClosureNew {
+            callee: IrNameRef::new(input.provider_name),
+            captures: Box::new([]),
+        },
+    );
+    IrGlobal::new(interner.resolve(input.name.name), body)
+        .with_binding_opt(input.binding)
+        .with_exported(input.exported)
+        .with_effects(input.effects)
 }
 
 fn lower_instance_provider_callable(
@@ -505,6 +623,8 @@ fn render_hir_ty_name(sema: &SemaModule, ty: HirTyId, interner: &Interner) -> Bo
         | HirTyKind::Arrow { .. }
         | HirTyKind::Sum { .. }
         | HirTyKind::Mut { .. }
+        | HirTyKind::AnyClass { .. }
+        | HirTyKind::SomeClass { .. }
         | HirTyKind::Record { .. } => super::render_ty_name(sema, ty, interner),
         HirTyKind::Error
         | HirTyKind::Unknown
@@ -639,7 +759,7 @@ fn lower_exported_import_global(
             interner.resolve(input.name.name),
             IrExpr::new(
                 spec.origin,
-                IrExprKind::DynamicImport {
+                IrExprKind::ModuleLoad {
                     spec: Box::new(spec),
                 },
             ),

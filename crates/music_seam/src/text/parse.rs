@@ -19,9 +19,9 @@ pub fn parse_text(text: &str) -> AssemblyResult<Artifact> {
         if line == ".end" {
             return Err(AssemblyError::TextParseFailed("unexpected `.end`".into()));
         }
-        if line.starts_with(".method ") {
-            let method_lines = collect_method_lines(&lines, &mut index)?;
-            builder.parse_method(line, &method_lines)?;
+        if line.starts_with(".procedure ") {
+            let procedure_lines = collect_procedure_lines(&lines, &mut index)?;
+            builder.parse_procedure(line, &procedure_lines)?;
             continue;
         }
         builder.parse_directive(line)?;
@@ -42,7 +42,7 @@ pub fn validate_text(text: &str) -> AssemblyResult {
     Ok(())
 }
 
-fn collect_method_lines<'text>(
+fn collect_procedure_lines<'text>(
     lines: &'text [&'text str],
     index: &mut usize,
 ) -> AssemblyResult<Vec<&'text str>> {
@@ -54,6 +54,6 @@ fn collect_method_lines<'text>(
         }
     }
     Err(AssemblyError::TextParseFailed(
-        "unterminated `.method` block".into(),
+        "unterminated `.procedure` block".into(),
     ))
 }

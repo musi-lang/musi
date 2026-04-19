@@ -1,0 +1,199 @@
+catalog vm musi_vm VmDiagKind crates/musi_vm/src/diag_catalog_gen.rs
+
+diag SeamDecodeFailed 6100
+  message "SEAM decode failed (`{detail}`)"
+  primary "SEAM decode failed"
+
+diag InvalidProgramShape 6101
+  message "invalid program shape (`{detail}`)"
+  primary "invalid program shape"
+
+diag InvalidTypeTerm 6102
+  message "invalid type term `{ty}` (`{detail}`)"
+  primary "invalid type term `{ty}`"
+
+diag InvalidSyntaxConstant 6103
+  message "invalid syntax constant (`{detail}`)"
+  primary "invalid syntax constant"
+
+diag VmInitializationRequired 6104
+  message "VM initialization required"
+  primary "VM initialization required"
+
+diag ModuleInitCycle 6105
+  message "module `{spec}` initialization cycle detected"
+  primary "module `{spec}` initialization cycle detected"
+
+diag ExportNotFound 6106
+  message "missing export `{export}` in `{module}`"
+  primary "missing export `{export}`"
+
+diag OpaqueExport 6107
+  message "opaque export `{export}` inaccessible from `{module}`"
+  primary "opaque export `{export}` inaccessible"
+
+diag NonCallableValue 6108
+  message "callable value expected, found `{found}`"
+  primary "callable value expected"
+
+diag MissingEntryProcedure 6109
+  message "missing entry procedure in `{module}`"
+  primary "missing entry procedure"
+
+diag StackEmpty 6110
+  message "{stack} stack empty"
+  primary "{stack} stack empty"
+
+diag OperandCountMismatch 6111
+  message "operand stack expected `{needed}` values, found `{available}`"
+  primary "operand stack has `{available}` values"
+
+diag IndexOutOfBounds 6112
+  message "{space} `{index}` out of bounds for `{owner}` with `{len}` entries"
+  primary "{space} `{index}` out of bounds"
+
+diag InvalidBranchTarget 6113
+  message "invalid branch target `{target}` in `{procedure}`"
+  primary "invalid branch target `{target}`"
+
+diag InvalidOperandForOpcode 6114
+  message "opcode `{opcode}` rejects operand shape `{found}`"
+  primary "opcode `{opcode}` rejects operand"
+
+diag InvalidValueKind 6115
+  message "value kind expected `{expected}`, found `{found}`"
+  primary "value kind `{found}` found"
+
+diag InvalidSequenceIndex 6116
+  message "invalid sequence index `{index}` for length `{len}`"
+  primary "invalid sequence index `{index}`"
+
+diag EmptySequenceIndexList 6117
+  message "sequence index list empty"
+  primary "sequence index list empty"
+
+diag InvalidRangeBounds 6118
+  message "range bounds expected integers, found `{start}` and `{end}`"
+  primary "invalid range bounds"
+
+diag InvalidRangeEvidence 6119
+  message "invalid range evidence for value kind `{found}`"
+  primary "invalid range evidence"
+
+diag InvalidRangeStep 6120
+  message "invalid range step (`{detail}`)"
+  primary "invalid range step"
+
+diag RangeMaterializeTooLarge 6121
+  message "range materialize length `{len}` exceeds limit `{limit}`"
+  primary "range materialize length `{len}` too large"
+
+diag InvalidDataIndex 6122
+  message "invalid data field index `{index}` for length `{len}`"
+  primary "invalid data field index `{index}`"
+
+diag InvalidTypeCast 6123
+  message "type cast expected `{expected}`, found `{found}`"
+  primary "type cast found `{found}`"
+
+diag ArithmeticFailed 6124
+  message "arithmetic failed (`{detail}`)"
+  primary "arithmetic failed"
+
+diag ModuleLoadRejected 6125
+  message "module `{spec}` load rejected"
+  primary "module `{spec}` load rejected"
+
+diag ForeignCallRejected 6126
+  message "foreign call `{foreign}` rejected"
+  primary "foreign call `{foreign}` rejected"
+
+diag PointerIntrinsicFailed 6127
+  message "pointer intrinsic `{intrinsic}` failed (`{detail}`)"
+  primary "pointer intrinsic `{intrinsic}` failed"
+
+diag NativeCallFailed 6128
+  message "native call `{foreign}` failed during `{stage}` for `{subject}` (`{detail}`)"
+  primary "native call `{foreign}` failed"
+
+diag EffectRejected 6129
+  message "effect `{effect}` operation `{op}` rejected (`{reason}`)"
+  primary "effect `{effect}` rejected"
+
+diag RootModuleRequired 6130
+  message "VM root module required"
+  primary "VM root module required"
+
+diag MissingModuleSource 6131
+  message "missing VM module source `{spec}`"
+  primary "missing VM module source `{spec}`"
+
+diag CallArityMismatch 6132
+  message "call `{callee}` expected `{expected}` arguments, found `{found}`"
+  primary "call `{callee}` arity mismatch"
+
+diag HandlerFrameMissing 6133
+  message "missing handler `{handler_id}` frame depth `{frame_depth}`"
+  primary "missing handler `{handler_id}` frame"
+
+diag MissingMatchingHandlerPop 6134
+  message "missing matching `hdl.pop` in `{procedure}`"
+  primary "missing matching `hdl.pop`"
+
+diag HeapLimitExceeded 6135
+  message "heap limit `{limit}` exceeded with `{allocated}` allocated bytes"
+  primary "heap limit `{limit}` exceeded"
+
+diag HeapObjectTooLarge 6136
+  message "heap object size `{bytes}` exceeds limit `{limit}`"
+  primary "heap object size `{bytes}` too large"
+
+diag StackFrameLimitExceeded 6137
+  message "stack frame limit `{limit}` exceeded with `{frames}` frames"
+  primary "stack frame limit `{limit}` exceeded"
+
+diag InstructionBudgetExhausted 6138
+  message "instruction budget `{budget}` exhausted"
+  primary "instruction budget `{budget}` exhausted"
+
+map vm_error_kind crate::VmErrorKind required
+  case "SeamDecodeFailed { .. }" SeamDecodeFailed
+  case "InvalidProgramShape { .. }" InvalidProgramShape
+  case "InvalidTypeTerm { .. }" InvalidTypeTerm
+  case "InvalidSyntaxConstant { .. }" InvalidSyntaxConstant
+  case "VmInitializationRequired" VmInitializationRequired
+  case "ModuleInitCycle { .. }" ModuleInitCycle
+  case "ExportNotFound { .. }" ExportNotFound
+  case "OpaqueExport { .. }" OpaqueExport
+  case "NonCallableValue { .. }" NonCallableValue
+  case "MissingEntryProcedure { .. }" MissingEntryProcedure
+  case "StackEmpty { .. }" StackEmpty
+  case "OperandCountMismatch { .. }" OperandCountMismatch
+  case "IndexOutOfBounds { .. }" IndexOutOfBounds
+  case "InvalidBranchTarget { .. }" InvalidBranchTarget
+  case "InvalidOperandForOpcode { .. }" InvalidOperandForOpcode
+  case "InvalidValueKind { .. }" InvalidValueKind
+  case "InvalidSequenceIndex { .. }" InvalidSequenceIndex
+  case "EmptySequenceIndexList" EmptySequenceIndexList
+  case "InvalidRangeBounds { .. }" InvalidRangeBounds
+  case "InvalidRangeEvidence { .. }" InvalidRangeEvidence
+  case "InvalidRangeStep { .. }" InvalidRangeStep
+  case "RangeMaterializeTooLarge { .. }" RangeMaterializeTooLarge
+  case "InvalidDataIndex { .. }" InvalidDataIndex
+  case "InvalidTypeCast { .. }" InvalidTypeCast
+  case "ArithmeticFailed { .. }" ArithmeticFailed
+  case "ModuleLoadRejected { .. }" ModuleLoadRejected
+  case "ForeignCallRejected { .. }" ForeignCallRejected
+  case "PointerIntrinsicFailed { .. }" PointerIntrinsicFailed
+  case "NativeCallFailed { .. }" NativeCallFailed
+  case "EffectRejected { .. }" EffectRejected
+  case "RootModuleRequired" RootModuleRequired
+  case "MissingModuleSource { .. }" MissingModuleSource
+  case "CallArityMismatch { .. }" CallArityMismatch
+  case "HandlerFrameMissing { .. }" HandlerFrameMissing
+  case "MissingMatchingHandlerPop { .. }" MissingMatchingHandlerPop
+  case "HeapLimitExceeded { .. }" HeapLimitExceeded
+  case "HeapObjectTooLarge { .. }" HeapObjectTooLarge
+  case "StackFrameLimitExceeded { .. }" StackFrameLimitExceeded
+  case "InstructionBudgetExhausted { .. }" InstructionBudgetExhausted
+end

@@ -24,6 +24,17 @@ export const startPages = [
 		questions: [],
 	},
 	{
+		id: "reading-musi-code",
+		partId: "start",
+		path: "/docs/book/start/reading-musi-code",
+		aliases: [
+			"/docs/language/start/reading-musi-code",
+			"/learn/language/start/reading-musi-code",
+		],
+		sourcePath: "docs/what/language/start/reading-musi-code.md",
+		questions: [],
+	},
+	{
 		id: "values-and-let",
 		partId: "start",
 		path: "/docs/book/start/values-and-let",

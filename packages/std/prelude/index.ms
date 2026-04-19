@@ -1,102 +1,102 @@
-let core := import "musi:core";
-let option := import "@std/option";
-let result := import "@std/result";
+let bytes := import "@std/bytes";
 let cmp := import "@std/cmp";
 let list := import "@std/list";
+let option := import "@std/option";
 let path := import "@std/path";
-let bytes := import "@std/bytes";
+let result := import "@std/result";
+let core := import "musi:core";
 
-// --- Type universe ---
-/// Prelude alias for core Type.
+-- --- Type universe ---
+--- Prelude alias for core Type.
 export let Type := core.Type;
-/// Prelude alias for core Array.
+--- Prelude alias for core Array.
 export let Array := core.Array;
-/// Prelude alias for core Any.
+--- Prelude alias for core Any.
 export let Any := core.Any;
-/// Prelude alias for core Unknown.
+--- Prelude alias for core Unknown.
 export let Unknown := core.Unknown;
-/// Prelude alias for core Syntax.
+--- Prelude alias for core Syntax.
 export let Syntax := core.Syntax;
-/// Prelude alias for core Empty.
+--- Prelude alias for core Empty.
 export let Empty := core.Empty;
-/// Prelude alias for core Unit.
+--- Prelude alias for core Unit.
 export let Unit := core.Unit;
-/// Prelude alias for core Bool.
+--- Prelude alias for core Bool.
 export let Bool := core.Bool;
-/// Prelude alias for core Nat.
+--- Prelude alias for core Nat.
 export let Nat := core.Nat;
-/// Prelude alias for core Int.
+--- Prelude alias for core Int.
 export let Int := core.Int;
-/// Prelude alias for core Int8.
+--- Prelude alias for core Int8.
 export let Int8 := core.Int8;
-/// Prelude alias for core Int16.
+--- Prelude alias for core Int16.
 export let Int16 := core.Int16;
-/// Prelude alias for core Int32.
+--- Prelude alias for core Int32.
 export let Int32 := core.Int32;
-/// Prelude alias for core Int64.
+--- Prelude alias for core Int64.
 export let Int64 := core.Int64;
-/// Prelude alias for core Nat8.
+--- Prelude alias for core Nat8.
 export let Nat8 := core.Nat8;
-/// Prelude alias for core Nat16.
+--- Prelude alias for core Nat16.
 export let Nat16 := core.Nat16;
-/// Prelude alias for core Nat32.
+--- Prelude alias for core Nat32.
 export let Nat32 := core.Nat32;
-/// Prelude alias for core Nat64.
+--- Prelude alias for core Nat64.
 export let Nat64 := core.Nat64;
-/// Prelude alias for core Float.
+--- Prelude alias for core Float.
 export let Float := core.Float;
-/// Prelude alias for core Float32.
+--- Prelude alias for core Float32.
 export let Float32 := core.Float32;
-/// Prelude alias for core Float64.
+--- Prelude alias for core Float64.
 export let Float64 := core.Float64;
-/// Prelude alias for core String.
+--- Prelude alias for core String.
 export let String := core.String;
-/// Prelude alias for core Rune.
+--- Prelude alias for core Rune.
 export let Rune := core.Rune;
-/// Prelude alias for core Range.
+--- Prelude alias for core Range.
 export let Range := core.Range;
-/// Prelude alias for core ClosedRange.
+--- Prelude alias for core ClosedRange.
 export let ClosedRange := core.ClosedRange;
-/// Prelude alias for core PartialRangeFrom.
+--- Prelude alias for core PartialRangeFrom.
 export let PartialRangeFrom := core.PartialRangeFrom;
-/// Prelude alias for core PartialRangeUpTo.
+--- Prelude alias for core PartialRangeUpTo.
 export let PartialRangeUpTo := core.PartialRangeUpTo;
-/// Prelude alias for core PartialRangeThru.
+--- Prelude alias for core PartialRangeThru.
 export let PartialRangeThru := core.PartialRangeThru;
-/// Prelude alias for core CString.
+--- Prelude alias for core CString.
 export let CString := core.CString;
-/// Prelude alias for core CPtr.
+--- Prelude alias for core CPtr.
 export let CPtr := core.CPtr;
 
-// --- Common named data types ---
-/// Prelude optional value type.
-export opaque let Option := option.Option;
-/// Prelude recoverable result type.
-export opaque let Result := result.Result;
-/// Prelude comparison ordering type.
-export opaque let Ordering := cmp.Ordering;
-/// Prelude list type.
-export opaque let List := list.List;
-/// Prelude path type.
-export opaque let Path := path.Path;
-/// Prelude bytes type.
-export opaque let Bytes := bytes.Bytes;
+-- --- Common named data types ---
+--- Prelude optional value type.
+export let Option := option.Option;
+--- Prelude recoverable result type.
+export let Result := result.Result;
+--- Prelude comparison ordering type.
+export let Ordering := cmp.Ordering;
+--- Prelude list type.
+export let List := list.List;
+--- Prelude path type.
+export let Path := path.Path;
+--- Prelude bytes type.
+export let Bytes := bytes.Bytes;
 
-// --- Common constructors ---
-/// Build a present option.
-export let some[T] (value : T) : Option[T] := option.some[T](value);
-/// Build an absent option.
-export let none[T] () : Option[T] := option.none[T]();
-/// Build a successful result.
-export let ok[T, E] (value : T) : Result[T, E] := result.ok[T, E](value);
-/// Build a failed result.
-export let err[T, E] (error : E) : Result[T, E] := result.err[T, E](error);
-/// Abort current computation.
+-- --- Common constructors ---
+--- Build a present option.
+export let someOf [T] (value : T) : Option[T] := option.someOf[T](value);
+--- Build an absent option.
+export let noneOf [T] () : Option[T] := option.noneOf[T]();
+--- Build a successful result.
+export let ok [T, E] (value : T) : Result[T, E] := result.ok[T, E](value);
+--- Build a failed result.
+export let err [T, E] (error : E) : Result[T, E] := result.err[T, E](error);
+--- Abort current computation.
 export let abort () : Empty := core.abort();
 
-/// Prelude abort effect contract.
+--- Prelude abort effect contract.
 export opaque let Abort := core.Abort;
-/// Prelude rangeable class.
+--- Prelude rangeable class.
 export opaque let Rangeable := core.Rangeable;
-/// Prelude range bounds class.
+--- Prelude range bounds class.
 export opaque let RangeBounds := core.RangeBounds;

@@ -1,88 +1,64 @@
-/// Recoverable success or failure value.
-export opaque let Result[T, E] := data {
-  | Ok(T)
-  | Err(E)
-};
+let core := import "./_core.ms";
 
-/// Build a successful result.
-export let ok[T, E] (value : T) : Result[T, E] := .Ok(value);
+--- Recoverable success or failure value.
+export let Result := core.Result;
 
-/// Build a failed result.
-export let err[T, E] (value : E) : Result[T, E] := .Err(value);
+--- Build a successful result.
+export let ok := core.ok;
 
-/// Returns true for successful results.
-export let (self : Result[T, E]).isOk[T, E] () : Bool :=
-  match self (
-  | .Ok(_) => 0 = 0
-  | .Err(_) => 0 = 1
-  );
+--- Build a failed result.
+export let err := core.err;
 
-/// Returns true for failed results.
-export let (self : Result[T, E]).isErr[T, E] () : Bool :=
-  match self (
-  | .Ok(_) => 0 = 1
-  | .Err(_) => 0 = 0
-  );
+--- Returns true for successful results.
+export let(self : Result[T, E]).isOk [T, E] () : Bool := core.isOk[T, E](self);
 
-/// Return the success value or the fallback.
-export let (self : Result[T, E]).unwrapOr[T, E] (fallback : T) : T :=
-  match self (
-  | .Ok(item) => item
-  | .Err(_) => fallback
-  );
+--- Returns true for failed results.
+export let(self : Result[T, E]).isErr [T, E] () : Bool :=
+    core.isErr[T, E](self);
 
-/// Return the success value or compute from the error.
-export let (self : Result[T, E]).unwrapOrElse[T, E] (fallback : E -> T) : T :=
-  match self (
-  | .Ok(item) => item
-  | .Err(error) => fallback(error)
-  );
+--- Return the success value or the fallback.
+export let(self : Result[T, E]).unwrapOr [T, E] (fallback : T) : T :=
+    core.unwrapOr[T, E](self, fallback);
 
-/// Transform a success value.
-export let (self : Result[T, E]).map[T, E, U] (f : T -> U) : Result[U, E] :=
-  match self (
-  | .Ok(item) => ok[U, E](f(item))
-  | .Err(error) => err[U, E](error)
-  );
+--- Return the success value or compute from the error.
+export let(self : Result[T, E]).unwrapOrElse [T, E] (fallback : E -> T) : T
+    :=
+    core.unwrapOrElse[T, E](self, fallback);
 
-/// Transform an error value.
-export let (self : Result[T, E]).mapErr[T, E, F] (f : E -> F) : Result[T, F] :=
-  match self (
-  | .Ok(item) => ok[T, F](item)
-  | .Err(error) => err[T, F](f(error))
-  );
+--- Transform a success value.
+export let(self : Result[T, E]).map [T, E, U] (f : T -> U) : Result[U, E]
+    :=
+    core.map[T, E, U](self, f);
 
-/// Transform a success value or return the fallback.
-export let (self : Result[T, E]).mapOr[T, E, U] (fallback : U, f : T -> U) : U :=
-  match self (
-  | .Ok(item) => f(item)
-  | .Err(_) => fallback
-  );
+--- Transform an error value.
+export let(self : Result[T, E]).mapErr [T, E, F] (f : E -> F) : Result[T, F]
+    :=
+    core.mapErr[T, E, F](self, f);
 
-/// Transform either result case into one value.
-export let (self : Result[T, E]).mapOrElse[T, E, U] (onErr : E -> U, onOk : T -> U) : U :=
-  match self (
-  | .Ok(item) => onOk(item)
-  | .Err(error) => onErr(error)
-  );
+--- Transform a success value or return the fallback.
+export let(self : Result[T, E]).mapOr [T, E, U] (fallback : U, f : T -> U) : U
+    :=
+    core.mapOr[T, E, U](self, fallback, f);
 
-/// Chain an operation that may fail.
-export let (self : Result[T, E]).andThen[T, E, U] (f : T -> Result[U, E]) : Result[U, E] :=
-  match self (
-  | .Ok(item) => f(item)
-  | .Err(error) => err[U, E](error)
-  );
+--- Transform either result case into one value.
+export let(self : Result[T, E]).mapOrElse [T, E, U] (onErr : E -> U,
+    onOk : T -> U
+) : U := core.mapOrElse[T, E, U](self, onErr, onOk);
 
-/// Recover from an error with another result.
-export let (self : Result[T, E]).orElse[T, E, F] (f : E -> Result[T, F]) : Result[T, F] :=
-  match self (
-  | .Ok(item) => ok[T, F](item)
-  | .Err(error) => f(error)
-  );
+--- Chain an operation that may fail.
+export let(self : Result[T, E]).andThen [T, E, U] (
+    f : T -> Result[U, E]
+) : Result[U, E] := core.andThen[T, E, U](self, f);
 
-/// Fold both result cases into one value.
-export let (self : Result[T, E]).fold[T, E, U] (onOk : T -> U, onErr : E -> U) : U :=
-  match self (
-  | .Ok(item) => onOk(item)
-  | .Err(error) => onErr(error)
-  );
+--- Recover from an error with another result.
+export let(self : Result[T, E]).orElse [T, E, F] (
+    f : E -> Result[T, F]
+) : Result[T, F] := core.orElse[T, E, F](self, f);
+
+--- Fold both result cases into one value.
+export let(self : Result[T, E]).fold [T, E, U] (
+    onOk : T -> U,
+    onErr : E -> U
+) : U
+    :=
+    core.fold[T, E, U](self, onOk, onErr);

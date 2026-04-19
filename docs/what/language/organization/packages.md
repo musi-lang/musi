@@ -7,29 +7,20 @@ order: 16
 slug: "packages"
 summary: "Move from one file to package-managed code without changing mental models."
 ---
-
-A package is a project boundary. It gives source files a root, gives tools a manifest, and gives other packages a stable name to import.
+A package is where files, imports, tests, and configuration agree on one project. It is the difference between a single recipe card and a small cookbook with chapters.
 
 {{snippet:chapter-packages}}
 
-## Reading Model
+Use packages when code has a name, a set of source files, and repeatable commands. The manifest keeps that information in one place so editors, formatters, tests, and command-line tools do not guess differently.
 
-Read the example from top to bottom. The generated package starts with a hello-world entry file and a tiny add test, so checking and testing stay separate from runtime entry conventions.
+## What belongs together
 
-## Standard Library
+Put files in the same package when they ship and change together. A restaurant app might keep menu, order, and receipt code together. A reusable date library should not live inside that app if other projects will use it.
 
-Packages use the standard library by default. That default makes imports such as `@std/testing` available without dependency boilerplate. Add `"lib": []` to `musi.json` only when a package needs to opt out of bundled libraries.
+## Configuration is part of the contract
 
-## Installed Modules
+Formatter width, source roots, and package metadata affect how the project is read. Keeping those values in the package makes behavior predictable outside one developer's editor.
 
-Package dependencies are materialized under `musi_modules/` by default. The directory is project-local, so Musi packages can live beside Rust, JavaScript, or other language projects without colliding with `target/` or `node_modules/`.
+Organization chapters are about where code lives. A package is like a small shop, files are shelves, imports are items brought in from another shelf, and exports are items placed at the counter for other code to use.
 
-Use `"musiModulesDir": "vendor/musi"` to choose a different local module directory. Use `"musiModulesDir": false` to disable local materialization and load packages directly from the global Musi cache.
-
-Registry and Git dependencies also use a global cache. Set `MUSI_CACHE_DIR` when a machine needs a fixed cache location, such as CI. `musi install` resolves dependencies, hydrates `musi_modules/` when enabled, and writes `musi.lock`.
-
-## Practical Rule
-
-Use this form when it makes value movement clearer than copying habits from another language. Prefer the smallest form that still tells the reader where names, types, effects, and boundaries live.
-
-Continue to [Imports and Exports](/learn/book/organization/modules/imports-and-exports).
+Messy organization usually starts when every file reaches for every name. Keep imports narrow, export only the names another file needs, and let file names explain the job before a reader opens them.

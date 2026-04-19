@@ -1,6 +1,6 @@
 use std::mem;
 
-use music_seam::{Instruction, MethodId};
+use music_seam::{Instruction, ProcedureId};
 
 use super::state::{CallFrame, CallFrameList, EffectHandler, EffectHandlerList, StepOutcome};
 use super::{
@@ -11,24 +11,24 @@ use super::{
 use super::Vm;
 
 impl Vm {
-    pub(crate) fn invoke_method(
+    pub(crate) fn invoke_procedure(
         &mut self,
         module_slot: usize,
-        method: MethodId,
+        procedure: ProcedureId,
         args: ValueList,
     ) -> VmResult<Value> {
-        self.push_frame(module_slot, method, args)?;
+        self.push_frame(module_slot, procedure, args)?;
         self.run_current_state()
     }
 
-    pub(crate) fn invoke_method_in_context(
+    pub(crate) fn invoke_procedure_in_context(
         &mut self,
         module_slot: usize,
-        method: MethodId,
+        procedure: ProcedureId,
         args: ValueList,
         base_depth: usize,
     ) -> VmResult<Value> {
-        self.push_frame(module_slot, method, args)?;
+        self.push_frame(module_slot, procedure, args)?;
         loop {
             let instruction = self.next_instruction()?;
             match self.execute_instr(&instruction)? {
@@ -77,7 +77,7 @@ impl Vm {
                 frame.stack.push(value);
                 self.run_current_state()
             }
-            None => Err(VmError::new(VmErrorKind::ProgramShapeInvalid {
+            None => Err(VmError::new(VmErrorKind::InvalidProgramShape {
                 detail: "continuation frame list is empty".into(),
             })),
         };
@@ -121,7 +121,7 @@ impl Vm {
     }
 
     pub(crate) fn invalid_dispatch(instruction: &Instruction, family: &str) -> VmError {
-        VmError::new(VmErrorKind::ProgramShapeInvalid {
+        VmError::new(VmErrorKind::InvalidProgramShape {
             detail: format!(
                 "opcode `{}` reached `{family}` executor",
                 instruction.opcode.mnemonic()

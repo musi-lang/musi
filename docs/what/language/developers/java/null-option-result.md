@@ -1,48 +1,31 @@
 ---
 title: "Null, Option, and Result"
-description: "Translate Java null, Optional, and expected failure into Musi Option and Result values."
+description: "Read Null, Option, and Result as a Java habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "Java Developers"
 order: 7
 slug: "null-option-result"
-summary: "Use Option for absence and Result for failure that carries information."
+summary: "Translate the Java habit, then use the Musi Book for the full rule."
 ---
 
-# Null, Option, and Result
+A Java reader brings habits from packages, classes, records, interfaces, exceptions, annotations, streams, and long-lived APIs. That helps with contracts, visibility, and maintainable names, but the Musi page asks a narrower question: what contract should this absence and failure branches example make visible?
 
-Java has `null`, and Java 17 also has `Optional` for maybe-present values:
+{{compare:java-null-option-result}}
 
-```java
-static Optional<Integer> lookupPort(String name) {
-    if (name.equals("admin")) {
-        return Optional.of(9000);
-    }
-    return Optional.empty();
-}
+## Reading Null, Option, and Result from Java
 
-int port = lookupPort("web").orElse(8080);
-```
+On the Musi side, Musi uses `option.someOf` and `option.noneOf` when absence is expected, so callers handle the empty branch deliberately. Read the shared example through Java eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-Musi uses the stdlib `Option` shape for ordinary absence.
+## False friend
 
-{{snippet:java-null-option}}
+Do not translate null, nil, None, or undefined as a quiet ordinary value. For a Java reader, the trap is reading Musi `class` as a nominal object type with constructors and fields; Musi `class` is a behavior contract supplied by instances; records and data model object shape.
 
-## Failure with information
+## When this pays off
 
-Java often uses exceptions or small result classes when failure should carry information:
+Use Option when a badge, ticket, receipt, search result, or lookup may honestly be missing. The Java instinct still helps here: Keep the Java habit of naming APIs for future readers.
 
-```java
-record ParsePort(boolean ok, int port, String message) {}
+## Keep close
 
-static ParsePort parsePort(String text) {
-    if (text.equals("8080")) {
-        return new ParsePort(true, 8080, "");
-    }
-    return new ParsePort(false, 0, "invalid port");
-}
-```
-
-Musi uses `Result` when callers should receive either a value or an error.
-
-{{snippet:java-result-value}}
-
+- [Data definitions](/learn/book/data/data-definitions)
+- [Patterns](/learn/book/data/patterns)
+- [Effects](/learn/book/effects-runtime/effects)

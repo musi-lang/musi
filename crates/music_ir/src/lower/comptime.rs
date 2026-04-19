@@ -96,7 +96,7 @@ fn lower_comptime_type(value: &ComptimeTypeValue) -> IrExprKind {
 }
 
 fn lower_comptime_module(value: &ComptimeModuleValue) -> IrExprKind {
-    IrExprKind::DynamicImport {
+    IrExprKind::ModuleLoad {
         spec: Box::new(IrExpr::new(
             dummy_origin(),
             IrExprKind::Lit(IrLit::String {
@@ -145,7 +145,7 @@ fn lower_comptime_module_export(ctx: &LowerCtx<'_>, module: &ModuleKey, name: &s
     IrExprKind::ModuleGet {
         base: Box::new(IrExpr::new(
             dummy_origin(),
-            IrExprKind::DynamicImport {
+            IrExprKind::ModuleLoad {
                 spec: Box::new(IrExpr::new(
                     dummy_origin(),
                     IrExprKind::Lit(IrLit::String {

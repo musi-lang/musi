@@ -4,11 +4,13 @@
 	"type": "module",
 	"scripts": {
 		"generate:content": "bun run scripts/generate-content.ts",
-		"dev": "bun run generate:content && ASTRO_TELEMETRY_DISABLED=1 astro dev",
+		"generate:content:check": "bun run scripts/generate-content.ts --check",
+		"validate:language-docs": "bun run scripts/validate-language-docs.ts",
+		"dev": "ASTRO_TELEMETRY_DISABLED=1 astro dev",
 		"dev:prod": "bun run build:prod && bun run preview:prod",
-		"build": "bun run generate:content && ASTRO_TELEMETRY_DISABLED=1 astro build",
+		"build": "ASTRO_TELEMETRY_DISABLED=1 astro build",
 		"build:prod": "bun run build",
-		"docs:studio": "bun run scripts/docs-studio.ts",
+		"docs:studio": "ASTRO_TELEMETRY_DISABLED=1 astro dev --host 127.0.0.1 --port 4322",
 		"verify:lang": "bun run build:prod && bun run scripts/verify-lang.ts",
 		"preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview",
 		"preview:prod": "ASTRO_TELEMETRY_DISABLED=1 astro preview --host 0.0.0.0",
@@ -18,6 +20,7 @@
 	},
 	"dependencies": {
 		"@astrojs/preact": "^5.1.1",
+		"@musi-lang/machines": "workspace:*",
 		"astro": "^6.1.7",
 		"preact": "^10.29.1",
 		"preact-render-to-string": "^6.6.7"

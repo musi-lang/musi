@@ -1,41 +1,31 @@
 ---
 title: "Values, Methods, and Expressions"
-description: "Translate C# methods, expression-bodied members, and return into Musi let functions and final expressions."
+description: "Read Values, Methods, and Expressions as a C# habit shift, with links to the Musi Book definition."
 group: "Musi for Developers"
 section: "C# Developers"
 order: 2
 slug: "values-methods-expressions"
-summary: "Use let functions and final expressions where C# uses methods and return."
+summary: "Translate the C# habit, then use the Musi Book for the full rule."
 ---
 
-C# methods name work. Expression-bodied methods make a simple calculation compact:
+A C# reader brings habits from nullable flow analysis, records, LINQ, async tasks, extension methods, interfaces, namespaces, and attributes. That helps with domain code through named APIs and tooling feedback, but the Musi page asks a narrower question: what contract should this local values and calls example make visible?
 
-```csharp
-static int Total(int basePrice, int fee) => basePrice + fee;
+{{compare:csharp-values-methods-expressions}}
 
-var answer = Total(1200, 45);
-answer;
-```
+## Reading Values, Methods, and Expressions from C#
 
-Musi uses `let` to name functions. The body can be the expression itself.
+On the Musi side, Musi lets a calculation be a `let`, a function, or a final expression without wrapping it in an object or framework first. Read the shared example through C# eyes: keep the useful instinct, then let Musi name shape, behavior, absence, and outside work in separate places.
 
-{{snippet:csharp-values-methods-expressions}}
+## False friend
 
-No `return` is needed for this shape. The expression after `:=` is the value.
+Do not preserve call ceremony just because the source language needs it for methods, receivers, overloads, or closures. For a C# reader, the trap is mapping Musi classes to object classes or service containers; Musi `class` is a typeclass-style behavior contract, not a CLR class with fields, constructors, and inheritance.
 
-## Named arguments
+## When this pays off
 
-C# named arguments make call sites clearer:
+Use this shape when a receipt total, label, distance, or score is pure data moving through named calls. The C# instinct still helps here: Keep the C# habit of making api shape readable at the call site.
 
-```csharp
-static int Render(int port, bool secure) => port;
+## Keep close
 
-var selected = Render(port: 8080, secure: true);
-selected;
-```
-
-Musi uses named arguments for the same reading job.
-
-{{snippet:csharp-named-calls}}
-
-Use named calls when two adjacent values could be confused.
+- [Values and let](/learn/book/start/values-and-let)
+- [Functions](/learn/book/core/functions)
+- [Calls](/learn/book/core/calls)

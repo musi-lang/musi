@@ -4,9 +4,9 @@ export const javaDeveloperSnippets = [
 	{
 		id: "java-values-methods-expressions",
 		language: "musi",
-		sourceText: `let total (basePrice : Int, fee : Int) : Int := basePrice + fee;
+		sourceText: `let receiptTotal (latteCents : Int, tipCents : Int) : Int := latteCents + tipCents;
 
-let answer := total(1200, 45);
+let answer := receiptTotal(450, 120);
 answer;`,
 		evidence: {
 			path: "docs/what/language/developers/java/values-methods-expressions.md",
@@ -18,7 +18,7 @@ answer;`,
 		language: "musi",
 		sourceText: `let render (port : Int, secure : Bool) : Int := port;
 
-let selected := render(port := 8080, secure := 0 = 0);
+let selected := render(port := 8080, secure := 1 = 1);
 selected;`,
 		evidence: {
 			path: "docs/what/language/developers/java/values-methods-expressions.md",
@@ -31,8 +31,8 @@ selected;`,
 		sourceText: `let invoiceTotal () : Int :=
   (
     let basePrice := 1200;
-    let fee := 45;
-    basePrice + fee
+    let deliveryFee := 45;
+    basePrice + deliveryFee
   );
 
 invoiceTotal();`,
@@ -59,11 +59,11 @@ totalSeats(3, 0);`,
 	{
 		id: "java-variables-mutation",
 		language: "musi",
-		sourceText: `let visits := mut 0;
-visits := visits + 1;
+		sourceText: `let checkIns := mut 0;
+checkIns := checkIns + 1;
 
-let nextVisits := visits + 1;
-nextVisits;`,
+let nextCheckIns := checkIns + 1;
+nextCheckIns;`,
 		evidence: {
 			path: "docs/what/language/developers/java/variables-mutation.md",
 			line: 1,
@@ -72,9 +72,9 @@ nextVisits;`,
 	{
 		id: "java-fresh-value",
 		language: "musi",
-		sourceText: `let basePrice := 1200;
-let total := basePrice + 45;
-total;`,
+		sourceText: `let baseFare := 1200;
+let totalFare := baseFare + 45;
+totalFare;`,
 		evidence: {
 			path: "docs/what/language/developers/java/variables-mutation.md",
 			line: 1,
@@ -83,20 +83,20 @@ total;`,
 	{
 		id: "java-records-classes-objects",
 		language: "musi",
-		sourceText: `let Endpoint := data {
+		sourceText: `let Shipment := data {
   host : String;
-  port : Int;
-  secure : Bool;
+  dock : Int;
+  refrigerated : Bool;
 };
 
 let local := {
-  host := "localhost",
-  port := 8080,
-  secure := 0 = 1
+  host := "Rotterdam",
+  dock := 12,
+  refrigerated := 0 = 1
 };
 
-let publicEndpoint := { ...local, host := "api.example.com", secure := 0 = 0 };
-publicEndpoint.port;`,
+let express := { ...local, host := "Hamburg", refrigerated := 0 = 0 };
+express.dock;`,
 		evidence: {
 			path: "docs/what/language/developers/java/records-classes-objects.md",
 			line: 1,
@@ -107,10 +107,10 @@ publicEndpoint.port;`,
 		language: "musi",
 		sourceText: `let iter := import "@std/iter";
 
-let ports := [3000, 8080];
-let visible := ports
-  |> iter.append[Int](9000)
-  |> iter.collect[Int]();
+let attendees := ["Ava", "Mina", "Noah", "Iris"];
+let visible := attendees
+  |> iter.append[String]("Luca")
+  |> iter.collect[String]();
 visible;`,
 		evidence: {
 			path: "docs/what/language/developers/java/collections-streams-pipelines.md",
@@ -122,15 +122,15 @@ visible;`,
 		language: "musi",
 		sourceText: `let option := import "@std/option";
 
-let lookupPort (name : String) : option.Option[Int] :=
-  match name (
-  | "admin" => option.some[Int](9000)
-  | _ => option.none[Int]()
+let lookupLocker (badgeId : String) : option.Option[Int] :=
+  match badgeId (
+  | "A12" => option.someOf[Int](204)
+  | _ => option.noneOf[Int]()
   );
 
-let port := lookupPort("web")
-  |> option.unwrapOr[Int](8080);
-port;`,
+let locker := lookupLocker("B07")
+  |> option.unwrapOr[Int](808);
+locker;`,
 		evidence: {
 			path: "docs/what/language/developers/java/null-option-result.md",
 			line: 1,
@@ -141,15 +141,15 @@ port;`,
 		language: "musi",
 		sourceText: `let result := import "@std/result";
 
-let parsePort (text : String) : result.Result[Int, String] :=
+let parseWeight (text : String) : result.Result[Int, String] :=
   match text (
-  | "8080" => result.ok[Int, String](8080)
-  | _ => result.err[Int, String]("invalid port")
+  | "450" => result.ok[Int, String](450)
+  | _ => result.err[Int, String]("invalid weight")
   );
 
-let port := parsePort("abc")
-  |> result.unwrapOr[Int, String](3000);
-port;`,
+let weight := parseWeight("abc")
+  |> result.unwrapOr[Int, String](0);
+weight;`,
 		evidence: {
 			path: "docs/what/language/developers/java/null-option-result.md",
 			line: 1,
@@ -160,15 +160,15 @@ port;`,
 		language: "musi",
 		sourceText: `let result := import "@std/result";
 
-let parsePort (text : String) : result.Result[Int, String] :=
+let parseSeatCount (text : String) : result.Result[Int, String] :=
   match text (
-  | "8080" => result.ok[Int, String](8080)
+  | "42" => result.ok[Int, String](42)
   | _ => result.err[Int, String]("parse error")
   );
 
-let port := parsePort("abc")
-  |> result.unwrapOr[Int, String](3000);
-port;`,
+let seats := parseSeatCount("abc")
+  |> result.unwrapOr[Int, String](0);
+seats;`,
 		evidence: {
 			path: "docs/what/language/developers/java/exceptions-effects.md",
 			line: 1,
@@ -189,17 +189,17 @@ io.writeLine(name);`,
 	{
 		id: "java-sealed-types-patterns",
 		language: "musi",
-		sourceText: `let TaskState := data {
+		sourceText: `let DeliveryState := data {
   | Waiting
-  | Running(id : Int)
-  | Done(code : Int)
+  | InTransit(stop : Int)
+  | Delivered(code : Int)
 };
 
-let state : TaskState := .Running(id := 42);
+let state : DeliveryState := .InTransit(stop := 3);
 match state (
-| .Running(id) => id
+| .InTransit(stop) => stop
 | .Waiting => 0
-| .Done(code) => code
+| .Delivered(code) => code
 );`,
 		evidence: {
 			path: "docs/what/language/developers/java/sealed-types-patterns.md",
@@ -211,8 +211,8 @@ match state (
 		language: "musi",
 		sourceText: `let identity[T] (input : T) : T := input;
 
-let port := identity[Int](8080);
-port;`,
+let dock := identity[Int](8080);
+dock;`,
 		evidence: {
 			path: "docs/what/language/developers/java/generics-interfaces-laws.md",
 			line: 1,
@@ -226,12 +226,12 @@ port;`,
   law atLeastFourWheels(vehicle : T) := vehicle.wheels() >= 4;
 };
 
-let Car := data {
-  | Car
+let Bus := data {
+  | Bus
 };
 
-let carVehicle := instance Vehicle[Car] {
-  let wheels(self : Car) : Int := 4;
+let busVehicle := instance Vehicle[Bus] {
+  let wheels(self : Bus) : Int := 6;
 };`,
 		evidence: {
 			path: "docs/what/language/developers/java/generics-interfaces-laws.md",
@@ -241,10 +241,10 @@ let carVehicle := instance Vehicle[Car] {
 	{
 		id: "java-methods-receiver-calls",
 		language: "musi",
-		sourceText: `let (port : Int).withOffset (offset : Int) : Int := port + offset;
+		sourceText: `let (subtotal : Int).withShipping (shipping : Int) : Int := subtotal + shipping;
 
-let publicPort := 8080.withOffset(1);
-publicPort;`,
+let publicTotal := 8080.withShipping(1);
+publicTotal;`,
 		evidence: {
 			path: "docs/what/language/developers/java/methods-and-receiver-calls.md",
 			line: 1,
@@ -253,7 +253,7 @@ publicPort;`,
 	{
 		id: "java-module-export",
 		language: "musi",
-		sourceText: "export let defaultPort () : Int := 8080;",
+		sourceText: "export let defaultDock () : Int := 8080;",
 		evidence: {
 			path: "docs/what/language/developers/java/packages-modules.md",
 			line: 1,
@@ -262,10 +262,10 @@ publicPort;`,
 	{
 		id: "java-module-import",
 		language: "musi",
-		sourceText: `let Ports := import "./ports";
+		sourceText: `let Shipping := import "./shipping";
 
-let port := Ports.defaultPort();
-port;`,
+let dock := Shipping.defaultDock();
+dock;`,
 		evidence: {
 			path: "docs/what/language/developers/java/packages-modules.md",
 			line: 1,
@@ -276,8 +276,8 @@ port;`,
 		language: "musi",
 		sourceText: `let testing := import "@std/testing";
 
-testing.describe("ports");
-testing.it("default port", testing.equal[Int](8080, 8080));
+testing.describe("shipping defaults");
+testing.it("default dock", testing.equal[Int](8080, 8080));
 testing.endDescribe();`,
 		evidence: {
 			path: "docs/what/language/developers/java/testing-tooling.md",

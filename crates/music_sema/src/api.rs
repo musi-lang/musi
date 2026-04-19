@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use music_arena::Idx;
 use music_base::diag::Diag;
@@ -27,242 +27,10 @@ pub fn sema_diag_kind(diag: &Diag) -> Option<SemaDiagKind> {
     SemaDiagKind::from_diag(diag)
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct ForeignLinkInfo {
-    pub name: Option<Box<str>>,
-    pub symbol: Option<Box<str>>,
-}
-
-impl ForeignLinkInfo {
-    #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            name: None,
-            symbol: None,
-        }
-    }
-
-    #[must_use]
-    pub fn with_name<Name>(mut self, name: Name) -> Self
-    where
-        Name: Into<Box<str>>,
-    {
-        self.name = Some(name.into());
-        self
-    }
-
-    #[must_use]
-    pub fn with_symbol<SymbolName>(mut self, symbol: SymbolName) -> Self
-    where
-        SymbolName: Into<Box<str>>,
-    {
-        self.symbol = Some(symbol.into());
-        self
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct TargetInfo {
-    pub triple: Option<Box<str>>,
-    pub os: Option<Box<str>>,
-    pub arch: Option<Box<str>>,
-    pub arch_family: Option<Box<str>>,
-    pub env: Option<Box<str>>,
-    pub abi: Option<Box<str>>,
-    pub vendor: Option<Box<str>>,
-    pub family: BTreeSet<Box<str>>,
-    pub features: BTreeSet<Box<str>>,
-    pub pointer_width: Option<u16>,
-    pub endian: Option<Box<str>>,
-    pub jit: JitTargetInfo,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct JitTargetInfo {
-    pub supported: bool,
-    pub backend: Option<Box<str>>,
-    pub isa: Option<Box<str>>,
-    pub call_conv: Option<Box<str>>,
-    pub features: BTreeSet<Box<str>>,
-}
-
-impl TargetInfo {
-    #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            triple: None,
-            os: None,
-            arch: None,
-            arch_family: None,
-            env: None,
-            abi: None,
-            vendor: None,
-            family: BTreeSet::new(),
-            features: BTreeSet::new(),
-            pointer_width: None,
-            endian: None,
-            jit: JitTargetInfo {
-                supported: false,
-                backend: None,
-                isa: None,
-                call_conv: None,
-                features: BTreeSet::new(),
-            },
-        }
-    }
-
-    #[must_use]
-    pub fn with_triple<Triple>(mut self, triple: Triple) -> Self
-    where
-        Triple: Into<Box<str>>,
-    {
-        self.triple = Some(normalize_target_text(&triple.into()).into_boxed_str());
-        self
-    }
-
-    #[must_use]
-    pub fn with_os<Os>(mut self, os: Os) -> Self
-    where
-        Os: Into<Box<str>>,
-    {
-        self.os = Some(normalize_target_text(&os.into()).into_boxed_str());
-        self
-    }
-
-    #[must_use]
-    pub fn with_arch<Arch>(mut self, arch: Arch) -> Self
-    where
-        Arch: Into<Box<str>>,
-    {
-        let arch = normalize_arch_text(&arch.into());
-        self.arch_family = arch_family(&arch).map(Into::into);
-        self.arch = Some(arch.into_boxed_str());
-        self.jit = jit_target_for_arch(self.arch.as_deref());
-        self
-    }
-
-    #[must_use]
-    pub fn with_arch_family<ArchFamily>(mut self, arch_family: ArchFamily) -> Self
-    where
-        ArchFamily: Into<Box<str>>,
-    {
-        self.arch_family = Some(normalize_target_text(&arch_family.into()).into_boxed_str());
-        self
-    }
-
-    #[must_use]
-    pub fn with_env<Env>(mut self, env: Env) -> Self
-    where
-        Env: Into<Box<str>>,
-    {
-        self.env = Some(normalize_target_text(&env.into()).into_boxed_str());
-        self
-    }
-
-    #[must_use]
-    pub fn with_abi<Abi>(mut self, abi: Abi) -> Self
-    where
-        Abi: Into<Box<str>>,
-    {
-        self.abi = Some(normalize_target_text(&abi.into()).into_boxed_str());
-        self
-    }
-
-    #[must_use]
-    pub fn with_vendor<Vendor>(mut self, vendor: Vendor) -> Self
-    where
-        Vendor: Into<Box<str>>,
-    {
-        self.vendor = Some(normalize_target_text(&vendor.into()).into_boxed_str());
-        self
-    }
-
-    #[must_use]
-    pub fn with_features(mut self, features: BTreeSet<Box<str>>) -> Self {
-        self.features = features
-            .into_iter()
-            .map(|feature| normalize_target_text(&feature).into_boxed_str())
-            .collect();
-        self
-    }
-
-    #[must_use]
-    pub fn with_family<Family>(mut self, family: Family) -> Self
-    where
-        Family: Into<Box<str>>,
-    {
-        let _ = self
-            .family
-            .insert(normalize_target_text(&family.into()).into_boxed_str());
-        self
-    }
-
-    #[must_use]
-    pub const fn with_pointer_width(mut self, pointer_width: u16) -> Self {
-        self.pointer_width = Some(pointer_width);
-        self
-    }
-
-    #[must_use]
-    pub fn with_endian<Endian>(mut self, endian: Endian) -> Self
-    where
-        Endian: Into<Box<str>>,
-    {
-        self.endian = Some(normalize_target_text(&endian.into()).into_boxed_str());
-        self
-    }
-}
-
-#[must_use]
-pub fn normalize_target_text(text: &str) -> String {
-    text.trim().to_ascii_lowercase().replace('_', "-")
-}
-
-#[must_use]
-pub fn normalize_arch_text(text: &str) -> String {
-    match normalize_target_text(text).as_str() {
-        "x86-64" => "x86-64".into(),
-        "aarch64" => "aarch64".into(),
-        "arm" => "aarch32".into(),
-        other => other.into(),
-    }
-}
-
-#[must_use]
-pub fn arch_family(arch: &str) -> Option<&'static str> {
-    match normalize_arch_text(arch).as_str() {
-        "x86" | "x86-64" => Some("x86"),
-        "aarch32" | "aarch64" => Some("arm"),
-        "rv32" | "rv64" | "riscv32" | "riscv64" => Some("risc-v"),
-        "wasm32" | "wasm64" => Some("webassembly"),
-        "powerpc" | "powerpc64" => Some("powerpc"),
-        "mips" | "mips64" => Some("mips"),
-        "loongarch32" | "loongarch64" => Some("loongarch"),
-        "s390x" => Some("ibm-z"),
-        _ => None,
-    }
-}
-
-#[must_use]
-pub fn jit_target_for_arch(arch: Option<&str>) -> JitTargetInfo {
-    let Some(arch) = arch else {
-        return JitTargetInfo::default();
-    };
-    let isa = match normalize_arch_text(arch).as_str() {
-        "x86-64" => "x64",
-        "aarch64" => "aarch64",
-        "rv64" | "riscv64" => "riscv64",
-        "s390x" => "s390x",
-        _ => return JitTargetInfo::default(),
-    };
-    JitTargetInfo {
-        supported: true,
-        backend: Some("cranelift".into()),
-        isa: Some(isa.into()),
-        call_conv: None,
-        features: BTreeSet::new(),
-    }
-}
+mod target;
+pub use target::{
+    ForeignLinkInfo, JitTargetInfo, TargetInfo, normalize_arch_text, normalize_target_text,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Attr {
@@ -430,6 +198,12 @@ pub enum SurfaceTyKind {
     Mut {
         inner: SurfaceTyId,
     },
+    AnyClass {
+        class: SurfaceTyId,
+    },
+    SomeClass {
+        class: SurfaceTyId,
+    },
     Record {
         fields: Box<[SurfaceTyField]>,
     },
@@ -465,8 +239,6 @@ impl SurfaceTyField {
 pub struct ExportedValue {
     pub name: Box<str>,
     pub ty: SurfaceTyId,
-    pub receiver_ty: Option<SurfaceTyId>,
-    pub receiver_mut: bool,
     pub type_params: NameList,
     pub type_param_kinds: SurfaceTyIdList,
     pub param_names: NameList,
@@ -478,6 +250,7 @@ pub struct ExportedValue {
     pub class_key: Option<DefinitionKey>,
     pub effect_key: Option<DefinitionKey>,
     pub data_key: Option<DefinitionKey>,
+    pub is_attached_method: bool,
     pub const_int: Option<i64>,
     pub comptime_value: Option<ComptimeValue>,
     pub inert_attrs: AttrList,
@@ -493,8 +266,6 @@ impl ExportedValue {
         Self {
             name: name.into(),
             ty,
-            receiver_ty: None,
-            receiver_mut: false,
             type_params: Box::default(),
             type_param_kinds: Box::default(),
             param_names: Box::default(),
@@ -506,6 +277,7 @@ impl ExportedValue {
             class_key: None,
             effect_key: None,
             data_key: None,
+            is_attached_method: false,
             const_int: None,
             comptime_value: None,
             inert_attrs: Box::default(),
@@ -537,13 +309,6 @@ impl ExportedValue {
     #[must_use]
     pub fn with_comptime_params(mut self, params: impl Into<ComptimeParamList>) -> Self {
         self.comptime_params = params.into();
-        self
-    }
-
-    #[must_use]
-    pub const fn with_receiver(mut self, receiver_ty: SurfaceTyId, receiver_mut: bool) -> Self {
-        self.receiver_ty = Some(receiver_ty);
-        self.receiver_mut = receiver_mut;
         self
     }
 
@@ -586,6 +351,12 @@ impl ExportedValue {
     #[must_use]
     pub fn with_data_key(mut self, data_key: DefinitionKey) -> Self {
         self.data_key = Some(data_key);
+        self
+    }
+
+    #[must_use]
+    pub const fn with_attached_method(mut self) -> Self {
+        self.is_attached_method = true;
         self
     }
 
@@ -753,6 +524,7 @@ pub struct DataSurface {
     pub type_params: NameList,
     pub type_param_kinds: SurfaceTyIdList,
     pub variants: Box<[DataVariantSurface]>,
+    pub is_record_shape: bool,
     pub repr_kind: Option<Box<str>>,
     pub layout_align: Option<u32>,
     pub layout_pack: Option<u32>,
@@ -769,6 +541,7 @@ impl DataSurface {
             type_params: Box::default(),
             type_param_kinds: Box::default(),
             variants: variants.into(),
+            is_record_shape: false,
             repr_kind: None,
             layout_align: None,
             layout_pack: None,
@@ -817,6 +590,12 @@ impl DataSurface {
     #[must_use]
     pub const fn with_frozen(mut self, frozen: bool) -> Self {
         self.frozen = frozen;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_record_shape(mut self, is_record_shape: bool) -> Self {
+        self.is_record_shape = is_record_shape;
         self
     }
 
@@ -1299,6 +1078,70 @@ impl ExprFacts {
     }
 }
 
+/// Semantic class for a resolved member access expression.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExprMemberKind {
+    /// Field provided by a record-like value.
+    RecordField,
+    /// Value exported by a module.
+    ModuleExport,
+    /// Callable resolved from receiver-first visible binding lookup.
+    DotCallable,
+    /// Callable declared with receiver-pattern method syntax.
+    AttachedMethod,
+    /// Attached method reached through receiver type namespace.
+    AttachedMethodNamespace,
+    /// Member projected from typeclass evidence.
+    ClassMember,
+    /// Export reached through std FFI pointer namespace support.
+    FfiPointerExport,
+    /// Operation exposed by an effect value.
+    EffectOperation,
+}
+
+/// Resolved target information for a member access expression.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExprMemberFact {
+    pub kind: ExprMemberKind,
+    pub name: Symbol,
+    pub ty: HirTyId,
+    pub binding: Option<NameBindingId>,
+    pub module_target: Option<ModuleKey>,
+    pub index: Option<u16>,
+}
+
+impl ExprMemberFact {
+    #[must_use]
+    pub const fn new(kind: ExprMemberKind, name: Symbol, ty: HirTyId) -> Self {
+        Self {
+            kind,
+            name,
+            ty,
+            binding: None,
+            module_target: None,
+            index: None,
+        }
+    }
+
+    #[must_use]
+    pub const fn with_binding(mut self, binding: NameBindingId) -> Self {
+        self.binding = Some(binding);
+        self
+    }
+
+    #[must_use]
+    pub fn with_module_target(mut self, target: ModuleKey) -> Self {
+        self.module_target = Some(target);
+        self
+    }
+
+    #[must_use]
+    pub const fn with_index(mut self, index: u16) -> Self {
+        self.index = Some(index);
+        self
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SemaEffectOpDef {
     params: HirTyIdList,
@@ -1329,6 +1172,7 @@ pub struct SemaDataDef {
     type_params: Box<[Symbol]>,
     type_param_kinds: HirTyIdList,
     variants: BTreeMap<Box<str>, SemaDataVariantDef>,
+    is_record_shape: bool,
     repr_kind: Option<Box<str>>,
     layout_align: Option<u32>,
     layout_pack: Option<u32>,
@@ -1486,6 +1330,7 @@ impl SemaDataDef {
             type_params: Box::default(),
             type_param_kinds: Box::default(),
             variants: variants.into(),
+            is_record_shape: false,
             repr_kind,
             layout_align,
             layout_pack,
@@ -1505,6 +1350,12 @@ impl SemaDataDef {
     {
         self.type_params = type_params.into();
         self.type_param_kinds = type_param_kinds.into();
+        self
+    }
+
+    #[must_use]
+    pub const fn with_record_shape(mut self, is_record_shape: bool) -> Self {
+        self.is_record_shape = is_record_shape;
         self
     }
 
@@ -1543,6 +1394,18 @@ impl SemaDataDef {
 
     pub fn variants(&self) -> impl Iterator<Item = (&str, &SemaDataVariantDef)> {
         self.variants.iter().map(|(name, def)| (name.as_ref(), def))
+    }
+
+    #[must_use]
+    pub const fn is_record_shape(&self) -> bool {
+        self.is_record_shape
+    }
+
+    #[must_use]
+    pub fn record_shape_variant(&self) -> Option<&SemaDataVariantDef> {
+        self.is_record_shape
+            .then(|| self.variants.get(self.key.name.as_ref()))
+            .flatten()
     }
 
     #[must_use]
@@ -1832,7 +1695,8 @@ pub struct SemaModule {
     expr_module_targets: HashMap<HirExprId, ModuleKey>,
     type_test_targets: HashMap<HirExprId, HirTyId>,
     expr_evidence: HashMap<HirExprId, Box<[ConstraintEvidence]>>,
-    expr_attached_bindings: HashMap<HirExprId, NameBindingId>,
+    expr_dot_callable_bindings: HashMap<HirExprId, NameBindingId>,
+    expr_member_facts: HashMap<HirExprId, ExprMemberFact>,
     expr_comptime_values: HashMap<HirExprId, ComptimeValue>,
     effect_defs: HashMap<Box<str>, SemaEffectDef>,
     data_defs: HashMap<Box<str>, SemaDataDef>,
@@ -1859,7 +1723,8 @@ struct SemaFactTables {
     expr_module_targets: HashMap<HirExprId, ModuleKey>,
     type_test_targets: HashMap<HirExprId, HirTyId>,
     expr_evidence: HashMap<HirExprId, Box<[ConstraintEvidence]>>,
-    expr_attached_bindings: HashMap<HirExprId, NameBindingId>,
+    expr_dot_callable_bindings: HashMap<HirExprId, NameBindingId>,
+    expr_member_facts: HashMap<HirExprId, ExprMemberFact>,
     expr_comptime_values: HashMap<HirExprId, ComptimeValue>,
 }
 
@@ -1886,7 +1751,8 @@ impl From<SemaModuleBuild> for SemaModule {
             expr_module_targets,
             type_test_targets,
             expr_evidence,
-            expr_attached_bindings,
+            expr_dot_callable_bindings,
+            expr_member_facts,
             expr_comptime_values,
         } = build_facts;
         let context = SemaContextTables {
@@ -1905,7 +1771,8 @@ impl From<SemaModuleBuild> for SemaModule {
             expr_module_targets,
             type_test_targets,
             expr_evidence,
-            expr_attached_bindings,
+            expr_dot_callable_bindings,
+            expr_member_facts,
             expr_comptime_values,
         };
         let decls = SemaDeclTables {
@@ -1967,8 +1834,13 @@ impl SemaModule {
     }
 
     #[must_use]
-    pub fn expr_attached_binding(&self, id: HirExprId) -> Option<NameBindingId> {
-        self.expr_attached_bindings.get(&id).copied()
+    pub fn expr_dot_callable_binding(&self, id: HirExprId) -> Option<NameBindingId> {
+        self.expr_dot_callable_bindings.get(&id).copied()
+    }
+
+    #[must_use]
+    pub fn expr_member_fact(&self, id: HirExprId) -> Option<&ExprMemberFact> {
+        self.expr_member_facts.get(&id)
     }
 
     #[must_use]
@@ -2087,7 +1959,8 @@ impl SemaModule {
             expr_module_targets: facts.expr_module_targets,
             type_test_targets: facts.type_test_targets,
             expr_evidence: facts.expr_evidence,
-            expr_attached_bindings: facts.expr_attached_bindings,
+            expr_dot_callable_bindings: facts.expr_dot_callable_bindings,
+            expr_member_facts: facts.expr_member_facts,
             expr_comptime_values: facts.expr_comptime_values,
             effect_defs: decls.effect_defs,
             data_defs: decls.data_defs,
