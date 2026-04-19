@@ -5,8 +5,8 @@ use music_hir::{HirArrayItem, HirDim, HirExprId, HirOrigin, HirTyId, HirTyKind};
 use crate::api::{ConstraintKind, ExprFacts};
 use crate::effects::EffectRow;
 
-use super::exprs::peel_mut_ty;
-use super::{CheckPass, DiagKind};
+use super::super::{CheckPass, DiagKind};
+use super::peel_mut_ty;
 
 impl CheckPass<'_, '_, '_> {
     pub(super) fn check_index_expr(
@@ -16,7 +16,7 @@ impl CheckPass<'_, '_, '_> {
         args: SliceRange<HirExprId>,
     ) -> ExprFacts {
         let builtins = self.builtins();
-        let base_facts = super::exprs::check_expr(self, base);
+        let base_facts = super::check_expr(self, base);
         let mut effects = base_facts.effects.clone();
         let arg_count = self.check_index_args(origin, args, &mut effects);
         let ty = if let HirTyKind::Array { dims, item } =
@@ -103,7 +103,7 @@ impl CheckPass<'_, '_, '_> {
     ) {
         let builtins = self.builtins();
         self.push_expected_ty(*item_ty);
-        let facts = super::exprs::check_expr(self, array_item.expr);
+        let facts = super::check_expr(self, array_item.expr);
         let _ = self.pop_expected_ty();
         effects.union_with(&facts.effects);
         if *item_ty == builtins.unknown {
@@ -123,7 +123,7 @@ impl CheckPass<'_, '_, '_> {
         has_runtime_spread: &mut bool,
         known_len: &mut u32,
     ) {
-        let spread_facts = super::exprs::check_expr(self, array_item.expr);
+        let spread_facts = super::check_expr(self, array_item.expr);
         effects.union_with(&spread_facts.effects);
         let spread_origin = self.expr(array_item.expr).origin;
         let spread_ty = peel_mut_ty(self, spread_facts.ty);
@@ -215,7 +215,7 @@ impl CheckPass<'_, '_, '_> {
     ) {
         let rangeable_symbol = self.known().rangeable;
         let rangeable = self.named_type_for_symbol(rangeable_symbol);
-        let obligation = super::schemes::ConstraintObligation {
+        let obligation = super::super::schemes::ConstraintObligation {
             kind: ConstraintKind::Implements,
             subject: item_ty,
             value: rangeable,
@@ -340,7 +340,7 @@ impl CheckPass<'_, '_, '_> {
             );
         }
         for index_expr in &index_exprs {
-            let facts = super::exprs::check_expr(self, *index_expr);
+            let facts = super::check_expr(self, *index_expr);
             effects.union_with(&facts.effects);
             let index_origin = self.expr(*index_expr).origin;
             self.type_mismatch(index_origin, builtins.int_, facts.ty);

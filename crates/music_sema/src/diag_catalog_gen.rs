@@ -483,8 +483,8 @@ const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: SemaDiagKind::MissingRecordField,
         code: 3123,
-        message: "record field missing",
-        primary: "record field missing",
+        message: "missing record field",
+        primary: "missing record field",
         help: None,
     },
     CatalogEntry {

@@ -7,8 +7,8 @@ use music_names::{Ident, Symbol};
 use crate::api::{ConstraintKind, ExprFacts};
 use crate::effects::EffectRow;
 
-use super::exprs::peel_mut_ty;
-use super::{CheckPass, DiagKind};
+use super::super::{CheckPass, DiagKind};
+use super::peel_mut_ty;
 
 impl CheckPass<'_, '_, '_> {
     pub(super) fn check_binary_expr(
@@ -23,8 +23,8 @@ impl CheckPass<'_, '_, '_> {
             return self.check_assign_expr(origin, left, right);
         }
         let builtins = self.builtins();
-        let left_facts = super::exprs::check_expr(self, left);
-        let right_facts = super::exprs::check_expr(self, right);
+        let left_facts = super::check_expr(self, left);
+        let right_facts = super::check_expr(self, right);
         let mut effects = left_facts.effects.clone();
         effects.union_with(&right_facts.effects);
         if matches!(op, HirBinaryOp::ClosedRange | HirBinaryOp::OpenRange) {
@@ -74,7 +74,7 @@ impl CheckPass<'_, '_, '_> {
         kind: HirPartialRangeKind,
         expr: HirExprId,
     ) -> ExprFacts {
-        let facts = super::exprs::check_expr(self, expr);
+        let facts = super::check_expr(self, expr);
         let bound = self.normalize_range_bound_ty(facts.ty);
         let obligations = [
             self.range_obligation(bound, self.known().rangeable),
@@ -102,7 +102,7 @@ impl CheckPass<'_, '_, '_> {
         let builtins = self.builtins();
         let (expected_rhs, mut effects) = self.assignment_contract(origin, left);
         self.push_expected_ty(expected_rhs);
-        let rhs_facts = super::exprs::check_expr(self, right);
+        let rhs_facts = super::check_expr(self, right);
         let _ = self.pop_expected_ty();
         effects.union_with(&rhs_facts.effects);
         self.type_mismatch(origin, expected_rhs, rhs_facts.ty);
@@ -146,7 +146,7 @@ impl CheckPass<'_, '_, '_> {
         args: SliceRange<HirExprId>,
     ) -> (HirTyId, EffectRow) {
         let builtins = self.builtins();
-        let base_facts = super::exprs::check_expr(self, base);
+        let base_facts = super::check_expr(self, base);
         let mut effects = base_facts.effects;
         let arg_count = self.check_index_args(origin, args, &mut effects);
         let expected = match self.ty(peel_mut_ty(self, base_facts.ty)).kind {
@@ -203,7 +203,7 @@ impl CheckPass<'_, '_, '_> {
         name: Ident,
     ) -> (HirTyId, EffectRow) {
         let builtins = self.builtins();
-        let base_facts = super::exprs::check_expr(self, base);
+        let base_facts = super::check_expr(self, base);
         let effects = base_facts.effects;
         let expected = match self.ty(peel_mut_ty(self, base_facts.ty)).kind {
             HirTyKind::Record { fields } if self.is_mut_ty(base_facts.ty) => self
@@ -396,9 +396,9 @@ impl CheckPass<'_, '_, '_> {
         &mut self,
         subject: HirTyId,
         class_name: Symbol,
-    ) -> super::schemes::ConstraintObligation {
+    ) -> super::super::schemes::ConstraintObligation {
         let class_ty = self.named_type_for_symbol(class_name);
-        super::schemes::ConstraintObligation {
+        super::super::schemes::ConstraintObligation {
             kind: ConstraintKind::Implements,
             subject,
             value: class_ty,

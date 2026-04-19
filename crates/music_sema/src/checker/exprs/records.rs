@@ -7,11 +7,13 @@ use music_names::Symbol;
 use crate::api::ExprFacts;
 use crate::effects::EffectRow;
 
-use super::exprs::peel_mut_ty;
-use super::{CheckPass, DiagKind};
+use super::super::{CheckPass, DiagKind};
+use super::peel_mut_ty;
 
+type RecordItemRange = SliceRange<HirRecordItem>;
 type RecordFieldMap = BTreeMap<Box<str>, HirTyId>;
 type RecordTyFieldMap = BTreeMap<Box<str>, HirTyField>;
+type SeenRecordFieldSet = BTreeSet<Box<str>>;
 
 struct RecordExprFields {
     fields: RecordTyFieldMap,
@@ -19,7 +21,7 @@ struct RecordExprFields {
 }
 
 impl CheckPass<'_, '_, '_> {
-    pub(super) fn check_record_expr(&mut self, items: SliceRange<HirRecordItem>) -> ExprFacts {
+    pub(super) fn check_record_expr(&mut self, items: RecordItemRange) -> ExprFacts {
         let expected_ty = self
             .expected_ty()
             .map(|expected| peel_mut_ty(self, expected));
@@ -52,11 +54,11 @@ impl CheckPass<'_, '_, '_> {
 
     fn collect_record_expr_fields(
         &mut self,
-        items: SliceRange<HirRecordItem>,
+        items: RecordItemRange,
         expected_record: Option<&RecordFieldMap>,
     ) -> (RecordExprFields, EffectRow) {
         let mut effects = EffectRow::empty();
-        let mut seen_explicit = BTreeSet::<Box<str>>::new();
+        let mut seen_explicit = SeenRecordFieldSet::new();
         let mut fields = RecordTyFieldMap::new();
         let mut inferred_record_ty = None;
         for record_item in self.record_items(items) {
@@ -83,7 +85,7 @@ impl CheckPass<'_, '_, '_> {
         record_item: &HirRecordItem,
         expected_record: Option<&RecordFieldMap>,
         fields: &mut RecordTyFieldMap,
-        seen_explicit: &mut BTreeSet<Box<str>>,
+        seen_explicit: &mut SeenRecordFieldSet,
         inferred_record_ty: &mut Option<HirTyId>,
         effects: &mut EffectRow,
     ) {
@@ -99,7 +101,7 @@ impl CheckPass<'_, '_, '_> {
                 effects,
             );
         } else {
-            let facts = super::exprs::check_expr(self, record_item.value);
+            let facts = super::check_expr(self, record_item.value);
             effects.union_with(&facts.effects);
         }
     }
@@ -111,7 +113,7 @@ impl CheckPass<'_, '_, '_> {
         inferred_record_ty: &mut Option<HirTyId>,
         effects: &mut EffectRow,
     ) {
-        let facts = super::exprs::check_expr(self, record_item.value);
+        let facts = super::check_expr(self, record_item.value);
         effects.union_with(&facts.effects);
         let origin = self.expr(record_item.value).origin;
         let spread_ty = peel_mut_ty(self, facts.ty);
@@ -134,13 +136,13 @@ impl CheckPass<'_, '_, '_> {
         name: Symbol,
         expected_record: Option<&RecordFieldMap>,
         fields: &mut RecordTyFieldMap,
-        seen_explicit: &mut BTreeSet<Box<str>>,
+        seen_explicit: &mut SeenRecordFieldSet,
         effects: &mut EffectRow,
     ) {
         let expected = self.expected_record_field_ty(name, expected_record, fields);
         self.report_unknown_record_field(name, record_item, expected_record);
         self.push_expected_ty(expected);
-        let facts = super::exprs::check_expr(self, record_item.value);
+        let facts = super::check_expr(self, record_item.value);
         let _ = self.pop_expected_ty();
         effects.union_with(&facts.effects);
         let origin = self.expr(record_item.value).origin;
@@ -184,7 +186,7 @@ impl CheckPass<'_, '_, '_> {
         value: HirExprId,
         ty: HirTyId,
         fields: &mut RecordTyFieldMap,
-        seen_explicit: &mut BTreeSet<Box<str>>,
+        seen_explicit: &mut SeenRecordFieldSet,
     ) {
         let key: Box<str> = self.resolve_symbol(name).into();
         if !seen_explicit.insert(key.clone()) {
@@ -270,9 +272,9 @@ impl CheckPass<'_, '_, '_> {
         &mut self,
         origin: HirOrigin,
         base: HirExprId,
-        items: SliceRange<HirRecordItem>,
+        items: RecordItemRange,
     ) -> ExprFacts {
-        let base_facts = super::exprs::check_expr(self, base);
+        let base_facts = super::check_expr(self, base);
         let mut effects = base_facts.effects.clone();
         let base_ty = peel_mut_ty(self, base_facts.ty);
         let mut fields = self.record_like_fields(base_ty).unwrap_or_else(|| {
@@ -281,7 +283,7 @@ impl CheckPass<'_, '_, '_> {
         });
         for record_item in self.record_items(items) {
             if record_item.spread {
-                let facts = super::exprs::check_expr(self, record_item.value);
+                let facts = super::check_expr(self, record_item.value);
                 effects.union_with(&facts.effects);
                 let spread_origin = self.expr(record_item.value).origin;
                 let spread_ty = peel_mut_ty(self, facts.ty);
@@ -304,7 +306,7 @@ impl CheckPass<'_, '_, '_> {
                 .and_then(|name| fields.get(self.resolve_symbol(name.name)).copied())
                 .unwrap_or_else(|| self.builtins().unknown);
             self.push_expected_ty(expected);
-            let facts = super::exprs::check_expr(self, record_item.value);
+            let facts = super::check_expr(self, record_item.value);
             let _ = self.pop_expected_ty();
             effects.union_with(&facts.effects);
             if let Some(name) = record_item.name {
@@ -374,7 +376,7 @@ impl CheckPass<'_, '_, '_> {
         })
     }
 
-    pub(super) fn record_like_fields(
+    pub(in super::super) fn record_like_fields(
         &mut self,
         ty: HirTyId,
     ) -> Option<BTreeMap<Box<str>, HirTyId>> {

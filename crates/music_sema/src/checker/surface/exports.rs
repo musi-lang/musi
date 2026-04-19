@@ -8,8 +8,8 @@ use music_hir::{
 use music_module::ModuleKey;
 use music_names::{Ident, Interner, NameBindingId, NameBindingKind, NameSite, Symbol};
 
-use super::surface_types::{SurfaceTyBuilder, lower_surface_effect_row};
-use super::{DeclState, ModuleState, TypingState};
+use super::super::{DeclState, ModuleState, TypingState};
+use super::types::{SurfaceTyBuilder, lower_surface_effect_row};
 use crate::BindingScheme;
 use crate::api::{
     Attr, AttrArg, AttrRecordField, AttrValue, ClassMemberSurface, ClassSurface, ConstraintFacts,

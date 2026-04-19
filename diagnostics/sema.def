@@ -273,6 +273,10 @@ diag DuplicateRecordField 3058
   message "duplicate record field"
   primary "duplicate record field"
 
+diag MissingRecordField 3123
+  message "missing record field"
+  primary "missing record field"
+
 diag VariantMissingDataContext 3059
   message "variant constructor requires data type context"
   primary "variant constructor requires data type context"

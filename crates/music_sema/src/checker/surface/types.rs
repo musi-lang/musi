@@ -6,7 +6,7 @@ use music_hir::{HirDim, HirStore, HirTyField, HirTyId, HirTyKind};
 use music_module::ModuleKey;
 use music_names::{Ident, Interner, Symbol};
 
-use super::PassBase;
+use super::super::PassBase;
 use crate::api::{
     DefinitionKey, ModuleSurface, SurfaceDim, SurfaceEffectItem, SurfaceEffectRow, SurfaceTy,
     SurfaceTyField, SurfaceTyId, SurfaceTyKind,
@@ -228,6 +228,108 @@ fn canonical_surface_record(surface: &ModuleSurface, fields: &[SurfaceTyField]) 
     )
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RangeTyTag {
+    Open,
+    Closed,
+    From,
+    UpTo,
+    Thru,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RangeTyForm<Id> {
+    tag: RangeTyTag,
+    bound: Id,
+}
+
+impl RangeTyTag {
+    const fn to_surface_kind(self, bound: SurfaceTyId) -> SurfaceTyKind {
+        match self {
+            Self::Open => SurfaceTyKind::Range { bound },
+            Self::Closed => SurfaceTyKind::ClosedRange { bound },
+            Self::From => SurfaceTyKind::PartialRangeFrom { bound },
+            Self::UpTo => SurfaceTyKind::PartialRangeUpTo { bound },
+            Self::Thru => SurfaceTyKind::PartialRangeThru { bound },
+        }
+    }
+
+    const fn to_hir_kind(self, bound: HirTyId) -> HirTyKind {
+        if matches!(self, Self::Open) {
+            return HirTyKind::Range { bound };
+        }
+        if matches!(self, Self::Closed) {
+            return HirTyKind::ClosedRange { bound };
+        }
+        if matches!(self, Self::From) {
+            return HirTyKind::PartialRangeFrom { bound };
+        }
+        if matches!(self, Self::UpTo) {
+            return HirTyKind::PartialRangeUpTo { bound };
+        }
+        HirTyKind::PartialRangeThru { bound }
+    }
+}
+
+const fn hir_range_form(kind: &HirTyKind) -> Option<RangeTyForm<HirTyId>> {
+    match kind {
+        HirTyKind::Range { bound } => Some(RangeTyForm {
+            tag: RangeTyTag::Open,
+            bound: *bound,
+        }),
+        HirTyKind::ClosedRange { bound } => Some(RangeTyForm {
+            tag: RangeTyTag::Closed,
+            bound: *bound,
+        }),
+        HirTyKind::PartialRangeFrom { bound } => Some(RangeTyForm {
+            tag: RangeTyTag::From,
+            bound: *bound,
+        }),
+        HirTyKind::PartialRangeUpTo { bound } => Some(RangeTyForm {
+            tag: RangeTyTag::UpTo,
+            bound: *bound,
+        }),
+        HirTyKind::PartialRangeThru { bound } => Some(RangeTyForm {
+            tag: RangeTyTag::Thru,
+            bound: *bound,
+        }),
+        _ => None,
+    }
+}
+
+const fn surface_range_form(kind: &SurfaceTyKind) -> Option<RangeTyForm<SurfaceTyId>> {
+    if let SurfaceTyKind::Range { bound } = kind {
+        return Some(RangeTyForm {
+            tag: RangeTyTag::Open,
+            bound: *bound,
+        });
+    }
+    if let SurfaceTyKind::ClosedRange { bound } = kind {
+        return Some(RangeTyForm {
+            tag: RangeTyTag::Closed,
+            bound: *bound,
+        });
+    }
+    if let SurfaceTyKind::PartialRangeFrom { bound } = kind {
+        return Some(RangeTyForm {
+            tag: RangeTyTag::From,
+            bound: *bound,
+        });
+    }
+    if let SurfaceTyKind::PartialRangeUpTo { bound } = kind {
+        return Some(RangeTyForm {
+            tag: RangeTyTag::UpTo,
+            bound: *bound,
+        });
+    }
+    if let SurfaceTyKind::PartialRangeThru { bound } = kind {
+        return Some(RangeTyForm {
+            tag: RangeTyTag::Thru,
+            bound: *bound,
+        });
+    }
+    None
+}
 pub(super) struct SurfaceTyBuilder<'a> {
     hir: &'a HirStore,
     pub(super) interner: &'a Interner,
@@ -336,25 +438,11 @@ impl<'a> SurfaceTyBuilder<'a> {
     }
 
     fn lower_range_kind(&mut self, kind: &HirTyKind) -> SurfaceTyKind {
-        match kind {
-            HirTyKind::Range { bound } => SurfaceTyKind::Range {
-                bound: self.lower(*bound),
-            },
-            HirTyKind::ClosedRange { bound } => SurfaceTyKind::ClosedRange {
-                bound: self.lower(*bound),
-            },
-            HirTyKind::PartialRangeFrom { bound } => SurfaceTyKind::PartialRangeFrom {
-                bound: self.lower(*bound),
-            },
-            HirTyKind::PartialRangeUpTo { bound } => SurfaceTyKind::PartialRangeUpTo {
-                bound: self.lower(*bound),
-            },
-            HirTyKind::PartialRangeThru { bound } => SurfaceTyKind::PartialRangeThru {
-                bound: self.lower(*bound),
-            },
-            other => simple_surface_ty_kind(other)
-                .expect("expected primitive type kind after range matches"),
-        }
+        let Some(form) = hir_range_form(kind) else {
+            return simple_surface_ty_kind(kind)
+                .expect("expected primitive type kind after range matches");
+        };
+        form.tag.to_surface_kind(self.lower(form.bound))
     }
 
     fn lower_ty_ids(&mut self, tys: SliceRange<HirTyId>) -> Box<[SurfaceTyId]> {
@@ -515,25 +603,10 @@ impl<'ctx, 'ctx_state, 'interner, 'env> SurfaceTyImporter<'ctx, 'ctx_state, 'int
     }
 
     fn import_range_kind(&mut self, kind: &SurfaceTyKind) -> HirTyKind {
-        match kind {
-            SurfaceTyKind::Range { bound } => HirTyKind::Range {
-                bound: self.import(*bound),
-            },
-            SurfaceTyKind::ClosedRange { bound } => HirTyKind::ClosedRange {
-                bound: self.import(*bound),
-            },
-            SurfaceTyKind::PartialRangeFrom { bound } => HirTyKind::PartialRangeFrom {
-                bound: self.import(*bound),
-            },
-            SurfaceTyKind::PartialRangeUpTo { bound } => HirTyKind::PartialRangeUpTo {
-                bound: self.import(*bound),
-            },
-            SurfaceTyKind::PartialRangeThru { bound } => HirTyKind::PartialRangeThru {
-                bound: self.import(*bound),
-            },
-            other => simple_hir_ty_kind(other)
-                .expect("expected primitive surface type kind after range matches"),
+        if let Some(form) = surface_range_form(kind) {
+            return form.tag.to_hir_kind(self.import(form.bound));
         }
+        simple_hir_ty_kind(kind).expect("expected primitive surface type kind after range matches")
     }
 
     fn import_ty_list(&mut self, tys: &[SurfaceTyId]) -> SliceRange<HirTyId> {

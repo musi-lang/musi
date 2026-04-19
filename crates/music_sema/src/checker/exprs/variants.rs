@@ -8,12 +8,13 @@ use music_names::{Ident, Symbol};
 use crate::api::ExprFacts;
 use crate::effects::EffectRow;
 
-use super::exprs::{check_expr, peel_mut_ty};
-use super::state::DataDef;
-use super::{CheckPass, DiagKind};
+use super::super::state::DataDef;
+use super::super::{CheckPass, DiagKind};
+use super::{check_expr, peel_mut_ty};
 
 type ExprIdList = Vec<HirExprId>;
 type TyIdList = Vec<HirTyId>;
+type VariantFieldNames = [Option<Box<str>>];
 
 impl CheckPass<'_, '_, '_> {
     pub(super) fn check_variant_expr(&mut self, tag: Ident, args: SliceRange<HirArg>) -> ExprFacts {
@@ -102,7 +103,7 @@ impl CheckPass<'_, '_, '_> {
         &mut self,
         diag_span: Span,
         expected_args: &[HirTyId],
-        field_names: &[Option<Box<str>>],
+        field_names: &VariantFieldNames,
         args: SliceRange<HirArg>,
         effects: &mut EffectRow,
     ) {
@@ -133,7 +134,7 @@ impl CheckPass<'_, '_, '_> {
         &mut self,
         diag_span: Span,
         expected_args: &[HirTyId],
-        field_names: &[Option<Box<str>>],
+        field_names: &VariantFieldNames,
         arg_nodes: Vec<HirArg>,
         named_args: bool,
         effects: &mut EffectRow,
@@ -161,7 +162,7 @@ impl CheckPass<'_, '_, '_> {
         &mut self,
         diag_span: Span,
         expected_args: &[HirTyId],
-        field_names: &[Option<Box<str>>],
+        field_names: &VariantFieldNames,
         arg: &HirArg,
         seen: &mut HashSet<Symbol>,
         effects: &mut EffectRow,
@@ -195,7 +196,7 @@ impl CheckPass<'_, '_, '_> {
     fn expected_variant_field_ty(
         &mut self,
         name: Ident,
-        field_names: &[Option<Box<str>>],
+        field_names: &VariantFieldNames,
         expected_args: &[HirTyId],
     ) -> HirTyId {
         let field_index = field_names
@@ -220,7 +221,7 @@ impl CheckPass<'_, '_, '_> {
     fn report_missing_variant_fields(
         &mut self,
         diag_span: Span,
-        field_names: &[Option<Box<str>>],
+        field_names: &VariantFieldNames,
         seen: &HashSet<Symbol>,
     ) {
         for field_name in field_names.iter().flatten() {
@@ -291,7 +292,7 @@ impl CheckPass<'_, '_, '_> {
                 .copied()
                 .unwrap_or(builtins.unknown);
             self.push_expected_ty(expected);
-            let facts = super::exprs::check_expr(self, arg);
+            let facts = super::check_expr(self, arg);
             let _ = self.pop_expected_ty();
             effects.union_with(&facts.effects);
             let origin = self.expr(arg).origin;

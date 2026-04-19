@@ -1,19 +1,30 @@
+mod effects;
+mod imports;
+mod instances;
+mod lets;
+
+pub(super) use effects::call_effects_for_expr;
+pub(super) use imports::{
+    expr_has_structural_target, module_export_for_expr, module_target_for_expr,
+    seed_prelude_bindings,
+};
+pub(super) use lets::{LetExprInput, check_let_expr};
+
 use std::collections::{BTreeMap, HashSet};
 
 use music_arena::SliceRange;
 use music_hir::{
     HirAttr, HirConstraint, HirExprId, HirExprKind, HirFieldDef, HirLitId, HirLitKind,
     HirMemberDef, HirMemberKind, HirOrigin, HirPatKind, HirTyId, HirTyKind, HirVariantDef,
-    HirVariantFieldDef,
 };
 use music_names::{Ident, NameBindingId, Symbol};
 
-use super::super::const_eval::{data_variant_tag, record_data_variant_tag};
-use super::super::exprs::check_expr;
-use super::super::schemes::BindingScheme;
-use super::super::surface::surface_key;
-use super::super::variant_payload::lower_variant_payload;
-use super::super::{CheckPass, DiagKind, EffectDef, EffectOpDef, PassBase};
+use super::const_eval::record_data_variant_tag;
+use super::exprs::check_expr;
+use super::schemes::BindingScheme;
+use super::surface::surface_key;
+use super::variant_payload::{lower_data_variant, variant_payload_style_is_mixed};
+use super::{CheckPass, DiagKind, EffectDef, EffectOpDef, PassBase};
 use crate::api::{
     ClassFacts, ClassMemberFacts, ExprFacts, ForeignLinkInfo, LawFacts, LawParamFacts, TargetInfo,
     normalize_arch_text, normalize_target_text,
@@ -48,7 +59,7 @@ fn matches_arch_value(target: Option<&str>, values: &[String]) -> bool {
     })
 }
 
-pub(in super::super) fn member_signature(
+pub(super) fn member_signature(
     ctx: &mut PassBase<'_, '_, '_>,
     member: &HirMemberDef,
     bind_name: bool,
@@ -83,10 +94,7 @@ pub(in super::super) fn member_signature(
     ClassMemberFacts::new(member.name.name, params, result)
 }
 
-pub(in super::super) fn member_law_facts(
-    ctx: &mut PassBase<'_, '_, '_>,
-    member: &HirMemberDef,
-) -> LawFacts {
+pub(super) fn member_law_facts(ctx: &mut PassBase<'_, '_, '_>, member: &HirMemberDef) -> LawFacts {
     let builtins = ctx.builtins();
     let params = ctx
         .params(member.params.clone())
@@ -105,7 +113,7 @@ pub(in super::super) fn member_law_facts(
     LawFacts::new(member.name.name, params)
 }
 
-pub(in super::super) fn check_foreign_let(
+pub(super) fn check_foreign_let(
     ctx: &mut CheckPass<'_, '_, '_>,
     expr_id: HirExprId,
     type_params: Box<[Symbol]>,
@@ -118,7 +126,7 @@ impl CheckPass<'_, '_, '_> {
     fn check_data_expr(&mut self, variants: VariantDefRange, fields: FieldDefRange) -> ExprFacts {
         let builtins = self.builtins();
         for variant in self.variants(variants) {
-            for field in self.variant_fields(variant.fields) {
+            for field in self.variant_fields(variant.fields.clone()) {
                 let origin = self.expr(field.ty).origin;
                 let _ = self.lower_type_expr(field.ty, origin);
             }
@@ -184,7 +192,7 @@ impl CheckPass<'_, '_, '_> {
             .map_or_else(|| "c".into(), |sym| self.resolve_symbol(sym).into());
         let attrs = self.attrs(self.expr(expr_id).mods.attrs);
         for attr in &attrs {
-            let path = super::super::attrs::attr_path(self, attr);
+            let path = super::attrs::attr_path(self, attr);
             match path.as_slice() {
                 ["link"] => self.validate_link_attr(attr, self.expr(expr_id).origin),
                 ["when"] => self.validate_when_attr(attr, self.expr(expr_id).origin),
@@ -261,7 +269,7 @@ impl CheckPass<'_, '_, '_> {
     fn when_attrs_match(&self, attrs: &[HirAttr]) -> bool {
         let target = self.target();
         for attr in attrs {
-            let path = super::super::attrs::attr_path(self, attr);
+            let path = super::attrs::attr_path(self, attr);
             if path.as_slice() != ["when"] {
                 continue;
             }
@@ -356,7 +364,7 @@ impl CheckPass<'_, '_, '_> {
     fn link_info_from_attrs(&self, attrs: &[HirAttr]) -> ForeignLinkInfo {
         let mut out = ForeignLinkInfo::new();
         for attr in attrs {
-            let path = super::super::attrs::attr_path(self, attr);
+            let path = super::attrs::attr_path(self, attr);
             if path.as_slice() != ["link"] {
                 continue;
             }
@@ -398,7 +406,7 @@ impl CheckPass<'_, '_, '_> {
 }
 
 impl CheckPass<'_, '_, '_> {
-    pub(in super::super) fn check_bound_data(
+    pub(super) fn check_bound_data(
         &mut self,
         name: Ident,
         variants: VariantDefRange,
@@ -423,7 +431,7 @@ impl CheckPass<'_, '_, '_> {
         let key = surface_key(self.module_key(), self.interner(), name.name);
         self.insert_data_def(
             data_name,
-            super::super::DataDef::new(key, variant_map, None, None, None, false)
+            super::DataDef::new(key, variant_map, None, None, None, false)
                 .with_record_shape(variants.is_empty() && !fields.is_empty()),
         );
     }
@@ -433,50 +441,24 @@ impl CheckPass<'_, '_, '_> {
         data_name: &str,
         variants: VariantDefRange,
         fields: FieldDefRange,
-    ) -> BTreeMap<Box<str>, super::super::DataVariantDef> {
-        let mut variant_map = BTreeMap::<Box<str>, super::super::DataVariantDef>::new();
+    ) -> BTreeMap<Box<str>, super::DataVariantDef> {
+        let mut variant_map = BTreeMap::<Box<str>, super::DataVariantDef>::new();
         let mut seen_variants = BTreeMap::<Box<str>, _>::new();
         let mut seen_tags = HashSet::<i64>::new();
         for (variant_index, variant) in self.variants(variants).into_iter().enumerate() {
-            self.collect_bound_data_variant(
-                variant_index,
-                variant,
-                &mut seen_tags,
-                &mut seen_variants,
-                &mut variant_map,
-            );
+            let variant_fields = self.variant_fields(variant.fields.clone());
+            if variant_payload_style_is_mixed(&variant_fields) {
+                self.diag(variant.origin.span, DiagKind::MixedVariantPayloadStyle, "");
+            }
+            let lowered = lower_data_variant(self, variant_index, variant);
+            self.record_bound_data_variant_tag(&mut seen_tags, lowered.tag_value, lowered.origin);
+            self.record_bound_data_variant_name(&mut seen_variants, &lowered.tag, lowered.origin);
+            let _previous_variant = variant_map.insert(lowered.tag, lowered.def);
         }
         if variant_map.is_empty() {
             self.insert_bound_record_data_variant(data_name, fields, &mut variant_map);
         }
         variant_map
-    }
-
-    fn collect_bound_data_variant(
-        &mut self,
-        variant_index: usize,
-        variant: HirVariantDef,
-        seen_tags: &mut HashSet<i64>,
-        seen_variants: &mut BTreeMap<Box<str>, HirOrigin>,
-        variant_map: &mut BTreeMap<Box<str>, super::super::DataVariantDef>,
-    ) {
-        let tag: Box<str> = self.resolve_symbol(variant.name.name).into();
-        let default_tag = i64::try_from(variant_index).unwrap_or(i64::MAX);
-        let tag_value = data_variant_tag(self, variant.value, default_tag);
-        self.record_bound_data_variant_tag(seen_tags, tag_value, variant.origin);
-        let variant_fields = self.variant_fields(variant.fields);
-        if variant_payload_style_is_mixed(&variant_fields) {
-            self.diag(variant.origin.span, DiagKind::MixedVariantPayloadStyle, "");
-        }
-        let (payload, field_tys, field_names) = lower_variant_payload(self, &variant_fields);
-        let result = variant
-            .result
-            .map(|expr| self.lower_type_expr(expr, variant.origin));
-        self.record_bound_data_variant_name(seen_variants, &tag, variant.origin);
-        let _previous_variant = variant_map.insert(
-            tag,
-            super::super::DataVariantDef::new(tag_value, payload, result, field_tys, field_names),
-        );
     }
 
     fn record_bound_data_variant_tag(
@@ -512,7 +494,7 @@ impl CheckPass<'_, '_, '_> {
         &mut self,
         data_name: &str,
         fields: FieldDefRange,
-        variant_map: &mut BTreeMap<Box<str>, super::super::DataVariantDef>,
+        variant_map: &mut BTreeMap<Box<str>, super::DataVariantDef>,
     ) {
         let record_fields = self.fields(fields);
         let field_names = record_fields
@@ -531,12 +513,12 @@ impl CheckPass<'_, '_, '_> {
         if !field_tys.is_empty() {
             let _ = variant_map.insert(
                 data_name.into(),
-                super::super::DataVariantDef::new(0, None, None, field_tys, field_names),
+                super::DataVariantDef::new(0, None, None, field_tys, field_names),
             );
         }
     }
 
-    pub(in super::super) fn check_bound_effect(
+    pub(super) fn check_bound_effect(
         &mut self,
         expr_id: HirExprId,
         name: Ident,
@@ -603,7 +585,7 @@ impl CheckPass<'_, '_, '_> {
         ExprFacts::new(builtins.type_, EffectRow::empty())
     }
 
-    pub(in super::super) fn check_bound_class(
+    pub(super) fn check_bound_class(
         &mut self,
         expr_id: HirExprId,
         name: Ident,
@@ -642,11 +624,3 @@ impl CheckPass<'_, '_, '_> {
         self.check_class_expr(expr_id, constraints, members)
     }
 }
-
-fn variant_payload_style_is_mixed(fields: &[HirVariantFieldDef]) -> bool {
-    let has_named = fields.iter().any(|field| field.name.is_some());
-    let has_positional = fields.iter().any(|field| field.name.is_none());
-    has_named && has_positional
-}
-
-// Attribute and export wrappers live in `HirExpr.mods`, not `HirExprKind`.

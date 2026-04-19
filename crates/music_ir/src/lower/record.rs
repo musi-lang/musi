@@ -2,6 +2,18 @@ use super::*;
 
 type RecordItemRange = SliceRange<HirRecordItem>;
 
+fn record_storage_ty_name(sema: &SemaModule, ty: HirTyId, interner: &Interner) -> Box<str> {
+    if let HirTyKind::Named { name, .. } = sema.ty(ty).kind {
+        let data_name = interner.resolve(name);
+        if let Some(data) = sema.data_def(data_name)
+            && data.is_record_shape()
+        {
+            return qualified_name(&data.key().module, data.key().name.as_ref());
+        }
+    }
+    render_ty_name(sema, ty, interner)
+}
+
 struct RecordUpdateLayout<'a> {
     result_ty: HirTyId,
     result_indices: &'a BTreeMap<Box<str>, u16>,

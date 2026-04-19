@@ -800,7 +800,9 @@ impl CheckPass<'_, '_, '_> {
         let _ = stack.pop();
         self.finish_instance_evidence(origin, matches)
     }
+}
 
+impl CheckPass<'_, '_, '_> {
     fn resolve_available_evidence(&self, key: &ConstraintKey) -> Option<ConstraintEvidence> {
         self.resolve_in_scope_evidence(key)
             .or_else(|| self.resolve_equivalent_in_scope_evidence(key))
@@ -956,7 +958,9 @@ impl CheckPass<'_, '_, '_> {
         };
         Some((class_key, class_args.into_boxed_slice()))
     }
+}
 
+impl CheckPass<'_, '_, '_> {
     fn instance_matches(
         &mut self,
         origin: HirOrigin,
@@ -1030,7 +1034,9 @@ impl CheckPass<'_, '_, '_> {
         }
         Some(subst)
     }
+}
 
+impl CheckPass<'_, '_, '_> {
     fn unify_ty(
         &mut self,
         type_params: &[Symbol],
@@ -1334,7 +1340,9 @@ impl PassBase<'_, '_, '_> {
         let _ = class_args;
         ctx.intern(&class_key.name)
     }
+}
 
+impl CheckPass<'_, '_, '_> {
     fn instance_provider_name(&self, instance: &InstanceFacts) -> Box<str> {
         let args = instance
             .class_args

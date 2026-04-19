@@ -1,10 +1,11 @@
 use std::env::temp_dir;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use async_lsp::lsp_types::{
     DiagnosticSeverity, InlayHintKind, Position, SemanticToken, TextDocumentIdentifier,
+    WorkDoneProgressParams,
 };
 use musi_tooling::{
     CliDiagnostic, CliDiagnosticLabel, CliDiagnosticRange, ToolInlayHint, ToolInlayHintKind,
@@ -19,7 +20,7 @@ use super::*;
 
 static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(0);
 
-fn temp_project() -> std::path::PathBuf {
+fn temp_project() -> PathBuf {
     let id = NEXT_TEMP_ID.fetch_add(1, Ordering::Relaxed);
     let path = temp_dir().join(format!("musi-lsp-test-{id}"));
     if path.exists() {
@@ -88,16 +89,16 @@ mod success {
     #[test]
     fn document_formatting_formats_multiline_match_like_cli_formatter() {
         let uri = Url::parse("file:///tmp/index.ms").expect("uri should parse");
-        let source = r#"export let isLess (target : Ordering) : Bool := match target(
+        let source = r"export let isLess (target : Ordering) : Bool := match target(
     | .Less => 0 = 0
     | _ => 0 = 1);
-"#;
-        let expected = r#"export let isLess (target : Ordering) : Bool :=
+";
+        let expected = r"export let isLess (target : Ordering) : Bool :=
   match target (
   | .Less => 0 = 0
   | _ => 0 = 1
   );
-"#;
+";
         let mut server = MusiLanguageServer::new(ClientSocket::new_closed());
         let _ = server.open_documents.insert(uri.clone(), source.to_owned());
 
@@ -109,7 +110,7 @@ mod success {
                     insert_spaces: true,
                     ..FormattingOptions::default()
                 },
-                work_done_progress_params: Default::default(),
+                work_done_progress_params: WorkDoneProgressParams::default(),
             })
             .expect("formatting should run");
 
@@ -140,7 +141,7 @@ mod success {
                     insert_spaces: true,
                     ..FormattingOptions::default()
                 },
-                work_done_progress_params: Default::default(),
+                work_done_progress_params: WorkDoneProgressParams::default(),
             })
             .expect("formatting should run");
 

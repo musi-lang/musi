@@ -7,9 +7,9 @@ use music_names::{Ident, NameBindingId, Symbol};
 use crate::BindingScheme;
 use crate::api::{ExprFacts, ExprMemberFact, ExprMemberKind, ModuleSurface};
 
-use super::decls::module_export_for_expr;
-use super::exprs::peel_mut_ty;
-use super::{CheckPass, DiagKind};
+use super::super::decls::module_export_for_expr;
+use super::super::{CheckPass, DiagKind};
+use super::peel_mut_ty;
 
 struct ImportedAttachedMethod {
     module: ModuleKey,
@@ -25,7 +25,7 @@ impl CheckPass<'_, '_, '_> {
         access: HirAccessKind,
         name: Ident,
     ) -> ExprFacts {
-        let base_facts = super::exprs::check_expr(self, base);
+        let base_facts = super::check_expr(self, base);
         let effects = base_facts.effects.clone();
 
         if let HirExprKind::Name { name: effect_name } = self.expr(base).kind {

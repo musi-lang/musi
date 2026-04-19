@@ -90,15 +90,22 @@ fn render_map(out: &mut String, enum_name: &str, map: &KindMap) {
         MapMode::Required => enum_name.to_owned(),
         MapMode::Option => format!("Option<{enum_name}>"),
     };
-    push_fmt(
-        out,
-        format_args!(
-            "pub const fn {}(source: {}{}) -> {return_type} {{\n    match source {{\n",
-            map.name,
-            if map.source_by_value { "" } else { "&" },
-            map.source_type
-        ),
+    let source_ref = if map.source_by_value { "" } else { "&" };
+    let signature = format!(
+        "pub const fn {}(source: {source_ref}{}) -> {return_type}",
+        map.name, map.source_type
     );
+    if signature.len() >= 100 {
+        push_fmt(
+            out,
+            format_args!(
+                "pub const fn {}(\n    source: {source_ref}{},\n) -> {return_type} {{\n    match source {{\n",
+                map.name, map.source_type
+            ),
+        );
+    } else {
+        push_fmt(out, format_args!("{signature} {{\n    match source {{\n"));
+    }
     let mut index = 0;
     while index < map.cases.len() {
         let start = index;
@@ -113,29 +120,40 @@ fn render_map(out: &mut String, enum_name: &str, map: &KindMap) {
 }
 
 fn render_map_arm(out: &mut String, enum_name: &str, map: &KindMap, start: usize, end: usize) {
-    out.push_str("        ");
+    let mut patterns = String::new();
     for (offset, case) in map.cases[start..end].iter().enumerate() {
         if offset > 0 {
-            out.push_str("\n        | ");
+            patterns.push_str("\n        | ");
         }
-        push_fmt(out, format_args!("{}::{}", map.source_type, case.pattern));
+        push_fmt(
+            &mut patterns,
+            format_args!("{}::{}", map.source_type, case.pattern),
+        );
     }
-    out.push_str(" => ");
-    render_map_target(out, enum_name, map.mode, &map.cases[start].target);
-    out.push_str(",\n");
+    let target = rendered_map_target(enum_name, map.mode, &map.cases[start].target);
+    let pattern_len = patterns.lines().map(str::len).max().unwrap_or_default();
+    let inline_len = pattern_len
+        .saturating_add("        ".len())
+        .saturating_add(" => ".len())
+        .saturating_add(target.len())
+        .saturating_add(",".len());
+    if inline_len > 100 {
+        push_fmt(
+            out,
+            format_args!("        {patterns} => {{\n            {target}\n        }}\n"),
+        );
+    } else {
+        push_fmt(out, format_args!("        {patterns} => {target},\n"));
+    }
 }
 
-fn render_map_target(out: &mut String, enum_name: &str, mode: MapMode, target: &MapTarget) {
+fn rendered_map_target(enum_name: &str, mode: MapMode, target: &MapTarget) -> String {
     match (mode, target) {
-        (MapMode::Option, MapTarget::None) => out.push_str("None"),
-        (MapMode::Option, MapTarget::Kind(kind)) => {
-            push_fmt(out, format_args!("Some({enum_name}::{kind})"));
-        }
-        (MapMode::Required, MapTarget::Kind(kind)) => {
-            push_fmt(out, format_args!("{enum_name}::{kind}"));
-        }
+        (MapMode::Option, MapTarget::None) => "None".to_owned(),
+        (MapMode::Option, MapTarget::Kind(kind)) => format!("Some({enum_name}::{kind})"),
+        (MapMode::Required, MapTarget::Kind(kind)) => format!("{enum_name}::{kind}"),
         (MapMode::Required, MapTarget::None) => {
-            out.push_str("compile_error!(\"invalid required diagnostic map target\")");
+            "compile_error!(\"invalid required diagnostic map target\")".to_owned()
         }
     }
 }

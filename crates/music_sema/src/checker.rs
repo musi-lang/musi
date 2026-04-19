@@ -7,20 +7,12 @@ mod attrs;
 mod collect;
 mod const_eval;
 mod decls;
-mod expr_arrays;
-mod expr_binary;
-mod expr_calls;
-mod expr_members;
-mod expr_records;
-mod expr_variants;
 mod exprs;
 mod normalize;
 mod pats;
 pub mod schemes;
 mod state;
 mod surface;
-mod surface_exports;
-mod surface_types;
 mod variant_payload;
 
 use state::{

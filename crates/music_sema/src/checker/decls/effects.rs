@@ -5,7 +5,7 @@ use music_hir::{HirExprId, HirExprKind, HirHandleClause, HirOrigin, HirTyId, Hir
 use music_names::{Ident, Symbol};
 
 use super::super::exprs::check_expr;
-use super::super::{CheckPass, DiagKind, ResumeCtx};
+use super::super::{CheckPass, DiagKind, EffectDef, EffectOpDef, ResumeCtx};
 use crate::api::ExprFacts;
 use crate::effects::{EffectKey, EffectRow};
 
@@ -137,7 +137,7 @@ impl CheckPass<'_, '_, '_> {
         &mut self,
         origin: HirOrigin,
         effect_name: &str,
-        effect: &super::super::EffectDef,
+        effect: &EffectDef,
         clauses: SliceRange<HirHandleClause>,
         input_ty: HirTyId,
     ) -> (HirTyId, EffectRow) {
@@ -186,7 +186,7 @@ impl CheckPass<'_, '_, '_> {
     fn check_handler_op_clauses(
         &mut self,
         origin: HirOrigin,
-        effect: &super::super::EffectDef,
+        effect: &EffectDef,
         clauses: Vec<HirHandleClause>,
         result_ty: HirTyId,
         clause_effects: &mut EffectRow,
@@ -224,9 +224,9 @@ impl CheckPass<'_, '_, '_> {
     fn handler_clause_op_def(
         &mut self,
         origin: HirOrigin,
-        effect: &super::super::EffectDef,
+        effect: &EffectDef,
         clause_name: &str,
-    ) -> Option<super::super::EffectOpDef> {
+    ) -> Option<EffectOpDef> {
         let op_def = effect.op(clause_name).cloned();
         if op_def.is_none() {
             self.diag_message(
@@ -243,7 +243,7 @@ impl CheckPass<'_, '_, '_> {
         &mut self,
         origin: HirOrigin,
         clause: &HirHandleClause,
-        op_def: &super::super::EffectOpDef,
+        op_def: &EffectOpDef,
         result_ty: HirTyId,
         clause_effects: &mut EffectRow,
     ) {
@@ -262,7 +262,7 @@ impl CheckPass<'_, '_, '_> {
         &mut self,
         origin: HirOrigin,
         clause: &HirHandleClause,
-        op_def: &super::super::EffectOpDef,
+        op_def: &EffectOpDef,
     ) -> (Vec<Ident>, Option<Ident>) {
         let params = self.idents(clause.params);
         if params.len() != op_def.params().len().saturating_add(1) {
@@ -275,7 +275,7 @@ impl CheckPass<'_, '_, '_> {
         (params[0..split].to_vec(), params.last().copied())
     }
 
-    fn bind_handler_clause_args(&mut self, args: Vec<Ident>, op_def: &super::super::EffectOpDef) {
+    fn bind_handler_clause_args(&mut self, args: Vec<Ident>, op_def: &EffectOpDef) {
         for (ident, ty) in args.into_iter().zip(op_def.params().iter().copied()) {
             if let Some(binding) = self.binding_id_for_decl(ident) {
                 self.insert_binding_type(binding, ty);
@@ -307,7 +307,7 @@ impl CheckPass<'_, '_, '_> {
     fn validate_handler_clause_coverage(
         &mut self,
         origin: HirOrigin,
-        effect: &super::super::EffectDef,
+        effect: &EffectDef,
         seen_value: usize,
         seen_ops: &BTreeSet<Box<str>>,
     ) {
@@ -406,7 +406,7 @@ pub(super) fn require_declared_effects(
 fn effect_op_call(
     ctx: &CheckPassRef<'_, '_, '_>,
     expr: HirExprId,
-) -> Option<(Box<str>, super::super::EffectOpDef)> {
+) -> Option<(Box<str>, EffectOpDef)> {
     let HirExprKind::Call { callee, args: _ } = ctx.expr(expr).kind else {
         return None;
     };

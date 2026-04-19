@@ -95,18 +95,6 @@ fn qualified_name(module: &ModuleKey, name: &str) -> Box<str> {
     format!("{}::{name}", module.as_str()).into_boxed_str()
 }
 
-fn record_storage_ty_name(sema: &SemaModule, ty: HirTyId, interner: &Interner) -> Box<str> {
-    if let HirTyKind::Named { name, .. } = sema.ty(ty).kind {
-        let data_name = interner.resolve(name);
-        if let Some(data) = sema.data_def(data_name)
-            && data.is_record_shape()
-        {
-            return qualified_name(&data.key().module, data.key().name.as_ref());
-        }
-    }
-    render_ty_name(sema, ty, interner)
-}
-
 struct LowerCtx<'a> {
     sema: &'a SemaModule,
     interner: &'a Interner,

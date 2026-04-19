@@ -1,10 +1,13 @@
+mod exports;
+mod types;
+
 use std::collections::BTreeSet;
 
 use crate::api::ModuleSurface;
 
-use super::surface_exports::{ExportSurfaceCollector, collect_module_exports};
-use super::surface_types::SurfaceTyBuilder;
-pub use super::surface_types::{canonical_surface_ty, import_surface_ty, surface_key};
+use self::exports::{ExportSurfaceCollector, collect_module_exports};
+use self::types::SurfaceTyBuilder;
+pub use self::types::{canonical_surface_ty, import_surface_ty, surface_key};
 use super::{DeclState, ModuleState, RuntimeEnv, TypingState};
 
 pub fn build_module_surface(

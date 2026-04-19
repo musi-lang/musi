@@ -1,3 +1,10 @@
+mod arrays;
+mod binary;
+mod calls;
+mod members;
+mod records;
+mod variants;
+
 use music_arena::SliceRange;
 use music_hir::{
     HirBinder, HirConstraint, HirExprId, HirExprKind, HirLitId, HirLitKind, HirMatchArm,
@@ -8,8 +15,8 @@ use music_names::Ident;
 
 use crate::api::{ComptimeValue, ExprFacts};
 
+use self::calls::{check_apply_expr, check_call_expr};
 use super::decls::{LetExprInput, check_let_expr};
-use super::expr_calls::{check_apply_expr, check_call_expr};
 use super::pats::bind_pat;
 use super::state::Builtins;
 use super::{CheckPass, DiagKind};

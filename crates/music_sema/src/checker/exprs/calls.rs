@@ -7,11 +7,11 @@ use music_names::{Ident, NameBindingId, Symbol};
 use crate::api::{ConstraintKind, ExprFacts, ExprMemberKind};
 use crate::effects::EffectRow;
 
-use super::const_eval::try_comptime_value;
-use super::decls::{call_effects_for_expr, module_export_for_expr, module_target_for_expr};
-use super::exprs::{check_expr, peel_mut_ty};
-use super::schemes::{BindingScheme, ConstraintObligation};
-use super::{CheckPass, DiagKind};
+use super::super::const_eval::try_comptime_value;
+use super::super::decls::{call_effects_for_expr, module_export_for_expr, module_target_for_expr};
+use super::super::schemes::{BindingScheme, ConstraintObligation};
+use super::super::{CheckPass, DiagKind};
+use super::{check_expr, peel_mut_ty};
 
 pub(super) fn check_call_expr(
     ctx: &mut CheckPass<'_, '_, '_>,
@@ -240,7 +240,7 @@ impl CallArgChecker<'_, '_, '_, '_, '_, '_> {
                 self.ctx.type_mismatch(origin, expected, range_item);
                 let rangeable_symbol = self.ctx.known().rangeable;
                 let rangeable = self.ctx.named_type_for_symbol(rangeable_symbol);
-                let obligation = super::schemes::ConstraintObligation {
+                let obligation = super::super::schemes::ConstraintObligation {
                     kind: ConstraintKind::Implements,
                     subject: range_item,
                     value: rangeable,

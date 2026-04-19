@@ -10,7 +10,7 @@ use music_names::Symbol;
 use super::super::exprs::check_expr;
 use super::super::surface::{canonical_surface_ty, surface_key};
 use super::super::{CheckPass, DiagKind};
-use super::declarations::member_signature;
+use super::member_signature;
 use crate::api::{ClassMemberFacts, DefinitionKey, ExprFacts, InstanceFacts};
 use crate::effects::EffectRow;
 
