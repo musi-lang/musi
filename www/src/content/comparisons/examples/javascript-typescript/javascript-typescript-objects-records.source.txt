@@ -1,3 +1,0 @@
-type Pet = { name: string; age: number };
-
-const dog: Pet = { name: "Miso", age: 4 };

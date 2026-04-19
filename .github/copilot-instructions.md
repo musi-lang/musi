@@ -4,7 +4,7 @@ Use `AGENTS.md` as source of truth. This file mirrors the current high-impact ru
 
 ## Canon
 
-- Syntax sources: `docs/what/language/syntax.md`, `grammar/Musi.g4`, `grammar/Musi.abnf`.
+- Syntax sources: `grammar/MusiParser.g4`, `grammar/MusiLexer.g4`, `grammar/Musi.abnf`.
 - Ownership/crate map: `docs/where/workspace-map.md`.
 - Public API inventory: `docs/reference/public-api.md`.
 - Documentation and feature matrices describe current behavior; do not use them to invent support policy.
