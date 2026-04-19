@@ -8,12 +8,11 @@ Before large changes, read:
 
 - `AGENTS.md`
 - `README.md`
-- `docs/what/language/index.md`
+- `docs/where/workspace-map.md`
+- `docs/reference/public-api.md`
 - `grammar/MusiParser.g4`
 - `grammar/MusiLexer.g4`
 - `grammar/Musi.abnf`
-
-If you touch website or docs generation, also read the relevant `www/` source near the page or generator you change.
 
 ## Workflow
 
@@ -31,7 +30,7 @@ If you touch website or docs generation, also read the relevant `www/` source ne
 - Keep public docs aligned with current behavior.
 - Do not add placeholders such as `todo!()` or `unimplemented!()` in `crates/`.
 - Keep tests next to owned code. Musi tests live in `*.test.ms` files and export `test`.
-- Grammar changes must keep parser structure intentional and update both grammar and docs when syntax meaning changes.
+- Grammar changes must keep parser structure intentional and update grammar tests or reference material when syntax meaning changes.
 
 ## Validation
 
@@ -57,38 +56,13 @@ cargo test -p musi_rt
 
 Use targeted crate tests first. Avoid `cargo test --workspace` on low-memory machines.
 
-### Website and generated content
-
-```bash
-rtk bun run --cwd www generate:content
-rtk bunx tsc -p www/tsconfig.json --noEmit
-rtk bun run --cwd www build
-```
-
-Run these whenever you touch:
-
-- `www/`
-- repo docs consumed by `www`
-- snippet registries or generated content inputs
-
-### VS Code extension
-
-```bash
-rtk bun run --cwd vscode-ext grammar:check
-rtk bun run --cwd vscode-ext test
-rtk bunx tsc -p vscode-ext/tsconfig.json --noEmit
-rtk bun run --cwd vscode-ext build
-```
-
-Run extension checks when you touch `vscode-ext/`, TextMate grammars, or editor bootstrap code.
-
 ## Pull request checklist
 
 - [ ] Scope is focused.
 - [ ] `make lint` passes.
 - [ ] `make check` passes.
 - [ ] Touched crates or surfaces have targeted tests/build checks.
-- [ ] Docs/examples changed with behavior changes.
+- [ ] Reference docs or tests changed with behavior changes.
 - [ ] Commit messages explain intent.
 - [ ] PR description states what changed and how it was validated.
 

@@ -1,3 +1,0 @@
-import { Option } from "./option";
-
-export const defaultGate = Option.some(1);

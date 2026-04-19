@@ -319,53 +319,6 @@ mod success {
     }
 
     #[test]
-    fn parses_website_musi_comparison_fixtures() {
-        use std::fs;
-        use std::path::{Path, PathBuf};
-
-        fn visit(path: &Path, files: &mut Vec<PathBuf>) {
-            for entry in fs::read_dir(path).expect("comparison examples directory should exist") {
-                let entry = entry.expect("comparison examples entry should be readable");
-                let path = entry.path();
-                if path.is_dir() {
-                    visit(&path, files);
-                    continue;
-                }
-                if path
-                    .file_name()
-                    .and_then(|name| name.to_str())
-                    .is_some_and(|name| name.ends_with(".musi.ms"))
-                {
-                    files.push(path);
-                }
-            }
-        }
-
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("..")
-            .join("..")
-            .join("www")
-            .join("src")
-            .join("content")
-            .join("comparisons")
-            .join("examples");
-        let mut files = Vec::new();
-        visit(&root, &mut files);
-        assert!(!files.is_empty(), "expected Musi comparison fixtures");
-
-        for path in files {
-            let source = fs::read_to_string(&path).expect("comparison fixture should be readable");
-            let parsed = parse(Lexer::new(&source).lex());
-            assert!(
-                parsed.errors().is_empty(),
-                "{} parse errors: {:?}",
-                path.display(),
-                parsed.errors()
-            );
-        }
-    }
-
-    #[test]
     fn parses_partial_modifier_on_let() {
         let parsed = parse(Lexer::new("partial let parseInt(text : String) : Int := 0;").lex());
         assert!(

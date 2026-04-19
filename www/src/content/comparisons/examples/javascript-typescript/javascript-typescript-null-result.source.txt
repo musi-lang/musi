@@ -1,3 +1,0 @@
-function findGate(ticket: string): number | undefined {
-  return ticket === "A12" ? 4 : undefined;
-}

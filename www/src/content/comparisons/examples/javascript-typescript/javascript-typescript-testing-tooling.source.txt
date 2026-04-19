@@ -1,3 +1,0 @@
-test("adds receipt lines", () => {
-  expect(450 + 120).toBe(570);
-});

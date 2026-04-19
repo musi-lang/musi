@@ -3,7 +3,7 @@
 ## Canon
 
 Source of truth:
-- Syntax: `docs/what/language/syntax.md`, `grammar/Musi.g4`, `grammar/Musi.abnf`
+- Syntax: `grammar/MusiParser.g4`, `grammar/MusiLexer.g4`, `grammar/Musi.abnf`
 - Ownership and crate map: `docs/where/workspace-map.md`
 - Public API inventory: `docs/reference/public-api.md`
 

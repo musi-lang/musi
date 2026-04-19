@@ -181,26 +181,20 @@ Key repo areas:
 
 - `crates/` — Rust compiler, runtime, tooling, package, and CLI crates
 - `packages/` — first-party Musi packages, including `@std`
-- `docs/what/language/` — repo-canonical language docs
+- `diagnostics/` — diagnostic fixtures and renderer references
+- `docs/reference/` — compiler, runtime, diagnostics, and language coverage references
+- `docs/where/` — workspace and ownership maps
 - `grammar/` — grammar sources
-- `www/` — docs website source
-- `vscode-ext/` — VS Code syntax extension
 
 Good entry points:
 
-- `docs/what/language/index.md`
-- `docs/what/language/start/getting-started.md`
-- `docs/what/language/types/type-annotations.md`
-- `docs/what/language/effects-runtime/effects.md`
-- `docs/what/language/advanced/attributes.md`
-- `docs/what/language/advanced/running-and-tooling.md`
 - `docs/where/workspace-map.md`
 - `docs/reference/public-api.md`
+- `docs/reference/language-feature-coverage.md`
+- `docs/reference/diagnostics.md`
 - `grammar/MusiParser.g4`
 - `grammar/MusiLexer.g4`
 - `grammar/Musi.abnf`
-
-Website, docs-site, and local docs editing operations live in [`www/README.md`](www/README.md).
 
 ## Testing and validation
 
@@ -217,7 +211,7 @@ Prefer targeted crate tests over `cargo test --workspace` on lower-memory machin
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for workflow, validation, and website/doc guidance.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for workflow and validation guidance.
 
 All contributors must follow [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 

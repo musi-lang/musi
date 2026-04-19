@@ -1,7 +1,0 @@
-name = "musi-www"
-compatibility_date = "2026-04-13"
-pages_build_output_dir = "./www/dist"
-
-[vars]
-BUN_VERSION = "1.3.12"
-SKIP_DEPENDENCY_INSTALL = "1"
