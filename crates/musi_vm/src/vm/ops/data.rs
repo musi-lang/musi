@@ -12,13 +12,14 @@ impl Vm {
                 let tag_value = self.pop_value()?;
                 let tag = Self::expect_int(&tag_value)?;
                 let fields = self.pop_args(usize::from(len))?;
-                self.push_value(Value::data(ty, tag, fields))?;
+                let value = self.alloc_data(ty, tag, fields)?;
+                self.push_value(value)?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::DataTag => {
                 let data_value = self.pop_value()?;
                 let data = Self::expect_data(data_value)?;
-                self.push_value(Value::Int(data.borrow().tag))?;
+                self.push_value(Value::Int(self.heap.data(data)?.tag))?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::DataGet => {
@@ -26,7 +27,7 @@ impl Vm {
                 let index = Self::expect_int(&index_value)?;
                 let data_value = self.pop_value()?;
                 let data = Self::expect_data(data_value)?;
-                let data_ref = data.borrow();
+                let data_ref = self.heap.data(data)?;
                 let slot = usize::try_from(index).unwrap_or(usize::MAX);
                 let value = data_ref.fields.get(slot).cloned().ok_or_else(|| {
                     VmError::new(VmErrorKind::InvalidDataIndex {
@@ -34,7 +35,6 @@ impl Vm {
                         len: data_ref.fields.len(),
                     })
                 })?;
-                drop(data_ref);
                 self.push_value(value)?;
                 Ok(StepOutcome::Continue)
             }
@@ -45,7 +45,7 @@ impl Vm {
                 let data_value = self.pop_value()?;
                 let data = Self::expect_data(data_value)?;
                 {
-                    let mut data_mut = data.borrow_mut();
+                    let data_mut = self.heap.data_mut(data)?;
                     let len = data_mut.fields.len();
                     let slot = usize::try_from(index).unwrap_or(usize::MAX);
                     let field = data_mut.fields.get_mut(slot).ok_or_else(|| {
@@ -53,6 +53,7 @@ impl Vm {
                     })?;
                     *field = value;
                 }
+                self.heap.refresh_allocation(data)?;
                 self.push_value(Value::Data(data))?;
                 Ok(StepOutcome::Continue)
             }

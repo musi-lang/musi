@@ -4,8 +4,8 @@ use music_seam::{Instruction, ProcedureId};
 
 use super::state::{CallFrame, CallFrameList, EffectHandler, EffectHandlerList, StepOutcome};
 use super::{
-    ContinuationValuePtr, OperandShape, Value, ValueList, VmError, VmErrorKind, VmOpcodeFamily,
-    VmResult, classify_opcode,
+    GcRef, OperandShape, Value, ValueList, VmError, VmErrorKind, VmOpcodeFamily, VmResult,
+    classify_opcode,
 };
 
 use super::Vm;
@@ -43,7 +43,7 @@ impl Vm {
 
     pub(crate) fn invoke_continuation(
         &mut self,
-        continuation: &ContinuationValuePtr,
+        continuation: GcRef,
         value: Value,
     ) -> VmResult<Value> {
         let saved_frames = mem::take(&mut self.frames);
@@ -51,6 +51,7 @@ impl Vm {
         let saved_active_resumes = mem::take(&mut self.active_resumes);
         let saved_target = self.continuation_target_handler;
 
+        let continuation = self.heap.continuation(continuation)?.clone();
         let frames = continuation
             .frames
             .iter()

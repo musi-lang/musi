@@ -3,13 +3,13 @@ use std::iter::repeat_n;
 
 use music_seam::{EffectId, ProcedureId};
 
-use super::{ContinuationValuePtr, Program, Value, ValueList};
+use super::{GcRef, Program, Value, ValueList};
 
 pub type LoadedModuleList = Vec<LoadedModule>;
 pub type ModuleSlotMap = HashMap<Box<str>, usize>;
 pub type CallFrameList = Vec<CallFrame>;
 pub type EffectHandlerList = Vec<EffectHandler>;
-pub type ResumeList = Vec<ContinuationValuePtr>;
+pub type ResumeList = Vec<GcRef>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModuleState {

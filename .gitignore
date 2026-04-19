@@ -342,3 +342,26 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+# .NET / C# / F#
+**/[Bb]in/
+**/[Oo]bj/
+**/TestResults/
+*.user
+*.suo
+
+# JVM / Java
+*.class
+*.jar
+*.war
+*.ear
+hs_err_pid*
+replay_pid*
+
+# Scala / Metals / Bloop / Scala CLI
+**/.metals/
+**/.bloop/
+**/.bsp/
+**/.scala-build/
+**/.ammonite/
+**/project/project/
+**/project/target/

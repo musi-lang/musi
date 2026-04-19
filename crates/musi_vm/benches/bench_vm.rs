@@ -32,11 +32,16 @@ fn lookup_answer(vm: &mut Vm) -> Value {
         .expect("answer export should resolve")
 }
 
-fn int_grid() -> Value {
+fn int_grid(vm: &mut Vm) -> Value {
     let ty = TypeId::from_raw(0);
-    let first = Value::sequence(ty, [Value::Int(1), Value::Int(2)]);
-    let second = Value::sequence(ty, [Value::Int(3), Value::Int(4)]);
-    Value::sequence(ty, [first, second])
+    let first = vm
+        .alloc_sequence(ty, [Value::Int(1), Value::Int(2)])
+        .expect("first row should allocate");
+    let second = vm
+        .alloc_sequence(ty, [Value::Int(3), Value::Int(4)])
+        .expect("second row should allocate");
+    vm.alloc_sequence(ty, [first, second])
+        .expect("grid should allocate")
 }
 
 fn bench_answer_with_int_arg(
@@ -127,16 +132,13 @@ fn bench_vm_sequence_index_mutation(c: &mut Criterion) {
     let answer = lookup_answer(&mut vm);
 
     _ = c.bench_function("bench_vm_sequence_index_mutation", |b| {
-        b.iter_batched(
-            || [int_grid()],
-            |args| {
-                let result = vm
-                    .call_value(black_box(answer.clone()), black_box(&args))
-                    .expect("sequence mutation should succeed");
-                black_box(result)
-            },
-            BatchSize::SmallInput,
-        );
+        b.iter(|| {
+            let args = [int_grid(&mut vm)];
+            let result = vm
+                .call_value(black_box(answer.clone()), black_box(&args))
+                .expect("sequence mutation should succeed");
+            black_box(result)
+        });
     });
 }
 

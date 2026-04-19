@@ -2,9 +2,10 @@ use std::ptr::{
     read_unaligned, with_exposed_provenance, with_exposed_provenance_mut, write_unaligned,
 };
 
-use musi_vm::{ForeignCall, Value, VmError, VmErrorKind, VmResult};
+use musi_vm::{ForeignCall, Value, VmError, VmErrorKind, VmHostContext, VmResult};
 
 pub fn call_musi_pointer_intrinsic(
+    ctx: &VmHostContext<'_>,
     foreign: &ForeignCall,
     args: &[Value],
 ) -> Option<VmResult<Value>> {
@@ -12,37 +13,53 @@ pub fn call_musi_pointer_intrinsic(
         return None;
     }
     let result = match foreign.symbol() {
-        "ffi.ptr.read.i8" => ptr_read::<i8>(foreign, args).map(|value| Value::Int(value.into())),
-        "ffi.ptr.read.u8" => ptr_read::<u8>(foreign, args).map(|value| Value::Nat(value.into())),
-        "ffi.ptr.read.i16" => ptr_read::<i16>(foreign, args).map(|value| Value::Int(value.into())),
-        "ffi.ptr.read.u16" => ptr_read::<u16>(foreign, args).map(|value| Value::Nat(value.into())),
-        "ffi.ptr.read.i32" => ptr_read::<i32>(foreign, args).map(|value| Value::Int(value.into())),
-        "ffi.ptr.read.u32" => ptr_read::<u32>(foreign, args).map(|value| Value::Nat(value.into())),
-        "ffi.ptr.read.i64" => ptr_read::<i64>(foreign, args).map(Value::Int),
-        "ffi.ptr.read.u64" => ptr_read::<u64>(foreign, args).map(Value::Nat),
-        "ffi.ptr.read.f32" => {
-            ptr_read::<f32>(foreign, args).map(|value| Value::Float(value.into()))
+        "ffi.ptr.read.i8" => {
+            ptr_read::<i8>(ctx, foreign, args).map(|value| Value::Int(value.into()))
         }
-        "ffi.ptr.read.f64" => ptr_read::<f64>(foreign, args).map(Value::Float),
-        "ffi.ptr.read.ptr" => ptr_read::<usize>(foreign, args).map(Value::CPtr),
-        "ffi.ptr.write.i8" => ptr_write_int::<i8>(foreign, args),
-        "ffi.ptr.write.u8" => ptr_write_nat::<u8>(foreign, args),
-        "ffi.ptr.write.i16" => ptr_write_int::<i16>(foreign, args),
-        "ffi.ptr.write.u16" => ptr_write_nat::<u16>(foreign, args),
-        "ffi.ptr.write.i32" => ptr_write_int::<i32>(foreign, args),
-        "ffi.ptr.write.u32" => ptr_write_nat::<u32>(foreign, args),
-        "ffi.ptr.write.i64" => ptr_write_int::<i64>(foreign, args),
-        "ffi.ptr.write.u64" => ptr_write_nat::<u64>(foreign, args),
-        "ffi.ptr.write.f32" => ptr_write_float::<f32>(foreign, args),
-        "ffi.ptr.write.f64" => ptr_write_float::<f64>(foreign, args),
-        "ffi.ptr.write.ptr" => ptr_write_ptr(foreign, args),
+        "ffi.ptr.read.u8" => {
+            ptr_read::<u8>(ctx, foreign, args).map(|value| Value::Nat(value.into()))
+        }
+        "ffi.ptr.read.i16" => {
+            ptr_read::<i16>(ctx, foreign, args).map(|value| Value::Int(value.into()))
+        }
+        "ffi.ptr.read.u16" => {
+            ptr_read::<u16>(ctx, foreign, args).map(|value| Value::Nat(value.into()))
+        }
+        "ffi.ptr.read.i32" => {
+            ptr_read::<i32>(ctx, foreign, args).map(|value| Value::Int(value.into()))
+        }
+        "ffi.ptr.read.u32" => {
+            ptr_read::<u32>(ctx, foreign, args).map(|value| Value::Nat(value.into()))
+        }
+        "ffi.ptr.read.i64" => ptr_read::<i64>(ctx, foreign, args).map(Value::Int),
+        "ffi.ptr.read.u64" => ptr_read::<u64>(ctx, foreign, args).map(Value::Nat),
+        "ffi.ptr.read.f32" => {
+            ptr_read::<f32>(ctx, foreign, args).map(|value| Value::Float(value.into()))
+        }
+        "ffi.ptr.read.f64" => ptr_read::<f64>(ctx, foreign, args).map(Value::Float),
+        "ffi.ptr.read.ptr" => ptr_read::<usize>(ctx, foreign, args).map(Value::CPtr),
+        "ffi.ptr.write.i8" => ptr_write_int::<i8>(ctx, foreign, args),
+        "ffi.ptr.write.u8" => ptr_write_nat::<u8>(ctx, foreign, args),
+        "ffi.ptr.write.i16" => ptr_write_int::<i16>(ctx, foreign, args),
+        "ffi.ptr.write.u16" => ptr_write_nat::<u16>(ctx, foreign, args),
+        "ffi.ptr.write.i32" => ptr_write_int::<i32>(ctx, foreign, args),
+        "ffi.ptr.write.u32" => ptr_write_nat::<u32>(ctx, foreign, args),
+        "ffi.ptr.write.i64" => ptr_write_int::<i64>(ctx, foreign, args),
+        "ffi.ptr.write.u64" => ptr_write_nat::<u64>(ctx, foreign, args),
+        "ffi.ptr.write.f32" => ptr_write_float::<f32>(ctx, foreign, args),
+        "ffi.ptr.write.f64" => ptr_write_float::<f64>(ctx, foreign, args),
+        "ffi.ptr.write.ptr" => ptr_write_ptr(ctx, foreign, args),
         _ => return None,
     };
     Some(result)
 }
 
-fn ptr_read<T: Copy>(foreign: &ForeignCall, args: &[Value]) -> VmResult<T> {
-    let address = ptr_arg(foreign, args, 0)?;
+fn ptr_read<T: Copy>(
+    ctx: &VmHostContext<'_>,
+    foreign: &ForeignCall,
+    args: &[Value],
+) -> VmResult<T> {
+    let address = ptr_arg(ctx, foreign, args, 0)?;
     if address == 0 {
         return Err(pointer_intrinsic_failed(foreign, "null pointer read"));
     }
@@ -50,7 +67,11 @@ fn ptr_read<T: Copy>(foreign: &ForeignCall, args: &[Value]) -> VmResult<T> {
     Ok(unsafe { read_unaligned(ptr) })
 }
 
-fn ptr_write_int<T>(foreign: &ForeignCall, args: &[Value]) -> VmResult<Value>
+fn ptr_write_int<T>(
+    ctx: &VmHostContext<'_>,
+    foreign: &ForeignCall,
+    args: &[Value],
+) -> VmResult<Value>
 where
     T: TryFrom<i64>,
 {
@@ -58,10 +79,14 @@ where
     let value = T::try_from(value).map_err(|_| {
         pointer_intrinsic_failed(foreign, "integer value out of pointer storage range")
     })?;
-    ptr_write_raw(foreign, args, value)
+    ptr_write_raw(ctx, foreign, args, value)
 }
 
-fn ptr_write_nat<T>(foreign: &ForeignCall, args: &[Value]) -> VmResult<Value>
+fn ptr_write_nat<T>(
+    ctx: &VmHostContext<'_>,
+    foreign: &ForeignCall,
+    args: &[Value],
+) -> VmResult<Value>
 where
     T: TryFrom<u64>,
 {
@@ -69,24 +94,37 @@ where
     let value = T::try_from(value).map_err(|_| {
         pointer_intrinsic_failed(foreign, "integer value out of pointer storage range")
     })?;
-    ptr_write_raw(foreign, args, value)
+    ptr_write_raw(ctx, foreign, args, value)
 }
 
-fn ptr_write_float<T>(foreign: &ForeignCall, args: &[Value]) -> VmResult<Value>
+fn ptr_write_float<T>(
+    ctx: &VmHostContext<'_>,
+    foreign: &ForeignCall,
+    args: &[Value],
+) -> VmResult<Value>
 where
     T: FromF64,
 {
     let value = float_arg(foreign, args, 1)?;
-    ptr_write_raw(foreign, args, T::from_f64(value))
+    ptr_write_raw(ctx, foreign, args, T::from_f64(value))
 }
 
-fn ptr_write_ptr(foreign: &ForeignCall, args: &[Value]) -> VmResult<Value> {
-    let value = ptr_arg(foreign, args, 1)?;
-    ptr_write_raw(foreign, args, value)
+fn ptr_write_ptr(
+    ctx: &VmHostContext<'_>,
+    foreign: &ForeignCall,
+    args: &[Value],
+) -> VmResult<Value> {
+    let value = ptr_arg(ctx, foreign, args, 1)?;
+    ptr_write_raw(ctx, foreign, args, value)
 }
 
-fn ptr_write_raw<T>(foreign: &ForeignCall, args: &[Value], value: T) -> VmResult<Value> {
-    let address = ptr_arg(foreign, args, 0)?;
+fn ptr_write_raw<T>(
+    ctx: &VmHostContext<'_>,
+    foreign: &ForeignCall,
+    args: &[Value],
+    value: T,
+) -> VmResult<Value> {
+    let address = ptr_arg(ctx, foreign, args, 0)?;
     if address == 0 {
         return Err(pointer_intrinsic_failed(foreign, "null pointer write"));
     }
@@ -95,11 +133,16 @@ fn ptr_write_raw<T>(foreign: &ForeignCall, args: &[Value], value: T) -> VmResult
     Ok(Value::Unit)
 }
 
-fn ptr_arg(foreign: &ForeignCall, args: &[Value], index: usize) -> VmResult<usize> {
+fn ptr_arg(
+    ctx: &VmHostContext<'_>,
+    foreign: &ForeignCall,
+    args: &[Value],
+    index: usize,
+) -> VmResult<usize> {
     match args.get(index) {
         Some(Value::CPtr(address)) => Ok(*address),
-        Some(pointer) => match pointer
-            .as_record()
+        Some(pointer) => match ctx
+            .record(pointer)
             .and_then(|record| record.get(0).cloned())
         {
             Some(Value::CPtr(address)) => Ok(address),

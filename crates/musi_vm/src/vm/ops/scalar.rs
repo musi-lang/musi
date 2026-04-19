@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use music_seam::{Instruction, Opcode};
 
 use super::{StepOutcome, Value, Vm, VmError, VmErrorKind, VmResult};
@@ -26,11 +24,13 @@ impl Vm {
         self.push_value(Value::Float(op(left, right)))
     }
 
-    pub(crate) fn compare_values(&mut self, op: impl FnOnce(&Value, &Value) -> bool) -> VmResult {
+    pub(crate) fn compare_values(&mut self, op: impl FnOnce(bool) -> bool) -> VmResult {
         let right = self.pop_value()?;
         let left = self.pop_value()?;
         let module_slot = self.current_module_slot()?;
-        self.push_value(self.bool_value(module_slot, op(&left, &right))?)
+        let equal = self.values_equal(&left, &right);
+        let value = self.bool_value(module_slot, op(equal))?;
+        self.push_value(value)
     }
 
     pub(crate) fn compare_ord<OpInt, OpNat, OpFloat, OpString>(
@@ -52,11 +52,14 @@ impl Vm {
             (Value::Int(left), Value::Int(right)) => op_int(*left, *right),
             (Value::Nat(left), Value::Nat(right)) => op_nat(*left, *right),
             (Value::Float(left), Value::Float(right)) => op_float(*left, *right),
-            (Value::String(left), Value::String(right)) => op_string(left, right),
+            (Value::String(left), Value::String(right)) => {
+                op_string(self.heap.string(*left)?, self.heap.string(*right)?)
+            }
             _ => return Err(Self::invalid_value_kind(left_value.kind(), &right_value)),
         };
         let module_slot = self.current_module_slot()?;
-        self.push_value(self.bool_value(module_slot, value)?)
+        let value = self.bool_value(module_slot, value)?;
+        self.push_value(value)
     }
 
     pub(crate) fn exec_scalar(&mut self, instruction: &Instruction) -> VmResult<StepOutcome> {
@@ -103,19 +106,20 @@ impl Vm {
             }
             Opcode::StrCat => {
                 let right_value = self.pop_value()?;
-                let right = Self::expect_string_value(right_value)?;
+                let right = self.expect_string_value(right_value)?;
                 let left_value = self.pop_value()?;
-                let left = Self::expect_string_value(left_value)?;
-                let text: Rc<str> = format!("{left}{right}").into();
-                self.push_value(Value::String(text))?;
+                let left = self.expect_string_value(left_value)?;
+                let text = format!("{left}{right}");
+                let value = self.alloc_string(text)?;
+                self.push_value(value)?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::CmpEq => {
-                self.compare_values(PartialEq::eq)?;
+                self.compare_values(|equal| equal)?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::CmpNe => {
-                self.compare_values(PartialEq::ne)?;
+                self.compare_values(|equal| !equal)?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::CmpLt => {

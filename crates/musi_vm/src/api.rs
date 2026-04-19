@@ -1,5 +1,5 @@
 pub use super::gc::HeapCollectionStats;
-pub use super::host::{RejectingHost, VmHost};
+pub use super::host::{RejectingHost, VmHost, VmHostCallContext, VmHostContext};
 pub use super::loader::{RejectingLoader, VmLoader};
 pub use super::program::{
     Program, ProgramDataLayout, ProgramDataVariantLayout, ProgramExport, ProgramExportKind,

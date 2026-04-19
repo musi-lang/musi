@@ -48,7 +48,7 @@ impl Vm {
                 let call = self.foreign_call(module_slot, foreign);
                 let result = self
                     .call_musi_intrinsic(module_slot, &call, &args)
-                    .unwrap_or_else(|| self.host.call_foreign(&call, &args))?;
+                    .unwrap_or_else(|| self.call_host_foreign(&call, &args))?;
                 self.push_value(result)?;
                 Ok(StepOutcome::Continue)
             }
@@ -61,7 +61,7 @@ impl Vm {
                 let call = self.foreign_call(module_slot, foreign);
                 let result = self
                     .call_musi_intrinsic(module_slot, &call, &args)
-                    .unwrap_or_else(|| self.host.call_foreign(&call, &args))?;
+                    .unwrap_or_else(|| self.call_host_foreign(&call, &args))?;
                 self.push_value(result)?;
                 Ok(StepOutcome::Continue)
             }
@@ -75,9 +75,10 @@ impl Vm {
             }
             Opcode::ModLoad => {
                 let spec_value = self.pop_value()?;
-                let spec = Self::expect_string_value(spec_value)?;
+                let spec = self.expect_string_value(spec_value)?;
                 let slot = self.load_dynamic_module(spec.as_ref())?;
-                self.push_value(Value::module(spec.as_ref(), slot))?;
+                let value = self.alloc_module(spec, slot)?;
+                self.push_value(value)?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::ModGet => {
@@ -133,7 +134,7 @@ impl Vm {
     }
 
     pub(crate) fn call_musi_intrinsic(
-        &self,
+        &mut self,
         module_slot: usize,
         foreign: &ForeignCall,
         args: &[Value],
@@ -145,19 +146,19 @@ impl Vm {
             return Some(result);
         }
         let result = match foreign.symbol() {
-            "data.tag" => Self::data_tag(foreign, args),
+            "data.tag" => self.data_tag(foreign, args),
             "cmp.float.total_compare" => Self::float_total_compare(foreign, args),
             "ffi.ptr.null" => Ok(Value::CPtr(0)),
             "ffi.ptr.is_null" => self.ptr_is_null(module_slot, foreign, args),
-            "ffi.ptr.offset.i8" | "ffi.ptr.offset.u8" => Self::ptr_offset(foreign, args, 1),
-            "ffi.ptr.offset.i16" | "ffi.ptr.offset.u16" => Self::ptr_offset(foreign, args, 2),
+            "ffi.ptr.offset.i8" | "ffi.ptr.offset.u8" => self.ptr_offset(foreign, args, 1),
+            "ffi.ptr.offset.i16" | "ffi.ptr.offset.u16" => self.ptr_offset(foreign, args, 2),
             "ffi.ptr.offset.i32" | "ffi.ptr.offset.u32" | "ffi.ptr.offset.f32" => {
-                Self::ptr_offset(foreign, args, 4)
+                self.ptr_offset(foreign, args, 4)
             }
             "ffi.ptr.offset.i64" | "ffi.ptr.offset.u64" | "ffi.ptr.offset.f64" => {
-                Self::ptr_offset(foreign, args, 8)
+                self.ptr_offset(foreign, args, 8)
             }
-            "ffi.ptr.offset.ptr" => Self::ptr_offset(
+            "ffi.ptr.offset.ptr" => self.ptr_offset(
                 foreign,
                 args,
                 i64::try_from(size_of::<usize>()).unwrap_or(8),
@@ -173,21 +174,21 @@ impl Vm {
     }
 
     fn call_sys_intrinsic(
-        &self,
+        &mut self,
         module_slot: usize,
         foreign: &ForeignCall,
         args: &[Value],
     ) -> Option<VmResult<Value>> {
         let result = match foreign.symbol() {
-            "sys.target.os" => Ok(Value::string(target_os())),
-            "sys.target.arch" => Ok(Value::string(target_arch())),
-            "sys.target.arch_family" => Ok(Value::string(target_arch_family())),
-            "sys.target.family" => Ok(Value::string(target_family())),
+            "sys.target.os" => self.alloc_string(target_os()),
+            "sys.target.arch" => self.alloc_string(target_arch()),
+            "sys.target.arch_family" => self.alloc_string(target_arch_family()),
+            "sys.target.family" => self.alloc_string(target_family()),
             "sys.target.pointer_width" => Ok(Value::Int(i64::from(usize::BITS))),
-            "sys.target.endian" => Ok(Value::string(target_endian())),
+            "sys.target.endian" => self.alloc_string(target_endian()),
             "sys.jit.supported" => Ok(Value::Int(i64::from(jit_supported()))),
-            "sys.jit.backend" => Ok(Value::string(jit_backend())),
-            "sys.jit.isa" => Ok(Value::string(jit_isa())),
+            "sys.jit.backend" => self.alloc_string(jit_backend()),
+            "sys.jit.isa" => self.alloc_string(jit_isa()),
             "sys.matches.os" => {
                 self.sys_match(module_slot, foreign, args, target_os, normalize_target_text)
             }
@@ -206,9 +207,9 @@ impl Vm {
         Some(result)
     }
 
-    fn data_tag(foreign: &ForeignCall, args: &[Value]) -> VmResult<Value> {
+    fn data_tag(&self, foreign: &ForeignCall, args: &[Value]) -> VmResult<Value> {
         match args.first() {
-            Some(Value::Data(data)) => Ok(Value::Int(data.borrow().tag)),
+            Some(Value::Data(data)) => Ok(Value::Int(self.heap.data(*data)?.tag)),
             Some(found) => Err(Self::invalid_value_kind(VmValueKind::Data, found)),
             None => Err(Self::ptr_error(foreign, "data tag argument missing")),
         }
@@ -226,7 +227,7 @@ impl Vm {
     }
 
     fn sys_match(
-        &self,
+        &mut self,
         module_slot: usize,
         foreign: &ForeignCall,
         args: &[Value],
@@ -236,21 +237,29 @@ impl Vm {
         let [Value::String(value)] = args else {
             return Err(Self::ptr_error(foreign, "target match argument invalid"));
         };
-        self.bool_value(module_slot, normalize(value.as_ref()) == target())
+        self.bool_value(
+            module_slot,
+            normalize(self.heap.string(*value)?) == target(),
+        )
     }
 
     fn ptr_is_null(
-        &self,
+        &mut self,
         module_slot: usize,
         foreign: &ForeignCall,
         args: &[Value],
     ) -> VmResult<Value> {
-        let address = Self::ptr_arg(foreign, args, 0)?;
+        let address = self.ptr_arg(foreign, args, 0)?;
         self.bool_value(module_slot, address == 0)
     }
 
-    fn ptr_offset(foreign: &ForeignCall, args: &[Value], stride: i64) -> VmResult<Value> {
-        let address = Self::ptr_arg(foreign, args, 0)?;
+    fn ptr_offset(
+        &mut self,
+        foreign: &ForeignCall,
+        args: &[Value],
+        stride: i64,
+    ) -> VmResult<Value> {
+        let address = self.ptr_arg(foreign, args, 0)?;
         let count = Self::int_arg(foreign, args, 1)?;
         let byte_count = count
             .checked_mul(stride)
@@ -267,15 +276,15 @@ impl Vm {
                 Self::ptr_error(foreign, "pointer offset count exceeds address space")
             })?)
         };
-        next.map(|address| Value::data(foreign.result_ty(), 0, [Value::CPtr(address)]))
-            .ok_or_else(|| Self::ptr_error(foreign, "pointer offset overflow"))
+        let address = next.ok_or_else(|| Self::ptr_error(foreign, "pointer offset overflow"))?;
+        self.alloc_data(foreign.result_ty(), 0, [Value::CPtr(address)])
     }
 
-    fn ptr_arg(foreign: &ForeignCall, args: &[Value], index: usize) -> VmResult<usize> {
+    fn ptr_arg(&self, foreign: &ForeignCall, args: &[Value], index: usize) -> VmResult<usize> {
         match args.get(index) {
             Some(Value::CPtr(address)) => Ok(*address),
             Some(Value::Data(data)) => {
-                let data = data.borrow();
+                let data = self.heap.data(*data)?;
                 match data.fields.first() {
                     Some(Value::CPtr(address)) => Ok(*address),
                     Some(found) => Err(Self::invalid_value_kind(VmValueKind::CPtr, found)),

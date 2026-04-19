@@ -13,8 +13,8 @@ mod vm;
 pub use api::{
     ClosureView, ForeignView, HeapCollectionStats, ModuleView, Program, ProgramDataLayout,
     ProgramDataVariantLayout, ProgramExport, ProgramExportKind, ProgramTypeAbiKind, RecordView,
-    RejectingHost, RejectingLoader, SeqView, StringView, Value, ValueView, Vm, VmHost, VmLoader,
-    VmOptions, render_value_view,
+    RejectingHost, RejectingLoader, SeqView, StringView, Value, ValueView, Vm, VmHost,
+    VmHostCallContext, VmHostContext, VmLoader, VmOptions, render_value_view,
 };
 pub use diag::VmDiagKind;
 pub use error::{

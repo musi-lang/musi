@@ -2,7 +2,7 @@ use std::env::{args_os, current_dir};
 
 use musi_foundation::runtime as foundation_runtime;
 use musi_native::NativeHost;
-use musi_vm::Value;
+use musi_vm::{EffectCall, Value, VmError, VmHostContext};
 
 use super::{invalid_runtime_effect, run_shell_command, saturating_usize_to_i64};
 
@@ -21,10 +21,10 @@ pub(super) fn register(host: &mut NativeHost) {
         },
     );
 
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::PROCESS_ARG_AT_OP,
-        |effect, args| {
+        |ctx, effect, args| {
             let [Value::Int(index)] = args else {
                 return Err(invalid_runtime_effect(effect, "invalid processArgAt args"));
             };
@@ -37,32 +37,30 @@ pub(super) fn register(host: &mut NativeHost) {
                         .unwrap_or_default()
                 },
             );
-            Ok(Value::string(value))
+            ctx.alloc_string(value)
         },
     );
 
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::PROCESS_CWD_OP,
-        |effect, args| {
+        |ctx, effect, args| {
             if !args.is_empty() {
                 return Err(invalid_runtime_effect(effect, "invalid processCwd args"));
             }
             let cwd = current_dir().map_err(|error| {
                 invalid_runtime_effect(effect, format!("processCwd failed (`{error}`)"))
             })?;
-            Ok(Value::string(cwd.to_string_lossy().into_owned()))
+            ctx.alloc_string(cwd.to_string_lossy().into_owned())
         },
     );
 
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::PROCESS_RUN_OP,
-        |effect, args| {
-            let [Value::String(command)] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid processRun args"));
-            };
-            Ok(Value::Int(run_shell_command(command.as_ref(), effect)?))
+        |ctx, effect, args| {
+            let command = string_arg(ctx, effect, args, "processRun")?;
+            Ok(Value::Int(run_shell_command(command, effect)?))
         },
     );
 
@@ -79,4 +77,21 @@ pub(super) fn register(host: &mut NativeHost) {
             ))
         },
     );
+}
+
+fn string_arg<'a>(
+    ctx: &'a VmHostContext<'_>,
+    effect: &EffectCall,
+    args: &'a [Value],
+    op_name: &str,
+) -> Result<&'a str, VmError> {
+    let [value] = args else {
+        return Err(invalid_runtime_effect(
+            effect,
+            format!("invalid {op_name} args"),
+        ));
+    };
+    ctx.string(value)
+        .map(|text| text.as_str())
+        .ok_or_else(|| invalid_runtime_effect(effect, format!("invalid {op_name} args")))
 }

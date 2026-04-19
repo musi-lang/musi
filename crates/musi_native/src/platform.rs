@@ -1,6 +1,9 @@
 use std::env::consts::OS;
 
-use musi_vm::{EffectCall, ForeignCall, ProgramTypeAbiKind, Value, VmError, VmErrorKind, VmResult};
+use musi_vm::{
+    EffectCall, ForeignCall, ProgramTypeAbiKind, Value, VmError, VmErrorKind, VmHostCallContext,
+    VmResult,
+};
 use music_seam::TypeId;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -103,13 +106,19 @@ impl PlatformHost {
             || foreign.result_data_layout().is_some()
     }
 
-    #[must_use]
-    pub fn call_foreign(self, foreign: &ForeignCall, args: &[Value]) -> Option<VmResult<Value>> {
-        if let Some(result) = musi_native_ffi::call_musi_pointer_intrinsic(foreign, args) {
+    pub fn call_foreign(
+        self,
+        ctx: VmHostCallContext<'_, '_>,
+        foreign: &ForeignCall,
+        args: &[Value],
+    ) -> Option<VmResult<Value>> {
+        if let Some(result) = musi_native_ffi::call_musi_pointer_intrinsic(ctx, foreign, args) {
             return Some(result);
         }
         match self.native_abi_support(foreign) {
-            NativeAbiCallSupport::Supported => Some(musi_native_ffi::call_foreign(foreign, args)),
+            NativeAbiCallSupport::Supported => {
+                Some(musi_native_ffi::call_foreign(ctx, foreign, args))
+            }
             NativeAbiCallSupport::UnsupportedTarget
             | NativeAbiCallSupport::UnsupportedAbi { .. }
             | NativeAbiCallSupport::MissingLink

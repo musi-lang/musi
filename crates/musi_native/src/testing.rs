@@ -1,7 +1,7 @@
 use std::mem::take;
 
 use musi_foundation::test;
-use musi_vm::{EffectCall, Value, VmError, VmErrorKind, VmResult};
+use musi_vm::{EffectCall, Value, VmError, VmErrorKind, VmHostContext, VmResult};
 
 pub type TestSuitePath = Vec<Box<str>>;
 pub type NativeTestCaseResultList = Vec<NativeTestCaseResult>;
@@ -76,6 +76,7 @@ impl TestHost {
     #[must_use]
     pub fn handle_effect(
         &mut self,
+        ctx: &VmHostContext<'_>,
         effect: &EffectCall,
         args: &[Value],
     ) -> Option<VmResult<Value>> {
@@ -85,21 +86,25 @@ impl TestHost {
         let Some(collector) = self.collector.as_mut() else {
             return Some(Err(reject_test_effect(effect, "test session not active")));
         };
-        Some(handle_test_effect(collector, effect, args).map(|()| Value::Unit))
+        Some(handle_test_effect(ctx, collector, effect, args).map(|()| Value::Unit))
     }
 }
 
 fn handle_test_effect(
+    ctx: &VmHostContext<'_>,
     collector: &mut TestCollector,
     effect: &EffectCall,
     args: &[Value],
 ) -> VmResult {
     match effect.op_name() {
         test::SUITE_START_OP => {
-            let [Value::String(name)] = args else {
+            let [name] = args else {
                 return Err(invalid_test_effect(effect));
             };
-            collector.active_suites.push(name.as_ref().into());
+            let Some(name) = ctx.string(name) else {
+                return Err(invalid_test_effect(effect));
+            };
+            collector.active_suites.push(name.as_str().into());
         }
         test::SUITE_END_OP => {
             if !args.is_empty() {
@@ -108,15 +113,18 @@ fn handle_test_effect(
             let _ = collector.active_suites.pop();
         }
         test::TEST_CASE_OP => {
-            let [Value::String(name), passed] = args else {
+            let [name, passed] = args else {
                 return Err(invalid_test_effect(effect));
             };
-            let Some(passed) = bool_flag(passed) else {
+            let Some(name) = ctx.string(name) else {
+                return Err(invalid_test_effect(effect));
+            };
+            let Some(passed) = ctx.bool_flag(passed) else {
                 return Err(invalid_test_effect(effect));
             };
             collector.cases.push(NativeTestCaseResult::new(
                 suite_name(&collector.active_suites),
-                name.as_ref().into(),
+                name.as_str().into(),
                 passed,
             ));
         }
@@ -143,9 +151,4 @@ fn suite_name(path: &[Box<str>]) -> Box<str> {
         .collect::<Vec<_>>()
         .join(" / ")
         .into_boxed_str()
-}
-
-fn bool_flag(value: &Value) -> Option<bool> {
-    let record = value.as_record()?;
-    (record.is_empty() && (record.tag() == 0 || record.tag() == 1)).then_some(record.tag() != 0)
 }

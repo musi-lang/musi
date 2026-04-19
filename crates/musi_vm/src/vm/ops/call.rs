@@ -1,7 +1,7 @@
 use music_seam::{Instruction, Opcode, Operand, ProcedureId};
 
 use crate::VmValueKind;
-use crate::value::{ClosureValuePtr, ForeignValue, ValueList};
+use crate::value::{ForeignValue, GcRef, ValueList};
 
 use super::{StepOutcome, Value, Vm, VmError, VmErrorKind, VmResult};
 
@@ -50,7 +50,7 @@ impl Vm {
     fn exec_closure_call(&mut self) -> VmResult<StepOutcome> {
         let callee = self.pop_value()?;
         match callee {
-            Value::Closure(closure) => self.push_closure_call_frame(&closure)?,
+            Value::Closure(closure) => self.push_closure_call_frame(closure)?,
             Value::Foreign(foreign) => {
                 let result = self.call_foreign_value(foreign)?;
                 self.push_value(result)?;
@@ -65,7 +65,7 @@ impl Vm {
         match callee {
             Value::Closure(closure) => {
                 let args = self.pop_seq_args()?;
-                self.push_seq_closure_call_frame(&closure, args)?;
+                self.push_seq_closure_call_frame(closure, args)?;
             }
             Value::Foreign(foreign) => {
                 let args = self.pop_seq_args()?;
@@ -98,12 +98,13 @@ impl Vm {
         let module_slot = self.current_module_slot()?;
         let capture_count = usize::from(captures);
         let captures = self.pop_args(capture_count)?;
-        self.push_value(Value::closure(module_slot, procedure, captures))?;
+        let value = self.alloc_closure(module_slot, procedure, captures)?;
+        self.push_value(value)?;
         Ok(StepOutcome::Continue)
     }
 
-    fn push_closure_call_frame(&mut self, closure: &ClosureValuePtr) -> VmResult {
-        let closure = closure.borrow();
+    fn push_closure_call_frame(&mut self, closure: GcRef) -> VmResult {
+        let closure = self.heap.closure(closure)?.clone();
         let total_params = self.call_arity(closure.module_slot, closure.procedure)?;
         let arg_count = total_params.saturating_sub(closure.captures.len());
         let args = self.pop_args(arg_count)?;
@@ -112,12 +113,8 @@ impl Vm {
         self.push_frame(closure.module_slot, closure.procedure, full_args)
     }
 
-    fn push_seq_closure_call_frame(
-        &mut self,
-        closure: &ClosureValuePtr,
-        args: ValueList,
-    ) -> VmResult {
-        let closure = closure.borrow();
+    fn push_seq_closure_call_frame(&mut self, closure: GcRef, args: ValueList) -> VmResult {
+        let closure = self.heap.closure(closure)?.clone();
         let total_params = self.call_arity(closure.module_slot, closure.procedure)?;
         let arg_count = total_params.saturating_sub(closure.captures.len());
         if args.len() != arg_count {
@@ -155,7 +152,7 @@ impl Vm {
         let call = Self::specialize_foreign_call(call, &type_args);
         let args = self.pop_args(call.param_tys().len())?;
         self.call_musi_intrinsic(module_slot, &call, &args)
-            .unwrap_or_else(|| self.host.call_foreign(&call, &args))
+            .unwrap_or_else(|| self.call_host_foreign(&call, &args))
     }
 
     fn call_foreign_value_with_args(
@@ -178,6 +175,6 @@ impl Vm {
             }));
         }
         self.call_musi_intrinsic(module_slot, &call, args)
-            .unwrap_or_else(|| self.host.call_foreign(&call, args))
+            .unwrap_or_else(|| self.call_host_foreign(&call, args))
     }
 }

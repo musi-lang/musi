@@ -3,7 +3,9 @@ use std::rc::Rc;
 
 use musi_foundation::syntax;
 use musi_native::{NativeHost, WeakNativeHost};
-use musi_vm::{EffectCall, Value, Vm, VmError, VmErrorKind, VmOptions, VmResult, VmValueKind};
+use musi_vm::{
+    EffectCall, Value, ValueView, Vm, VmError, VmErrorKind, VmOptions, VmResult, VmValueKind,
+};
 use music_term::SyntaxTerm;
 
 use super::compile::{SessionLoader, compile_synthetic_program_from_store};
@@ -18,7 +20,7 @@ impl Runtime {
     ///
     /// Returns [`crate::RuntimeError`] if syntax value is invalid, compilation fails, or runtime execution fails.
     pub fn eval_expr_syntax(&mut self, syntax: &Value, result_ty: &str) -> RuntimeResult<Value> {
-        let body = Self::syntax_term(syntax)?;
+        let body = self.syntax_term(syntax)?;
         let source = format!("export let answer () : {result_ty} := {};", body.text());
         let program = self.compile_synthetic_program("main", &source)?;
         let loader = SessionLoader::new(Rc::clone(&self.store));
@@ -34,7 +36,7 @@ impl Runtime {
     ///
     /// Returns [`crate::RuntimeError`] if syntax value is invalid, compilation fails, or runtime loading fails.
     pub fn load_module_syntax(&mut self, spec: &str, syntax: &Value) -> RuntimeResult<Value> {
-        let source = Self::syntax_term(syntax)?.text().to_owned();
+        let source = self.syntax_term(syntax)?.text().to_owned();
         let _ = self
             .store
             .borrow_mut()
@@ -49,9 +51,12 @@ impl Runtime {
         Ok(self.vm_mut()?.load_module(spec)?)
     }
 
-    fn syntax_term(value: &Value) -> RuntimeResult<&SyntaxTerm> {
-        match value {
-            Value::Syntax(term) => Ok(term.as_ref()),
+    fn syntax_term<'a>(&'a self, value: &'a Value) -> RuntimeResult<&'a SyntaxTerm> {
+        let Some(vm) = self.vm.as_ref() else {
+            return Err(RuntimeError::new(RuntimeErrorKind::RootModuleRequired));
+        };
+        match vm.inspect(value) {
+            ValueView::Syntax(term) => Ok(term.term()),
             _ => Err(RuntimeError::new(RuntimeErrorKind::InvalidSyntaxValue {
                 found: value.kind(),
             })),
@@ -68,34 +73,47 @@ pub(super) fn register_syntax_handlers(
     let eval_store = Rc::clone(&store);
     let eval_host = nested_host.clone();
     let eval_vm_options = vm_options.clone();
-    host.register_effect_handler(syntax::EFFECT, syntax::EVAL_OP, move |effect, args| {
-        let [Value::Syntax(body), Value::Type(result_ty)] = args else {
-            return Err(invalid_syntax_effect(effect, "invalid syntax eval args"));
-        };
-        let result_ty_name = effect.type_term(*result_ty).to_string();
-        eval_syntax_value(
-            &eval_store,
-            &eval_host,
-            &eval_vm_options,
-            body.text(),
-            result_ty_name.as_str(),
-        )
-    });
+    host.register_effect_handler_with_context(
+        syntax::EFFECT,
+        syntax::EVAL_OP,
+        move |ctx, effect, args| {
+            let [body, Value::Type(result_ty)] = args else {
+                return Err(invalid_syntax_effect(effect, "invalid syntax eval args"));
+            };
+            let body = ctx
+                .syntax(body)
+                .ok_or_else(|| invalid_syntax_effect(effect, "invalid syntax eval args"))?;
+            let result_ty_name = effect.type_term(*result_ty).to_string();
+            eval_syntax_value(
+                &eval_store,
+                &eval_host,
+                &eval_vm_options,
+                body.term().text(),
+                result_ty_name.as_str(),
+            )
+        },
+    );
 
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         syntax::EFFECT,
         syntax::REGISTER_MODULE_OP,
-        move |effect, args| {
-            let [Value::String(spec), Value::Syntax(body)] = args else {
+        move |ctx, effect, args| {
+            let [spec, body] = args else {
                 return Err(invalid_syntax_effect(
                     effect,
                     "invalid syntax register args",
                 ));
             };
+            let spec = ctx
+                .string(spec)
+                .ok_or_else(|| invalid_syntax_effect(effect, "invalid syntax register args"))?;
+            let body = ctx
+                .syntax(body)
+                .ok_or_else(|| invalid_syntax_effect(effect, "invalid syntax register args"))?;
             let mut store = store.borrow_mut();
             let _ = store
                 .module_texts
-                .insert(spec.as_ref().into(), body.text().into());
+                .insert(spec.as_str().into(), body.term().text().into());
             store.programs.clear();
             Ok(Value::Unit)
         },

@@ -2,70 +2,89 @@ use std::env::{remove_var, set_var, var, var_os};
 
 use musi_foundation::runtime as foundation_runtime;
 use musi_native::NativeHost;
-use musi_vm::Value;
+use musi_vm::{EffectCall, Value, VmError, VmHostContext};
 
 use super::invalid_runtime_effect;
 
 pub(super) fn register(host: &mut NativeHost) {
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::ENV_GET_OP,
-        |effect, args| {
-            let [Value::String(name)] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid envGet args"));
-            };
-            Ok(Value::string(var(name.as_ref()).unwrap_or_default()))
+        |ctx, effect, args| {
+            let name = string_arg(ctx, effect, args, "envGet")?;
+            ctx.alloc_string(var(name).unwrap_or_default())
         },
     );
 
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::ENV_HAS_OP,
-        |effect, args| {
-            let [Value::String(name)] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid envHas args"));
-            };
-            Ok(Value::Int(i64::from(var_os(name.as_ref()).is_some())))
+        |ctx, effect, args| {
+            let name = string_arg(ctx, effect, args, "envHas")?;
+            Ok(Value::Int(i64::from(var_os(name).is_some())))
         },
     );
 
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::ENV_SET_OP,
-        |effect, args| {
-            let [Value::String(name), Value::String(value)] = args else {
+        |ctx, effect, args| {
+            let [name, value] = args else {
                 return Err(invalid_runtime_effect(effect, "invalid envSet args"));
             };
+            let name = ctx
+                .string(name)
+                .ok_or_else(|| invalid_runtime_effect(effect, "invalid envSet args"))?;
+            let value = ctx
+                .string(value)
+                .ok_or_else(|| invalid_runtime_effect(effect, "invalid envSet args"))?;
+            let name = name.as_str();
+            let value = value.as_str();
             if !valid_env_key(name) || value.contains('\0') {
                 return Ok(Value::Int(0));
             }
             // SAFETY: Musi's runtime executes on one VM thread; no concurrent Rust env access exists here.
             #[allow(unsafe_code)]
             unsafe {
-                set_var(name.as_ref(), value.as_ref());
+                set_var(name, value);
             }
             Ok(Value::Int(1))
         },
     );
 
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::ENV_REMOVE_OP,
-        |effect, args| {
-            let [Value::String(name)] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid envRemove args"));
-            };
+        |ctx, effect, args| {
+            let name = string_arg(ctx, effect, args, "envRemove")?;
             if !valid_env_key(name) {
                 return Ok(Value::Int(0));
             }
             // SAFETY: Musi's runtime executes on one VM thread; no concurrent Rust env access exists here.
             #[allow(unsafe_code)]
             unsafe {
-                remove_var(name.as_ref());
+                remove_var(name);
             }
             Ok(Value::Int(1))
         },
     );
+}
+
+fn string_arg<'a>(
+    ctx: &'a VmHostContext<'_>,
+    effect: &EffectCall,
+    args: &'a [Value],
+    op_name: &str,
+) -> Result<&'a str, VmError> {
+    let [value] = args else {
+        return Err(invalid_runtime_effect(
+            effect,
+            format!("invalid {op_name} args"),
+        ));
+    };
+    ctx.string(value)
+        .map(|text| text.as_str())
+        .ok_or_else(|| invalid_runtime_effect(effect, format!("invalid {op_name} args")))
 }
 
 fn valid_env_key(name: &str) -> bool {

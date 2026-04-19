@@ -4,7 +4,7 @@
 use musi_foundation::{register_modules, test};
 use musi_vm::{
     EffectCall, ForeignCall, NativeFailureStage, Program, ProgramTypeAbiKind, RejectingLoader,
-    Value, Vm, VmError, VmErrorKind, VmHost, VmOptions, VmResult,
+    Value, Vm, VmError, VmErrorKind, VmHost, VmHostCallContext, VmHostContext, VmOptions, VmResult,
 };
 use music_module::ModuleKey;
 use music_session::{Session, SessionOptions};
@@ -16,7 +16,12 @@ use crate::{NativeHost, NativeTestCaseResult, NativeTestReport};
 struct FallbackHost;
 
 impl VmHost for FallbackHost {
-    fn call_foreign(&mut self, foreign: &ForeignCall, _args: &[Value]) -> VmResult<Value> {
+    fn call_foreign(
+        &mut self,
+        _ctx: VmHostCallContext<'_, '_>,
+        foreign: &ForeignCall,
+        _args: &[Value],
+    ) -> VmResult<Value> {
         if foreign.name() == "main::puts" {
             return Ok(Value::Int(11));
         }
@@ -25,7 +30,12 @@ impl VmHost for FallbackHost {
         }))
     }
 
-    fn handle_effect(&mut self, effect: &EffectCall, _args: &[Value]) -> VmResult<Value> {
+    fn handle_effect(
+        &mut self,
+        _ctx: VmHostCallContext<'_, '_>,
+        effect: &EffectCall,
+        _args: &[Value],
+    ) -> VmResult<Value> {
         if effect.effect_name() == "main::Console" && effect.op_name() == "readLine" {
             return Ok(Value::Int(9));
         }
@@ -212,19 +222,33 @@ mod success {
         foreign "c" let strchr (value : CString, code : Int) : CString;
         export let answer () : CString := unsafe { strchr(musi_native_test_progname(), 0); };
     "#;
-        let value = call_export_with_host(NativeHost::default(), source)
+        let program = compile_program(&[("main", source)], "main");
+        let mut vm = Vm::new(program, RejectingLoader, NativeHost::default(), VmOptions);
+        vm.initialize().expect("program should initialize");
+        let value = vm
+            .call_export("answer", &[])
             .expect("cstring result should succeed");
-
-        assert_eq!(value, Value::string(""));
+        let musi_vm::ValueView::String(text) = vm.inspect(&value) else {
+            panic!("expected string result");
+        };
+        assert_eq!(text.as_str(), "");
     }
 
     #[test]
     fn dispatches_registered_effect_handler() {
         let mut host = NativeHost::new();
-        host.register_effect_handler("main::Console", "readLine", |_effect, args| {
-            assert_eq!(args, &[Value::string(">")]);
-            Ok(Value::Int(5))
-        });
+        host.register_effect_handler_with_context(
+            "main::Console",
+            "readLine",
+            |ctx, _effect, args| {
+                let [prompt] = args else {
+                    panic!("expected prompt");
+                };
+                let prompt = ctx.string(prompt).expect("prompt should be string");
+                assert_eq!(prompt.as_str(), ">");
+                Ok(Value::Int(5))
+            },
+        );
 
         let value = call_export_with_host(
             host,

@@ -183,6 +183,7 @@ Key repo areas:
 - `packages/` — first-party Musi packages, including `@std`
 - `diagnostics/` — diagnostic fixtures and renderer references
 - `docs/reference/` — compiler, runtime, diagnostics, and language coverage references
+- `docs/reference/performance.md` — VM/runtime benchmark tracking across CLR, JVM, and SEAM
 - `docs/where/` — workspace and ownership maps
 - `grammar/` — grammar sources
 
@@ -191,6 +192,7 @@ Good entry points:
 - `docs/where/workspace-map.md`
 - `docs/reference/public-api.md`
 - `docs/reference/language-feature-coverage.md`
+- `docs/reference/performance.md`
 - `docs/reference/diagnostics.md`
 - `grammar/MusiParser.g4`
 - `grammar/MusiLexer.g4`

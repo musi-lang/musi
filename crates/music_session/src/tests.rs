@@ -1,7 +1,8 @@
 #![allow(unused_imports)]
 
 use musi_vm::{
-    EffectCall, ForeignCall, Program, Value, Vm, VmError, VmErrorKind, VmHost, VmOptions, VmResult,
+    EffectCall, ForeignCall, Program, Value, ValueView, Vm, VmError, VmErrorKind, VmHost,
+    VmHostCallContext, VmHostContext, VmOptions, VmResult,
 };
 use music_base::diag::Diag;
 use music_emit::{EmitDiagKind, emit_diag_kind};
@@ -117,13 +118,23 @@ fn compile_main_entry_with_source(source: &str) -> CompiledOutput {
 struct CtfeTestHost;
 
 impl VmHost for CtfeTestHost {
-    fn call_foreign(&mut self, foreign: &ForeignCall, _args: &[Value]) -> VmResult<Value> {
+    fn call_foreign(
+        &mut self,
+        _ctx: VmHostCallContext<'_, '_>,
+        foreign: &ForeignCall,
+        _args: &[Value],
+    ) -> VmResult<Value> {
         Err(VmError::new(VmErrorKind::ForeignCallRejected {
             foreign: foreign.name().into(),
         }))
     }
 
-    fn handle_effect(&mut self, effect: &EffectCall, _args: &[Value]) -> VmResult<Value> {
+    fn handle_effect(
+        &mut self,
+        _ctx: VmHostCallContext<'_, '_>,
+        effect: &EffectCall,
+        _args: &[Value],
+    ) -> VmResult<Value> {
         match (effect.effect_name(), effect.op_name()) {
             ("main::Clock", "tick") => Ok(Value::Int(42)),
             _ => Err(VmError::new(VmErrorKind::EffectRejected {
@@ -402,16 +413,17 @@ mod success {
                 "$main::answer",
             ],
         );
-        let int_array_ty = output
-            .artifact
-            .types
-            .iter()
-            .find_map(|(id, _)| (output.artifact.type_name(id) == "[]Int").then_some(id))
-            .unwrap();
-        assert_eq!(
-            run_export(&output, "answer"),
-            Value::sequence(int_array_ty, [1, 2, 3].map(Value::Int))
-        );
+        let program = Program::from_bytes(&output.bytes).expect("program should load");
+        let mut vm = Vm::with_rejecting_host(program, VmOptions);
+        vm.initialize().expect("program should initialize");
+        let value = vm.call_export("answer", &[]).expect("export should run");
+        let ValueView::Seq(seq) = vm.inspect(&value) else {
+            panic!("answer should return sequence");
+        };
+        assert_eq!(seq.len(), 3);
+        assert_eq!(seq.get(0), Some(&Value::Int(1)));
+        assert_eq!(seq.get(1), Some(&Value::Int(2)));
+        assert_eq!(seq.get(2), Some(&Value::Int(3)));
     }
 
     #[test]

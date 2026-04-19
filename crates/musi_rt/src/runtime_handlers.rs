@@ -12,7 +12,7 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use musi_foundation::runtime as foundation_runtime;
 use musi_native::NativeHost;
-use musi_vm::{EffectCall, Value, VmError, VmErrorKind};
+use musi_vm::{EffectCall, Value, VmError, VmErrorKind, VmHostCallContext, VmHostContext};
 
 use crate::output::RuntimeOutputSinkCell;
 
@@ -36,14 +36,12 @@ pub fn register_runtime_handlers(host: &mut NativeHost, output: &RuntimeOutputSi
 
 fn register_log_io_handlers(host: &mut NativeHost, output: &RuntimeOutputSinkCell) {
     let log_info_output = Rc::clone(output);
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::LOG_INFO_OP,
-        move |effect, args| {
-            let [Value::String(message)] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid logInfo args"));
-            };
-            let line = format!("[musi:runtime] {}", message.as_ref());
+        move |ctx, effect, args| {
+            let message = string_arg(ctx, effect, args, "logInfo")?;
+            let line = format!("[musi:runtime] {message}");
             log_info_output
                 .borrow_mut()
                 .write_stderr(&line, true)
@@ -55,14 +53,17 @@ fn register_log_io_handlers(host: &mut NativeHost, output: &RuntimeOutputSinkCel
     );
 
     let log_write_output = Rc::clone(output);
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::LOG_WRITE_OP,
-        move |effect, args| {
-            let [Value::Int(level), Value::String(message)] = args else {
+        move |ctx, effect, args| {
+            let [Value::Int(level), message] = args else {
                 return Err(invalid_runtime_effect(effect, "invalid logWrite args"));
             };
-            let line = format!("[std:{level}] {}", message.as_ref());
+            let message = ctx
+                .string(message)
+                .ok_or_else(|| invalid_runtime_effect(effect, "invalid logWrite args"))?;
+            let line = format!("[std:{level}] {}", message.as_str());
             log_write_output
                 .borrow_mut()
                 .write_stderr(&line, true)
@@ -74,182 +75,201 @@ fn register_log_io_handlers(host: &mut NativeHost, output: &RuntimeOutputSinkCel
     );
 
     let stdout_output = Rc::clone(output);
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::IO_PRINT_OP,
-        move |effect, args| write_stream(effect, args, StreamKind::Stdout, false, &stdout_output),
+        move |ctx, effect, args| {
+            write_stream(ctx, effect, args, StreamKind::Stdout, false, &stdout_output)
+        },
     );
     let stdout_line_output = Rc::clone(output);
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::IO_PRINT_LINE_OP,
-        move |effect, args| {
-            write_stream(effect, args, StreamKind::Stdout, true, &stdout_line_output)
+        move |ctx, effect, args| {
+            write_stream(
+                ctx,
+                effect,
+                args,
+                StreamKind::Stdout,
+                true,
+                &stdout_line_output,
+            )
         },
     );
     let stderr_output = Rc::clone(output);
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::IO_PRINT_ERROR_OP,
-        move |effect, args| write_stream(effect, args, StreamKind::Stderr, false, &stderr_output),
-    );
-    let stderr_line_output = Rc::clone(output);
-    host.register_effect_handler(
-        foundation_runtime::EFFECT,
-        foundation_runtime::IO_PRINT_ERROR_LINE_OP,
-        move |effect, args| {
-            write_stream(effect, args, StreamKind::Stderr, true, &stderr_line_output)
+        move |ctx, effect, args| {
+            write_stream(ctx, effect, args, StreamKind::Stderr, false, &stderr_output)
         },
     );
-    host.register_effect_handler(
+    let stderr_line_output = Rc::clone(output);
+    host.register_effect_handler_with_context(
+        foundation_runtime::EFFECT,
+        foundation_runtime::IO_PRINT_ERROR_LINE_OP,
+        move |ctx, effect, args| {
+            write_stream(
+                ctx,
+                effect,
+                args,
+                StreamKind::Stderr,
+                true,
+                &stderr_line_output,
+            )
+        },
+    );
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::IO_READ_LINE_OP,
-        |effect, args| {
+        |ctx, effect, args| {
             if !args.is_empty() {
                 return Err(invalid_runtime_effect(effect, "invalid ioReadLine args"));
             }
-            Ok(Value::string(read_line(effect)?))
+            ctx.alloc_string(read_line(effect)?)
         },
     );
 }
 
 fn register_fs_handlers(host: &mut NativeHost) {
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::FS_READ_TEXT_OP,
-        |effect, args| {
-            let [Value::String(path)] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid fsReadText args"));
-            };
-            let text = fs::read_to_string(path.as_ref()).map_err(|error| {
+        |ctx, effect, args| {
+            let path = string_arg(ctx, effect, args, "fsReadText")?.to_owned();
+            let text = fs::read_to_string(path).map_err(|error| {
                 invalid_runtime_effect(effect, format!("fsReadText failed (`{error}`)"))
             })?;
-            Ok(Value::string(text))
+            ctx.alloc_string(text)
         },
     );
 
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::FS_WRITE_TEXT_OP,
-        |effect, args| {
-            let [Value::String(path), Value::String(text)] = args else {
+        |ctx, effect, args| {
+            let [path, text] = args else {
                 return Err(invalid_runtime_effect(effect, "invalid fsWriteText args"));
             };
-            fs::write(path.as_ref(), text.as_ref()).map_err(|error| {
+            let path = ctx
+                .string(path)
+                .ok_or_else(|| invalid_runtime_effect(effect, "invalid fsWriteText args"))?;
+            let text = ctx
+                .string(text)
+                .ok_or_else(|| invalid_runtime_effect(effect, "invalid fsWriteText args"))?;
+            fs::write(path.as_str(), text.as_str()).map_err(|error| {
                 invalid_runtime_effect(effect, format!("fsWriteText failed (`{error}`)"))
             })?;
             Ok(Value::Unit)
         },
     );
 
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::FS_EXISTS_OP,
-        |effect, args| {
-            let [Value::String(path)] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid fsExists args"));
-            };
-            Ok(Value::Int(i64::from(Path::new(path.as_ref()).exists())))
+        |ctx, effect, args| {
+            let path = string_arg(ctx, effect, args, "fsExists")?;
+            Ok(Value::Int(i64::from(Path::new(path).exists())))
         },
     );
 
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::FS_APPEND_TEXT_OP,
-        |effect, args| {
-            let [Value::String(path), Value::String(text)] = args else {
+        |ctx, effect, args| {
+            let [path, text] = args else {
                 return Err(invalid_runtime_effect(effect, "invalid fsAppendText args"));
             };
+            let path = ctx
+                .string(path)
+                .ok_or_else(|| invalid_runtime_effect(effect, "invalid fsAppendText args"))?;
+            let text = ctx
+                .string(text)
+                .ok_or_else(|| invalid_runtime_effect(effect, "invalid fsAppendText args"))?;
             let result = fs::OpenOptions::new()
                 .create(true)
                 .append(true)
-                .open(path.as_ref())
-                .and_then(|mut file| file.write_all(text.as_bytes()));
+                .open(path.as_str())
+                .and_then(|mut file| file.write_all(text.as_str().as_bytes()));
             Ok(Value::Int(i64::from(result.is_ok())))
         },
     );
 
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::FS_REMOVE_OP,
-        |effect, args| {
-            let [Value::String(path)] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid fsRemove args"));
-            };
-            Ok(Value::Int(i64::from(
-                fs::remove_file(path.as_ref()).is_ok(),
-            )))
+        |ctx, effect, args| {
+            let path = string_arg(ctx, effect, args, "fsRemove")?;
+            Ok(Value::Int(i64::from(fs::remove_file(path).is_ok())))
         },
     );
 
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::FS_CREATE_DIR_ALL_OP,
-        |effect, args| {
-            let [Value::String(path)] = args else {
-                return Err(invalid_runtime_effect(
-                    effect,
-                    "invalid fsCreateDirAll args",
-                ));
-            };
-            Ok(Value::Int(i64::from(
-                fs::create_dir_all(path.as_ref()).is_ok(),
-            )))
+        |ctx, effect, args| {
+            let path = string_arg(ctx, effect, args, "fsCreateDirAll")?;
+            Ok(Value::Int(i64::from(fs::create_dir_all(path).is_ok())))
         },
     );
 }
 
 fn register_text_handlers(host: &mut NativeHost) {
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::TEXT_LENGTH_OP,
-        |effect, args| {
-            let [Value::String(value)] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid textLength args"));
-            };
+        |ctx, effect, args| {
+            let value = string_arg(ctx, effect, args, "textLength")?;
             Ok(Value::Int(saturating_usize_to_i64(value.chars().count())))
         },
     );
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::TEXT_TRIM_OP,
-        |effect, args| {
-            transform_string_arg(effect, args, "textTrim", |value| value.trim().to_owned())
+        |ctx, effect, args| {
+            transform_string_arg(ctx, effect, args, "textTrim", |value| {
+                value.trim().to_owned()
+            })
         },
     );
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::TEXT_TO_LOWERCASE_OP,
-        |effect, args| transform_string_arg(effect, args, "textToLowerCase", str::to_lowercase),
+        |ctx, effect, args| {
+            transform_string_arg(ctx, effect, args, "textToLowerCase", str::to_lowercase)
+        },
     );
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::TEXT_TO_UPPERCASE_OP,
-        |effect, args| transform_string_arg(effect, args, "textToUpperCase", str::to_uppercase),
+        |ctx, effect, args| {
+            transform_string_arg(ctx, effect, args, "textToUpperCase", str::to_uppercase)
+        },
     );
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::TEXT_CONTAINS_OP,
-        |effect, args| {
-            text_predicate(effect, args, "textContains", |value, needle| {
+        |ctx, effect, args| {
+            text_predicate(ctx, effect, args, "textContains", |value, needle| {
                 value.contains(needle)
             })
         },
     );
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::TEXT_STARTS_WITH_OP,
-        |effect, args| {
-            text_predicate(effect, args, "textStartsWith", |value, needle| {
+        |ctx, effect, args| {
+            text_predicate(ctx, effect, args, "textStartsWith", |value, needle| {
                 value.starts_with(needle)
             })
         },
     );
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::TEXT_ENDS_WITH_OP,
-        |effect, args| {
-            text_predicate(effect, args, "textEndsWith", |value, needle| {
+        |ctx, effect, args| {
+            text_predicate(ctx, effect, args, "textEndsWith", |value, needle| {
                 value.ends_with(needle)
             })
         },
@@ -257,198 +277,175 @@ fn register_text_handlers(host: &mut NativeHost) {
 }
 
 fn register_path_handlers(host: &mut NativeHost) {
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::PATH_JOIN_OP,
-        |effect, args| {
-            let [Value::String(left), Value::String(right)] = args else {
+        |ctx, effect, args| {
+            let [left, right] = args else {
                 return Err(invalid_runtime_effect(effect, "invalid pathJoin args"));
             };
-            Ok(Value::string(
-                Path::new(left.as_ref())
-                    .join(right.as_ref())
+            let left = ctx
+                .string(left)
+                .ok_or_else(|| invalid_runtime_effect(effect, "invalid pathJoin args"))?;
+            let right = ctx
+                .string(right)
+                .ok_or_else(|| invalid_runtime_effect(effect, "invalid pathJoin args"))?;
+            ctx.alloc_string(
+                Path::new(left.as_str())
+                    .join(right.as_str())
                     .display()
                     .to_string(),
-            ))
+            )
         },
     );
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::PATH_NORMALIZE_OP,
-        |effect, args| {
-            let [Value::String(value)] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid pathNormalize args"));
-            };
-            Ok(Value::string(
-                Path::new(value.as_ref())
+        |ctx, effect, args| {
+            let value = string_arg(ctx, effect, args, "pathNormalize")?;
+            ctx.alloc_string(
+                Path::new(value)
                     .components()
                     .as_path()
                     .display()
                     .to_string(),
-            ))
+            )
         },
     );
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::PATH_DIRNAME_OP,
-        |effect, args| {
-            let [Value::String(value)] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid pathDirname args"));
-            };
-            let dirname = Path::new(value.as_ref())
+        |ctx, effect, args| {
+            let value = string_arg(ctx, effect, args, "pathDirname")?;
+            let dirname = Path::new(value)
                 .parent()
                 .map(|path| path.display().to_string())
                 .unwrap_or_default();
-            Ok(Value::string(dirname))
+            ctx.alloc_string(dirname)
         },
     );
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::PATH_BASENAME_OP,
-        |effect, args| {
-            let [Value::String(value)] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid pathBasename args"));
-            };
-            let basename = Path::new(value.as_ref())
+        |ctx, effect, args| {
+            let value = string_arg(ctx, effect, args, "pathBasename")?;
+            let basename = Path::new(value)
                 .file_name()
                 .map(|name| name.to_string_lossy().into_owned())
                 .unwrap_or_default();
-            Ok(Value::string(basename))
+            ctx.alloc_string(basename)
         },
     );
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::PATH_EXTNAME_OP,
-        |effect, args| {
-            let [Value::String(value)] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid pathExtname args"));
-            };
-            let extname = Path::new(value.as_ref())
+        |ctx, effect, args| {
+            let value = string_arg(ctx, effect, args, "pathExtname")?;
+            let extname = Path::new(value)
                 .extension()
                 .map(|ext| format!(".{}", ext.to_string_lossy()))
                 .unwrap_or_default();
-            Ok(Value::string(extname))
+            ctx.alloc_string(extname)
         },
     );
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::PATH_IS_ABSOLUTE_OP,
-        |effect, args| {
-            let [Value::String(value)] = args else {
-                return Err(invalid_runtime_effect(
-                    effect,
-                    "invalid pathIsAbsolute args",
-                ));
-            };
-            Ok(Value::Int(i64::from(
-                Path::new(value.as_ref()).is_absolute(),
-            )))
+        |ctx, effect, args| {
+            let value = string_arg(ctx, effect, args, "pathIsAbsolute")?;
+            Ok(Value::Int(i64::from(Path::new(value).is_absolute())))
         },
     );
 }
 
 fn register_json_handlers(host: &mut NativeHost) {
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::JSON_IS_VALID_OP,
-        |effect, args| {
-            let [Value::String(source)] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid jsonIsValid args"));
-            };
+        |ctx, effect, args| {
+            let source = string_arg(ctx, effect, args, "jsonIsValid")?;
             Ok(Value::Int(i64::from(
                 serde_json::from_str::<serde_json::Value>(source).is_ok(),
             )))
         },
     );
 
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::JSON_NORMALIZE_OP,
-        |effect, args| {
-            let [Value::String(source)] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid jsonNormalize args"));
-            };
-            Ok(Value::string(normalize_json(source, effect)?))
+        |ctx, effect, args| {
+            let source = string_arg(ctx, effect, args, "jsonNormalize")?.to_owned();
+            ctx.alloc_string(normalize_json(&source, effect)?)
         },
     );
 }
 
 fn register_encoding_handlers(host: &mut NativeHost) {
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::HEX_ENCODE_OP,
-        |effect, args| {
-            let [Value::String(source)] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid hexEncode args"));
-            };
-            Ok(Value::string(hex_encode(source.as_bytes())))
+        |ctx, effect, args| {
+            let source = string_arg(ctx, effect, args, "hexEncode")?.to_owned();
+            ctx.alloc_string(hex_encode(source.as_bytes()))
         },
     );
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::HEX_DECODE_OP,
-        |effect, args| decode_utf8_encoded(effect, args, "hexDecode", decode_hex),
+        |ctx, effect, args| decode_utf8_encoded(ctx, effect, args, "hexDecode", decode_hex),
     );
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::HEX_IS_VALID_OP,
-        |effect, args| {
-            let [Value::String(source)] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid hexIsValid args"));
-            };
-            Ok(Value::Int(i64::from(decode_hex(source.as_ref()).is_ok())))
+        |ctx, effect, args| {
+            let source = string_arg(ctx, effect, args, "hexIsValid")?;
+            Ok(Value::Int(i64::from(decode_hex(source).is_ok())))
         },
     );
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::BASE64_ENCODE_OP,
-        |effect, args| {
-            let [Value::String(source)] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid base64Encode args"));
-            };
-            Ok(Value::string(BASE64_STANDARD.encode(source.as_bytes())))
+        |ctx, effect, args| {
+            let source = string_arg(ctx, effect, args, "base64Encode")?.to_owned();
+            ctx.alloc_string(BASE64_STANDARD.encode(source.as_bytes()))
         },
     );
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::BASE64_DECODE_OP,
-        |effect, args| {
-            decode_utf8_encoded(effect, args, "base64Decode", |source| {
+        |ctx, effect, args| {
+            decode_utf8_encoded(ctx, effect, args, "base64Decode", |source| {
                 BASE64_STANDARD
                     .decode(source)
                     .map_err(|error| format!("base64Decode failed (`{error}`)").into())
             })
         },
     );
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::BASE64_IS_VALID_OP,
-        |effect, args| {
-            let [Value::String(source)] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid base64IsValid args"));
-            };
+        |ctx, effect, args| {
+            let source = string_arg(ctx, effect, args, "base64IsValid")?;
             Ok(Value::Int(i64::from(
-                BASE64_STANDARD.decode(source.as_ref()).is_ok(),
+                BASE64_STANDARD.decode(source).is_ok(),
             )))
         },
     );
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::UTF8_ENCODE_OP,
-        |effect, args| transform_string_arg(effect, args, "utf8Encode", str::to_owned),
+        |ctx, effect, args| transform_string_arg(ctx, effect, args, "utf8Encode", str::to_owned),
     );
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::UTF8_DECODE_OP,
-        |effect, args| transform_string_arg(effect, args, "utf8Decode", str::to_owned),
+        |ctx, effect, args| transform_string_arg(ctx, effect, args, "utf8Decode", str::to_owned),
     );
-    host.register_effect_handler(
+    host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::UTF8_IS_VALID_OP,
-        |effect, args| {
-            let [Value::String(bytes)] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid utf8IsValid args"));
-            };
+        |ctx, effect, args| {
+            let bytes = string_arg(ctx, effect, args, "utf8IsValid")?;
             Ok(Value::Int(i64::from(from_utf8(bytes.as_bytes()).is_ok())))
         },
     );
@@ -489,13 +486,23 @@ enum StreamKind {
 }
 
 fn write_stream(
+    ctx: &VmHostContext<'_>,
     effect: &EffectCall,
     args: &[Value],
     stream: StreamKind,
     line: bool,
     output: &RuntimeOutputSinkCell,
 ) -> Result<Value, VmError> {
-    let [Value::String(text)] = args else {
+    let [text] = args else {
+        let op = match (stream, line) {
+            (StreamKind::Stdout, false) => "ioPrint",
+            (StreamKind::Stdout, true) => "ioPrintLine",
+            (StreamKind::Stderr, false) => "ioPrintError",
+            (StreamKind::Stderr, true) => "ioPrintErrorLine",
+        };
+        return Err(invalid_runtime_effect(effect, format!("invalid {op} args")));
+    };
+    let Some(text) = ctx.string(text) else {
         let op = match (stream, line) {
             (StreamKind::Stdout, false) => "ioPrint",
             (StreamKind::Stdout, true) => "ioPrintLine",
@@ -505,8 +512,8 @@ fn write_stream(
         return Err(invalid_runtime_effect(effect, format!("invalid {op} args")));
     };
     let write_result = match stream {
-        StreamKind::Stdout => output.borrow_mut().write_stdout(text.as_ref(), line),
-        StreamKind::Stderr => output.borrow_mut().write_stderr(text.as_ref(), line),
+        StreamKind::Stdout => output.borrow_mut().write_stdout(text.as_str(), line),
+        StreamKind::Stderr => output.borrow_mut().write_stderr(text.as_str(), line),
     };
     write_result.map_err(|error| {
         let op = match (stream, line) {
@@ -535,33 +542,36 @@ fn read_line(effect: &EffectCall) -> Result<String, VmError> {
 }
 
 fn transform_string_arg(
+    ctx: VmHostCallContext<'_, '_>,
     effect: &EffectCall,
     args: &[Value],
     op_name: &str,
     f: impl FnOnce(&str) -> String,
 ) -> Result<Value, VmError> {
-    let [Value::String(value)] = args else {
-        return Err(invalid_runtime_effect(
-            effect,
-            format!("invalid {op_name} args"),
-        ));
-    };
-    Ok(Value::string(f(value.as_ref())))
+    let value = string_arg(ctx, effect, args, op_name)?;
+    ctx.alloc_string(f(value))
 }
 
 fn text_predicate(
+    ctx: &VmHostContext<'_>,
     effect: &EffectCall,
     args: &[Value],
     op_name: &str,
     f: impl FnOnce(&str, &str) -> bool,
 ) -> Result<Value, VmError> {
-    let [Value::String(value), Value::String(needle)] = args else {
+    let [value, needle] = args else {
         return Err(invalid_runtime_effect(
             effect,
             format!("invalid {op_name} args"),
         ));
     };
-    Ok(Value::Int(i64::from(f(value.as_ref(), needle.as_ref()))))
+    let value = ctx
+        .string(value)
+        .ok_or_else(|| invalid_runtime_effect(effect, format!("invalid {op_name} args")))?;
+    let needle = ctx
+        .string(needle)
+        .ok_or_else(|| invalid_runtime_effect(effect, format!("invalid {op_name} args")))?;
+    Ok(Value::Int(i64::from(f(value.as_str(), needle.as_str()))))
 }
 
 fn normalize_json(source: &str, effect: &EffectCall) -> Result<String, VmError> {
@@ -574,22 +584,34 @@ fn normalize_json(source: &str, effect: &EffectCall) -> Result<String, VmError> 
 }
 
 fn decode_utf8_encoded(
+    ctx: VmHostCallContext<'_, '_>,
     effect: &EffectCall,
     args: &[Value],
     op_name: &str,
     decoder: impl FnOnce(&str) -> Result<Vec<u8>, Box<str>>,
 ) -> Result<Value, VmError> {
-    let [Value::String(source)] = args else {
+    let source = string_arg(ctx, effect, args, op_name)?;
+    let bytes = decoder(source).map_err(|reason| invalid_runtime_effect(effect, reason))?;
+    let text = String::from_utf8(bytes)
+        .map_err(|error| invalid_runtime_effect(effect, format!("{op_name} failed (`{error}`)")))?;
+    ctx.alloc_string(text)
+}
+
+fn string_arg<'a>(
+    ctx: &'a VmHostContext<'_>,
+    effect: &EffectCall,
+    args: &'a [Value],
+    op_name: &str,
+) -> Result<&'a str, VmError> {
+    let [value] = args else {
         return Err(invalid_runtime_effect(
             effect,
             format!("invalid {op_name} args"),
         ));
     };
-    let bytes =
-        decoder(source.as_ref()).map_err(|reason| invalid_runtime_effect(effect, reason))?;
-    let text = String::from_utf8(bytes)
-        .map_err(|error| invalid_runtime_effect(effect, format!("{op_name} failed (`{error}`)")))?;
-    Ok(Value::string(text))
+    ctx.string(value)
+        .map(|text| text.as_str())
+        .ok_or_else(|| invalid_runtime_effect(effect, format!("invalid {op_name} args")))
 }
 
 fn hex_encode(bytes: &[u8]) -> String {

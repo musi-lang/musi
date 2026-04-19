@@ -82,14 +82,14 @@ impl Vm {
     }
 
     pub(crate) fn export_value(
-        &self,
+        &mut self,
         slot: usize,
         _name: &str,
         target: ExportTarget,
     ) -> VmResult<Value> {
         let module_name = self.module(slot)?.spec.clone();
         match target {
-            ExportTarget::Procedure(procedure) => Ok(Value::closure(slot, procedure, Vec::new())),
+            ExportTarget::Procedure(procedure) => self.alloc_closure(slot, procedure, Vec::new()),
             ExportTarget::Global(global) => {
                 let globals = &self.module(slot)?.globals;
                 let raw_slot = usize::try_from(global.raw()).unwrap_or(usize::MAX);
@@ -109,9 +109,9 @@ impl Vm {
         }
     }
 
-    pub(crate) fn expect_module_slot(module: &Value) -> VmResult<usize> {
+    pub(crate) fn expect_module_slot(&self, module: &Value) -> VmResult<usize> {
         match module {
-            Value::Module(module) => Ok(module.slot),
+            Value::Module(module) => Ok(self.heap.module(*module)?.slot),
             _ => Err(VmError::new(VmErrorKind::InvalidValueKind {
                 expected: VmValueKind::Module,
                 found: module.kind(),

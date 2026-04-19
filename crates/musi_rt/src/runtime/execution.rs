@@ -78,7 +78,7 @@ impl Runtime {
         self.root_spec.as_deref()
     }
 
-    pub(super) fn vm_mut(&mut self) -> RuntimeResult<&mut Vm> {
+    pub(crate) fn vm_mut(&mut self) -> RuntimeResult<&mut Vm> {
         self.vm
             .as_mut()
             .ok_or_else(|| RuntimeError::new(RuntimeErrorKind::RootModuleRequired))

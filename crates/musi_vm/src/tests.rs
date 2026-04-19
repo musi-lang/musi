@@ -2,8 +2,11 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::iter::empty;
 use std::rc::Rc;
 
+use crate::gc::{HeapOptions, RuntimeHeap};
+use crate::value::SequenceValue;
 use musi_foundation::register_modules;
 use music_module::ModuleKey;
 use music_seam::descriptor::{
@@ -16,7 +19,8 @@ use music_term::{TypeTerm, TypeTermKind};
 
 use super::{
     EffectCall, ForeignCall, Program, ProgramTypeAbiKind, RejectingLoader, Value, ValueView, Vm,
-    VmError, VmErrorKind, VmHost, VmLoader, VmOptions, VmResult, render_value_view,
+    VmError, VmErrorKind, VmHost, VmHostCallContext, VmHostContext, VmLoader, VmOptions, VmResult,
+    render_value_view,
 };
 
 #[derive(Default)]
@@ -37,13 +41,23 @@ impl VmLoader for TestLoader {
 struct TestHost;
 
 impl VmHost for TestHost {
-    fn call_foreign(&mut self, foreign: &ForeignCall, _args: &[Value]) -> VmResult<Value> {
+    fn call_foreign(
+        &mut self,
+        _ctx: &mut VmHostContext<'_>,
+        foreign: &ForeignCall,
+        _args: &[Value],
+    ) -> VmResult<Value> {
         Err(VmError::new(VmErrorKind::ForeignCallRejected {
             foreign: foreign.name().into(),
         }))
     }
 
-    fn handle_effect(&mut self, effect: &EffectCall, _args: &[Value]) -> VmResult<Value> {
+    fn handle_effect(
+        &mut self,
+        _ctx: &mut VmHostContext<'_>,
+        effect: &EffectCall,
+        _args: &[Value],
+    ) -> VmResult<Value> {
         Err(VmError::new(VmErrorKind::EffectRejected {
             effect: effect.effect_name().into(),
             op: Some(effect.op_name().into()),
@@ -67,7 +81,12 @@ struct SignatureLog {
 }
 
 impl VmHost for SignatureHost {
-    fn call_foreign(&mut self, foreign: &ForeignCall, _args: &[Value]) -> VmResult<Value> {
+    fn call_foreign(
+        &mut self,
+        _ctx: VmHostCallContext<'_, '_>,
+        foreign: &ForeignCall,
+        _args: &[Value],
+    ) -> VmResult<Value> {
         self.log.borrow_mut().foreign_calls.push((
             foreign.name().into(),
             foreign
@@ -81,7 +100,12 @@ impl VmHost for SignatureHost {
         Ok(Value::Int(7))
     }
 
-    fn handle_effect(&mut self, effect: &EffectCall, _args: &[Value]) -> VmResult<Value> {
+    fn handle_effect(
+        &mut self,
+        _ctx: VmHostCallContext<'_, '_>,
+        effect: &EffectCall,
+        _args: &[Value],
+    ) -> VmResult<Value> {
         self.log.borrow_mut().effect_calls.push((
             effect.effect_name().into(),
             effect.op_name().into(),
@@ -241,6 +265,61 @@ mod success {
     }
 
     #[test]
+    fn garbage_collection_keeps_top_level_calls_stable() {
+        let program = compile_program(
+            &[(
+                "main",
+                r"
+            export let answer () : Int := (
+              let values : [2]Int := [1, 2];
+              values.[0] + 41
+            );
+        ",
+            )],
+            "main",
+        );
+
+        let mut vm = Vm::with_rejecting_host(program, VmOptions);
+        vm.initialize().expect("vm init should succeed");
+        let value = vm
+            .call_export("answer", &[])
+            .expect("export call should succeed");
+        let before = vm.heap_allocated_bytes();
+        let stats = vm.collect_garbage();
+
+        assert_eq!(value, Value::Int(42));
+        assert!(before > 0);
+        assert_eq!(before, stats.after_bytes);
+        assert_eq!(stats.after_bytes, vm.heap_allocated_bytes());
+    }
+
+    #[test]
+    fn garbage_collection_breaks_unreachable_cycles() {
+        let ty = TypeId::from_raw(0);
+        let mut heap = RuntimeHeap::default();
+        let options = HeapOptions {
+            max_object_bytes: None,
+        };
+        let cycle = heap
+            .alloc_sequence(SequenceValue::new(ty, Vec::new().into()), &options)
+            .expect("cycle should allocate");
+        let Value::Seq(reference) = cycle else {
+            panic!("cycle should be a sequence");
+        };
+        heap.sequence_mut(reference)
+            .expect("cycle should be mutable")
+            .items
+            .push(Value::Seq(reference));
+
+        let before = heap.allocated_bytes();
+        let stats = heap.collect_from_roots(empty::<&Value>());
+
+        assert!(before > 0);
+        assert_eq!(stats.after_bytes, 0);
+        assert_eq!(heap.allocated_bytes(), 0);
+    }
+
+    #[test]
     fn executes_closure_and_recursive_callable() {
         let program = compile_program(
             &[(
@@ -350,8 +429,12 @@ mod success {
             .expect("type id");
         let mut vm = Vm::with_rejecting_host(program, VmOptions);
         vm.initialize().expect("vm init should succeed");
-        let inner = Value::sequence(outer_ty, vec![Value::Int(1), Value::Int(2)]);
-        let grid = Value::sequence(outer_ty, vec![inner.clone(), inner]);
+        let inner = vm
+            .alloc_sequence(outer_ty, [Value::Int(1), Value::Int(2)])
+            .expect("inner sequence should allocate");
+        let grid = vm
+            .alloc_sequence(outer_ty, [inner.clone(), inner])
+            .expect("grid sequence should allocate");
         let value = vm
             .call_export("touch", &[grid])
             .expect("multi-index call should succeed");
@@ -388,11 +471,16 @@ mod success {
                 .expect("module callable export should succeed"),
             Value::Int(42)
         );
-        assert_eq!(
-            vm.load_module("dep")
-                .expect("cached dynamic load should succeed"),
-            module
-        );
+        let cached = vm
+            .load_module("dep")
+            .expect("cached dynamic load should succeed");
+        let (ValueView::Module(module), ValueView::Module(cached)) =
+            (vm.inspect(&module), vm.inspect(&cached))
+        else {
+            panic!("dynamic module handles should inspect as modules");
+        };
+        assert_eq!(cached.slot(), module.slot());
+        assert_eq!(cached.spec(), module.spec());
     }
 
     #[test]
@@ -733,10 +821,11 @@ mod failure {
             "live array should exceed heap limit",
         );
 
-        assert!(matches!(
-            error.kind(),
-            VmErrorKind::HeapLimitExceeded { limit: 16, .. }
-        ));
+        assert!(
+            matches!(error.kind(), VmErrorKind::HeapLimitExceeded { .. }),
+            "{:?}",
+            error.kind()
+        );
     }
 
     #[test]

@@ -1,12 +1,10 @@
-use std::rc::Rc;
 use std::slice::from_ref;
 
 use music_seam::{Instruction, Opcode, Operand, TypeId};
 
-use crate::VmValueKind;
-use crate::value::DataValuePtr;
-
 use super::{StepOutcome, Value, Vm, VmError, VmErrorKind, VmResult};
+use crate::VmValueKind;
+use crate::value::DataValue;
 
 const MAX_RANGE_MATERIALIZE_LEN: usize = 1_000_000;
 
@@ -42,7 +40,8 @@ impl Vm {
             return Err(Self::invalid_operand(instruction));
         };
         let items = self.pop_args(usize::from(len))?;
-        self.push_value(Value::sequence(ty, items))?;
+        let value = self.alloc_sequence(ty, items)?;
+        self.push_value(value)?;
         Ok(StepOutcome::Continue)
     }
 
@@ -51,7 +50,7 @@ impl Vm {
         let index = Self::expect_int(&index_value)?;
         let seq_value = self.pop_value()?;
         let seq = Self::expect_seq(seq_value)?;
-        let seq_ref = seq.borrow();
+        let seq_ref = self.heap.sequence(seq)?;
         let slot = usize::try_from(index).unwrap_or(usize::MAX);
         let value = seq_ref.items.get(slot).cloned().ok_or_else(|| {
             VmError::new(VmErrorKind::InvalidSequenceIndex {
@@ -59,7 +58,6 @@ impl Vm {
                 len: seq_ref.items.len(),
             })
         })?;
-        drop(seq_ref);
         self.push_value(value)?;
         Ok(StepOutcome::Continue)
     }
@@ -71,7 +69,7 @@ impl Vm {
         let indices = self.pop_index_list(len)?;
         let seq_value = self.pop_value()?;
         let seq = Self::expect_seq(seq_value)?;
-        let value = Self::get_nested_seq(seq, &indices)?;
+        let value = self.get_nested_seq(seq, &indices)?;
         self.push_value(value)?;
         Ok(StepOutcome::Continue)
     }
@@ -83,7 +81,7 @@ impl Vm {
         let seq_value = self.pop_value()?;
         let seq = Self::expect_seq(seq_value)?;
         {
-            let mut seq_mut = seq.borrow_mut();
+            let seq_mut = self.heap.sequence_mut(seq)?;
             let len = seq_mut.items.len();
             let slot = usize::try_from(index).unwrap_or(usize::MAX);
             let item = seq_mut
@@ -92,6 +90,7 @@ impl Vm {
                 .ok_or_else(|| VmError::new(VmErrorKind::InvalidSequenceIndex { index, len }))?;
             *item = value;
         }
+        self.heap.refresh_allocation(seq)?;
         self.push_value(Value::Seq(seq))?;
         Ok(StepOutcome::Continue)
     }
@@ -104,27 +103,28 @@ impl Vm {
         let indices = self.pop_index_list(len)?;
         let seq_value = self.pop_value()?;
         let seq = Self::expect_seq(seq_value)?;
-        Self::set_nested_seq(Rc::clone(&seq), &indices, value)?;
+        self.set_nested_seq(seq, &indices, value)?;
         self.push_value(Value::Seq(seq))?;
         Ok(StepOutcome::Continue)
     }
 
     fn exec_seq_cat(&mut self) -> VmResult<StepOutcome> {
         let right_value = self.pop_value()?;
-        let right_items = Self::expect_seq_items(right_value)?;
+        let right_items = self.expect_seq_items(right_value)?;
         let left_value = self.pop_value()?;
         let left = Self::expect_seq(left_value)?;
-        let left = left.borrow();
+        let left = self.heap.sequence(left)?;
         let mut items = left.items.clone();
         items.extend(right_items);
-        self.push_value(Value::sequence(left.ty, items))?;
+        let value = self.alloc_sequence(left.ty, items)?;
+        self.push_value(value)?;
         Ok(StepOutcome::Continue)
     }
 
     fn exec_seq_len(&mut self) -> VmResult<StepOutcome> {
         let seq_value = self.pop_value()?;
         let seq = Self::expect_seq(seq_value)?;
-        let len = i64::try_from(seq.borrow().items.len()).unwrap_or(i64::MAX);
+        let len = i64::try_from(self.heap.sequence(seq)?.items.len()).unwrap_or(i64::MAX);
         self.push_value(Value::Int(len))?;
         Ok(StepOutcome::Continue)
     }
@@ -140,16 +140,17 @@ impl Vm {
             RuntimeRangeKind::Open | RuntimeRangeKind::Closed => vec![lower, upper],
             RuntimeRangeKind::From => {
                 let evidence = self.pop_value()?;
-                let (_, default_upper) = Self::range_bounds_dictionary(evidence)?;
+                let (_, default_upper) = self.range_bounds_dictionary(evidence)?;
                 vec![self.call_value(default_upper, &[])?, lower]
             }
             RuntimeRangeKind::UpTo | RuntimeRangeKind::Thru => {
                 let evidence = self.pop_value()?;
-                let (default_lower, _) = Self::range_bounds_dictionary(evidence)?;
+                let (default_lower, _) = self.range_bounds_dictionary(evidence)?;
                 vec![self.call_value(default_lower, &[])?, upper]
             }
         };
-        self.push_value(Value::data(ty, 0, fields))?;
+        let value = self.alloc_data(ty, 0, fields)?;
+        self.push_value(value)?;
         Ok(StepOutcome::Continue)
     }
 
@@ -159,7 +160,9 @@ impl Vm {
         let evidence = self.pop_value()?;
         let items = self.materialize_range_items(range, evidence)?;
         let module_slot = self.current_module_slot()?;
-        self.push_value(self.bool_value(module_slot, items.iter().any(|item| item == &needle))?)?;
+        let contains = items.iter().any(|item| self.values_equal(item, &needle));
+        let value = self.bool_value(module_slot, contains)?;
+        self.push_value(value)?;
         Ok(StepOutcome::Continue)
     }
 
@@ -168,24 +171,27 @@ impl Vm {
         let evidence = self.pop_value()?;
         let ty = self.range_sequence_type(&range)?;
         let items = self.materialize_range_items(range, evidence)?;
-        self.push_value(Value::sequence(ty, items))?;
+        let value = self.alloc_sequence(ty, items)?;
+        self.push_value(value)?;
         Ok(StepOutcome::Continue)
     }
 
     fn exec_seq_has(&mut self) -> VmResult<StepOutcome> {
         let needle = self.pop_value()?;
         let seq_value = self.pop_value()?;
-        let contains = Self::expect_seq_items(seq_value)?
+        let contains = self
+            .expect_seq_items(seq_value)?
             .iter()
-            .any(|item| item == &needle);
+            .any(|item| self.values_equal(item, &needle));
         let module_slot = self.current_module_slot()?;
-        self.push_value(self.bool_value(module_slot, contains)?)?;
+        let value = self.bool_value(module_slot, contains)?;
+        self.push_value(value)?;
         Ok(StepOutcome::Continue)
     }
 
-    fn expect_seq_items(value: Value) -> VmResult<Vec<Value>> {
+    fn expect_seq_items(&self, value: Value) -> VmResult<Vec<Value>> {
         match value {
-            Value::Seq(seq) => Ok(seq.borrow().items.iter().cloned().collect()),
+            Value::Seq(seq) => Ok(self.heap.sequence(seq)?.items.iter().cloned().collect()),
             other => Err(Self::invalid_value_kind(VmValueKind::Seq, &other)),
         }
     }
@@ -205,7 +211,7 @@ impl Vm {
 
     fn materialize_range_items(&mut self, range: Value, evidence: Value) -> VmResult<Vec<Value>> {
         let (start, end, kind) = self.range_parts(range)?;
-        let (compare, next, prev) = Self::range_dictionary(evidence)?;
+        let (compare, next, prev) = self.range_dictionary(evidence)?;
         let direction = self.compare_range_values(&compare, &start, &end)?;
         let is_ascending = direction <= 0;
         let step = if is_ascending { next } else { prev };
@@ -241,7 +247,7 @@ impl Vm {
 
     fn range_parts(&self, range: Value) -> VmResult<(Value, Value, RuntimeRangeKind)> {
         let data = Self::expect_data(range)?;
-        let data = data.borrow();
+        let data = self.heap.data(data)?;
         let Some(kind) = self.range_type_kind(data.ty) else {
             return Err(VmError::new(VmErrorKind::InvalidValueKind {
                 expected: VmValueKind::Data,
@@ -264,9 +270,8 @@ impl Vm {
         Ok((start, end, kind))
     }
 
-    fn range_dictionary(evidence: Value) -> VmResult<(Value, Value, Value)> {
-        let data = Self::range_evidence_data(evidence, 3, "range dictionary field count")?;
-        let data = data.borrow();
+    fn range_dictionary(&self, evidence: Value) -> VmResult<(Value, Value, Value)> {
+        let data = self.range_evidence_data(evidence, 3, "range dictionary field count")?;
         Ok((
             data.fields[0].clone(),
             data.fields[1].clone(),
@@ -274,21 +279,22 @@ impl Vm {
         ))
     }
 
-    fn range_bounds_dictionary(evidence: Value) -> VmResult<(Value, Value)> {
-        let data = Self::range_evidence_data(evidence, 2, "range bounds dictionary field count")?;
-        let data = data.borrow();
+    fn range_bounds_dictionary(&self, evidence: Value) -> VmResult<(Value, Value)> {
+        let data = self.range_evidence_data(evidence, 2, "range bounds dictionary field count")?;
         Ok((data.fields[0].clone(), data.fields[1].clone()))
     }
 
     fn range_evidence_data(
+        &self,
         evidence: Value,
         min_fields: usize,
         detail: &'static str,
-    ) -> VmResult<DataValuePtr> {
+    ) -> VmResult<&DataValue> {
         let found = evidence.kind();
         let data = Self::expect_data(evidence)
             .map_err(|_| VmError::new(VmErrorKind::InvalidRangeEvidence { found }))?;
-        if data.borrow().fields.len() < min_fields {
+        let data = self.heap.data(data)?;
+        if data.fields.len() < min_fields {
             return Err(VmError::new(VmErrorKind::InvalidRangeStep {
                 detail: detail.into(),
             }));
@@ -300,7 +306,7 @@ impl Vm {
         let Value::Data(data) = range else {
             return Err(Self::invalid_value_kind(VmValueKind::Data, range));
         };
-        let range_ty = data.borrow().ty;
+        let range_ty = self.heap.data(*data)?.ty;
         let range_name = self
             .loaded_modules
             .iter()
@@ -372,7 +378,7 @@ impl Vm {
                 detail: "step must return Option-like data".into(),
             })
         })?;
-        let data = data.borrow();
+        let data = self.heap.data(data)?;
         let Some(layout) = self
             .loaded_modules
             .iter()

@@ -1,6 +1,8 @@
 use music_seam::{EffectId, ForeignId, TypeId};
 use music_term::TypeTerm;
 
+use super::gc::{HeapOptions, RuntimeHeap};
+use super::value::{DataValue, RecordView, StringView, SyntaxView};
 use super::{
     Program, ProgramDataLayout, ProgramTypeAbiKind, Value, VmError, VmErrorKind, VmResult,
 };
@@ -229,27 +231,112 @@ pub trait VmHost {
     /// # Errors
     ///
     /// Returns [`VmError`] when host foreign execution rejects or fails.
-    fn call_foreign(&mut self, foreign: &ForeignCall, args: &[Value]) -> VmResult<Value>;
+    fn call_foreign(
+        &mut self,
+        ctx: VmHostCallContext<'_, '_>,
+        foreign: &ForeignCall,
+        args: &[Value],
+    ) -> VmResult<Value>;
 
     /// Handles one unhandled runtime effect invocation.
     ///
     /// # Errors
     ///
     /// Returns [`VmError`] when host effect handling rejects or fails.
-    fn handle_effect(&mut self, effect: &EffectCall, args: &[Value]) -> VmResult<Value>;
+    fn handle_effect(
+        &mut self,
+        ctx: VmHostCallContext<'_, '_>,
+        effect: &EffectCall,
+        args: &[Value],
+    ) -> VmResult<Value>;
+}
+
+/// Borrowed VM context passed to host callbacks.
+pub type VmHostCallContext<'call, 'vm> = &'call mut VmHostContext<'vm>;
+
+pub struct VmHostContext<'a> {
+    pub(crate) heap: &'a mut RuntimeHeap,
+    pub(crate) options: HeapOptions,
+}
+
+impl<'a> VmHostContext<'a> {
+    pub(crate) const fn new(heap: &'a mut RuntimeHeap, options: HeapOptions) -> Self {
+        Self { heap, options }
+    }
+
+    /// Allocates one VM-owned string.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VmError`] when heap limits reject the allocation.
+    pub fn alloc_string(&mut self, text: impl Into<Box<str>>) -> VmResult<Value> {
+        self.heap.alloc_string(text, &self.options)
+    }
+
+    /// Allocates one VM-owned data value.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VmError`] when heap limits reject the allocation.
+    pub fn alloc_data<Fields>(&mut self, ty: TypeId, tag: i64, fields: Fields) -> VmResult<Value>
+    where
+        Fields: IntoIterator<Item = Value>,
+    {
+        self.heap.alloc_data(
+            DataValue::new(ty, tag, fields.into_iter().collect()),
+            &self.options,
+        )
+    }
+
+    pub fn string<'b>(&'b self, value: &'b Value) -> Option<StringView<'b>> {
+        let Value::String(reference) = value else {
+            return None;
+        };
+        self.heap.string(*reference).ok().map(StringView::new)
+    }
+
+    pub fn syntax<'b>(&'b self, value: &'b Value) -> Option<SyntaxView<'b>> {
+        let Value::Syntax(reference) = value else {
+            return None;
+        };
+        self.heap.syntax(*reference).ok().map(SyntaxView::new)
+    }
+
+    pub fn record<'b>(&'b self, value: &'b Value) -> Option<RecordView<'b>> {
+        let Value::Data(reference) = value else {
+            return None;
+        };
+        self.heap.data(*reference).ok().map(RecordView::new)
+    }
+
+    #[must_use]
+    pub fn bool_flag(&self, value: &Value) -> Option<bool> {
+        let record = self.record(value)?;
+        (record.is_empty() && (record.tag() == 0 || record.tag() == 1)).then_some(record.tag() != 0)
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct RejectingHost;
 
 impl VmHost for RejectingHost {
-    fn call_foreign(&mut self, foreign: &ForeignCall, _args: &[Value]) -> VmResult<Value> {
+    fn call_foreign(
+        &mut self,
+        _ctx: &mut VmHostContext<'_>,
+        foreign: &ForeignCall,
+        _args: &[Value],
+    ) -> VmResult<Value> {
         Err(VmError::new(VmErrorKind::ForeignCallRejected {
             foreign: foreign.name().into(),
         }))
     }
 
-    fn handle_effect(&mut self, effect: &EffectCall, _args: &[Value]) -> VmResult<Value> {
+    fn handle_effect(
+        &mut self,
+        _ctx: &mut VmHostContext<'_>,
+        effect: &EffectCall,
+        _args: &[Value],
+    ) -> VmResult<Value> {
         Err(VmError::new(VmErrorKind::EffectRejected {
             effect: effect.effect_name().into(),
             op: Some(effect.op_name().into()),

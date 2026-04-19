@@ -25,8 +25,8 @@ impl Vm {
             "Syntax" => matches!(value, Value::Syntax(_)),
             "Module" => matches!(value, Value::Module(_)),
             _ => match value {
-                Value::Seq(seq) => seq.borrow().ty == ty,
-                Value::Data(data) => data.borrow().ty == ty,
+                Value::Seq(seq) => self.heap.sequence(*seq).is_ok_and(|seq| seq.ty == ty),
+                Value::Data(data) => self.heap.data(*data).is_ok_and(|data| data.ty == ty),
                 Value::Type(id) => *id == ty,
                 _ => false,
             },
@@ -73,10 +73,9 @@ impl Vm {
                 };
                 let module_slot = self.current_module_slot()?;
                 let value = self.pop_value()?;
-                self.push_value(self.bool_value(
-                    module_slot,
-                    self.value_matches_type(module_slot, &value, ty),
-                )?)?;
+                let matches_type = self.value_matches_type(module_slot, &value, ty);
+                let value = self.bool_value(module_slot, matches_type)?;
+                self.push_value(value)?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::TyCast => {

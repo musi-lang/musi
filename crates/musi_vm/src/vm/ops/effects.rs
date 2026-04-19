@@ -1,11 +1,9 @@
-use std::rc::Rc;
-
 use crate::{VmIndexSpace, VmStackKind};
 use music_seam::{EffectId, Instruction, Opcode, Operand};
 
 use super::{
-    CallFrame, ContinuationFrame, ContinuationHandler, ContinuationValuePtr, EffectCall,
-    EffectHandler, StepOutcome, Value, ValueList, Vm, VmError, VmErrorKind, VmResult,
+    CallFrame, ContinuationFrame, ContinuationHandler, EffectCall, EffectHandler, GcRef,
+    StepOutcome, Value, ValueList, Vm, VmError, VmErrorKind, VmResult,
 };
 
 impl Vm {
@@ -42,7 +40,7 @@ impl Vm {
                 };
                 let body_result = self.pop_value()?;
                 self.restore_handler_stack_depth(&handler)?;
-                let value_clause = Self::handler_clause_closure(&handler, 0)?;
+                let value_clause = self.handler_clause_closure(&handler, 0)?;
                 let result = self.call_value(value_clause, &[body_result])?;
                 if self
                     .continuation_target_handler
@@ -75,14 +73,14 @@ impl Vm {
             }
             Opcode::EffResume => {
                 let value = self.pop_value()?;
-                let continuation = self.active_resumes.last().cloned().ok_or_else(|| {
+                let continuation = self.active_resumes.last().copied().ok_or_else(|| {
                     VmError::new(VmErrorKind::EffectRejected {
                         effect: "<active>".into(),
                         op: None,
                         reason: "resume requires active continuation".into(),
                     })
                 })?;
-                let result = self.invoke_continuation(&continuation, value)?;
+                let result = self.invoke_continuation(continuation, value)?;
                 self.push_value(result)?;
                 Ok(StepOutcome::Continue)
             }
@@ -121,10 +119,10 @@ impl Vm {
                 })
             })?;
             let closure =
-                Self::handler_clause_closure(&handler, usize::from(op).saturating_add(1))?;
+                self.handler_clause_closure(&handler, usize::from(op).saturating_add(1))?;
             let continuation = self.capture_continuation(handler_index)?;
             let mut clause_args = args.to_vec();
-            clause_args.push(Value::Continuation(Rc::clone(&continuation)));
+            clause_args.push(Value::Continuation(continuation));
             self.frames.truncate(handler.frame_depth.saturating_add(1));
             self.handlers.truncate(handler_index.saturating_add(1));
             self.restore_handler_stack_depth(&handler)?;
@@ -145,7 +143,7 @@ impl Vm {
                 result_ty: op_desc.result_ty,
                 is_comptime_safe: op_desc.is_comptime_safe,
             };
-            self.host.handle_effect(&effect_call, args)
+            self.call_host_effect(&effect_call, args)
         }
     }
 
@@ -177,10 +175,14 @@ impl Vm {
         self.pop_args(op_desc.param_tys.len())
     }
 
-    pub(crate) fn handler_clause_closure(handler: &EffectHandler, index: usize) -> VmResult<Value> {
+    pub(crate) fn handler_clause_closure(
+        &self,
+        handler: &EffectHandler,
+        index: usize,
+    ) -> VmResult<Value> {
         let handler_value = handler.handler.clone();
         let handler_data = Self::expect_data(handler_value)?;
-        let data_ref = handler_data.borrow();
+        let data_ref = self.heap.data(handler_data)?;
         let closure = data_ref.fields.get(index).cloned().ok_or_else(|| {
             VmError::new(VmErrorKind::EffectRejected {
                 effect: format!("{}", handler.effect.raw()).into(),
@@ -202,10 +204,7 @@ impl Vm {
         Ok(())
     }
 
-    pub(crate) fn capture_continuation(
-        &self,
-        handler_index: usize,
-    ) -> VmResult<ContinuationValuePtr> {
+    pub(crate) fn capture_continuation(&mut self, handler_index: usize) -> VmResult<GcRef> {
         let handler = self.handlers.get(handler_index).ok_or_else(|| {
             VmError::new(VmErrorKind::EffectRejected {
                 effect: "<handler>".into(),
@@ -223,7 +222,7 @@ impl Vm {
             .cloned()
             .map(ContinuationHandler::from)
             .collect();
-        match Value::continuation(frames, handlers) {
+        match self.alloc_continuation(frames, handlers)? {
             Value::Continuation(continuation) => Ok(continuation),
             _ => Err(VmError::new(VmErrorKind::InvalidProgramShape {
                 detail: "continuation construction failed".into(),

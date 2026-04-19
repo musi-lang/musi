@@ -154,7 +154,7 @@ impl Vm {
     pub(crate) fn pop_seq_args(&mut self) -> VmResult<ValueList> {
         let value = self.pop_value()?;
         let seq = Self::expect_seq(value)?;
-        Ok(seq.borrow().items.clone())
+        Ok(self.heap.sequence(seq)?.items.clone())
     }
 
     pub(crate) fn pop_index_list(&mut self, len: i16) -> VmResult<smallvec::SmallVec<[i64; 4]>> {
