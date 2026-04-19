@@ -87,7 +87,7 @@ fn write_option_prelude_entry(root: &Path) {
         root,
         "index.ms",
         r"
-export let answer () : Option[Int] := makeSome[Int](1);
+export let answer () : Option[Int] := someOf[Int](1);
 ",
     );
 }
@@ -1002,7 +1002,7 @@ export let Option := import "@std/option";
 let OptionPkg := import "@std/option";
 export let Int := Int;
 export opaque let Option := OptionPkg.Option;
-export let makeSome := OptionPkg.makeSome;
+export let someOf := OptionPkg.someOf;
 export let none := OptionPkg.none;
 "#,
         );
@@ -1014,7 +1014,7 @@ export opaque let Option[T] := data {
   | Some(T)
   | None
 };
-export let makeSome[T] (value : T) : Option[T] := .Some(value);
+export let someOf[T] (value : T) : Option[T] := .Some(value);
 export let none[T] () : Option[T] := .None;
 ",
         );

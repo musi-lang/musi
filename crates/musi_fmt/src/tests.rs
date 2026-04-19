@@ -361,13 +361,13 @@ mod success {
 
     #[test]
     fn keeps_fitting_instance_members_inline_and_spaced() {
-        let source = "export instance Rangeable[Int]{ let next (value : Int) : Option[Int] := makeSome[Int](value + 1); };";
+        let source = "export instance Rangeable[Int]{ let next (value : Int) : Option[Int] := someOf[Int](value + 1); };";
 
         let result = format_source(source, &options()).unwrap();
 
         assert_eq!(
             result.text,
-            "export instance Rangeable[Int] {\n  let next (value : Int) : Option[Int] := makeSome[Int](value + 1);\n};\n"
+            "export instance Rangeable[Int] {\n  let next (value : Int) : Option[Int] := someOf[Int](value + 1);\n};\n"
         );
     }
 
@@ -460,8 +460,8 @@ mod success {
     fn formats_match_arms_pipe_aligned_by_default() {
         let source = r#"export let readNonEmptyLine () : Option[String] :=
   match readTrimmedLine() (
-    | value if value.isEmpty() => option.none[String]()
-    | value => option.makeSome[String](value)
+    | value if value.isEmpty() => option.noneOf[String]()
+    | value => option.someOf[String](value)
   );
 "#;
 
@@ -471,8 +471,8 @@ mod success {
             result.text,
             r#"export let readNonEmptyLine () : Option[String] :=
   match readTrimmedLine() (
-  | value if value.isEmpty() => option.none[String]()
-  | value => option.makeSome[String](value)
+  | value if value.isEmpty() => option.noneOf[String]()
+  | value => option.someOf[String](value)
   );
 "#
         );
@@ -654,8 +654,8 @@ mod success {
         options.match_arm_indent = MatchArmIndent::Block;
         let source = r#"export let readNonEmptyLine () : Option[String] :=
   match readTrimmedLine() (
-  | value if value.isEmpty() => option.none[String]()
-  | value => option.makeSome[String](value)
+  | value if value.isEmpty() => option.noneOf[String]()
+  | value => option.someOf[String](value)
   );
 "#;
 
@@ -665,8 +665,8 @@ mod success {
             result.text,
             r#"export let readNonEmptyLine () : Option[String] :=
   match readTrimmedLine() (
-    | value if value.isEmpty() => option.none[String]()
-    | value => option.makeSome[String](value)
+    | value if value.isEmpty() => option.noneOf[String]()
+    | value => option.someOf[String](value)
   );
 "#
         );

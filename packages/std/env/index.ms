@@ -42,8 +42,8 @@ export let has (target : Key) : Bool := runtime.envHas(keyText(target)) > 0;
 --- Read an environment variable.
 export let get (target : Key) : Option[Var] :=
   match has(target) (
-  | ok if ok => option.makeSome[Var](var(runtime.envGet(keyText(target))))
-  | _ => option.makeNone[Var]()
+  | ok if ok => option.someOf[Var](var(runtime.envGet(keyText(target))))
+  | _ => option.noneOf[Var]()
   );
 
 --- Set an environment variable.

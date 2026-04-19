@@ -20,13 +20,13 @@ export let promptTrimmed (message : String) : String := prompt(message).trim();
 --- Read a non-empty trimmed line.
 export let readNonEmptyLine () : Option[String] :=
   match readTrimmedLine() (
-  | value if value.isEmpty() => option.makeNone[String]()
-  | value => option.makeSome[String](value)
+  | value if value.isEmpty() => option.noneOf[String]()
+  | value => option.someOf[String](value)
   );
 
 --- Prompt for a non-empty trimmed line.
 export let promptNonEmpty (message : String) : Option[String] :=
   match promptTrimmed(message) (
-  | value if value.isEmpty() => option.makeNone[String]()
-  | value => option.makeSome[String](value)
+  | value if value.isEmpty() => option.noneOf[String]()
+  | value => option.someOf[String](value)
   );

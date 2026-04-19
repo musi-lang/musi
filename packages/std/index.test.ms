@@ -7,7 +7,7 @@ export let test () :=
     let sameBytes := std.bytes.fromArray([1, 2]);
     let oneList := std.list.of[Int](1);
     let currentOs := std.os.targetOs(std.os.current);
-    let noneInt := std.option.makeNone[Int]();
+    let noneInt := std.option.noneOf[Int]();
     testing.it(
       "root re-exports 'bytes' family",
       testing.toBeTruthy(sameBytes.equals(std.bytes.fromArray([1, 2]))),

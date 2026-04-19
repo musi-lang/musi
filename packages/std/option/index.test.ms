@@ -4,8 +4,8 @@ let testing := import "@std/testing";
 export let test () :=
   (
     testing.describe("option");
-    let someOne := option.makeSome[Int](1);
-    let noneInt := option.makeNone[Int]();
+    let someOne := option.someOf[Int](1);
+    let noneInt := option.noneOf[Int]();
     testing.it(
       "'isSome' detects present value",
       testing.toBeTruthy(someOne.isSome()),

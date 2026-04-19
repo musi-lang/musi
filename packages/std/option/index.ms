@@ -4,10 +4,10 @@ let core := import "./_core.ms";
 export let Option := core.Option;
 
 --- Build a present optional value.
-export let makeSome := core.makeSome;
+export let someOf := core.someOf;
 
 --- Build an absent optional value.
-export let makeNone := core.makeNone;
+export let noneOf := core.noneOf;
 
 --- Returns true when the option contains a value.
 export let(self : Option[T]).isSome [T] () : Bool := core.isSome[T](self);

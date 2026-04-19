@@ -12,6 +12,6 @@ export let isValid (source : String) : Bool :=
 --- Decode a value from this format.
 export let decode (source : String) : Option[String] :=
   match isValid(source) (
-  | valid if valid => option.makeSome[String](runtime.base64Decode(source))
-  | _ => option.makeNone[String]()
+  | valid if valid => option.someOf[String](runtime.base64Decode(source))
+  | _ => option.noneOf[String]()
   );

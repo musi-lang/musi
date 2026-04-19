@@ -11,6 +11,6 @@ export let isValid (bytes : String) : Bool := runtime.utf8IsValid(bytes) > 0;
 --- Decode a value from this format.
 export let decode (bytes : String) : Option[String] :=
   match isValid(bytes) (
-  | valid if valid => option.makeSome[String](runtime.utf8Decode(bytes))
-  | _ => option.makeNone[String]()
+  | valid if valid => option.someOf[String](runtime.utf8Decode(bytes))
+  | _ => option.noneOf[String]()
   );

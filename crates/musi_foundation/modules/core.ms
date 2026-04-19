@@ -93,9 +93,9 @@ export opaque let Option [T] := data {
   | None
 };
 
-export let makeSome [T] (value : T) : Option[T] := .Some(value);
+export let someOf [T] (value : T) : Option[T] := .Some(value);
 
-export let makeNone [T] () : Option[T] := .None;
+export let noneOf [T] () : Option[T] := .None;
 
 export let isSome [T] (value : Option[T]) : Bool :=
   match value (
@@ -134,8 +134,8 @@ export opaque let RangeBounds[T] := class {
 
 export instance Rangeable[Int] {
   let compare (left : Int, right : Int) : Int := left - right;
-  let next (value : Int) : Option[Int] := makeSome[Int] (value + 1);
-  let prev (value : Int) : Option[Int] := makeSome[Int](value - 1);
+  let next (value : Int) : Option[Int] := someOf[Int] (value + 1);
+  let prev (value : Int) : Option[Int] := someOf[Int](value - 1);
 };
 
 export instance RangeBounds[Int] {

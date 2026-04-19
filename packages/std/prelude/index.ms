@@ -84,9 +84,9 @@ export let Bytes := bytes.Bytes;
 
 -- --- Common constructors ---
 --- Build a present option.
-export let makeSome [T] (value : T) : Option[T] := option.makeSome[T](value);
+export let someOf [T] (value : T) : Option[T] := option.someOf[T](value);
 --- Build an absent option.
-export let makeNone [T] () : Option[T] := option.makeNone[T]();
+export let noneOf [T] () : Option[T] := option.noneOf[T]();
 --- Build a successful result.
 export let ok [T, E] (value : T) : Result[T, E] := result.ok[T, E](value);
 --- Build a failed result.

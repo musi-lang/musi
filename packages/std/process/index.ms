@@ -38,8 +38,8 @@ export let argsCount () : Int := runtime.processArgCount();
 --- Process arg by index.
 export let argAt (index : Int) : Option[String] :=
   match runtime.processArgAt(index) (
-  | value if value = "" => option.makeNone[String]()
-  | value => option.makeSome[String](value)
+  | value if value = "" => option.noneOf[String]()
+  | value => option.someOf[String](value)
   );
 
 --- Current working directory.

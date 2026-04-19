@@ -11,6 +11,6 @@ export let isValid (source : String) : Bool := runtime.hexIsValid(source) > 0;
 --- Decode a value from this format.
 export let decode (source : String) : Option[String] :=
   match isValid(source) (
-  | valid if valid => option.makeSome[String](runtime.hexDecode(source))
-  | _ => option.makeNone[String]()
+  | valid if valid => option.someOf[String](runtime.hexDecode(source))
+  | _ => option.noneOf[String]()
   );

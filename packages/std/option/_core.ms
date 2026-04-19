@@ -5,10 +5,10 @@ export opaque let Option [T] := data {
 };
 
 --- Build a present optional value.
-export let makeSome [T] (value : T) : Option[T] := .Some(value);
+export let someOf [T] (value : T) : Option[T] := .Some(value);
 
 --- Build an absent optional value.
-export let makeNone [T] () : Option[T] := .None;
+export let noneOf [T] () : Option[T] := .None;
 
 --- Internal implementation for `isSome`.
 export let isSome [T] (target : Option[T]) : Bool :=
@@ -41,8 +41,8 @@ export let unwrapOrElse [T] (target : Option[T], fallback : T) : T :=
 --- Internal implementation for `map`.
 export let map [T, U] (target : Option[T], f : T -> U) : Option[U] :=
   match target (
-  | .Some(item) => makeSome[U](f(item))
-  | .None => makeNone[U]()
+  | .Some(item) => someOf[U](f(item))
+  | .None => noneOf[U]()
   );
 
 --- Internal implementation for `mapOr`.
@@ -66,7 +66,7 @@ export let andThen [T, U] (target : Option[T], f : T -> Option[U]) : Option[U]
   :=
   match target (
   | .Some(item) => f(item)
-  | .None => makeNone[U]()
+  | .None => noneOf[U]()
   );
 
 --- Internal implementation for `orElse`.
@@ -82,8 +82,8 @@ export let filter [T] (target : Option[T], predicate : T -> Bool) : Option[T]
   :=
   match target (
   | .Some(item)if predicate(item) => target
-  | .Some(_) => makeNone[T]()
-  | .None => makeNone[T]()
+  | .Some(_) => noneOf[T]()
+  | .None => noneOf[T]()
   );
 
 --- Internal implementation for `fold`.
