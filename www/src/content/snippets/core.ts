@@ -240,7 +240,7 @@ Slice.concat[Int]([1], [2, 3]);`,
 let Local := import "./index.ms";
 Local.answer;`,
 		evidence: {
-			path: "crates/music_sema/src/checker/surface_exports.rs",
+			path: "crates/music_sema/src/checker/surface/exports.rs",
 			line: 607,
 		},
 	},
@@ -737,7 +737,7 @@ let Option := import "@std/option";
 let Local := import "./index.ms";
 Local.answer;`,
 		evidence: {
-			path: "crates/music_sema/src/checker/surface_exports.rs",
+			path: "crates/music_sema/src/checker/surface/exports.rs",
 			line: 607,
 		},
 	},
