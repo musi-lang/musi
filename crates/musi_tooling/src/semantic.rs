@@ -1,3 +1,4 @@
+use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
@@ -104,11 +105,11 @@ pub fn semantic_tokens_for_project_file_with_overlay(
             .names
             .bindings
             .iter()
-            .filter_map(|(binding_id, binding)| {
-                (binding.site.source_id == parsed.source_id
-                    && binding_token_kind(binding_id, binding.kind, sema).is_callable())
-                .then(|| range_key(source, binding.site.span))
+            .filter(|(binding_id, binding)| {
+                binding.site.source_id == parsed.source_id
+                    && binding_token_kind(*binding_id, binding.kind, sema).is_callable()
             })
+            .map(|(_, binding)| range_key(source, binding.site.span))
             .collect::<BTreeSet<_>>();
         syntax_tokens
             .retain(|token| !callable_binding_ranges.contains(&tool_range_key(token.range)));
@@ -520,7 +521,7 @@ fn syntax_type_token_kind(
     None
 }
 
-pub(crate) fn builtin_type_name_token_kind(text: &str) -> Option<ToolSemanticTokenKind> {
+pub fn builtin_type_name_token_kind(text: &str) -> Option<ToolSemanticTokenKind> {
     if is_builtin_type_name(text) {
         Some(ToolSemanticTokenKind::Type)
     } else {
@@ -720,7 +721,7 @@ fn normalize_tokens(mut tokens: ToolSemanticTokenList) -> ToolSemanticTokenList 
             token.range.start_col,
             token.range.end_line,
             token.range.end_col,
-            std::cmp::Reverse(token_priority(token.kind)),
+            Reverse(token_priority(token.kind)),
         )
     });
     let mut out = Vec::new();

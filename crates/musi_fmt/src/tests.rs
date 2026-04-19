@@ -1,6 +1,6 @@
 use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::slice;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -51,7 +51,7 @@ fn assert_format_is_stable(source: &str) {
     assert_formatted_text_is_stable(&result.text);
 }
 
-fn assert_format_respects_width(source: &str, path: &std::path::Path) {
+fn assert_format_respects_width(source: &str, path: &Path) {
     let result = format_source(source, &options()).unwrap();
     for (line_index, line) in result.text.lines().enumerate() {
         if line.chars().count() <= options().line_width || line_has_unbreakable_atom(line) {
@@ -304,22 +304,22 @@ mod success {
 
     #[test]
     fn keeps_fitting_effect_members_inline_and_aligned() {
-        let source = r#"export opaque let Runtime := effect {
+        let source = r"export opaque let Runtime := effect {
   let envGet (name : String) : String;
   let envSet (name : String, value : String) : Int;
   let randomIntInRange (lowerBound : Int, upperBound : Int) : Int;
-};"#;
+};";
 
         let result = format_source(source, &options()).unwrap();
 
         assert_eq!(
             result.text,
-            r#"export opaque let Runtime := effect {
+            r"export opaque let Runtime := effect {
   let envGet (name : String) : String;
   let envSet (name : String, value : String) : Int;
   let randomIntInRange (lowerBound : Int, upperBound : Int) : Int;
 };
-"#
+"
         );
         assert!(
             result
@@ -341,13 +341,13 @@ mod success {
 
         assert_eq!(
             result.text,
-            r#"export opaque let Runtime := effect {
+            r"export opaque let Runtime := effect {
   let randomIntInRange (
     lowerBound : Int,
     upperBound : Int
   ) : Int;
 };
-"#
+"
         );
         assert!(
             result
@@ -458,43 +458,43 @@ mod success {
 
     #[test]
     fn formats_match_arms_pipe_aligned_by_default() {
-        let source = r#"export let readNonEmptyLine () : Option[String] :=
+        let source = r"export let readNonEmptyLine () : Option[String] :=
   match readTrimmedLine() (
     | value if value.isEmpty() => option.noneOf[String]()
     | value => option.someOf[String](value)
   );
-"#;
+";
 
         let result = format_source(source, &options()).unwrap();
 
         assert_eq!(
             result.text,
-            r#"export let readNonEmptyLine () : Option[String] :=
+            r"export let readNonEmptyLine () : Option[String] :=
   match readTrimmedLine() (
   | value if value.isEmpty() => option.noneOf[String]()
   | value => option.someOf[String](value)
   );
-"#
+"
         );
     }
 
     #[test]
     fn formats_dirty_multiline_match_rhs_canonically() {
-        let source = r#"export let isLess (target : Ordering) : Bool := match target(
+        let source = r"export let isLess (target : Ordering) : Bool := match target(
     | .Less => 0 = 0
     | _ => 0 = 1);
-"#;
+";
 
         let result = format_source(source, &options()).unwrap();
 
         assert_eq!(
             result.text,
-            r#"export let isLess (target : Ordering) : Bool :=
+            r"export let isLess (target : Ordering) : Bool :=
   match target (
   | .Less => 0 = 0
   | _ => 0 = 1
   );
-"#
+"
         );
         let second = format_source(&result.text, &options()).unwrap();
         assert_eq!(second.text, result.text);
@@ -504,21 +504,21 @@ mod success {
     fn formats_dirty_multiline_match_rhs_with_block_arms_when_configured() {
         let mut options = options();
         options.match_arm_indent = MatchArmIndent::Block;
-        let source = r#"export let isLess (target : Ordering) : Bool := match target(
+        let source = r"export let isLess (target : Ordering) : Bool := match target(
 | .Less => 0 = 0
 | _ => 0 = 1);
-"#;
+";
 
         let result = format_source(source, &options).unwrap();
 
         assert_eq!(
             result.text,
-            r#"export let isLess (target : Ordering) : Bool :=
+            r"export let isLess (target : Ordering) : Bool :=
   match target (
     | .Less => 0 = 0
     | _ => 0 = 1
   );
-"#
+"
         );
         let second = format_source(&result.text, &options).unwrap();
         assert_eq!(second.text, result.text);
@@ -612,13 +612,13 @@ mod success {
 
         assert_eq!(
             result.text,
-            r#"export opaque let Runtime := effect {
+            r"export opaque let Runtime := effect {
   let envSet (
     name : String,
     value : String
   ) : Int;
 };
-"#
+"
         );
     }
 
@@ -652,23 +652,23 @@ mod success {
     fn formats_match_arms_with_block_indent_when_configured() {
         let mut options = options();
         options.match_arm_indent = MatchArmIndent::Block;
-        let source = r#"export let readNonEmptyLine () : Option[String] :=
+        let source = r"export let readNonEmptyLine () : Option[String] :=
   match readTrimmedLine() (
   | value if value.isEmpty() => option.noneOf[String]()
   | value => option.someOf[String](value)
   );
-"#;
+";
 
         let result = format_source(source, &options).unwrap();
 
         assert_eq!(
             result.text,
-            r#"export let readNonEmptyLine () : Option[String] :=
+            r"export let readNonEmptyLine () : Option[String] :=
   match readTrimmedLine() (
     | value if value.isEmpty() => option.noneOf[String]()
     | value => option.someOf[String](value)
   );
-"#
+"
         );
     }
 

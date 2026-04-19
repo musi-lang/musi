@@ -80,23 +80,17 @@ pub fn format_source(source: &str, options: &FormatOptions) -> FormatResultOf {
         };
         let role = token_roles.get(index).copied().unwrap_or_default();
         formatter.preserve_blank_separator_if_needed(token.span);
-        let break_after_comma = formatter.should_break_after_current_comma(&lexed, index);
-        let break_before_operator = formatter.should_break_before_current_operator(&lexed, index);
-        let break_after_colon_eq = formatter.should_break_after_current_colon_eq(&lexed, index);
-        let break_after_open_group =
-            formatter.should_break_after_current_open_group(&lexed, index, role);
-        let skip_current_comma = formatter.should_skip_current_comma(&lexed, index);
-        formatter.write_token(
-            token.kind,
-            text,
-            role,
-            token.span,
-            break_after_comma,
-            skip_current_comma,
-            break_before_operator,
-            break_after_colon_eq,
-            break_after_open_group,
-        );
+        let token_options = TokenWriteOptions::empty()
+            .with_break_after_comma(formatter.should_break_after_current_comma(&lexed, index))
+            .with_skip_current_comma(formatter.should_skip_current_comma(&lexed, index))
+            .with_break_before_operator(
+                formatter.should_break_before_current_operator(&lexed, index),
+            )
+            .with_break_after_colon_eq(formatter.should_break_after_current_colon_eq(&lexed, index))
+            .with_break_after_open_group(
+                formatter.should_break_after_current_open_group(&lexed, index, role),
+            );
+        formatter.write_token(token.kind, text, role, token.span, token_options);
     }
     let formatted_text = enforce_bind_line_width(formatter.finish(), options);
     let formatted_text = compact_record_fields(formatted_text, options);
@@ -124,7 +118,7 @@ struct SourceFormatter<'a> {
     parens: ParenFrameList,
     braces: BraceFrameList,
     last_token_end: usize,
-    pending_attachment: bool,
+    pending_attachment: PendingAttachment,
     line_start_paren_depth: usize,
     continuation_indent: usize,
 }
@@ -134,6 +128,93 @@ enum DeclarationState {
     None,
     WaitingName,
     NameBeforeParams,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PendingAttachment {
+    None,
+    ItemDoc,
+}
+
+impl PendingAttachment {
+    const fn from_item_doc(is_item_doc: bool) -> Self {
+        if is_item_doc {
+            Self::ItemDoc
+        } else {
+            Self::None
+        }
+    }
+
+    const fn is_pending(self) -> bool {
+        matches!(self, Self::ItemDoc)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TokenWriteOptions(u8);
+
+impl TokenWriteOptions {
+    const BREAK_AFTER_COMMA: u8 = 1 << 0;
+    const SKIP_CURRENT_COMMA: u8 = 1 << 1;
+    const BREAK_BEFORE_OPERATOR: u8 = 1 << 2;
+    const BREAK_AFTER_COLON_EQ: u8 = 1 << 3;
+    const BREAK_AFTER_OPEN_GROUP: u8 = 1 << 4;
+
+    const fn empty() -> Self {
+        Self(0)
+    }
+
+    const fn with_break_after_comma(self, enabled: bool) -> Self {
+        self.with_flag(Self::BREAK_AFTER_COMMA, enabled)
+    }
+
+    const fn with_skip_current_comma(self, enabled: bool) -> Self {
+        self.with_flag(Self::SKIP_CURRENT_COMMA, enabled)
+    }
+
+    const fn with_break_before_operator(self, enabled: bool) -> Self {
+        self.with_flag(Self::BREAK_BEFORE_OPERATOR, enabled)
+    }
+
+    const fn with_break_after_colon_eq(self, enabled: bool) -> Self {
+        self.with_flag(Self::BREAK_AFTER_COLON_EQ, enabled)
+    }
+
+    const fn with_break_after_open_group(self, enabled: bool) -> Self {
+        self.with_flag(Self::BREAK_AFTER_OPEN_GROUP, enabled)
+    }
+
+    const fn break_after_comma(self) -> bool {
+        self.has_flag(Self::BREAK_AFTER_COMMA)
+    }
+
+    const fn skip_current_comma(self) -> bool {
+        self.has_flag(Self::SKIP_CURRENT_COMMA)
+    }
+
+    const fn break_before_operator(self) -> bool {
+        self.has_flag(Self::BREAK_BEFORE_OPERATOR)
+    }
+
+    const fn break_after_colon_eq(self) -> bool {
+        self.has_flag(Self::BREAK_AFTER_COLON_EQ)
+    }
+
+    const fn break_after_open_group(self) -> bool {
+        self.has_flag(Self::BREAK_AFTER_OPEN_GROUP)
+    }
+
+    const fn with_flag(self, flag: u8, enabled: bool) -> Self {
+        if enabled {
+            Self(self.0 | flag)
+        } else {
+            Self(self.0 & !flag)
+        }
+    }
+
+    const fn has_flag(self, flag: u8) -> bool {
+        self.0 & flag != 0
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -258,7 +339,7 @@ impl<'a> SourceFormatter<'a> {
             parens: Vec::new(),
             braces: Vec::new(),
             last_token_end: 0,
-            pending_attachment: false,
+            pending_attachment: PendingAttachment::None,
             line_start_paren_depth: 0,
             continuation_indent: 0,
         }
@@ -304,7 +385,7 @@ impl<'a> SourceFormatter<'a> {
         } else {
             self.push_space();
         }
-        self.pending_attachment = is_item_doc && !is_same_line;
+        self.pending_attachment = PendingAttachment::from_item_doc(is_item_doc && !is_same_line);
         self.set_last_token_end(span);
     }
 
@@ -363,7 +444,7 @@ impl<'a> SourceFormatter<'a> {
         let Some(between) = self.original.get(self.last_token_end..start) else {
             return;
         };
-        if self.pending_attachment || self.out_ends_with_attachment_line() {
+        if self.pending_attachment.is_pending() || self.out_ends_with_attachment_line() {
             return;
         }
         if newline_count(between) >= 2 {
@@ -383,11 +464,7 @@ impl SourceFormatter<'_> {
         text: &str,
         role: TokenFormatRole,
         span: Span,
-        break_after_comma: bool,
-        skip_current_comma: bool,
-        break_before_operator: bool,
-        break_after_colon_eq: bool,
-        break_after_open_group: bool,
+        options: TokenWriteOptions,
     ) {
         if self.ignore_next {
             self.write_original_token(kind, text);
@@ -396,11 +473,11 @@ impl SourceFormatter<'_> {
             self.set_last_token_end(span);
             return;
         }
-        if break_before_operator {
+        if options.break_before_operator() {
             self.continuation_indent = self.continuation_indent.max(1);
             self.newline();
         }
-        if skip_current_comma {
+        if options.skip_current_comma() {
             self.set_last_token_end(span);
             return;
         }
@@ -453,13 +530,17 @@ impl SourceFormatter<'_> {
             }
             TokenKind::LBrace => self.write_open_brace(text, role),
             TokenKind::Semicolon => self.write_semicolon(),
-            TokenKind::Comma => self.write_comma(break_after_comma),
+            TokenKind::Comma => self.write_comma(options.break_after_comma()),
             TokenKind::Pipe => self.write_pipe(text),
-            TokenKind::LParen => self.write_open_paren(text, role, break_after_open_group),
-            TokenKind::LBracket => self.write_open_bracket(text, role, break_after_open_group),
+            TokenKind::LParen => {
+                self.write_open_paren(text, role, options.break_after_open_group());
+            }
+            TokenKind::LBracket => {
+                self.write_open_bracket(text, role, options.break_after_open_group());
+            }
             _ => self.write_regular(kind, text, role),
         }
-        if break_after_colon_eq {
+        if options.break_after_colon_eq() {
             self.continuation_indent = self.continuation_indent.max(1);
             self.newline();
         }
@@ -467,9 +548,9 @@ impl SourceFormatter<'_> {
         self.previous = Some(kind);
         if role == TokenFormatRole::AttributeEnd {
             self.newline();
-            self.pending_attachment = true;
+            self.pending_attachment = PendingAttachment::ItemDoc;
         } else if role != TokenFormatRole::Attribute {
-            self.pending_attachment = false;
+            self.pending_attachment = PendingAttachment::None;
         }
         self.set_last_token_end(span);
     }
@@ -804,7 +885,7 @@ impl SourceFormatter<'_> {
         self.line_len = self.line_len.saturating_add(1);
         if in_brace_comma_list
             || break_after_comma
-            || self.should_break_after_comma()
+            || Self::should_break_after_comma()
             || self.group_already_broke()
         {
             if in_brace_comma_list {
@@ -832,7 +913,7 @@ impl SourceFormatter<'_> {
         self.line_len = self.line_len.saturating_add(1);
     }
 
-    fn should_insert_trailing_comma(&self, paren: Option<ParenFrame>) -> bool {
+    const fn should_insert_trailing_comma(&self, paren: Option<ParenFrame>) -> bool {
         let Some(paren) = paren else {
             return false;
         };
@@ -887,7 +968,7 @@ impl SourceFormatter<'_> {
             && self.indent == 0
             && !self.out.is_empty()
             && !self.out.ends_with("\n\n")
-            && !self.pending_attachment
+            && !self.pending_attachment.is_pending()
             && !self.out_ends_with_attachment_line()
         {
             self.blank_line();
@@ -911,10 +992,10 @@ impl SourceFormatter<'_> {
                 self.declaration_state = DeclarationState::NameBeforeParams;
             }
             TokenKind::KwExport | TokenKind::KwRec | TokenKind::KwPartial => {}
-            _ if kind != TokenKind::LParen => {
-                if !matches!(kind, TokenKind::LBracket | TokenKind::RBracket) {
-                    self.declaration_state = DeclarationState::None;
-                }
+            _ if kind != TokenKind::LParen
+                && !matches!(kind, TokenKind::LBracket | TokenKind::RBracket) =>
+            {
+                self.declaration_state = DeclarationState::None;
             }
             _ => {}
         }
@@ -991,7 +1072,7 @@ impl SourceFormatter<'_> {
 }
 
 impl SourceFormatter<'_> {
-    const fn should_break_after_comma(&self) -> bool {
+    const fn should_break_after_comma() -> bool {
         false
     }
 
@@ -1165,16 +1246,27 @@ fn enforce_bind_line_width(text: String, options: &FormatOptions) -> String {
             && is_let_line(line)
             && let Some(index) = line.find(" := ")
         {
+            let lhs_end = index.saturating_add(" :=".len());
             let rhs_start = index.saturating_add(" := ".len());
+            let Some(lhs) = line.get(..lhs_end) else {
+                out.push_str(line);
+                out.push('\n');
+                continue;
+            };
+            let Some(rhs) = line.get(rhs_start..) else {
+                out.push_str(line);
+                out.push('\n');
+                continue;
+            };
             let indent = line
                 .chars()
                 .take_while(|ch| ch.is_whitespace())
                 .collect::<String>();
-            out.push_str(line[..index + " :=".len()].trim_end());
+            out.push_str(lhs.trim_end());
             out.push('\n');
             out.push_str(&indent);
             out.push_str(&options.indent_unit());
-            out.push_str(line[rhs_start..].trim_start());
+            out.push_str(rhs.trim_start());
             out.push('\n');
             continue;
         }
@@ -1312,16 +1404,16 @@ fn align_match_arrows(text: String, options: &FormatOptions) -> String {
     match options.match_arm_arrow_alignment {
         MatchArmArrowAlignment::None => text,
         MatchArmArrowAlignment::Consecutive => {
-            align_match_arrow_runs(text, options, MatchArmArrowAlignment::Consecutive)
+            align_match_arrow_runs(&text, options, MatchArmArrowAlignment::Consecutive)
         }
         MatchArmArrowAlignment::Block => {
-            align_match_arrow_runs(text, options, MatchArmArrowAlignment::Block)
+            align_match_arrow_runs(&text, options, MatchArmArrowAlignment::Block)
         }
     }
 }
 
 fn align_match_arrow_runs(
-    text: String,
+    text: &str,
     options: &FormatOptions,
     alignment: MatchArmArrowAlignment,
 ) -> String {

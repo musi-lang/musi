@@ -159,7 +159,7 @@ impl FormatOptions {
         options
     }
 
-    pub fn apply_profile(&mut self, profile: FmtProfile) {
+    pub const fn apply_profile(&mut self, profile: FmtProfile) {
         match profile {
             FmtProfile::Standard => {}
             FmtProfile::Compact => {
