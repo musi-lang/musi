@@ -121,7 +121,7 @@ impl Vm {
             let closure =
                 self.handler_clause_closure(&handler, usize::from(op).saturating_add(1))?;
             let continuation = self.capture_continuation(handler_index)?;
-            let mut clause_args = args.to_vec();
+            let mut clause_args = args.iter().cloned().collect::<ValueList>();
             clause_args.push(Value::Continuation(continuation));
             self.frames.truncate(handler.frame_depth.saturating_add(1));
             self.handlers.truncate(handler_index.saturating_add(1));

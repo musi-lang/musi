@@ -3,7 +3,7 @@ use std::iter::repeat_n;
 
 use music_seam::{EffectId, ProcedureId};
 
-use super::{GcRef, Program, Value, ValueList};
+use super::{GcRef, Program, RuntimeInstruction, RuntimeInstructionList, Value, ValueList};
 
 pub type LoadedModuleList = Vec<LoadedModule>;
 pub type ModuleSlotMap = HashMap<Box<str>, usize>;
@@ -33,6 +33,7 @@ pub struct CallFrame {
     pub(crate) ip: usize,
     pub(crate) locals: ValueList,
     pub(crate) stack: ValueList,
+    pub(crate) code: Option<RuntimeInstructionList>,
 }
 
 impl CallFrame {
@@ -49,6 +50,7 @@ impl CallFrame {
             ip: 0,
             locals,
             stack,
+            code: None,
         }
     }
 
@@ -56,6 +58,41 @@ impl CallFrame {
     pub const fn with_ip(mut self, ip: usize) -> Self {
         self.ip = ip;
         self
+    }
+
+    #[must_use]
+    pub fn with_runtime_code(mut self, code: RuntimeInstructionList) -> Self {
+        self.code = Some(code);
+        self
+    }
+
+    pub(crate) fn set_runtime_code(&mut self, code: RuntimeInstructionList) {
+        self.code = Some(code);
+    }
+
+    pub(crate) fn runtime_instruction(&self) -> Option<RuntimeInstruction> {
+        self.code.as_ref()?.get(self.ip).copied()
+    }
+
+    pub(crate) fn reset_empty(
+        &mut self,
+        module_slot: usize,
+        procedure: ProcedureId,
+        code: RuntimeInstructionList,
+    ) {
+        self.module_slot = module_slot;
+        self.procedure = procedure;
+        self.ip = 0;
+        self.locals.clear();
+        self.stack.clear();
+        self.code = Some(code);
+    }
+
+    pub(crate) fn recycle(&mut self) {
+        self.ip = 0;
+        self.locals.clear();
+        self.stack.clear();
+        self.code = None;
     }
 }
 

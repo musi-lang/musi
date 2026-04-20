@@ -4,17 +4,248 @@ use std::sync::Arc;
 use music_seam::decode_binary;
 use music_seam::descriptor::ExportTarget;
 use music_seam::{
-    Artifact, ClassId, CodeEntry, DataId, EffectId, ExportId, ForeignId, Instruction, LabelId,
-    ProcedureId, StringId, TypeId,
+    Artifact, ClassId, CodeEntry, ConstantId, DataId, EffectId, ExportId, ForeignId, GlobalId,
+    Instruction, LabelId, Opcode, Operand, ProcedureId, StringId, TypeId,
 };
 use music_term::{TypeTerm, TypeTermKind};
 
 use super::{VmError, VmErrorKind, VmIndexSpace, VmResult};
 
 type InstructionList = Box<[Instruction]>;
+pub type RuntimeInstructionList = Arc<[RuntimeInstruction]>;
+type RuntimeBranchTableList = Box<[Option<RuntimeBranchTable>]>;
 type LabelIndexMap = HashMap<LabelId, usize>;
 type ExportMap = HashMap<Box<str>, ExportId>;
 type DataLayoutMap = HashMap<TypeId, ProgramDataLayout>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompareOp {
+    Eq,
+    Ne,
+    Lt,
+    Gt,
+    Le,
+    Ge,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeCallMode {
+    Normal,
+    Tail,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RuntimeCallShape {
+    pub(crate) params: u16,
+    pub(crate) locals: u16,
+}
+
+impl RuntimeCallShape {
+    #[must_use]
+    pub const fn new(params: u16, locals: u16) -> Self {
+        Self { params, locals }
+    }
+
+    #[must_use]
+    pub fn local_count(self) -> usize {
+        usize::from(self.locals.max(self.params))
+    }
+
+    #[must_use]
+    pub fn param_count(self) -> usize {
+        usize::from(self.params)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeFusedOp {
+    LocalSmiCompareBranch {
+        local: u16,
+        smi: i16,
+        compare: CompareOp,
+        target: usize,
+        fallthrough: usize,
+    },
+    LocalSmiCompareSelfTailDecAcc {
+        compare_local: u16,
+        compare_smi: i16,
+        compare: CompareOp,
+        fallthrough: usize,
+        dec_local: u16,
+        dec_smi: i16,
+        acc_local: u16,
+        add_local: u16,
+        param_count: u16,
+        mirror_local: Option<u16>,
+        loop_ip: usize,
+    },
+    SelfTailDecAcc {
+        dec_local: u16,
+        dec_smi: i16,
+        acc_local: u16,
+        add_local: u16,
+        param_count: u16,
+    },
+    LocalDataTagBranchTable {
+        local: u16,
+        branch_table: usize,
+    },
+    LocalDataGetConstStore {
+        source: u16,
+        field: i16,
+        dest: u16,
+        fallthrough: usize,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeOperand {
+    Raw,
+    None,
+    I16(i16),
+    Local(u16),
+    String(StringId),
+    Type(TypeId),
+    Constant(ConstantId),
+    Global(GlobalId),
+    Procedure(ProcedureId),
+    Foreign(ForeignId),
+    EffectId(EffectId),
+    TypeLen {
+        ty: TypeId,
+        len: u16,
+    },
+    WideProcedureCaptures {
+        procedure: ProcedureId,
+        captures: u8,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RuntimeInstruction {
+    pub(crate) opcode: Opcode,
+    pub(crate) operand: RuntimeOperand,
+    pub(crate) raw_index: usize,
+    pub(crate) branch_target: Option<usize>,
+    pub(crate) compare_branch: Option<(CompareOp, usize)>,
+    pub(crate) call_mode: RuntimeCallMode,
+    pub(crate) call_shape: Option<RuntimeCallShape>,
+    pub(crate) fused: Option<RuntimeFusedOp>,
+}
+
+impl RuntimeInstruction {
+    fn new(raw_index: usize, instruction: &Instruction) -> Self {
+        Self {
+            opcode: instruction.opcode,
+            operand: RuntimeOperand::from(&instruction.operand),
+            raw_index,
+            branch_target: None,
+            compare_branch: None,
+            call_mode: RuntimeCallMode::Normal,
+            call_shape: None,
+            fused: None,
+        }
+    }
+
+    const fn with_branch_target(mut self, target: usize) -> Self {
+        self.branch_target = Some(target);
+        self
+    }
+
+    const fn with_compare_branch(mut self, op: CompareOp, target: usize) -> Self {
+        self.compare_branch = Some((op, target));
+        self
+    }
+
+    const fn with_call_mode(mut self, call_mode: RuntimeCallMode) -> Self {
+        self.call_mode = call_mode;
+        self
+    }
+
+    const fn with_call_shape(mut self, call_shape: RuntimeCallShape) -> Self {
+        self.call_shape = Some(call_shape);
+        self
+    }
+
+    const fn with_fused(mut self, fused: RuntimeFusedOp) -> Self {
+        self.fused = Some(fused);
+        self
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RuntimeBranchTable {
+    targets: Box<[Option<usize>]>,
+}
+
+impl RuntimeBranchTable {
+    #[must_use]
+    pub const fn new(targets: Box<[Option<usize>]>) -> Self {
+        Self { targets }
+    }
+
+    #[must_use]
+    pub fn target_for(&self, index: usize) -> Option<usize> {
+        self.targets
+            .get(index)
+            .or_else(|| self.targets.last())
+            .copied()
+            .flatten()
+    }
+}
+
+impl RuntimeOperand {
+    pub const fn to_instruction(self, opcode: Opcode) -> Option<Instruction> {
+        let operand = match self {
+            Self::Raw => return None,
+            Self::None => Operand::None,
+            Self::I16(value) => Operand::I16(value),
+            Self::Local(slot) => Operand::Local(slot),
+            Self::String(value) => Operand::String(value),
+            Self::Type(value) => Operand::Type(value),
+            Self::Constant(value) => Operand::Constant(value),
+            Self::Global(value) => Operand::Global(value),
+            Self::Procedure(value) => Operand::Procedure(value),
+            Self::Foreign(value) => Operand::Foreign(value),
+            Self::EffectId(value) => Operand::EffectId(value),
+            Self::TypeLen { ty, len } => Operand::TypeLen { ty, len },
+            Self::WideProcedureCaptures {
+                procedure,
+                captures,
+            } => Operand::WideProcedureCaptures {
+                procedure,
+                captures,
+            },
+        };
+        Some(Instruction::new(opcode, operand))
+    }
+}
+
+impl From<&Operand> for RuntimeOperand {
+    fn from(operand: &Operand) -> Self {
+        match *operand {
+            Operand::None => Self::None,
+            Operand::Label(_) | Operand::BranchTable(_) | Operand::Effect { .. } => Self::Raw,
+            Operand::I16(value) => Self::I16(value),
+            Operand::Local(slot) => Self::Local(slot),
+            Operand::String(value) => Self::String(value),
+            Operand::Type(value) => Self::Type(value),
+            Operand::Constant(value) => Self::Constant(value),
+            Operand::Global(value) => Self::Global(value),
+            Operand::Procedure(procedure) => Self::Procedure(procedure),
+            Operand::Foreign(value) => Self::Foreign(value),
+            Operand::EffectId(value) => Self::EffectId(value),
+            Operand::TypeLen { ty, len } => Self::TypeLen { ty, len },
+            Operand::WideProcedureCaptures {
+                procedure,
+                captures,
+            } => Self::WideProcedureCaptures {
+                procedure,
+                captures,
+            },
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProgramExportKind {
@@ -248,6 +479,8 @@ pub struct LoadedProcedure {
     pub params: u16,
     pub locals: u16,
     pub instructions: InstructionList,
+    pub(crate) runtime_instructions: RuntimeInstructionList,
+    pub(crate) runtime_branch_tables: RuntimeBranchTableList,
     pub labels: LabelIndexMap,
 }
 
@@ -258,12 +491,16 @@ impl LoadedProcedure {
         params: u16,
         locals: u16,
         instructions: InstructionList,
+        runtime_instructions: RuntimeInstructionList,
+        runtime_branch_tables: RuntimeBranchTableList,
     ) -> Self {
         Self {
             name: name.into(),
             params,
             locals,
             instructions,
+            runtime_instructions,
+            runtime_branch_tables,
             labels: LabelIndexMap::new(),
         }
     }
@@ -272,6 +509,11 @@ impl LoadedProcedure {
     pub fn with_labels(mut self, labels: LabelIndexMap) -> Self {
         self.labels = labels;
         self
+    }
+
+    #[must_use]
+    pub(crate) fn runtime_branch_table(&self, raw_index: usize) -> Option<&RuntimeBranchTable> {
+        self.runtime_branch_tables.get(raw_index)?.as_ref()
     }
 }
 
@@ -477,6 +719,12 @@ impl Program {
             })
     }
 
+    pub(crate) fn loaded_runtime_code(&self, id: ProcedureId) -> VmResult<RuntimeInstructionList> {
+        Ok(Arc::<[RuntimeInstruction]>::clone(
+            &self.loaded_procedure(id)?.runtime_instructions,
+        ))
+    }
+
     #[must_use]
     pub(crate) fn export_target(&self, name: &str) -> Option<ExportTarget> {
         let export_id = self.inner.exports.get(name).copied()?;
@@ -498,10 +746,16 @@ impl Program {
 }
 
 fn build_procedures(artifact: &Artifact) -> VmResult<Box<[LoadedProcedure]>> {
+    let procedure_shapes = artifact
+        .procedures
+        .iter()
+        .map(|(_, procedure)| RuntimeCallShape::new(procedure.params, procedure.locals))
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
     artifact
         .procedures
         .iter()
-        .map(|(_, procedure)| {
+        .map(|(procedure_id, procedure)| {
             let procedure_name: Box<str> = artifact.string_text(procedure.name).into();
             let mut labels = LabelIndexMap::new();
             let mut instructions = Vec::new();
@@ -516,16 +770,419 @@ fn build_procedures(artifact: &Artifact) -> VmResult<Box<[LoadedProcedure]>> {
                     }
                 }
             }
+            let instructions = instructions.into_boxed_slice();
+            let runtime_instructions = decode_runtime_instructions(
+                procedure_id,
+                procedure.params,
+                &instructions,
+                &labels,
+                &procedure_shapes,
+            );
+            let runtime_branch_tables = decode_runtime_branch_tables(&instructions, &labels);
             Ok(LoadedProcedure::new(
                 procedure_name,
                 procedure.params,
                 procedure.locals,
-                instructions.into_boxed_slice(),
+                instructions,
+                runtime_instructions,
+                runtime_branch_tables,
             )
             .with_labels(labels))
         })
         .collect::<VmResult<Vec<_>>>()
         .map(Vec::into_boxed_slice)
+}
+
+fn decode_runtime_instructions(
+    current_procedure: ProcedureId,
+    param_count: u16,
+    instructions: &[Instruction],
+    labels: &LabelIndexMap,
+    procedure_shapes: &[RuntimeCallShape],
+) -> RuntimeInstructionList {
+    instructions
+        .iter()
+        .enumerate()
+        .map(|(index, instruction)| {
+            decode_runtime_instruction(
+                current_procedure,
+                param_count,
+                index,
+                instruction,
+                instructions,
+                labels,
+                procedure_shapes,
+            )
+        })
+        .collect::<Vec<_>>()
+        .into()
+}
+
+fn decode_runtime_branch_tables(
+    instructions: &[Instruction],
+    labels: &LabelIndexMap,
+) -> RuntimeBranchTableList {
+    instructions
+        .iter()
+        .map(|instruction| {
+            let Operand::BranchTable(branch_labels) = &instruction.operand else {
+                return None;
+            };
+            let targets = branch_labels
+                .iter()
+                .map(|label| labels.get(label).copied())
+                .collect::<Vec<_>>()
+                .into_boxed_slice();
+            Some(RuntimeBranchTable::new(targets))
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice()
+}
+
+fn decode_runtime_instruction(
+    current_procedure: ProcedureId,
+    param_count: u16,
+    index: usize,
+    instruction: &Instruction,
+    instructions: &[Instruction],
+    labels: &LabelIndexMap,
+    procedure_shapes: &[RuntimeCallShape],
+) -> RuntimeInstruction {
+    let runtime = RuntimeInstruction::new(index, instruction);
+    if let Some(fused) =
+        decode_fused_op(current_procedure, param_count, index, instructions, labels)
+    {
+        return runtime.with_fused(fused);
+    }
+    match instruction.opcode {
+        Opcode::Br | Opcode::BrFalse => decode_branch_target(runtime, &instruction.operand, labels),
+        Opcode::Call | Opcode::CallTail => decode_call(
+            runtime,
+            index,
+            instruction,
+            instructions,
+            labels,
+            procedure_shapes,
+        ),
+        Opcode::CmpEq
+        | Opcode::CmpNe
+        | Opcode::CmpLt
+        | Opcode::CmpGt
+        | Opcode::CmpLe
+        | Opcode::CmpGe => decode_compare_branch(runtime, index, instructions, labels),
+        _ => runtime,
+    }
+}
+
+fn decode_fused_op(
+    current_procedure: ProcedureId,
+    param_count: u16,
+    index: usize,
+    instructions: &[Instruction],
+    labels: &LabelIndexMap,
+) -> Option<RuntimeFusedOp> {
+    decode_local_smi_compare_self_tail_dec_acc(
+        current_procedure,
+        param_count,
+        index,
+        instructions,
+        labels,
+    )
+    .or_else(|| decode_self_tail_dec_acc(current_procedure, param_count, index, instructions))
+    .or_else(|| decode_local_data_tag_branch_table(index, instructions))
+    .or_else(|| decode_local_data_get_const_store(index, instructions))
+    .or_else(|| decode_local_smi_compare_branch(index, instructions, labels))
+}
+
+fn decode_local_smi_compare_self_tail_dec_acc(
+    current_procedure: ProcedureId,
+    param_count: u16,
+    index: usize,
+    instructions: &[Instruction],
+    labels: &LabelIndexMap,
+) -> Option<RuntimeFusedOp> {
+    let RuntimeFusedOp::LocalSmiCompareBranch {
+        local: compare_local,
+        smi: compare_smi,
+        compare,
+        target,
+        fallthrough,
+    } = decode_local_smi_compare_branch(index, instructions, labels)?
+    else {
+        return None;
+    };
+    let RuntimeFusedOp::SelfTailDecAcc {
+        dec_local,
+        dec_smi,
+        acc_local,
+        add_local,
+        param_count,
+    } = decode_self_tail_dec_acc(current_procedure, param_count, target, instructions)?
+    else {
+        return None;
+    };
+    let (mirror_local, loop_ip) = copied_match_local(index, instructions, dec_local, compare_local);
+    Some(RuntimeFusedOp::LocalSmiCompareSelfTailDecAcc {
+        compare_local,
+        compare_smi,
+        compare,
+        fallthrough,
+        dec_local,
+        dec_smi,
+        acc_local,
+        add_local,
+        param_count,
+        mirror_local,
+        loop_ip,
+    })
+}
+
+fn copied_match_local(
+    index: usize,
+    instructions: &[Instruction],
+    source: u16,
+    dest: u16,
+) -> (Option<u16>, usize) {
+    let Some(prefix_index) = index.checked_sub(2) else {
+        return (None, 0);
+    };
+    let Some([load, store]) = instruction_window::<2>(prefix_index, instructions) else {
+        return (None, 0);
+    };
+    let (Opcode::LdLoc, Operand::Local(load_local)) = (load.opcode, &load.operand) else {
+        return (None, 0);
+    };
+    let (Opcode::StLoc, Operand::Local(store_local)) = (store.opcode, &store.operand) else {
+        return (None, 0);
+    };
+    if *load_local == source && *store_local == dest {
+        (Some(dest), index)
+    } else {
+        (None, 0)
+    }
+}
+
+fn decode_self_tail_dec_acc(
+    current_procedure: ProcedureId,
+    param_count: u16,
+    index: usize,
+    instructions: &[Instruction],
+) -> Option<RuntimeFusedOp> {
+    let [dec_load, dec_step, dec_op, acc_load, add_load, add_op, call] =
+        instruction_window::<7>(index, instructions)?;
+    let (Opcode::LdLoc, Operand::Local(dec_local)) = (dec_load.opcode, &dec_load.operand) else {
+        return None;
+    };
+    let (Opcode::LdSmi, Operand::I16(dec_smi)) = (dec_step.opcode, &dec_step.operand) else {
+        return None;
+    };
+    if dec_op.opcode != Opcode::ISub {
+        return None;
+    }
+    let (Opcode::LdLoc, Operand::Local(acc_local)) = (acc_load.opcode, &acc_load.operand) else {
+        return None;
+    };
+    let (Opcode::LdLoc, Operand::Local(add_local)) = (add_load.opcode, &add_load.operand) else {
+        return None;
+    };
+    if add_op.opcode != Opcode::IAdd {
+        return None;
+    }
+    let (Opcode::Call | Opcode::CallTail, Operand::Procedure(procedure)) =
+        (call.opcode, &call.operand)
+    else {
+        return None;
+    };
+    if *procedure != current_procedure {
+        return None;
+    }
+    Some(RuntimeFusedOp::SelfTailDecAcc {
+        dec_local: *dec_local,
+        dec_smi: *dec_smi,
+        acc_local: *acc_local,
+        add_local: *add_local,
+        param_count,
+    })
+}
+
+fn decode_local_smi_compare_branch(
+    index: usize,
+    instructions: &[Instruction],
+    labels: &LabelIndexMap,
+) -> Option<RuntimeFusedOp> {
+    let [first, second, compare, branch] = instruction_window::<4>(index, instructions)?;
+    let (Opcode::LdLoc, Operand::Local(local)) = (first.opcode, &first.operand) else {
+        return None;
+    };
+    let (Opcode::LdSmi, Operand::I16(smi)) = (second.opcode, &second.operand) else {
+        return None;
+    };
+    let compare = compare_op(compare.opcode)?;
+    let (Opcode::BrFalse, Operand::Label(label)) = (branch.opcode, &branch.operand) else {
+        return None;
+    };
+    let target = labels.get(label).copied()?;
+    Some(RuntimeFusedOp::LocalSmiCompareBranch {
+        local: *local,
+        smi: *smi,
+        compare,
+        target,
+        fallthrough: index.saturating_add(4),
+    })
+}
+
+fn decode_local_data_tag_branch_table(
+    index: usize,
+    instructions: &[Instruction],
+) -> Option<RuntimeFusedOp> {
+    let [load, tag, branch] = instruction_window::<3>(index, instructions)?;
+    let (Opcode::LdLoc, Operand::Local(local)) = (load.opcode, &load.operand) else {
+        return None;
+    };
+    if tag.opcode != Opcode::DataTag || branch.opcode != Opcode::BrTbl {
+        return None;
+    }
+    Some(RuntimeFusedOp::LocalDataTagBranchTable {
+        local: *local,
+        branch_table: index.saturating_add(2),
+    })
+}
+
+fn decode_local_data_get_const_store(
+    index: usize,
+    instructions: &[Instruction],
+) -> Option<RuntimeFusedOp> {
+    let [load, field, get, store] = instruction_window::<4>(index, instructions)?;
+    let (Opcode::LdLoc, Operand::Local(source)) = (load.opcode, &load.operand) else {
+        return None;
+    };
+    let (Opcode::LdSmi, Operand::I16(field)) = (field.opcode, &field.operand) else {
+        return None;
+    };
+    if get.opcode != Opcode::DataGet {
+        return None;
+    }
+    let (Opcode::StLoc, Operand::Local(dest)) = (store.opcode, &store.operand) else {
+        return None;
+    };
+    Some(RuntimeFusedOp::LocalDataGetConstStore {
+        source: *source,
+        field: *field,
+        dest: *dest,
+        fallthrough: index.saturating_add(4),
+    })
+}
+
+fn instruction_window<const N: usize>(
+    index: usize,
+    instructions: &[Instruction],
+) -> Option<&[Instruction; N]> {
+    instructions
+        .get(index..index.checked_add(N)?)?
+        .try_into()
+        .ok()
+}
+
+fn decode_branch_target(
+    runtime: RuntimeInstruction,
+    operand: &Operand,
+    labels: &LabelIndexMap,
+) -> RuntimeInstruction {
+    let Operand::Label(label) = operand else {
+        return runtime;
+    };
+    labels
+        .get(label)
+        .copied()
+        .map_or(runtime, |target| runtime.with_branch_target(target))
+}
+
+fn decode_call(
+    runtime: RuntimeInstruction,
+    index: usize,
+    instruction: &Instruction,
+    instructions: &[Instruction],
+    labels: &LabelIndexMap,
+    procedure_shapes: &[RuntimeCallShape],
+) -> RuntimeInstruction {
+    let runtime = if matches!(instruction.opcode, Opcode::CallTail)
+        || call_is_tail_position(index, instructions, labels)
+    {
+        runtime.with_call_mode(RuntimeCallMode::Tail)
+    } else {
+        runtime
+    };
+    let Operand::Procedure(procedure) = instruction.operand else {
+        return runtime;
+    };
+    let Some(shape) = procedure_shapes
+        .get(usize::try_from(procedure.raw()).unwrap_or(usize::MAX))
+        .copied()
+    else {
+        return runtime;
+    };
+    runtime.with_call_shape(shape)
+}
+
+fn decode_compare_branch(
+    runtime: RuntimeInstruction,
+    index: usize,
+    instructions: &[Instruction],
+    labels: &LabelIndexMap,
+) -> RuntimeInstruction {
+    let Some(compare) = compare_op(runtime.opcode) else {
+        return runtime;
+    };
+    let Some(next) = instructions.get(index.saturating_add(1)) else {
+        return runtime;
+    };
+    if !matches!(next.opcode, Opcode::BrFalse) {
+        return runtime;
+    }
+    let Operand::Label(label) = next.operand else {
+        return runtime;
+    };
+    labels.get(&label).copied().map_or(runtime, |target| {
+        runtime.with_compare_branch(compare, target)
+    })
+}
+
+fn call_is_tail_position(
+    index: usize,
+    instructions: &[Instruction],
+    labels: &LabelIndexMap,
+) -> bool {
+    let next_index = index.saturating_add(1);
+    let Some(next) = instructions.get(next_index) else {
+        return false;
+    };
+    if matches!(next.opcode, Opcode::Ret) {
+        return true;
+    }
+    if !matches!(next.opcode, Opcode::Br) {
+        return false;
+    }
+    let Operand::Label(label) = next.operand else {
+        return false;
+    };
+    let Some(target) = labels.get(&label).copied() else {
+        return false;
+    };
+    instructions
+        .get(target)
+        .is_some_and(|instruction| matches!(instruction.opcode, Opcode::Ret))
+}
+
+const fn compare_op(opcode: Opcode) -> Option<CompareOp> {
+    match opcode {
+        Opcode::CmpEq => Some(CompareOp::Eq),
+        Opcode::CmpNe => Some(CompareOp::Ne),
+        Opcode::CmpLt => Some(CompareOp::Lt),
+        Opcode::CmpGt => Some(CompareOp::Gt),
+        Opcode::CmpLe => Some(CompareOp::Le),
+        Opcode::CmpGe => Some(CompareOp::Ge),
+        _ => None,
+    }
 }
 
 fn build_exports(artifact: &Artifact) -> (ExportMap, Box<[ProgramExport]>) {

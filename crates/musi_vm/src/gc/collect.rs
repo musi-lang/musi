@@ -1,17 +1,36 @@
-use crate::value::{GcRef, Value};
+use crate::value::GcRef;
+#[cfg(test)]
+use crate::value::Value;
+use smallvec::SmallVec;
 
 use super::heap::{HeapCollectionStats, RuntimeHeap};
 use super::space::HeapAllocation;
 
 impl RuntimeHeap {
+    #[cfg(test)]
     pub(crate) fn collect_from_roots<'a>(
         &mut self,
         roots: impl IntoIterator<Item = &'a Value>,
     ) -> HeapCollectionStats {
         for root in roots {
-            self.mark_value(root);
+            if let Some(reference) = root.gc_ref() {
+                self.mark_ref(reference);
+            }
         }
+        self.finish_collection()
+    }
 
+    pub(crate) fn collect_from_refs(
+        &mut self,
+        roots: impl IntoIterator<Item = GcRef>,
+    ) -> HeapCollectionStats {
+        for reference in roots {
+            self.mark_ref(reference);
+        }
+        self.finish_collection()
+    }
+
+    fn finish_collection(&mut self) -> HeapCollectionStats {
         let before_bytes = self.allocated_bytes;
         let before_objects = self.live_object_count();
         let mut reclaimed_objects = 0;
@@ -39,7 +58,11 @@ impl RuntimeHeap {
             slot.is_marked = false;
         }
         self.finish_line_sweep();
-        let evacuated_objects = self.evacuate_fragmented_blocks();
+        let evacuated_objects = if reclaimed_objects == 0 {
+            0
+        } else {
+            self.evacuate_fragmented_blocks()
+        };
         let free_blocks = self.free_blocks();
         HeapCollectionStats {
             before_bytes,
@@ -53,13 +76,6 @@ impl RuntimeHeap {
         }
     }
 
-    fn mark_value(&mut self, source: &Value) {
-        let Some(reference) = source.gc_ref() else {
-            return;
-        };
-        self.mark_ref(reference);
-    }
-
     fn mark_ref(&mut self, reference: GcRef) {
         let (allocation, children) = {
             let Ok(slot) = self.slot_mut(reference) else {
@@ -70,7 +86,7 @@ impl RuntimeHeap {
             }
             slot.is_marked = true;
             let allocation = slot.allocation;
-            let mut children = Vec::new();
+            let mut children = SmallVec::<[GcRef; 8]>::new();
             if let Some(object) = slot.object.as_ref() {
                 object.visit_children(|child| {
                     if let Some(reference) = child.gc_ref() {

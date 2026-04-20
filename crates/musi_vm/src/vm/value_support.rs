@@ -122,7 +122,6 @@ impl Vm {
             })?;
             *slot = value;
         }
-        self.heap.refresh_allocation(current)?;
         Ok(())
     }
 

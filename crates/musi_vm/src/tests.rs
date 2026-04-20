@@ -468,6 +468,36 @@ mod success {
     }
 
     #[test]
+    fn fuses_recursive_sum_loop() {
+        let program = compile_program(
+            &[(
+                "main",
+                r"
+            let rec sum (n : Int, acc : Int) : Int :=
+              match n (
+              | 0 => acc
+              | _ => sum(n - 1, acc + n)
+            );
+            export let answer (n : Int) : Int := sum(n, 0);
+        ",
+            )],
+            "main",
+        );
+        let mut vm = Vm::with_rejecting_host(program, VmOptions);
+        vm.initialize().expect("vm init should succeed");
+        let before = vm.executed_instructions();
+        let value = vm
+            .call_export("answer", &[Value::Int(200)])
+            .expect("sum should run");
+        let executed = vm.executed_instructions() - before;
+        assert_eq!(value, Value::Int(20_100));
+        assert!(
+            executed <= 220,
+            "recursive sum should stay fused: {executed}"
+        );
+    }
+
+    #[test]
     fn executes_record_projection_and_update() {
         let program = compile_program(
             &[(
@@ -678,6 +708,37 @@ mod success {
             Some(".True")
         );
         assert_eq!(ranged, Value::Int(2));
+    }
+
+    #[test]
+    fn streams_range_membership_without_materialized_sequence() {
+        let program = compile_program(
+            &[(
+                "main",
+                r#"
+            let Core := import "musi:core";
+            let Bool := Core.Bool;
+            let Int := Core.Int;
+            let Rangeable := Core.Rangeable;
+            export let answer () : Bool := 0 in (0 ..< 1000);
+        "#,
+            )],
+            "main",
+        );
+
+        let mut vm = Vm::with_rejecting_host(program, VmOptions);
+        vm.initialize().expect("vm init should succeed");
+        let before = vm.heap_allocated_bytes();
+        let value = vm
+            .call_export("answer", &[])
+            .expect("range membership call should succeed");
+        let after = vm.heap_allocated_bytes();
+
+        assert_eq!(
+            render_value_view(vm.inspect(&value)).as_deref(),
+            Some(".True")
+        );
+        assert!(after.saturating_sub(before) < 32 * 1024);
     }
 
     #[test]

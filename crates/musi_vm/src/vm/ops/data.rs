@@ -1,6 +1,6 @@
 use music_seam::{Instruction, Opcode, Operand};
 
-use super::{StepOutcome, Value, Vm, VmError, VmErrorKind, VmResult};
+use super::{StepOutcome, Value, ValueList, Vm, VmError, VmErrorKind, VmResult};
 
 impl Vm {
     pub(crate) fn exec_data(&mut self, instruction: &Instruction) -> VmResult<StepOutcome> {
@@ -11,15 +11,25 @@ impl Vm {
                 };
                 let tag_value = self.pop_value()?;
                 let tag = Self::expect_int(&tag_value)?;
-                let fields = self.pop_args(usize::from(len))?;
-                let value = self.alloc_data(ty, tag, fields)?;
+                let fields = if len == 1 {
+                    let mut fields = ValueList::new();
+                    fields.push(self.pop_value()?);
+                    fields
+                } else {
+                    self.pop_args(usize::from(len))?
+                };
+                let value = self.alloc_data_owned(ty, tag, fields)?;
                 self.push_value(value)?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::DataTag => {
                 let data_value = self.pop_value()?;
                 let data = Self::expect_data(data_value)?;
-                self.push_value(Value::Int(self.heap.data(data)?.tag))?;
+                let tag = self.heap.data(data)?.tag;
+                if self.try_branch_table_after_data_tag(tag)? {
+                    return Ok(StepOutcome::Continue);
+                }
+                self.push_value(Value::Int(tag))?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::DataGet => {

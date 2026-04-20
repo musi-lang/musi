@@ -1,19 +1,44 @@
 use music_seam::{Instruction, Opcode};
 
+use crate::VmValueKind;
+
 use super::{StepOutcome, Value, Vm, VmError, VmErrorKind, VmResult};
 
 impl Vm {
-    pub(crate) fn binary_int_op(&mut self, op: impl FnOnce(i64, i64) -> Option<i64>) -> VmResult {
+    fn pop_int_pair(&mut self) -> VmResult<(i64, i64)> {
         let right_value = self.pop_value()?;
-        let right = Self::expect_int(&right_value)?;
+        let right = match right_value {
+            Value::Int(value) => value,
+            Value::Nat(value) => i64::try_from(value)
+                .map_err(|_| Self::invalid_value_kind(VmValueKind::Int, &right_value))?,
+            _ => {
+                return Err(Self::invalid_value_kind(VmValueKind::Int, &right_value));
+            }
+        };
         let left_value = self.pop_value()?;
-        let left = Self::expect_int(&left_value)?;
+        let left = match left_value {
+            Value::Int(value) => value,
+            Value::Nat(value) => i64::try_from(value)
+                .map_err(|_| Self::invalid_value_kind(VmValueKind::Int, &left_value))?,
+            _ => {
+                return Err(Self::invalid_value_kind(VmValueKind::Int, &left_value));
+            }
+        };
+        Ok((left, right))
+    }
+
+    pub(crate) fn checked_int_op(
+        &mut self,
+        op: impl FnOnce(i64, i64) -> Option<i64>,
+    ) -> VmResult<StepOutcome> {
+        let (left, right) = self.pop_int_pair()?;
         let result = op(left, right).ok_or_else(|| {
             VmError::new(VmErrorKind::ArithmeticFailed {
                 detail: "signed integer overflow".into(),
             })
         })?;
-        self.push_value(Value::Int(result))
+        self.push_value(Value::Int(result))?;
+        Ok(StepOutcome::Continue)
     }
 
     pub(crate) fn binary_float_op(&mut self, op: impl FnOnce(f64, f64) -> f64) -> VmResult {
@@ -64,26 +89,11 @@ impl Vm {
 
     pub(crate) fn exec_scalar(&mut self, instruction: &Instruction) -> VmResult<StepOutcome> {
         match instruction.opcode {
-            Opcode::IAdd => {
-                self.binary_int_op(i64::checked_add)?;
-                Ok(StepOutcome::Continue)
-            }
-            Opcode::ISub => {
-                self.binary_int_op(i64::checked_sub)?;
-                Ok(StepOutcome::Continue)
-            }
-            Opcode::IMul => {
-                self.binary_int_op(i64::checked_mul)?;
-                Ok(StepOutcome::Continue)
-            }
-            Opcode::IDiv => {
-                self.binary_int_op(i64::checked_div)?;
-                Ok(StepOutcome::Continue)
-            }
-            Opcode::IRem => {
-                self.binary_int_op(i64::checked_rem)?;
-                Ok(StepOutcome::Continue)
-            }
+            Opcode::IAdd => self.checked_int_op(i64::checked_add),
+            Opcode::ISub => self.checked_int_op(i64::checked_sub),
+            Opcode::IMul => self.checked_int_op(i64::checked_mul),
+            Opcode::IDiv => self.checked_int_op(i64::checked_div),
+            Opcode::IRem => self.checked_int_op(i64::checked_rem),
             Opcode::FAdd => {
                 self.binary_float_op(|left, right| left + right)?;
                 Ok(StepOutcome::Continue)

@@ -2,7 +2,7 @@ use std::slice::from_ref;
 
 use music_seam::{Instruction, Opcode, Operand, TypeId};
 
-use super::{StepOutcome, Value, Vm, VmError, VmErrorKind, VmResult};
+use super::{GcRef, StepOutcome, Value, Vm, VmError, VmErrorKind, VmResult};
 use crate::VmValueKind;
 use crate::value::DataValue;
 
@@ -40,7 +40,7 @@ impl Vm {
             return Err(Self::invalid_operand(instruction));
         };
         let items = self.pop_args(usize::from(len))?;
-        let value = self.alloc_sequence(ty, items)?;
+        let value = self.alloc_sequence_owned(ty, items)?;
         self.push_value(value)?;
         Ok(StepOutcome::Continue)
     }
@@ -66,10 +66,18 @@ impl Vm {
         let Operand::I16(len) = instruction.operand else {
             return Err(Self::invalid_operand(instruction));
         };
-        let indices = self.pop_index_list(len)?;
-        let seq_value = self.pop_value()?;
-        let seq = Self::expect_seq(seq_value)?;
-        let value = self.get_nested_seq(seq, &indices)?;
+        let value = if len == 2 {
+            let second = self.pop_int_index()?;
+            let first = self.pop_int_index()?;
+            let seq_value = self.pop_value()?;
+            let seq = Self::expect_seq(seq_value)?;
+            self.get_nested_seq2(seq, first, second)?
+        } else {
+            let indices = self.pop_index_list(len)?;
+            let seq_value = self.pop_value()?;
+            let seq = Self::expect_seq(seq_value)?;
+            self.get_nested_seq(seq, &indices)?
+        };
         self.push_value(value)?;
         Ok(StepOutcome::Continue)
     }
@@ -90,7 +98,6 @@ impl Vm {
                 .ok_or_else(|| VmError::new(VmErrorKind::InvalidSequenceIndex { index, len }))?;
             *item = value;
         }
-        self.heap.refresh_allocation(seq)?;
         self.push_value(Value::Seq(seq))?;
         Ok(StepOutcome::Continue)
     }
@@ -100,10 +107,20 @@ impl Vm {
             return Err(Self::invalid_operand(instruction));
         };
         let value = self.pop_value()?;
-        let indices = self.pop_index_list(len)?;
-        let seq_value = self.pop_value()?;
-        let seq = Self::expect_seq(seq_value)?;
-        self.set_nested_seq(seq, &indices, value)?;
+        let seq = if len == 2 {
+            let second = self.pop_int_index()?;
+            let first = self.pop_int_index()?;
+            let seq_value = self.pop_value()?;
+            let seq = Self::expect_seq(seq_value)?;
+            self.set_nested_seq2(seq, first, second, value)?;
+            seq
+        } else {
+            let indices = self.pop_index_list(len)?;
+            let seq_value = self.pop_value()?;
+            let seq = Self::expect_seq(seq_value)?;
+            self.set_nested_seq(seq, &indices, value)?;
+            seq
+        };
         self.push_value(Value::Seq(seq))?;
         Ok(StepOutcome::Continue)
     }
@@ -158,9 +175,8 @@ impl Vm {
         let needle = self.pop_value()?;
         let range = self.pop_value()?;
         let evidence = self.pop_value()?;
-        let items = self.materialize_range_items(range, evidence)?;
         let module_slot = self.current_module_slot()?;
-        let contains = items.iter().any(|item| self.values_equal(item, &needle));
+        let contains = self.range_contains_value(range, evidence, &needle)?;
         let value = self.bool_value(module_slot, contains)?;
         self.push_value(value)?;
         Ok(StepOutcome::Continue)
@@ -179,14 +195,64 @@ impl Vm {
     fn exec_seq_has(&mut self) -> VmResult<StepOutcome> {
         let needle = self.pop_value()?;
         let seq_value = self.pop_value()?;
-        let contains = self
-            .expect_seq_items(seq_value)?
-            .iter()
-            .any(|item| self.values_equal(item, &needle));
+        let contains = match seq_value {
+            Value::Seq(seq) => self
+                .heap
+                .sequence(seq)?
+                .items
+                .iter()
+                .any(|item| self.values_equal(item, &needle)),
+            other => return Err(Self::invalid_value_kind(VmValueKind::Seq, &other)),
+        };
         let module_slot = self.current_module_slot()?;
         let value = self.bool_value(module_slot, contains)?;
         self.push_value(value)?;
         Ok(StepOutcome::Continue)
+    }
+
+    fn pop_int_index(&mut self) -> VmResult<i64> {
+        let index_value = self.pop_value()?;
+        Self::expect_int(&index_value)
+    }
+
+    fn get_nested_seq2(&self, seq: GcRef, first: i64, second: i64) -> VmResult<Value> {
+        let row = self.nested_row_seq(seq, first)?;
+        let row_ref = self.heap.sequence(row)?;
+        let len = row_ref.items.len();
+        let slot = usize::try_from(second).unwrap_or(usize::MAX);
+        row_ref
+            .items
+            .get(slot)
+            .cloned()
+            .ok_or_else(|| VmError::new(VmErrorKind::InvalidSequenceIndex { index: second, len }))
+    }
+
+    fn set_nested_seq2(&mut self, seq: GcRef, first: i64, second: i64, value: Value) -> VmResult {
+        let row = self.nested_row_seq(seq, first)?;
+        let row_ref = self.heap.sequence_mut(row)?;
+        let len = row_ref.items.len();
+        let slot = usize::try_from(second).unwrap_or(usize::MAX);
+        let field = row_ref.items.get_mut(slot).ok_or_else(|| {
+            VmError::new(VmErrorKind::InvalidSequenceIndex { len, index: second })
+        })?;
+        *field = value;
+        Ok(())
+    }
+
+    fn nested_row_seq(&self, seq: GcRef, index: i64) -> VmResult<GcRef> {
+        let seq_ref = self.heap.sequence(seq)?;
+        let len = seq_ref.items.len();
+        let slot = usize::try_from(index).unwrap_or(usize::MAX);
+        let Some(value) = seq_ref.items.get(slot) else {
+            return Err(VmError::new(VmErrorKind::InvalidSequenceIndex {
+                index,
+                len,
+            }));
+        };
+        match value {
+            Value::Seq(row) => Ok(*row),
+            other => Err(Self::invalid_value_kind(VmValueKind::Seq, other)),
+        }
     }
 
     fn expect_seq_items(&self, value: Value) -> VmResult<Vec<Value>> {
@@ -195,7 +261,9 @@ impl Vm {
             other => Err(Self::invalid_value_kind(VmValueKind::Seq, &other)),
         }
     }
+}
 
+impl Vm {
     fn decode_range_kind(flags: u16) -> VmResult<RuntimeRangeKind> {
         match flags {
             0 => Ok(RuntimeRangeKind::Open),
@@ -243,6 +311,48 @@ impl Vm {
             current = stepped;
         }
         Ok(items)
+    }
+
+    fn range_contains_value(
+        &mut self,
+        range: Value,
+        evidence: Value,
+        needle: &Value,
+    ) -> VmResult<bool> {
+        let (start, end, kind) = self.range_parts(range)?;
+        let (compare, next, prev) = self.range_dictionary(evidence)?;
+        let direction = self.compare_range_values(&compare, &start, &end)?;
+        let is_ascending = direction <= 0;
+        let step = if is_ascending { next } else { prev };
+        let mut current = start;
+        let mut visited = 0usize;
+        loop {
+            let cmp_to_end = self.compare_range_values(&compare, &current, &end)?;
+            let before_end = if is_ascending {
+                cmp_to_end < 0
+            } else {
+                cmp_to_end > 0
+            };
+            let at_end = cmp_to_end == 0;
+            let include_end = matches!(kind, RuntimeRangeKind::Closed | RuntimeRangeKind::Thru);
+            if !(before_end || include_end && at_end) {
+                return Ok(false);
+            }
+            if visited >= MAX_RANGE_MATERIALIZE_LEN {
+                return Err(VmError::new(VmErrorKind::RangeMaterializeTooLarge {
+                    len: visited.saturating_add(1),
+                    limit: MAX_RANGE_MATERIALIZE_LEN,
+                }));
+            }
+            if self.values_equal(&current, needle) {
+                return Ok(true);
+            }
+            visited = visited.saturating_add(1);
+            if at_end {
+                return Ok(false);
+            }
+            current = self.step_range_value(&step, &current, is_ascending, &compare)?;
+        }
     }
 
     fn range_parts(&self, range: Value) -> VmResult<(Value, Value, RuntimeRangeKind)> {

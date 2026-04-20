@@ -120,6 +120,8 @@ impl DataValue {
 pub struct ClosureValue {
     pub(crate) module_slot: usize,
     pub(crate) procedure: ProcedureId,
+    pub(crate) params: u16,
+    pub(crate) locals: u16,
     pub(crate) captures: ValueList,
 }
 
@@ -129,8 +131,27 @@ impl ClosureValue {
         Self {
             module_slot,
             procedure,
+            params: 0,
+            locals: 0,
             captures,
         }
+    }
+
+    #[must_use]
+    pub const fn with_shape(mut self, params: u16, locals: u16) -> Self {
+        self.params = params;
+        self.locals = locals;
+        self
+    }
+
+    #[must_use]
+    pub fn param_count(&self) -> usize {
+        usize::from(self.params)
+    }
+
+    #[must_use]
+    pub fn local_count(&self) -> usize {
+        usize::from(self.locals.max(self.params))
     }
 }
 
