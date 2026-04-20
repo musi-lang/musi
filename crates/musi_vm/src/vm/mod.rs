@@ -16,8 +16,8 @@ pub use super::{
     VmError, VmErrorKind, VmHost, VmResult, VmValueKind,
 };
 
-mod bound;
 mod alloc;
+mod bound;
 mod call;
 mod dispatch;
 mod exec_control;

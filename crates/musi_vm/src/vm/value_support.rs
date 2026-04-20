@@ -78,13 +78,10 @@ impl Vm {
         let mut current = seq;
         for (index_pos, index) in indices.iter().enumerate() {
             let next = {
-                let current_ref = self.heap.sequence(current)?;
                 let slot = usize::try_from(*index).unwrap_or(usize::MAX);
-                current_ref.items.get(slot).cloned().ok_or_else(|| {
-                    VmError::new(VmErrorKind::InvalidSequenceIndex {
-                        index: *index,
-                        len: current_ref.items.len(),
-                    })
+                let len = self.heap.sequence_len(current)?;
+                self.heap.sequence_get_cloned(current, slot).map_err(|_| {
+                    VmError::new(VmErrorKind::InvalidSequenceIndex { index: *index, len })
                 })?
             };
             if index_pos + 1 == indices.len() {
@@ -102,26 +99,19 @@ impl Vm {
         let mut current = seq;
         for index in prefix {
             let next = {
-                let current_ref = self.heap.sequence(current)?;
                 let slot = usize::try_from(*index).unwrap_or(usize::MAX);
-                current_ref.items.get(slot).cloned().ok_or_else(|| {
-                    VmError::new(VmErrorKind::InvalidSequenceIndex {
-                        index: *index,
-                        len: current_ref.items.len(),
-                    })
+                let len = self.heap.sequence_len(current)?;
+                self.heap.sequence_get_cloned(current, slot).map_err(|_| {
+                    VmError::new(VmErrorKind::InvalidSequenceIndex { index: *index, len })
                 })?
             };
             current = Self::expect_seq(next)?;
         }
-        {
-            let current_ref = self.heap.sequence_mut(current)?;
-            let len = current_ref.items.len();
-            let slot_index = usize::try_from(*last).unwrap_or(usize::MAX);
-            let slot = current_ref.items.get_mut(slot_index).ok_or_else(|| {
-                VmError::new(VmErrorKind::InvalidSequenceIndex { index: *last, len })
-            })?;
-            *slot = value;
-        }
+        let slot_index = usize::try_from(*last).unwrap_or(usize::MAX);
+        let len = self.heap.sequence_len(current)?;
+        self.heap
+            .sequence_set(current, slot_index, value)
+            .map_err(|_| VmError::new(VmErrorKind::InvalidSequenceIndex { index: *last, len }))?;
         Ok(())
     }
 
@@ -158,15 +148,14 @@ impl Vm {
             }
             (Value::Seq(left), Value::Seq(right)) => self
                 .heap
-                .sequence(*left)
+                .sequence_items_cloned(*left)
                 .ok()
-                .zip(self.heap.sequence(*right).ok())
+                .zip(self.heap.sequence_items_cloned(*right).ok())
                 .is_some_and(|(left, right)| {
-                    left.items.len() == right.items.len()
+                    left.len() == right.len()
                         && left
-                            .items
                             .iter()
-                            .zip(right.items.iter())
+                            .zip(right.iter())
                             .all(|(left, right)| self.values_equal(left, right))
                 }),
             (Value::Data(left), Value::Data(right)) => self

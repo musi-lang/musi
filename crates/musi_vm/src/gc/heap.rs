@@ -15,7 +15,7 @@ use crate::value::{
 };
 
 use super::error::{invalid_heap_ref, stale_heap_ref};
-use super::object::HeapObject;
+use super::object::{HeapObject, PackedSeq2x2, PackedSeq2x2Row};
 use super::space::{
     HeapAllocation, HeapSlot, HeapSpace, IMMIX_CARD_LINES, IMMIX_CARDS_PER_BLOCK, IMMIX_LINE_BYTES,
     IMMIX_LINES_PER_BLOCK, ImmixBlock,
@@ -102,6 +102,9 @@ impl RuntimeHeap {
         value: SequenceValue,
         options: &HeapOptions,
     ) -> VmResult<Value> {
+        if let Some(packed) = self.try_alloc_packed_seq2x2(&value, options)? {
+            return Ok(Value::Seq(packed));
+        }
         self.alloc_value(HeapObject::Seq(value), Value::Seq, options)
     }
 
@@ -160,6 +163,11 @@ impl RuntimeHeap {
         build: impl FnOnce(GcRef) -> Value,
         options: &HeapOptions,
     ) -> VmResult<Value> {
+        let reference = self.alloc_object_ref(object, options)?;
+        Ok(build(reference))
+    }
+
+    fn alloc_object_ref(&mut self, object: HeapObject, options: &HeapOptions) -> VmResult<GcRef> {
         let bytes = object.bytes();
         if options.max_object_bytes.is_some_and(|limit| bytes > limit) {
             return Err(VmError::new(VmErrorKind::HeapObjectTooLarge {
@@ -183,7 +191,75 @@ impl RuntimeHeap {
         }
         self.allocated_bytes = self.allocated_bytes.saturating_add(bytes);
         self.young_allocated_bytes = self.young_allocated_bytes.saturating_add(bytes);
-        Ok(build(GcRef::new(self.isolate, slot, generation)))
+        Ok(GcRef::new(self.isolate, slot, generation))
+    }
+
+    fn try_alloc_packed_seq2x2(
+        &mut self,
+        value: &SequenceValue,
+        options: &HeapOptions,
+    ) -> VmResult<Option<GcRef>> {
+        if value.items.len() != 2 {
+            return Ok(None);
+        }
+        let Value::Seq(first_row) = value.items[0] else {
+            return Ok(None);
+        };
+        let Value::Seq(second_row) = value.items[1] else {
+            return Ok(None);
+        };
+        let first_cells = self.seq_len2_int_cells(first_row)?;
+        let second_cells = self.seq_len2_int_cells(second_row)?;
+        let row_map = if first_row == second_row {
+            [0, 0]
+        } else {
+            [0, 1]
+        };
+        let dead = GcRef::new(self.isolate, usize::MAX, u32::MAX);
+        let grid_ref = self.alloc_object_ref(
+            HeapObject::PackedSeq2x2(PackedSeq2x2 {
+                ty: value.ty,
+                cells: [first_cells, second_cells],
+                row_refs: [dead; 2],
+                row_map,
+            }),
+            options,
+        )?;
+        let row0_ref = self.alloc_object_ref(
+            HeapObject::PackedSeq2x2Row(PackedSeq2x2Row {
+                ty: value.ty,
+                grid: grid_ref,
+                logical_row: 0,
+            }),
+            options,
+        )?;
+        let row1_ref = if first_row == second_row {
+            row0_ref
+        } else {
+            self.alloc_object_ref(
+                HeapObject::PackedSeq2x2Row(PackedSeq2x2Row {
+                    ty: value.ty,
+                    grid: grid_ref,
+                    logical_row: 1,
+                }),
+                options,
+            )?
+        };
+        let HeapObject::PackedSeq2x2(grid) = self.object_mut(grid_ref)? else {
+            return Ok(None);
+        };
+        grid.row_refs = [row0_ref, row1_ref];
+        Ok(Some(grid_ref))
+    }
+
+    fn seq_len2_int_cells(&self, reference: GcRef) -> VmResult<[i64; 2]> {
+        let sequence = self.sequence(reference)?;
+        if sequence.items.len() != 2 {
+            return Err(invalid_heap_ref(reference, "sequence(len=2)"));
+        }
+        let first = fast_int(&sequence.items[0])?;
+        let second = fast_int(&sequence.items[1])?;
+        Ok([first, second])
     }
 }
 
@@ -236,12 +312,175 @@ impl RuntimeHeap {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn sequence_mut(&mut self, reference: GcRef) -> VmResult<&mut SequenceValue> {
         self.mark_write_barrier(reference)?;
         match self.object_mut(reference)? {
             HeapObject::Seq(value) => Ok(value),
             _ => Err(invalid_heap_ref(reference, "sequence")),
         }
+    }
+
+    pub(crate) fn sequence_len(&self, reference: GcRef) -> VmResult<usize> {
+        match self.object(reference)? {
+            HeapObject::Seq(value) => Ok(value.items.len()),
+            HeapObject::PackedSeq2x2(_) | HeapObject::PackedSeq2x2Row(_) => Ok(2),
+            _ => Err(invalid_heap_ref(reference, "sequence")),
+        }
+    }
+
+    pub(crate) fn sequence_ty(&self, reference: GcRef) -> VmResult<TypeId> {
+        match self.object(reference)? {
+            HeapObject::Seq(value) => Ok(value.ty),
+            HeapObject::PackedSeq2x2(value) => Ok(value.ty),
+            HeapObject::PackedSeq2x2Row(value) => Ok(value.ty),
+            _ => Err(invalid_heap_ref(reference, "sequence")),
+        }
+    }
+
+    pub(crate) fn sequence_get_cloned(&self, reference: GcRef, index: usize) -> VmResult<Value> {
+        match self.object(reference)? {
+            HeapObject::Seq(value) => value.items.get(index).cloned().ok_or_else(|| {
+                VmError::new(VmErrorKind::InvalidSequenceIndex {
+                    index: i64::try_from(index).unwrap_or(i64::MAX),
+                    len: value.items.len(),
+                })
+            }),
+            HeapObject::PackedSeq2x2(value) => value
+                .row_refs
+                .get(index)
+                .copied()
+                .map(Value::Seq)
+                .ok_or_else(|| {
+                    VmError::new(VmErrorKind::InvalidSequenceIndex {
+                        index: i64::try_from(index).unwrap_or(i64::MAX),
+                        len: 2,
+                    })
+                }),
+            HeapObject::PackedSeq2x2Row(value) => {
+                if index >= 2 {
+                    return Err(VmError::new(VmErrorKind::InvalidSequenceIndex {
+                        index: i64::try_from(index).unwrap_or(i64::MAX),
+                        len: 2,
+                    }));
+                }
+                let grid = self.packed_grid(value.grid)?;
+                Ok(Value::Int(grid.cell_for(value.logical_row, index)))
+            }
+            _ => Err(invalid_heap_ref(reference, "sequence")),
+        }
+    }
+
+    pub(crate) fn sequence_set(
+        &mut self,
+        reference: GcRef,
+        index: usize,
+        value: Value,
+    ) -> VmResult {
+        self.mark_write_barrier(reference)?;
+        match self.object(reference)? {
+            HeapObject::PackedSeq2x2(_) => {
+                self.promote_packed_grid(reference)?;
+                return self.sequence_set(reference, index, value);
+            }
+            HeapObject::PackedSeq2x2Row(_) => {
+                if index >= 2 {
+                    return Err(VmError::new(VmErrorKind::InvalidSequenceIndex {
+                        index: i64::try_from(index).unwrap_or(i64::MAX),
+                        len: 2,
+                    }));
+                }
+                let int = fast_int(&value)?;
+                let HeapObject::PackedSeq2x2Row(row) = self.object(reference)? else {
+                    return Err(invalid_heap_ref(reference, "packed row"));
+                };
+                let grid_ref = row.grid;
+                let logical_row = row.logical_row;
+                let grid = self.packed_grid_mut(grid_ref)?;
+                grid.set_cell_for(logical_row, index, int);
+                return Ok(());
+            }
+            _ => {}
+        }
+        let HeapObject::Seq(sequence) = self.object_mut(reference)? else {
+            return Err(invalid_heap_ref(reference, "sequence"));
+        };
+        let len = sequence.items.len();
+        let Some(slot) = sequence.items.get_mut(index) else {
+            return Err(VmError::new(VmErrorKind::InvalidSequenceIndex {
+                index: i64::try_from(index).unwrap_or(i64::MAX),
+                len,
+            }));
+        };
+        *slot = value;
+        Ok(())
+    }
+
+    pub(crate) fn sequence_items_cloned(&self, reference: GcRef) -> VmResult<Vec<Value>> {
+        let len = self.sequence_len(reference)?;
+        (0..len)
+            .map(|index| self.sequence_get_cloned(reference, index))
+            .collect()
+    }
+
+    pub(crate) fn sequence_int_at(&self, reference: GcRef, index: usize) -> VmResult<i64> {
+        fast_int(&self.sequence_get_cloned(reference, index)?)
+    }
+
+    pub(crate) fn sequence_seq_at(&self, reference: GcRef, index: usize) -> VmResult<GcRef> {
+        match self.sequence_get_cloned(reference, index)? {
+            Value::Seq(reference) => Ok(reference),
+            other => Err(VmError::new(VmErrorKind::InvalidValueKind {
+                expected: Seq,
+                found: other.kind(),
+            })),
+        }
+    }
+
+    fn packed_grid(&self, reference: GcRef) -> VmResult<&PackedSeq2x2> {
+        match self.object(reference)? {
+            HeapObject::PackedSeq2x2(grid) => Ok(grid),
+            _ => Err(invalid_heap_ref(reference, "packed grid")),
+        }
+    }
+
+    fn packed_grid_mut(&mut self, reference: GcRef) -> VmResult<&mut PackedSeq2x2> {
+        match self.object_mut(reference)? {
+            HeapObject::PackedSeq2x2(grid) => Ok(grid),
+            _ => Err(invalid_heap_ref(reference, "packed grid")),
+        }
+    }
+
+    fn promote_packed_grid(&mut self, grid_ref: GcRef) -> VmResult {
+        let (ty, row_refs) = {
+            let grid = self.packed_grid(grid_ref)?;
+            (grid.ty, grid.row_refs)
+        };
+        let row0 = self.promote_packed_row_to_plain(row_refs[0])?;
+        let row1 = if row_refs[1] == row_refs[0] {
+            row0
+        } else {
+            self.promote_packed_row_to_plain(row_refs[1])?
+        };
+        let mut items = ValueList::new();
+        items.push(Value::Seq(row0));
+        items.push(Value::Seq(row1));
+        *self.object_mut(grid_ref)? = HeapObject::Seq(SequenceValue::new(ty, items));
+        Ok(())
+    }
+
+    fn promote_packed_row_to_plain(&mut self, row_ref: GcRef) -> VmResult<GcRef> {
+        let (ty, grid_ref, logical_row) = match self.object(row_ref)? {
+            HeapObject::PackedSeq2x2Row(row) => (row.ty, row.grid, row.logical_row),
+            HeapObject::Seq(_) => return Ok(row_ref),
+            _ => return Err(invalid_heap_ref(row_ref, "packed row")),
+        };
+        let grid = self.packed_grid(grid_ref)?;
+        let mut items = ValueList::new();
+        items.push(Value::Int(grid.cell_for(logical_row, 0)));
+        items.push(Value::Int(grid.cell_for(logical_row, 1)));
+        *self.object_mut(row_ref)? = HeapObject::Seq(SequenceValue::new(ty, items));
+        Ok(row_ref)
     }
 
     pub(crate) fn data(&self, reference: GcRef) -> VmResult<&DataValue> {
@@ -540,6 +779,32 @@ pub struct HeapCollectionStats {
 }
 
 impl RuntimeHeap {
+    pub(crate) fn fast_seq2_mutation_2x2_kernel(
+        &mut self,
+        grid: GcRef,
+        init_value: i16,
+        update_add: i16,
+    ) -> VmResult<i64> {
+        self.fast_seq2_mutation_2x2(
+            grid,
+            RuntimeSeq2Mutation {
+                grid_local: 0,
+                init_first: 0,
+                init_second: 1,
+                init_value,
+                update_target_first: 1,
+                update_target_second: 0,
+                update_source_first: 0,
+                update_source_second: 1,
+                update_add,
+                finish_left_first: 0,
+                finish_left_second: 1,
+                finish_right_first: 1,
+                finish_right_second: 0,
+            },
+        )
+    }
+
     pub(crate) fn fast_seq2_mutation(
         &mut self,
         grid: GcRef,
@@ -594,6 +859,17 @@ impl RuntimeHeap {
     }
 
     fn fast_seq2_mutation_2x2(&mut self, grid: GcRef, plan: RuntimeSeq2Mutation) -> VmResult<i64> {
+        if let HeapObject::PackedSeq2x2(packed) = self.object_mut(grid)? {
+            packed.set_cell_for(0, 1, i64::from(plan.init_value));
+            let source = packed.cell_for(0, 1);
+            let next = source
+                .checked_add(i64::from(plan.update_add))
+                .ok_or_else(arithmetic_overflow)?;
+            packed.set_cell_for(1, 0, next);
+            let left = packed.cell_for(0, 1);
+            let right = packed.cell_for(1, 0);
+            return left.checked_add(right).ok_or_else(arithmetic_overflow);
+        }
         let (row0, row1) = self.seq2_rows_2x2(grid)?;
         let (row0_items, row0_len) = self.sequence_items_mut_ptr(row0)?;
         let (row1_items, row1_len) = self.sequence_items_mut_ptr(row1)?;
@@ -628,32 +904,9 @@ impl RuntimeHeap {
     }
 
     fn seq2_rows_2x2(&self, grid: GcRef) -> VmResult<(GcRef, GcRef)> {
-        let outer = self.sequence(grid)?;
-        let first = outer.items.first().ok_or_else(|| {
-            VmError::new(VmErrorKind::InvalidSequenceIndex {
-                index: 0,
-                len: outer.items.len(),
-            })
-        })?;
-        let second = outer.items.get(1).ok_or_else(|| {
-            VmError::new(VmErrorKind::InvalidSequenceIndex {
-                index: 1,
-                len: outer.items.len(),
-            })
-        })?;
-        let Value::Seq(row0) = first else {
-            return Err(VmError::new(VmErrorKind::InvalidValueKind {
-                expected: Seq,
-                found: first.kind(),
-            }));
-        };
-        let Value::Seq(row1) = second else {
-            return Err(VmError::new(VmErrorKind::InvalidValueKind {
-                expected: Seq,
-                found: second.kind(),
-            }));
-        };
-        Ok((*row0, *row1))
+        let row0 = self.sequence_seq_at(grid, 0)?;
+        let row1 = self.sequence_seq_at(grid, 1)?;
+        Ok((row0, row1))
     }
 
     fn sequence_items_mut_ptr(&mut self, reference: GcRef) -> VmResult<(*mut Value, usize)> {

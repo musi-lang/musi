@@ -61,6 +61,11 @@ pub enum RuntimeKernel {
         source: u16,
         smi: i16,
     },
+    Seq2Mutation2x2 {
+        grid_local: u16,
+        init_value: i16,
+        update_add: i16,
+    },
     Seq2Mutation(RuntimeSeq2Mutation),
     InlineEffectResume {
         resume_value: i16,

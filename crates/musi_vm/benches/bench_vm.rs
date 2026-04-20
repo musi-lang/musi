@@ -28,8 +28,7 @@ fn initialized_vm(program: &Program, options: VmOptions) -> Vm {
 }
 
 fn bind_answer(vm: &mut Vm) -> BoundExport {
-    vm.bind_export("answer")
-        .expect("answer export should bind")
+    vm.bind_export("answer").expect("answer export should bind")
 }
 
 fn int_grid(vm: &mut Vm) -> Value {
@@ -57,7 +56,9 @@ fn bench_answer_with_int_arg(
 
     _ = c.bench_function(name, |b| {
         b.iter(|| {
-            let result = vm.call1_i64_i64(black_box(&answer), black_box(arg)).expect(failure);
+            let result = vm
+                .call1_i64_i64(black_box(&answer), black_box(arg))
+                .expect(failure);
             black_box(result)
         });
     });

@@ -38,25 +38,25 @@ These stay outside cross-runtime comparison unless an honest behavioral equivale
 
 ## Current Baseline
 
-Recorded on 2026-04-20 from the VM performance working tree based on `659f8ff5` on MacBook Pro `MacBookPro18,2`, Apple M1 Max, 10 cores, 32 GB, macOS 26.4.1 arm64. Rust used `cargo 1.95.0`; Java used OpenJDK `17.0.18`; Scala used Scala CLI `1.13.0`; .NET SDK was `10.0.202`; CLR runtime reported by the benches was `8.0.26`.
+Recorded on 2026-04-20 from the VM performance working tree based on `01730e70` on MacBook Pro `MacBookPro18,2`, Apple M1 Max, 10 cores, 32 GB, macOS 26.4.1 arm64. Rust used `cargo 1.95.0`; Java used OpenJDK `17.0.18`; Scala used Scala CLI `1.13.0`; .NET SDK was `10.0.202`; CLR runtime reported by the benches was `8.0.26`.
 
-Do not mix historical C# interpreter data with this multi-VM table. Values are point estimates from a full local run. Musi SEAM values are Criterion mean point estimates from `estimates.json`. Lower is better. Musi currently uses SEAM bytecode plus tiered runtime kernels for recognized hot procedure shapes. `init_small_module` now measures initialize-phase cost only; VM construction moved to Musi-only `construct_small_vm`.
+Do not mix historical C# interpreter data with this multi-VM table. Values are point estimates from local runs. Peer values below come from the latest `make bench-vms` run; Musi values were refreshed with `make bench-vm` in this pass using Criterion mean point estimates from `estimates.json`. Lower is better. Musi currently uses SEAM bytecode plus tiered runtime kernels for recognized hot procedure shapes. `init_small_module` now measures initialize-phase cost only; VM construction moved to Musi-only `construct_small_vm`.
 
 | Workload                   |     Java 17 |    Scala 3 |     C# .NET 8 |  F# .NET 8 |  Musi SEAM | Musi vs best peer |
 | -------------------------- | ----------: | ---------: | ------------: | ---------: | ---------: | ----------------: |
-| `init_small_module`        |   5.4 ns/op |  7.1 ns/op |     8.1 ns/op | 10.3 ns/op | 53.0 ns/op |              9.8x |
-| `scalar_recursive_sum`     | 439.7 ns/op | 52.8 ns/op | 1,404.4 ns/op | 88.7 ns/op | 31.9 ns/op |              0.6x |
-| `closure_capture`          |   6.0 ns/op |  7.3 ns/op |    18.7 ns/op |  5.3 ns/op | 16.7 ns/op |              3.2x |
-| `sequence_index_mutation`  |   7.2 ns/op |  7.1 ns/op |     6.5 ns/op |  9.8 ns/op | 72.5 ns/op |             11.2x |
-| `data_match_option`        |   7.1 ns/op |  7.1 ns/op |     9.3 ns/op |  2.6 ns/op | 14.5 ns/op |              5.6x |
-| `effect_resume_equivalent` |   7.1 ns/op |  7.1 ns/op |     9.0 ns/op |  8.3 ns/op | 10.9 ns/op |              1.5x |
+| `init_small_module`        |   5.4 ns/op |  7.1 ns/op |     8.1 ns/op | 10.1 ns/op | 51.3 ns/op |              9.5x |
+| `scalar_recursive_sum`     | 437.3 ns/op | 52.7 ns/op | 1,397.2 ns/op | 88.5 ns/op | 28.2 ns/op |              0.5x |
+| `closure_capture`          |   5.9 ns/op |  7.1 ns/op |    18.5 ns/op |  5.3 ns/op |  3.5 ns/op |              0.7x |
+| `sequence_index_mutation`  |   7.1 ns/op |  7.2 ns/op |     6.5 ns/op |  9.8 ns/op | 22.3 ns/op |              3.4x |
+| `data_match_option`        |   7.2 ns/op |  7.1 ns/op |     9.9 ns/op |  2.6 ns/op |  3.5 ns/op |              1.3x |
+| `effect_resume_equivalent` |   7.1 ns/op |  7.1 ns/op |     9.0 ns/op |  8.3 ns/op |  7.5 ns/op |              1.1x |
 
 ## Current Musi-Only Baseline
 
 | Workload                    |     Musi SEAM |
 | --------------------------- | ------------: |
-| `construct_small_vm`        |    37.9 ns/op |
-| `gc_stress_sequence_return` | 1,422.0 ns/op |
+| `construct_small_vm`        |    36.4 ns/op |
+| `gc_stress_sequence_return` | 1,393.9 ns/op |
 
 ## Validation Baseline
 
@@ -65,8 +65,7 @@ Do not mix historical C# interpreter data with this multi-VM table. Values are p
 | `rtk cargo test -p musi_vm` | PASS   |
 | `rtk make lint`             | PASS   |
 | `rtk make test`             | PASS   |
-| `rtk make bench-vms`        | PASS   |
-| `rtk make bench-vms-smoke`  | PASS   |
+| `rtk make bench-vm`         | PASS   |
 
 ## Garbage Collector Direction
 
@@ -94,7 +93,7 @@ Implementation checkpoints:
 ## Optimization Queue
 
 1. Initialization: reduce module/closure export setup overhead and repeated heap-root retention.
-2. Sequence mutation: reduce nested sequence lookup and repeated bounds validation now that benchmark setup allocation is removed.
+2. Sequence mutation: keep pushing packed `[2][2]Int` path and reduce remaining non-packed fallback overhead.
 3. Closure/data/effect kernels: keep scalar recursion, closure capture, data match, and inline effect resume fast while expanding only semantics-proven shapes.
 4. Immix GC: allocation fast path, line/block metadata, root tracing, sweep, and reuse.
 5. Generic effects: optimize continuation allocation, handler dispatch, and resume value flow without changing handler reuse semantics.

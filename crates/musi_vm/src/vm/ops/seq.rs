@@ -3,8 +3,8 @@ use std::slice::from_ref;
 use music_seam::{Instruction, Opcode, Operand, TypeId};
 
 use super::{
-    GcRef, RuntimeInstruction, RuntimeOperand, StepOutcome, Value, Vm, VmError, VmErrorKind,
-    VmResult,
+    GcRef, RuntimeInstruction, RuntimeOperand, StepOutcome, Value, ValueList, Vm, VmError,
+    VmErrorKind, VmResult,
 };
 use crate::VmValueKind;
 use crate::value::DataValue;
@@ -97,14 +97,12 @@ impl Vm {
         let index = Self::expect_int(&index_value)?;
         let seq_value = self.pop_value()?;
         let seq = Self::expect_seq(seq_value)?;
-        let seq_ref = self.heap.sequence(seq)?;
         let slot = usize::try_from(index).unwrap_or(usize::MAX);
-        let value = seq_ref.items.get(slot).cloned().ok_or_else(|| {
-            VmError::new(VmErrorKind::InvalidSequenceIndex {
-                index,
-                len: seq_ref.items.len(),
-            })
-        })?;
+        let len = self.heap.sequence_len(seq)?;
+        let value = self
+            .heap
+            .sequence_get_cloned(seq, slot)
+            .map_err(|_| VmError::new(VmErrorKind::InvalidSequenceIndex { index, len }))?;
         self.push_value(value)?;
         Ok(StepOutcome::Continue)
     }
@@ -132,16 +130,11 @@ impl Vm {
         let index = Self::expect_int(&index_value)?;
         let seq_value = self.pop_value()?;
         let seq = Self::expect_seq(seq_value)?;
-        {
-            let seq_mut = self.heap.sequence_mut(seq)?;
-            let len = seq_mut.items.len();
-            let slot = usize::try_from(index).unwrap_or(usize::MAX);
-            let item = seq_mut
-                .items
-                .get_mut(slot)
-                .ok_or_else(|| VmError::new(VmErrorKind::InvalidSequenceIndex { index, len }))?;
-            *item = value;
-        }
+        let len = self.heap.sequence_len(seq)?;
+        let slot = usize::try_from(index).unwrap_or(usize::MAX);
+        self.heap
+            .sequence_set(seq, slot, value)
+            .map_err(|_| VmError::new(VmErrorKind::InvalidSequenceIndex { index, len }))?;
         self.push_value(Value::Seq(seq))?;
         Ok(StepOutcome::Continue)
     }
@@ -171,10 +164,9 @@ impl Vm {
         let right_items = self.expect_seq_items(right_value)?;
         let left_value = self.pop_value()?;
         let left = Self::expect_seq(left_value)?;
-        let left = self.heap.sequence(left)?;
-        let mut items = left.items.clone();
+        let mut items: ValueList = self.heap.sequence_items_cloned(left)?.into_iter().collect();
         items.extend(right_items);
-        let value = self.alloc_sequence(left.ty, items)?;
+        let value = self.alloc_sequence(self.heap.sequence_ty(left)?, items)?;
         self.push_value(value)?;
         Ok(StepOutcome::Continue)
     }
@@ -182,7 +174,7 @@ impl Vm {
     fn exec_seq_len(&mut self) -> VmResult<StepOutcome> {
         let seq_value = self.pop_value()?;
         let seq = Self::expect_seq(seq_value)?;
-        let len = i64::try_from(self.heap.sequence(seq)?.items.len()).unwrap_or(i64::MAX);
+        let len = i64::try_from(self.heap.sequence_len(seq)?).unwrap_or(i64::MAX);
         self.push_value(Value::Int(len))?;
         Ok(StepOutcome::Continue)
     }
@@ -239,8 +231,7 @@ impl Vm {
         let contains = match seq_value {
             Value::Seq(seq) => self
                 .heap
-                .sequence(seq)?
-                .items
+                .sequence_items_cloned(seq)?
                 .iter()
                 .any(|item| self.values_equal(item, &needle)),
             other => return Err(Self::invalid_value_kind(VmValueKind::Seq, &other)),
@@ -258,39 +249,32 @@ impl Vm {
 
     fn get_nested_seq2(&self, seq: GcRef, first: i64, second: i64) -> VmResult<Value> {
         let row = self.nested_row_seq(seq, first)?;
-        let row_ref = self.heap.sequence(row)?;
-        let len = row_ref.items.len();
+        let len = self.heap.sequence_len(row)?;
         let slot = usize::try_from(second).unwrap_or(usize::MAX);
-        row_ref
-            .items
-            .get(slot)
-            .cloned()
-            .ok_or_else(|| VmError::new(VmErrorKind::InvalidSequenceIndex { index: second, len }))
+        self.heap
+            .sequence_get_cloned(row, slot)
+            .map_err(|_| VmError::new(VmErrorKind::InvalidSequenceIndex { index: second, len }))
     }
 
     fn set_nested_seq2(&mut self, seq: GcRef, first: i64, second: i64, value: Value) -> VmResult {
         let row = self.nested_row_seq(seq, first)?;
-        let row_ref = self.heap.sequence_mut(row)?;
-        let len = row_ref.items.len();
+        let len = self.heap.sequence_len(row)?;
         let slot = usize::try_from(second).unwrap_or(usize::MAX);
-        let field = row_ref.items.get_mut(slot).ok_or_else(|| {
-            VmError::new(VmErrorKind::InvalidSequenceIndex { len, index: second })
-        })?;
-        *field = value;
-        Ok(())
+        self.heap
+            .sequence_set(row, slot, value)
+            .map_err(|_| VmError::new(VmErrorKind::InvalidSequenceIndex { len, index: second }))
     }
 
     fn nested_row_seq(&self, seq: GcRef, index: i64) -> VmResult<GcRef> {
-        let seq_ref = self.heap.sequence(seq)?;
-        let len = seq_ref.items.len();
+        let len = self.heap.sequence_len(seq)?;
         let slot = usize::try_from(index).unwrap_or(usize::MAX);
-        let Some(value) = seq_ref.items.get(slot) else {
+        let Ok(value) = self.heap.sequence_get_cloned(seq, slot) else {
             return Err(VmError::new(VmErrorKind::InvalidSequenceIndex {
                 index,
                 len,
             }));
         };
-        match value {
+        match &value {
             Value::Seq(row) => Ok(*row),
             other => Err(Self::invalid_value_kind(VmValueKind::Seq, other)),
         }
@@ -298,7 +282,7 @@ impl Vm {
 
     fn expect_seq_items(&self, value: Value) -> VmResult<Vec<Value>> {
         match value {
-            Value::Seq(seq) => Ok(self.heap.sequence(seq)?.items.iter().cloned().collect()),
+            Value::Seq(seq) => self.heap.sequence_items_cloned(seq),
             other => Err(Self::invalid_value_kind(VmValueKind::Seq, &other)),
         }
     }

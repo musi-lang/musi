@@ -25,7 +25,7 @@ impl Vm {
             "Syntax" => matches!(value, Value::Syntax(_)),
             "Module" => matches!(value, Value::Module(_)),
             _ => match value {
-                Value::Seq(seq) => self.heap.sequence(*seq).is_ok_and(|seq| seq.ty == ty),
+                Value::Seq(seq) => self.heap.sequence_ty(*seq).is_ok_and(|seq_ty| seq_ty == ty),
                 Value::Data(data) => self.heap.data(*data).is_ok_and(|data| data.ty == ty),
                 Value::Type(id) => *id == ty,
                 _ => false,

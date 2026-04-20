@@ -68,7 +68,13 @@ impl Vm {
     ///
     /// Returns [`VmError`] if entry execution fails.
     pub fn initialize(&mut self) -> VmResult {
-        let _ = &self.options;
+        if self
+            .loaded_modules
+            .first()
+            .is_some_and(LoadedModule::is_initialized)
+        {
+            return Ok(());
+        }
         self.initialize_slot(0)
     }
 

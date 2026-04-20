@@ -2,6 +2,8 @@ use music_seam::{ClassId, EffectId, ForeignId, ProcedureId, TypeId};
 use music_term::SyntaxTerm;
 use smallvec::SmallVec;
 
+use crate::gc::RuntimeHeap;
+
 use super::VmValueKind;
 
 pub type ValueList = SmallVec<[Value; 8]>;
@@ -480,33 +482,46 @@ impl<'a> ForeignView<'a> {
 
 #[derive(Debug)]
 pub struct SeqView<'a> {
-    pub(crate) inner: &'a SequenceValue,
+    pub(crate) heap: &'a RuntimeHeap,
+    pub(crate) reference: GcRef,
 }
 
 impl<'a> SeqView<'a> {
     #[must_use]
-    pub const fn new(inner: &'a SequenceValue) -> Self {
-        Self { inner }
+    pub const fn new(heap: &'a RuntimeHeap, reference: GcRef) -> Self {
+        Self { heap, reference }
     }
 
     #[must_use]
-    pub const fn ty(&self) -> TypeId {
-        self.inner.ty
+    ///
+    /// # Panics
+    ///
+    /// Panics when sequence reference is stale or collected.
+    pub fn ty(&self) -> TypeId {
+        self.heap
+            .sequence_ty(self.reference)
+            .expect("live sequence")
     }
 
     #[must_use]
+    ///
+    /// # Panics
+    ///
+    /// Panics when sequence reference is stale or collected.
     pub fn len(&self) -> usize {
-        self.inner.items.len()
+        self.heap
+            .sequence_len(self.reference)
+            .expect("live sequence")
     }
 
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.inner.items.is_empty()
+        self.len() == 0
     }
 
     #[must_use]
-    pub fn get(&self, index: usize) -> Option<&Value> {
-        self.inner.items.get(index)
+    pub fn get(&self, index: usize) -> Option<Value> {
+        self.heap.sequence_get_cloned(self.reference, index).ok()
     }
 }
 

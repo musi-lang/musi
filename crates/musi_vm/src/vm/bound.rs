@@ -46,7 +46,17 @@ impl Vm {
     ///
     /// Returns [`VmError`] when invocation fails or result is not integer-like.
     pub fn call0_i64(&mut self, export: &BoundExport) -> VmResult<i64> {
-        let value = self.call_bound_fast(export, &[])?;
+        if let BoundExportKind::Kernel {
+            module_slot,
+            kernel,
+        } = export.kind
+        {
+            self.count_instruction();
+            if let Some(value) = self.exec_runtime_kernel(module_slot, kernel, &[])? {
+                return int_like_result(value);
+            }
+        }
+        let value = self.call_value(export.value.clone(), &[])?;
         int_like_result(value)
     }
 
@@ -57,7 +67,20 @@ impl Vm {
     /// Returns [`VmError`] when invocation fails or result is not integer-like.
     pub fn call1_i64_i64(&mut self, export: &BoundExport, arg: i64) -> VmResult<i64> {
         let args = [Value::Int(arg)];
-        let value = self.call_bound_fast(export, &args)?;
+        if let BoundExportKind::Kernel {
+            module_slot,
+            kernel,
+        } = export.kind
+        {
+            self.count_instruction();
+            if let Some(value) = self.exec_runtime_kernel_i64_arg(module_slot, kernel, arg)? {
+                return Ok(value);
+            }
+            if let Some(value) = self.exec_runtime_kernel(module_slot, kernel, &args)? {
+                return int_like_result(value);
+            }
+        }
+        let value = self.call_value(export.value.clone(), &args)?;
         int_like_result(value)
     }
 
@@ -68,22 +91,21 @@ impl Vm {
     /// Returns [`VmError`] when invocation fails or result is not integer-like.
     pub fn call1_seq_i64(&mut self, export: &BoundExport, arg: GcRef) -> VmResult<i64> {
         let args = [Value::Seq(arg)];
-        let value = self.call_bound_fast(export, &args)?;
-        int_like_result(value)
-    }
-
-    fn call_bound_fast(&mut self, export: &BoundExport, args: &[Value]) -> VmResult<Value> {
         if let BoundExportKind::Kernel {
             module_slot,
             kernel,
         } = export.kind
         {
             self.count_instruction();
-            if let Some(value) = self.exec_runtime_kernel(module_slot, kernel, args)? {
+            if let Some(value) = self.exec_runtime_kernel_seq_arg(kernel, arg)? {
                 return Ok(value);
             }
+            if let Some(value) = self.exec_runtime_kernel(module_slot, kernel, &args)? {
+                return int_like_result(value);
+            }
         }
-        self.call_value(export.value.clone(), args)
+        let value = self.call_value(export.value.clone(), &args)?;
+        int_like_result(value)
     }
 
     fn bound_export_kind_for(&self, value: &Value) -> VmResult<BoundExportKind> {

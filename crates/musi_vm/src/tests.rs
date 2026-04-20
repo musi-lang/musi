@@ -510,7 +510,7 @@ mod success {
             .expect("answer should load");
         assert!(matches!(
             answer.runtime_kernel(),
-            Some(RuntimeKernel::Seq2Mutation { .. })
+            Some(RuntimeKernel::Seq2Mutation2x2 { .. } | RuntimeKernel::Seq2Mutation(_))
         ));
         assert!(answer.runtime_instructions.iter().any(|instruction| {
             matches!(
@@ -659,9 +659,7 @@ mod success {
         );
 
         let bound = vm.bind_export("answer").expect("answer should bind");
-        let value = vm
-            .call1_i64_i64(&bound, 200)
-            .expect("typed sum should run");
+        let value = vm.call1_i64_i64(&bound, 200).expect("typed sum should run");
         assert_eq!(value, 20_100);
     }
 

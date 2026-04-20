@@ -680,32 +680,30 @@ impl Vm {
 
     fn seq2_int(&self, seq: GcRef, first: i64, second: i64) -> VmResult<i64> {
         let row = self.seq2_row(seq, first)?;
-        let row_ref = self.heap.sequence(row)?;
-        let slot = sequence_index(second, row_ref.items.len())?;
-        int_from_value(&row_ref.items[slot])
+        let len = self.heap.sequence_len(row)?;
+        let slot = sequence_index(second, len)?;
+        self.heap.sequence_int_at(row, slot)
     }
 
     fn set_seq2(&mut self, seq: GcRef, first: i64, second: i64, value: Value) -> VmResult {
         let row = self.seq2_row(seq, first)?;
-        let row_ref = self.heap.sequence_mut(row)?;
-        let slot = sequence_index(second, row_ref.items.len())?;
-        row_ref.items[slot] = value;
-        Ok(())
+        let len = self.heap.sequence_len(row)?;
+        let slot = sequence_index(second, len)?;
+        self.heap.sequence_set(row, slot, value)
     }
 
     fn seq2_row(&self, seq: GcRef, first: i64) -> VmResult<GcRef> {
-        let seq_ref = self.heap.sequence(seq)?;
-        let len = seq_ref.items.len();
+        let len = self.heap.sequence_len(seq)?;
         let slot = usize::try_from(first).unwrap_or(usize::MAX);
-        let Some(value) = seq_ref.items.get(slot) else {
+        let Ok(value) = self.heap.sequence_get_cloned(seq, slot) else {
             return Err(VmError::new(VmErrorKind::InvalidSequenceIndex {
                 index: first,
                 len,
             }));
         };
         match value {
-            Value::Seq(row) => Ok(*row),
-            other => Err(Self::invalid_value_kind(VmValueKind::Seq, other)),
+            Value::Seq(row) => Ok(row),
+            other => Err(Self::invalid_value_kind(VmValueKind::Seq, &other)),
         }
     }
 

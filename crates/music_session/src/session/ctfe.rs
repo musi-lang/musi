@@ -310,7 +310,6 @@ fn seq_to_comptime(
     let items = (0..seq.len())
         .map(|index| {
             seq.get(index)
-                .cloned()
                 .ok_or_else(|| "sequence item missing".into())
                 .and_then(|item| value_to_comptime(root_key, vm, &item))
         })

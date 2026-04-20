@@ -248,13 +248,18 @@ impl LoadedModule {
         let (globals, state) = program.global_init_image().map_or_else(
             || {
                 (
-                    ModuleGlobals::Owned(
-                        Box::new(repeat_n(Value::Unit, program.artifact().globals.len()).collect()),
-                    ),
+                    ModuleGlobals::Owned(Box::new(
+                        repeat_n(Value::Unit, program.artifact().globals.len()).collect(),
+                    )),
                     ModuleState::Uninitialized,
                 )
             },
-            |image| (ModuleGlobals::Shared(Arc::clone(image)), ModuleState::Initialized),
+            |image| {
+                (
+                    ModuleGlobals::Shared(Arc::clone(image)),
+                    ModuleState::Initialized,
+                )
+            },
         );
         Self {
             spec: spec.into(),

@@ -421,9 +421,9 @@ mod success {
             panic!("answer should return sequence");
         };
         assert_eq!(seq.len(), 3);
-        assert_eq!(seq.get(0), Some(&Value::Int(1)));
-        assert_eq!(seq.get(1), Some(&Value::Int(2)));
-        assert_eq!(seq.get(2), Some(&Value::Int(3)));
+        assert_eq!(seq.get(0), Some(Value::Int(1)));
+        assert_eq!(seq.get(1), Some(Value::Int(2)));
+        assert_eq!(seq.get(2), Some(Value::Int(3)));
     }
 
     #[test]
