@@ -5,6 +5,7 @@ mod gc;
 mod host;
 mod loader;
 pub(crate) mod program;
+mod program_kernel;
 mod types;
 pub(crate) mod value;
 mod vm;

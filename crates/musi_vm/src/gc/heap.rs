@@ -243,31 +243,6 @@ impl RuntimeHeap {
         }
     }
 
-    pub(crate) fn refresh_allocation(&mut self, reference: GcRef) -> VmResult {
-        let new_bytes = self.object(reference)?.bytes();
-        let old_bytes = self.slot(reference)?.bytes;
-        if old_bytes == new_bytes {
-            return Ok(());
-        }
-        if new_bytes > old_bytes {
-            self.allocated_bytes = self
-                .allocated_bytes
-                .saturating_add(new_bytes.saturating_sub(old_bytes));
-        } else {
-            self.allocated_bytes = self
-                .allocated_bytes
-                .saturating_sub(old_bytes.saturating_sub(new_bytes));
-        }
-        let old_allocation = self.slot(reference)?.allocation;
-        let line_count = new_bytes.div_ceil(IMMIX_LINE_BYTES).max(1);
-        let allocation = self.allocate(line_count.saturating_mul(IMMIX_LINE_BYTES));
-        self.release_allocation(old_allocation);
-        let slot = self.slot_mut(reference)?;
-        slot.bytes = new_bytes;
-        slot.allocation = allocation;
-        Ok(())
-    }
-
     pub(super) fn slot(&self, reference: GcRef) -> VmResult<&HeapSlot> {
         let slot = self
             .slots

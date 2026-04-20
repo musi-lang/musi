@@ -3,7 +3,7 @@ use music_seam::{Instruction, Opcode, Operand, ProcedureId};
 use crate::value::{ForeignValue, GcRef};
 use crate::{VmStackKind, VmValueKind};
 
-use crate::vm::RuntimeCallShape;
+use crate::vm::{RuntimeCallShape, RuntimeInstruction, RuntimeOperand};
 
 use super::{StepOutcome, Value, Vm, VmError, VmErrorKind, VmResult};
 
@@ -18,6 +18,41 @@ impl Vm {
             Opcode::Ret => self.return_from_frame(),
             Opcode::ClsNew => self.exec_closure_new(instruction),
             _ => Err(Self::invalid_dispatch(instruction, "call")),
+        }
+    }
+
+    pub(crate) fn exec_fast_call_edge(
+        &mut self,
+        runtime: &RuntimeInstruction,
+    ) -> VmResult<StepOutcome> {
+        match runtime.opcode {
+            Opcode::CallSeq => {
+                let RuntimeOperand::Procedure(procedure) = runtime.operand else {
+                    let instruction = self.current_raw_instruction(runtime.raw_index)?;
+                    return Err(Self::invalid_operand(&instruction));
+                };
+                let module_slot = self.current_module_slot()?;
+                let args = self.pop_seq_args()?;
+                self.push_frame(module_slot, procedure, args)?;
+                Ok(StepOutcome::Continue)
+            }
+            Opcode::CallCls => self.exec_closure_call(),
+            Opcode::CallClsSeq => self.exec_seq_closure_call(),
+            Opcode::ClsNew => {
+                let RuntimeOperand::WideProcedureCaptures {
+                    procedure,
+                    captures,
+                } = runtime.operand
+                else {
+                    let instruction = self.current_raw_instruction(runtime.raw_index)?;
+                    return Err(Self::invalid_operand(&instruction));
+                };
+                self.exec_closure_new_with_parts(procedure, captures)
+            }
+            _ => {
+                let instruction = self.current_raw_instruction(runtime.raw_index)?;
+                Err(Self::invalid_dispatch(&instruction, "call"))
+            }
         }
     }
 
@@ -116,6 +151,14 @@ impl Vm {
         else {
             return Err(Self::invalid_operand(instruction));
         };
+        self.exec_closure_new_with_parts(procedure, captures)
+    }
+
+    fn exec_closure_new_with_parts(
+        &mut self,
+        procedure: ProcedureId,
+        captures: u8,
+    ) -> VmResult<StepOutcome> {
         let module_slot = self.current_module_slot()?;
         let capture_count = usize::from(captures);
         let captures = self.pop_args(capture_count)?;

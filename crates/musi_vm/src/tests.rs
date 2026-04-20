@@ -7,13 +7,14 @@ use std::thread::spawn;
 
 use crate::gc::{HeapOptions, RuntimeHeap};
 use crate::value::SequenceValue;
+use crate::vm::{RuntimeFusedOp, RuntimeKernel};
 use musi_foundation::register_modules;
 use music_module::ModuleKey;
 use music_seam::descriptor::{
     DataDescriptor, DataVariantDescriptor, ProcedureDescriptor, TypeDescriptor,
 };
 use music_seam::{Artifact, CodeEntry, Instruction, Opcode, Operand};
-use music_seam::{StringId, TypeId};
+use music_seam::{ProcedureId, StringId, TypeId};
 use music_session::{Session, SessionOptions};
 use music_term::{TypeTerm, TypeTermKind};
 
@@ -259,7 +260,6 @@ mod success {
             &[("main", "export let answer () : [2]Int := [1, 2];")],
             "main",
         );
-
         let mut vm = Vm::with_rejecting_host(program, VmOptions);
         vm.initialize().expect("vm init should succeed");
         let value = vm
@@ -290,7 +290,6 @@ mod success {
             )],
             "main",
         );
-
         let mut vm = Vm::with_rejecting_host(program, VmOptions);
         vm.initialize().expect("vm init should succeed");
         let value = vm
@@ -468,6 +467,114 @@ mod success {
     }
 
     #[test]
+    fn fuses_sequence_index_mutation() {
+        let program = compile_program(
+            &[(
+                "main",
+                r"
+            export let answer (grid : mut [2][2]Int) : Int := (
+              grid.[0, 1] := 42;
+              grid.[1, 0] := grid.[0, 1] + 1;
+              grid.[0, 1] + grid.[1, 0]
+            );
+        ",
+            )],
+            "main",
+        );
+        let answer = program
+            .loaded_procedure(ProcedureId::from_raw(0))
+            .expect("answer should load");
+        assert!(matches!(
+            answer.runtime_kernel(),
+            Some(RuntimeKernel::Seq2Mutation { .. })
+        ));
+        assert!(answer.runtime_instructions.iter().any(|instruction| {
+            matches!(
+                instruction.fused,
+                Some(RuntimeFusedOp::LocalSeq2ConstSet { .. })
+            )
+        }));
+        assert!(answer.runtime_instructions.iter().any(|instruction| {
+            matches!(
+                instruction.fused,
+                Some(RuntimeFusedOp::LocalSeq2GetAddSet { .. })
+            )
+        }));
+        assert!(answer.runtime_instructions.iter().any(|instruction| {
+            matches!(
+                instruction.fused,
+                Some(RuntimeFusedOp::LocalSeq2GetAdd { .. })
+            )
+        }));
+
+        let mut vm = Vm::with_rejecting_host(program, VmOptions);
+        vm.initialize().expect("vm init should succeed");
+        let ty = TypeId::from_raw(0);
+        let first = vm
+            .alloc_sequence(ty, [Value::Int(1), Value::Int(2)])
+            .expect("first row should allocate");
+        let second = vm
+            .alloc_sequence(ty, [Value::Int(3), Value::Int(4)])
+            .expect("second row should allocate");
+        let grid = vm
+            .alloc_sequence(ty, [first, second])
+            .expect("grid should allocate");
+        let value = vm
+            .call_export("answer", &[grid])
+            .expect("sequence mutation should run");
+        assert_eq!(value, Value::Int(85));
+    }
+
+    #[test]
+    fn fuses_data_match_option_path() {
+        let program = compile_program(
+            &[(
+                "main",
+                r"
+            let MaybeInt := data {
+              | Some(Int)
+              | None
+            };
+            export let answer (n : Int) : Int := (
+              let selected : MaybeInt := .Some(n);
+              match selected (
+              | .Some(value) => value + 1
+              | .None => 0
+              )
+            );
+        ",
+            )],
+            "main",
+        );
+        let answer = program
+            .loaded_procedure(ProcedureId::from_raw(0))
+            .expect("answer should load");
+        assert!(matches!(
+            answer.runtime_kernel(),
+            Some(RuntimeKernel::DataConstructMatchAdd { .. })
+        ));
+        assert!(answer.runtime_instructions.iter().any(|instruction| {
+            matches!(
+                instruction.fused,
+                Some(RuntimeFusedOp::LocalDataNew1Init { .. })
+            )
+        }));
+        assert!(answer.runtime_instructions.iter().any(|instruction| {
+            matches!(
+                instruction.fused,
+                Some(RuntimeFusedOp::LocalCopyAddSmi { .. })
+            )
+        }));
+
+        let mut vm = Vm::with_rejecting_host(program, VmOptions);
+        vm.initialize().expect("vm init should succeed");
+        let value = vm
+            .call_export("answer", &[Value::Int(41)])
+            .expect("data match should run");
+        assert_eq!(value, Value::Int(42));
+    }
+
+    #[test]
     fn fuses_recursive_sum_loop() {
         let program = compile_program(
             &[(
@@ -483,6 +590,20 @@ mod success {
             )],
             "main",
         );
+        let sum = program
+            .loaded_procedure(ProcedureId::from_raw(0))
+            .expect("sum should load");
+        assert!(matches!(
+            sum.runtime_kernel(),
+            Some(RuntimeKernel::IntTailAccumulator { .. })
+        ));
+        let answer = program
+            .loaded_procedure(ProcedureId::from_raw(1))
+            .expect("answer should load");
+        assert!(matches!(
+            answer.runtime_kernel(),
+            Some(RuntimeKernel::DirectIntWrapperCall { .. })
+        ));
         let mut vm = Vm::with_rejecting_host(program, VmOptions);
         vm.initialize().expect("vm init should succeed");
         let before = vm.executed_instructions();

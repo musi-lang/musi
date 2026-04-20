@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::mem;
 
-use music_seam::{Instruction, Opcode, ProcedureId};
+use music_seam::{Instruction, Opcode, ProcedureId, TypeId};
 
 use crate::{VmIndexSpace, VmStackKind, VmValueKind};
 
@@ -110,23 +110,26 @@ impl Vm {
         let saved_target = self.continuation_target_handler;
         let saved_return_depth = self.return_depth;
 
-        let continuation = self.heap.continuation(continuation)?.clone();
-        let frames = continuation
-            .frames
-            .iter()
-            .cloned()
-            .map(CallFrame::from)
-            .collect::<CallFrameList>();
-        let handlers = continuation
-            .handlers
-            .iter()
-            .cloned()
-            .map(EffectHandler::from)
-            .collect::<EffectHandlerList>();
-        let target_handler = continuation
-            .handlers
-            .first()
-            .map(|handler| handler.handler_id);
+        let (frames, handlers, target_handler) = {
+            let continuation = self.heap.continuation(continuation)?;
+            let frames = continuation
+                .frames
+                .iter()
+                .cloned()
+                .map(CallFrame::from)
+                .collect::<CallFrameList>();
+            let handlers = continuation
+                .handlers
+                .iter()
+                .cloned()
+                .map(EffectHandler::from)
+                .collect::<EffectHandlerList>();
+            let target_handler = continuation
+                .handlers
+                .first()
+                .map(|handler| handler.handler_id);
+            (frames, handlers, target_handler)
+        };
 
         self.frames = frames;
         self.handlers = handlers;
@@ -203,7 +206,23 @@ impl Vm {
             Opcode::BrFalse => self.exec_fast_brfalse(runtime),
             Opcode::Call => self.exec_fast_call(runtime),
             Opcode::CallTail => self.exec_fast_tail_call(runtime),
+            Opcode::CallSeq | Opcode::CallCls | Opcode::CallClsSeq | Opcode::ClsNew => {
+                self.exec_fast_call_edge(runtime)
+            }
             Opcode::Ret => self.return_from_frame(),
+            Opcode::SeqNew
+            | Opcode::SeqGet
+            | Opcode::SeqGetN
+            | Opcode::SeqSet
+            | Opcode::SeqSetN => self.exec_fast_seq(runtime),
+            Opcode::DataNew | Opcode::DataTag | Opcode::DataGet | Opcode::DataSet => {
+                self.exec_fast_data(runtime)
+            }
+            Opcode::HdlPush
+            | Opcode::HdlPop
+            | Opcode::EffInvk
+            | Opcode::EffInvkSeq
+            | Opcode::EffResume => self.exec_fast_effect(runtime),
             _ => {
                 let instruction =
                     if let Some(instruction) = runtime.operand.to_instruction(runtime.opcode) {
@@ -284,6 +303,21 @@ impl Vm {
 impl Vm {
     fn exec_fused(&mut self, fused: RuntimeFusedOp) -> VmResult<StepOutcome> {
         match fused {
+            RuntimeFusedOp::LocalSmiCompareBranch { .. }
+            | RuntimeFusedOp::LocalSmiCompareSelfTailDecAcc { .. }
+            | RuntimeFusedOp::SelfTailDecAcc { .. } => self.exec_fused_control(fused),
+            RuntimeFusedOp::LocalDataTagBranchTable { .. }
+            | RuntimeFusedOp::LocalDataGetConstStore { .. }
+            | RuntimeFusedOp::LocalDataNew1Init { .. }
+            | RuntimeFusedOp::LocalCopyAddSmi { .. } => self.exec_fused_data(fused),
+            RuntimeFusedOp::LocalSeq2ConstSet { .. }
+            | RuntimeFusedOp::LocalSeq2GetAddSet { .. }
+            | RuntimeFusedOp::LocalSeq2GetAdd { .. } => self.exec_fused_seq(fused),
+        }
+    }
+
+    fn exec_fused_control(&mut self, fused: RuntimeFusedOp) -> VmResult<StepOutcome> {
+        match fused {
             RuntimeFusedOp::LocalSmiCompareBranch {
                 local,
                 smi,
@@ -346,6 +380,12 @@ impl Vm {
                 })?;
                 Ok(StepOutcome::Continue)
             }
+            _ => Err(fused_dispatch_error("control")),
+        }
+    }
+
+    fn exec_fused_data(&mut self, fused: RuntimeFusedOp) -> VmResult<StepOutcome> {
+        match fused {
             RuntimeFusedOp::LocalDataTagBranchTable {
                 local,
                 branch_table,
@@ -356,6 +396,93 @@ impl Vm {
                 dest,
                 fallthrough,
             } => self.exec_local_data_get_const_store(source, field, dest, fallthrough),
+            RuntimeFusedOp::LocalDataNew1Init {
+                field_local,
+                tag,
+                ty,
+                data_local,
+                match_local,
+                zero,
+                fallthrough,
+            } => self.exec_local_data_new1_init(DataNewInitPlan {
+                field_local,
+                tag,
+                ty,
+                data_local,
+                match_local,
+                zero,
+                fallthrough,
+            }),
+            RuntimeFusedOp::LocalCopyAddSmi {
+                source,
+                dest,
+                smi,
+                fallthrough,
+            } => self.exec_local_copy_add_smi(source, dest, smi, fallthrough),
+            _ => Err(fused_dispatch_error("data")),
+        }
+    }
+
+    fn exec_fused_seq(&mut self, fused: RuntimeFusedOp) -> VmResult<StepOutcome> {
+        match fused {
+            RuntimeFusedOp::LocalSeq2ConstSet {
+                local,
+                first,
+                second,
+                value,
+                scratch,
+                scratch_value,
+                fallthrough,
+            } => self.exec_local_seq2_const_set(Seq2ConstSetPlan {
+                local,
+                first,
+                second,
+                value,
+                scratch,
+                scratch_value,
+                fallthrough,
+            }),
+            RuntimeFusedOp::LocalSeq2GetAddSet {
+                target,
+                target_first,
+                target_second,
+                source,
+                source_first,
+                source_second,
+                add,
+                scratch,
+                scratch_value,
+                fallthrough,
+            } => self.exec_local_seq2_get_add_set(Seq2GetAddSetPlan {
+                target,
+                target_first,
+                target_second,
+                source,
+                source_first,
+                source_second,
+                add,
+                scratch,
+                scratch_value,
+                fallthrough,
+            }),
+            RuntimeFusedOp::LocalSeq2GetAdd {
+                left,
+                left_first,
+                left_second,
+                right,
+                right_first,
+                right_second,
+                fallthrough,
+            } => self.exec_local_seq2_get_add(Seq2GetAddPlan {
+                left,
+                left_first,
+                left_second,
+                right,
+                right_first,
+                right_second,
+                fallthrough,
+            }),
+            _ => Err(fused_dispatch_error("sequence")),
         }
     }
 
@@ -409,6 +536,184 @@ impl Vm {
         }
         frame.stack.clear();
         frame.ip = loop_ip;
+        Ok(())
+    }
+
+    fn exec_local_data_new1_init(&mut self, plan: DataNewInitPlan) -> VmResult<StepOutcome> {
+        let DataNewInitPlan {
+            field_local,
+            tag,
+            ty,
+            data_local,
+            match_local,
+            zero,
+            fallthrough,
+        } = plan;
+        let field = self.local_value(field_local)?;
+        let data = self.alloc_data_owned(ty, i64::from(tag), vec![field].into())?;
+        self.store_local(data_local, data.clone())?;
+        self.store_local(match_local, Value::Int(i64::from(zero)))?;
+        self.store_local(match_local, data)?;
+        self.jump_to_ip(fallthrough)?;
+        Ok(StepOutcome::Continue)
+    }
+
+    fn exec_local_copy_add_smi(
+        &mut self,
+        source: u16,
+        dest: u16,
+        smi: i16,
+        fallthrough: usize,
+    ) -> VmResult<StepOutcome> {
+        let value = self.local_value(source)?;
+        let int = int_from_value(&value)?;
+        self.store_local(dest, value)?;
+        let result = int
+            .checked_add(i64::from(smi))
+            .ok_or_else(int_overflow_error)?;
+        self.current_frame_mut()?.stack.push(Value::Int(result));
+        self.jump_to_ip(fallthrough)?;
+        Ok(StepOutcome::Continue)
+    }
+
+    fn local_value(&self, local: u16) -> VmResult<Value> {
+        let frame = self.current_frame()?;
+        let index = usize::from(local);
+        let Some(value) = frame.locals.get(index) else {
+            return Err(local_index_error(local, frame.locals.len()));
+        };
+        Ok(value.clone())
+    }
+
+    fn exec_local_seq2_const_set(&mut self, plan: Seq2ConstSetPlan) -> VmResult<StepOutcome> {
+        let Seq2ConstSetPlan {
+            local,
+            first,
+            second,
+            value,
+            scratch,
+            scratch_value,
+            fallthrough,
+        } = plan;
+        let seq = self.local_seq(local)?;
+        self.set_seq2(
+            seq,
+            i64::from(first),
+            i64::from(second),
+            Value::Int(i64::from(value)),
+        )?;
+        self.store_local(scratch, Value::Int(i64::from(scratch_value)))?;
+        self.current_frame_mut()?.stack.push(Value::Seq(seq));
+        self.jump_to_ip(fallthrough)?;
+        Ok(StepOutcome::Continue)
+    }
+
+    fn exec_local_seq2_get_add_set(&mut self, plan: Seq2GetAddSetPlan) -> VmResult<StepOutcome> {
+        let Seq2GetAddSetPlan {
+            target,
+            target_first,
+            target_second,
+            source,
+            source_first,
+            source_second,
+            add,
+            scratch,
+            scratch_value,
+            fallthrough,
+        } = plan;
+        let source_seq = self.local_seq(source)?;
+        let value = self.seq2_int(
+            source_seq,
+            i64::from(source_first),
+            i64::from(source_second),
+        )?;
+        let value = value
+            .checked_add(i64::from(add))
+            .ok_or_else(int_overflow_error)?;
+        let target_seq = self.local_seq(target)?;
+        self.set_seq2(
+            target_seq,
+            i64::from(target_first),
+            i64::from(target_second),
+            Value::Int(value),
+        )?;
+        self.store_local(scratch, Value::Int(i64::from(scratch_value)))?;
+        self.current_frame_mut()?.stack.push(Value::Seq(target_seq));
+        self.jump_to_ip(fallthrough)?;
+        Ok(StepOutcome::Continue)
+    }
+
+    fn exec_local_seq2_get_add(&mut self, plan: Seq2GetAddPlan) -> VmResult<StepOutcome> {
+        let Seq2GetAddPlan {
+            left,
+            left_first,
+            left_second,
+            right,
+            right_first,
+            right_second,
+            fallthrough,
+        } = plan;
+        let left_seq = self.local_seq(left)?;
+        let left_value = self.seq2_int(left_seq, i64::from(left_first), i64::from(left_second))?;
+        let right_seq = self.local_seq(right)?;
+        let right_value =
+            self.seq2_int(right_seq, i64::from(right_first), i64::from(right_second))?;
+        let value = left_value
+            .checked_add(right_value)
+            .ok_or_else(int_overflow_error)?;
+        self.current_frame_mut()?.stack.push(Value::Int(value));
+        self.jump_to_ip(fallthrough)?;
+        Ok(StepOutcome::Continue)
+    }
+
+    fn local_seq(&self, local: u16) -> VmResult<GcRef> {
+        let frame = self.current_frame()?;
+        let index = usize::from(local);
+        let Some(value) = frame.locals.get(index) else {
+            return Err(local_index_error(local, frame.locals.len()));
+        };
+        Self::expect_seq(value.clone())
+    }
+
+    fn seq2_int(&self, seq: GcRef, first: i64, second: i64) -> VmResult<i64> {
+        let row = self.seq2_row(seq, first)?;
+        let row_ref = self.heap.sequence(row)?;
+        let slot = sequence_index(second, row_ref.items.len())?;
+        int_from_value(&row_ref.items[slot])
+    }
+
+    fn set_seq2(&mut self, seq: GcRef, first: i64, second: i64, value: Value) -> VmResult {
+        let row = self.seq2_row(seq, first)?;
+        let row_ref = self.heap.sequence_mut(row)?;
+        let slot = sequence_index(second, row_ref.items.len())?;
+        row_ref.items[slot] = value;
+        Ok(())
+    }
+
+    fn seq2_row(&self, seq: GcRef, first: i64) -> VmResult<GcRef> {
+        let seq_ref = self.heap.sequence(seq)?;
+        let len = seq_ref.items.len();
+        let slot = usize::try_from(first).unwrap_or(usize::MAX);
+        let Some(value) = seq_ref.items.get(slot) else {
+            return Err(VmError::new(VmErrorKind::InvalidSequenceIndex {
+                index: first,
+                len,
+            }));
+        };
+        match value {
+            Value::Seq(row) => Ok(*row),
+            other => Err(Self::invalid_value_kind(VmValueKind::Seq, other)),
+        }
+    }
+
+    fn store_local(&mut self, local: u16, value: Value) -> VmResult {
+        let frame = self.current_frame_mut()?;
+        let index = usize::from(local);
+        let len = frame.locals.len();
+        let Some(slot) = frame.locals.get_mut(index) else {
+            return Err(local_index_error(local, len));
+        };
+        *slot = value;
         Ok(())
     }
 
@@ -708,6 +1013,53 @@ struct SelfTailDecAccPlan {
     loop_ip: usize,
 }
 
+#[derive(Clone, Copy)]
+struct DataNewInitPlan {
+    field_local: u16,
+    tag: i16,
+    ty: TypeId,
+    data_local: u16,
+    match_local: u16,
+    zero: i16,
+    fallthrough: usize,
+}
+
+#[derive(Clone, Copy)]
+struct Seq2ConstSetPlan {
+    local: u16,
+    first: i16,
+    second: i16,
+    value: i16,
+    scratch: u16,
+    scratch_value: i16,
+    fallthrough: usize,
+}
+
+#[derive(Clone, Copy)]
+struct Seq2GetAddSetPlan {
+    target: u16,
+    target_first: i16,
+    target_second: i16,
+    source: u16,
+    source_first: i16,
+    source_second: i16,
+    add: i16,
+    scratch: u16,
+    scratch_value: i16,
+    fallthrough: usize,
+}
+
+#[derive(Clone, Copy)]
+struct Seq2GetAddPlan {
+    left: u16,
+    left_first: i16,
+    left_second: i16,
+    right: u16,
+    right_first: i16,
+    right_second: i16,
+    fallthrough: usize,
+}
+
 #[inline]
 fn int_from_value(value: &Value) -> VmResult<i64> {
     match value {
@@ -722,6 +1074,28 @@ fn int_from_value(value: &Value) -> VmResult<i64> {
 fn int_overflow_error() -> VmError {
     VmError::new(VmErrorKind::ArithmeticFailed {
         detail: "signed integer overflow".into(),
+    })
+}
+
+#[inline]
+fn sequence_index(index: i64, len: usize) -> VmResult<usize> {
+    let Ok(slot) = usize::try_from(index) else {
+        return Err(sequence_index_error(index, len));
+    };
+    if slot >= len {
+        return Err(sequence_index_error(index, len));
+    }
+    Ok(slot)
+}
+
+#[inline]
+const fn sequence_index_error(index: i64, len: usize) -> VmError {
+    VmError::new(VmErrorKind::InvalidSequenceIndex { index, len })
+}
+
+fn fused_dispatch_error(family: &str) -> VmError {
+    VmError::new(VmErrorKind::InvalidProgramShape {
+        detail: format!("fused opcode reached `{family}` executor").into(),
     })
 }
 

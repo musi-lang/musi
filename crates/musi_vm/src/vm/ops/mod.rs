@@ -1,7 +1,7 @@
 pub use super::state::{CallFrame, EffectHandler, StepOutcome};
 pub use super::{
-    ContinuationFrame, ContinuationHandler, EffectCall, ForeignCall, GcRef, Value, ValueList, Vm,
-    VmError, VmErrorKind, VmResult,
+    ContinuationFrame, ContinuationHandler, EffectCall, ForeignCall, GcRef, RuntimeInstruction,
+    RuntimeOperand, Value, ValueList, Vm, VmError, VmErrorKind, VmResult,
 };
 
 mod branch;

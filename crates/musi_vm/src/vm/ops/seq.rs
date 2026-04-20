@@ -2,7 +2,10 @@ use std::slice::from_ref;
 
 use music_seam::{Instruction, Opcode, Operand, TypeId};
 
-use super::{GcRef, StepOutcome, Value, Vm, VmError, VmErrorKind, VmResult};
+use super::{
+    GcRef, RuntimeInstruction, RuntimeOperand, StepOutcome, Value, Vm, VmError, VmErrorKind,
+    VmResult,
+};
 use crate::VmValueKind;
 use crate::value::DataValue;
 
@@ -20,11 +23,26 @@ enum RuntimeRangeKind {
 impl Vm {
     pub(crate) fn exec_seq(&mut self, instruction: &Instruction) -> VmResult<StepOutcome> {
         match instruction.opcode {
-            Opcode::SeqNew => self.exec_seq_new(instruction),
+            Opcode::SeqNew => {
+                let Operand::TypeLen { ty, len } = instruction.operand else {
+                    return Err(Self::invalid_operand(instruction));
+                };
+                self.exec_seq_new(ty, len)
+            }
             Opcode::SeqGet => self.exec_seq_get(),
-            Opcode::SeqGetN => self.exec_seq_get_n(instruction),
+            Opcode::SeqGetN => {
+                let Operand::I16(len) = instruction.operand else {
+                    return Err(Self::invalid_operand(instruction));
+                };
+                self.exec_seq_get_n(len)
+            }
             Opcode::SeqSet => self.exec_seq_set(),
-            Opcode::SeqSetN => self.exec_seq_set_n(instruction),
+            Opcode::SeqSetN => {
+                let Operand::I16(len) = instruction.operand else {
+                    return Err(Self::invalid_operand(instruction));
+                };
+                self.exec_seq_set_n(len)
+            }
             Opcode::SeqCat => self.exec_seq_cat(),
             Opcode::SeqLen => self.exec_seq_len(),
             Opcode::RangeNew => self.exec_range_new(instruction),
@@ -35,10 +53,39 @@ impl Vm {
         }
     }
 
-    fn exec_seq_new(&mut self, instruction: &Instruction) -> VmResult<StepOutcome> {
-        let Operand::TypeLen { ty, len } = instruction.operand else {
-            return Err(Self::invalid_operand(instruction));
-        };
+    pub(crate) fn exec_fast_seq(&mut self, runtime: &RuntimeInstruction) -> VmResult<StepOutcome> {
+        match runtime.opcode {
+            Opcode::SeqNew => {
+                let RuntimeOperand::TypeLen { ty, len } = runtime.operand else {
+                    let instruction = self.current_raw_instruction(runtime.raw_index)?;
+                    return Err(Self::invalid_operand(&instruction));
+                };
+                self.exec_seq_new(ty, len)
+            }
+            Opcode::SeqGet => self.exec_seq_get(),
+            Opcode::SeqGetN => {
+                let RuntimeOperand::I16(len) = runtime.operand else {
+                    let instruction = self.current_raw_instruction(runtime.raw_index)?;
+                    return Err(Self::invalid_operand(&instruction));
+                };
+                self.exec_seq_get_n(len)
+            }
+            Opcode::SeqSet => self.exec_seq_set(),
+            Opcode::SeqSetN => {
+                let RuntimeOperand::I16(len) = runtime.operand else {
+                    let instruction = self.current_raw_instruction(runtime.raw_index)?;
+                    return Err(Self::invalid_operand(&instruction));
+                };
+                self.exec_seq_set_n(len)
+            }
+            _ => {
+                let instruction = self.current_raw_instruction(runtime.raw_index)?;
+                Err(Self::invalid_dispatch(&instruction, "sequence"))
+            }
+        }
+    }
+
+    fn exec_seq_new(&mut self, ty: TypeId, len: u16) -> VmResult<StepOutcome> {
         let items = self.pop_args(usize::from(len))?;
         let value = self.alloc_sequence_owned(ty, items)?;
         self.push_value(value)?;
@@ -62,10 +109,7 @@ impl Vm {
         Ok(StepOutcome::Continue)
     }
 
-    fn exec_seq_get_n(&mut self, instruction: &Instruction) -> VmResult<StepOutcome> {
-        let Operand::I16(len) = instruction.operand else {
-            return Err(Self::invalid_operand(instruction));
-        };
+    fn exec_seq_get_n(&mut self, len: i16) -> VmResult<StepOutcome> {
         let value = if len == 2 {
             let second = self.pop_int_index()?;
             let first = self.pop_int_index()?;
@@ -102,10 +146,7 @@ impl Vm {
         Ok(StepOutcome::Continue)
     }
 
-    fn exec_seq_set_n(&mut self, instruction: &Instruction) -> VmResult<StepOutcome> {
-        let Operand::I16(len) = instruction.operand else {
-            return Err(Self::invalid_operand(instruction));
-        };
+    fn exec_seq_set_n(&mut self, len: i16) -> VmResult<StepOutcome> {
         let value = self.pop_value()?;
         let seq = if len == 2 {
             let second = self.pop_int_index()?;

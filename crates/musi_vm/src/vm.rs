@@ -8,7 +8,7 @@ pub use super::host::{EffectCall, ForeignCall, VmHostContext};
 pub use super::loader::{RejectingLoader, VmLoader};
 pub use super::program::{
     CompareOp, RuntimeCallMode, RuntimeCallShape, RuntimeFusedOp, RuntimeInstruction,
-    RuntimeInstructionList, RuntimeOperand,
+    RuntimeInstructionList, RuntimeKernel, RuntimeOperand,
 };
 pub use super::value::{
     ClosureValue, ClosureView, ContinuationFrame, ContinuationHandler, ContinuationValue,
@@ -21,6 +21,7 @@ pub use super::{
 };
 
 mod dispatch;
+mod kernel;
 mod module;
 mod ops;
 mod stack;
@@ -39,6 +40,7 @@ pub struct VmOptions {
     pub stack_frame_limit: Option<usize>,
     pub instruction_budget: Option<u64>,
     pub gc_stress: bool,
+    pub optimization_level: VmOptimizationLevel,
 }
 
 impl Default for VmOptions {
@@ -54,6 +56,7 @@ impl VmOptions {
         stack_frame_limit: None,
         instruction_budget: None,
         gc_stress: false,
+        optimization_level: VmOptimizationLevel::Tiered,
     };
 
     #[must_use]
@@ -85,10 +88,26 @@ impl VmOptions {
         self.gc_stress = gc_stress;
         self
     }
+
+    #[must_use]
+    pub const fn with_optimization_level(
+        mut self,
+        optimization_level: VmOptimizationLevel,
+    ) -> Self {
+        self.optimization_level = optimization_level;
+        self
+    }
 }
 
 #[allow(non_upper_case_globals)]
 pub const VmOptions: VmOptions = VmOptions::DEFAULT;
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum VmOptimizationLevel {
+    Interpreter,
+    #[default]
+    Tiered,
+}
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct VmRuntime;
@@ -284,12 +303,24 @@ impl Vm {
         let base_depth = self.frames.len();
         let result = match value {
             Value::Closure(closure) => {
-                let closure = self.heap.closure(closure)?;
-                let module_slot = closure.module_slot;
-                let procedure = closure.procedure;
-                let param_count = closure.param_count();
-                let local_count = closure.local_count();
-                if closure.captures.is_empty() {
+                let (module_slot, procedure, params, locals, captures) = {
+                    let closure = self.heap.closure(closure)?;
+                    (
+                        closure.module_slot,
+                        closure.procedure,
+                        closure.params,
+                        closure.locals,
+                        closure.captures.clone(),
+                    )
+                };
+                let param_count = usize::from(params);
+                let local_count = usize::from(locals.max(params));
+                if captures.is_empty() {
+                    if let Some(value) =
+                        self.try_invoke_kernel_from_args(module_slot, procedure, args)?
+                    {
+                        return self.finish_call_value(base_depth, value);
+                    }
                     if base_depth == 0 {
                         self.invoke_procedure_from_args_shape(
                             module_slot,
@@ -308,26 +339,23 @@ impl Vm {
                             local_count,
                         )
                     }
+                } else if base_depth == 0 {
+                    self.invoke_procedure_with_prefix_args_shape(
+                        module_slot,
+                        procedure,
+                        &captures,
+                        args,
+                        RuntimeCallShape::new(params, locals),
+                    )
                 } else {
-                    let captures = closure.captures.clone();
-                    if base_depth == 0 {
-                        self.invoke_procedure_with_prefix_args_shape(
-                            module_slot,
-                            procedure,
-                            &captures,
-                            args,
-                            RuntimeCallShape::new(closure.params, closure.locals),
-                        )
-                    } else {
-                        self.invoke_procedure_in_context_with_prefix_args_shape(
-                            module_slot,
-                            procedure,
-                            &captures,
-                            args,
-                            base_depth,
-                            RuntimeCallShape::new(closure.params, closure.locals),
-                        )
-                    }
+                    self.invoke_procedure_in_context_with_prefix_args_shape(
+                        module_slot,
+                        procedure,
+                        &captures,
+                        args,
+                        base_depth,
+                        RuntimeCallShape::new(params, locals),
+                    )
                 }
             }
             Value::Continuation(continuation) => {
@@ -355,6 +383,14 @@ impl Vm {
                 found: value.kind(),
             })),
         }?;
+        self.retain_external_value(&result)?;
+        if base_depth == 0 && self.heap_dirty {
+            let _ = self.collect_garbage();
+        }
+        Ok(result)
+    }
+
+    fn finish_call_value(&mut self, base_depth: usize, result: Value) -> VmResult<Value> {
         self.retain_external_value(&result)?;
         if base_depth == 0 && self.heap_dirty {
             let _ = self.collect_garbage();

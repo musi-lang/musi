@@ -3,7 +3,8 @@ use music_seam::{EffectId, Instruction, Opcode, Operand};
 
 use super::{
     CallFrame, ContinuationFrame, ContinuationHandler, EffectCall, EffectHandler, GcRef,
-    StepOutcome, Value, ValueList, Vm, VmError, VmErrorKind, VmResult,
+    RuntimeInstruction, RuntimeOperand, StepOutcome, Value, ValueList, Vm, VmError, VmErrorKind,
+    VmResult,
 };
 
 impl Vm {
@@ -13,79 +14,144 @@ impl Vm {
                 let Operand::EffectId(effect) = instruction.operand else {
                     return Err(Self::invalid_operand(instruction));
                 };
-                let handler = self.pop_value()?;
                 let frame_depth = self.frames.len().checked_sub(1).ok_or_else(|| {
                     VmError::new(VmErrorKind::StackEmpty {
                         stack: VmStackKind::CallFrame,
                     })
                 })?;
-                let stack_depth = self.frames.last().map_or(0, |frame| frame.stack.len());
                 let pop_ip = self.find_matching_handler_pop(frame_depth)?;
-                let handler_id = self.next_handler_id;
-                self.next_handler_id = self.next_handler_id.saturating_add(1);
-                self.handlers.push(
-                    EffectHandler::new(handler_id, effect, handler).with_stack_state(
-                        frame_depth,
-                        stack_depth,
-                        pop_ip,
-                    ),
-                );
-                Ok(StepOutcome::Continue)
+                self.push_effect_handler(effect, pop_ip)
             }
-            Opcode::HdlPop => {
-                let Some(handler) = self.handlers.pop() else {
-                    return Err(VmError::new(VmErrorKind::StackEmpty {
-                        stack: VmStackKind::Handler,
-                    }));
-                };
-                let body_result = self.pop_value()?;
-                self.restore_handler_stack_depth(&handler)?;
-                let value_clause = self.handler_clause_closure(&handler, 0)?;
-                let result = self.call_value(value_clause, &[body_result])?;
-                if self
-                    .continuation_target_handler
-                    .is_some_and(|target| target == handler.handler_id)
-                {
-                    return Ok(StepOutcome::Return(result));
-                }
-                self.push_value(result)?;
-                Ok(StepOutcome::Continue)
-            }
+            Opcode::HdlPop => self.pop_effect_handler(),
             Opcode::EffInvk => {
                 let Operand::Effect { effect, op } = instruction.operand else {
                     return Err(Self::invalid_operand(instruction));
                 };
-                let module_slot = self.current_module_slot()?;
-                let args = self.pop_effect_args(module_slot, effect, op)?;
-                let result = self.invoke_effect(module_slot, effect, op, &args)?;
-                self.push_value(result)?;
-                Ok(StepOutcome::Continue)
+                self.invoke_effect_from_stack(effect, op)
             }
             Opcode::EffInvkSeq => {
                 let Operand::Effect { effect, op } = instruction.operand else {
                     return Err(Self::invalid_operand(instruction));
                 };
-                let module_slot = self.current_module_slot()?;
-                let args = self.pop_seq_args()?;
-                let result = self.invoke_effect(module_slot, effect, op, &args)?;
-                self.push_value(result)?;
-                Ok(StepOutcome::Continue)
+                self.invoke_effect_from_seq(effect, op)
             }
-            Opcode::EffResume => {
-                let value = self.pop_value()?;
-                let continuation = self.active_resumes.last().copied().ok_or_else(|| {
-                    VmError::new(VmErrorKind::EffectRejected {
-                        effect: "<active>".into(),
-                        op: None,
-                        reason: "resume requires active continuation".into(),
-                    })
-                })?;
-                let result = self.invoke_continuation(continuation, value)?;
-                self.push_value(result)?;
-                Ok(StepOutcome::Continue)
-            }
+            Opcode::EffResume => self.resume_active_effect(),
             _ => Err(Self::invalid_dispatch(instruction, "effect")),
         }
+    }
+
+    pub(crate) fn exec_fast_effect(
+        &mut self,
+        runtime: &RuntimeInstruction,
+    ) -> VmResult<StepOutcome> {
+        match runtime.opcode {
+            Opcode::HdlPush => {
+                let RuntimeOperand::EffectId(effect) = runtime.operand else {
+                    let instruction = self.current_raw_instruction(runtime.raw_index)?;
+                    return Err(Self::invalid_operand(&instruction));
+                };
+                let Some(pop_ip) = runtime.branch_target else {
+                    let frame_depth = self.frames.len().checked_sub(1).ok_or_else(|| {
+                        VmError::new(VmErrorKind::StackEmpty {
+                            stack: VmStackKind::CallFrame,
+                        })
+                    })?;
+                    return self
+                        .push_effect_handler(effect, self.find_matching_handler_pop(frame_depth)?);
+                };
+                self.push_effect_handler(effect, pop_ip)
+            }
+            Opcode::HdlPop => self.pop_effect_handler(),
+            Opcode::EffInvk => {
+                let RuntimeOperand::Effect { effect, op } = runtime.operand else {
+                    let instruction = self.current_raw_instruction(runtime.raw_index)?;
+                    return Err(Self::invalid_operand(&instruction));
+                };
+                self.invoke_effect_from_stack(effect, op)
+            }
+            Opcode::EffInvkSeq => {
+                let RuntimeOperand::Effect { effect, op } = runtime.operand else {
+                    let instruction = self.current_raw_instruction(runtime.raw_index)?;
+                    return Err(Self::invalid_operand(&instruction));
+                };
+                self.invoke_effect_from_seq(effect, op)
+            }
+            Opcode::EffResume => self.resume_active_effect(),
+            _ => {
+                let instruction = self.current_raw_instruction(runtime.raw_index)?;
+                Err(Self::invalid_dispatch(&instruction, "effect"))
+            }
+        }
+    }
+
+    fn push_effect_handler(&mut self, effect: EffectId, pop_ip: usize) -> VmResult<StepOutcome> {
+        let handler = self.pop_value()?;
+        let frame_depth = self.frames.len().checked_sub(1).ok_or_else(|| {
+            VmError::new(VmErrorKind::StackEmpty {
+                stack: VmStackKind::CallFrame,
+            })
+        })?;
+        let stack_depth = self.frames.last().map_or(0, |frame| frame.stack.len());
+        let handler_id = self.next_handler_id;
+        self.next_handler_id = self.next_handler_id.saturating_add(1);
+        self.handlers.push(
+            EffectHandler::new(handler_id, effect, handler).with_stack_state(
+                frame_depth,
+                stack_depth,
+                pop_ip,
+            ),
+        );
+        Ok(StepOutcome::Continue)
+    }
+
+    fn pop_effect_handler(&mut self) -> VmResult<StepOutcome> {
+        let Some(handler) = self.handlers.pop() else {
+            return Err(VmError::new(VmErrorKind::StackEmpty {
+                stack: VmStackKind::Handler,
+            }));
+        };
+        let body_result = self.pop_value()?;
+        self.restore_handler_stack_depth(&handler)?;
+        let value_clause = self.handler_clause_closure(&handler, 0)?;
+        let result = self.call_value(value_clause, &[body_result])?;
+        if self
+            .continuation_target_handler
+            .is_some_and(|target| target == handler.handler_id)
+        {
+            return Ok(StepOutcome::Return(result));
+        }
+        self.push_value(result)?;
+        Ok(StepOutcome::Continue)
+    }
+
+    fn invoke_effect_from_stack(&mut self, effect: EffectId, op: u16) -> VmResult<StepOutcome> {
+        let module_slot = self.current_module_slot()?;
+        let args = self.pop_effect_args(module_slot, effect, op)?;
+        let result = self.invoke_effect(module_slot, effect, op, &args)?;
+        self.push_value(result)?;
+        Ok(StepOutcome::Continue)
+    }
+
+    fn invoke_effect_from_seq(&mut self, effect: EffectId, op: u16) -> VmResult<StepOutcome> {
+        let module_slot = self.current_module_slot()?;
+        let args = self.pop_seq_args()?;
+        let result = self.invoke_effect(module_slot, effect, op, &args)?;
+        self.push_value(result)?;
+        Ok(StepOutcome::Continue)
+    }
+
+    fn resume_active_effect(&mut self) -> VmResult<StepOutcome> {
+        let value = self.pop_value()?;
+        let continuation = self.active_resumes.last().copied().ok_or_else(|| {
+            VmError::new(VmErrorKind::EffectRejected {
+                effect: "<active>".into(),
+                op: None,
+                reason: "resume requires active continuation".into(),
+            })
+        })?;
+        let result = self.invoke_continuation(continuation, value)?;
+        self.push_value(result)?;
+        Ok(StepOutcome::Continue)
     }
 
     pub(crate) fn invoke_effect(

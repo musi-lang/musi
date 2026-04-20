@@ -10,6 +10,7 @@ use music_seam::{
 use music_term::{TypeTerm, TypeTermKind};
 
 use super::{VmError, VmErrorKind, VmIndexSpace, VmResult};
+use crate::program_kernel::decode_runtime_kernel;
 
 type InstructionList = Box<[Instruction]>;
 pub type RuntimeInstructionList = Arc<[RuntimeInstruction]>;
@@ -32,6 +33,38 @@ pub enum CompareOp {
 pub enum RuntimeCallMode {
     Normal,
     Tail,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeKernel {
+    IntTailAccumulator {
+        compare_local: u16,
+        compare_smi: i16,
+        compare: CompareOp,
+        dec_local: u16,
+        dec_smi: i16,
+        acc_local: u16,
+        add_local: u16,
+        return_local: u16,
+    },
+    DirectIntWrapperCall {
+        arg_local: u16,
+        const_arg: i16,
+        procedure: ProcedureId,
+    },
+    IntArgAddSmi {
+        arg_local: u16,
+        smi: i16,
+    },
+    DataConstructMatchAdd {
+        source: u16,
+        smi: i16,
+    },
+    Seq2Mutation {
+        init: RuntimeFusedOp,
+        update: RuntimeFusedOp,
+        finish: RuntimeFusedOp,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,6 +129,51 @@ pub enum RuntimeFusedOp {
         dest: u16,
         fallthrough: usize,
     },
+    LocalDataNew1Init {
+        field_local: u16,
+        tag: i16,
+        ty: TypeId,
+        data_local: u16,
+        match_local: u16,
+        zero: i16,
+        fallthrough: usize,
+    },
+    LocalCopyAddSmi {
+        source: u16,
+        dest: u16,
+        smi: i16,
+        fallthrough: usize,
+    },
+    LocalSeq2ConstSet {
+        local: u16,
+        first: i16,
+        second: i16,
+        value: i16,
+        scratch: u16,
+        scratch_value: i16,
+        fallthrough: usize,
+    },
+    LocalSeq2GetAddSet {
+        target: u16,
+        target_first: i16,
+        target_second: i16,
+        source: u16,
+        source_first: i16,
+        source_second: i16,
+        add: i16,
+        scratch: u16,
+        scratch_value: i16,
+        fallthrough: usize,
+    },
+    LocalSeq2GetAdd {
+        left: u16,
+        left_first: i16,
+        left_second: i16,
+        right: u16,
+        right_first: i16,
+        right_second: i16,
+        fallthrough: usize,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -111,6 +189,10 @@ pub enum RuntimeOperand {
     Procedure(ProcedureId),
     Foreign(ForeignId),
     EffectId(EffectId),
+    Effect {
+        effect: EffectId,
+        op: u16,
+    },
     TypeLen {
         ty: TypeId,
         len: u16,
@@ -208,6 +290,7 @@ impl RuntimeOperand {
             Self::Procedure(value) => Operand::Procedure(value),
             Self::Foreign(value) => Operand::Foreign(value),
             Self::EffectId(value) => Operand::EffectId(value),
+            Self::Effect { effect, op } => Operand::Effect { effect, op },
             Self::TypeLen { ty, len } => Operand::TypeLen { ty, len },
             Self::WideProcedureCaptures {
                 procedure,
@@ -225,7 +308,8 @@ impl From<&Operand> for RuntimeOperand {
     fn from(operand: &Operand) -> Self {
         match *operand {
             Operand::None => Self::None,
-            Operand::Label(_) | Operand::BranchTable(_) | Operand::Effect { .. } => Self::Raw,
+            Operand::Label(_) | Operand::BranchTable(_) => Self::Raw,
+            Operand::Effect { effect, op } => Self::Effect { effect, op },
             Operand::I16(value) => Self::I16(value),
             Operand::Local(slot) => Self::Local(slot),
             Operand::String(value) => Self::String(value),
@@ -481,6 +565,7 @@ pub struct LoadedProcedure {
     pub instructions: InstructionList,
     pub(crate) runtime_instructions: RuntimeInstructionList,
     pub(crate) runtime_branch_tables: RuntimeBranchTableList,
+    pub(crate) runtime_kernel: Option<RuntimeKernel>,
     pub labels: LabelIndexMap,
 }
 
@@ -493,6 +578,7 @@ impl LoadedProcedure {
         instructions: InstructionList,
         runtime_instructions: RuntimeInstructionList,
         runtime_branch_tables: RuntimeBranchTableList,
+        runtime_kernel: Option<RuntimeKernel>,
     ) -> Self {
         Self {
             name: name.into(),
@@ -501,6 +587,7 @@ impl LoadedProcedure {
             instructions,
             runtime_instructions,
             runtime_branch_tables,
+            runtime_kernel,
             labels: LabelIndexMap::new(),
         }
     }
@@ -514,6 +601,11 @@ impl LoadedProcedure {
     #[must_use]
     pub(crate) fn runtime_branch_table(&self, raw_index: usize) -> Option<&RuntimeBranchTable> {
         self.runtime_branch_tables.get(raw_index)?.as_ref()
+    }
+
+    #[must_use]
+    pub const fn runtime_kernel(&self) -> Option<RuntimeKernel> {
+        self.runtime_kernel
     }
 }
 
@@ -779,6 +871,8 @@ fn build_procedures(artifact: &Artifact) -> VmResult<Box<[LoadedProcedure]>> {
                 &procedure_shapes,
             );
             let runtime_branch_tables = decode_runtime_branch_tables(&instructions, &labels);
+            let runtime_kernel =
+                decode_runtime_kernel(procedure.params, &instructions, &runtime_instructions);
             Ok(LoadedProcedure::new(
                 procedure_name,
                 procedure.params,
@@ -786,6 +880,7 @@ fn build_procedures(artifact: &Artifact) -> VmResult<Box<[LoadedProcedure]>> {
                 instructions,
                 runtime_instructions,
                 runtime_branch_tables,
+                runtime_kernel,
             )
             .with_labels(labels))
         })
@@ -864,6 +959,7 @@ fn decode_runtime_instruction(
             labels,
             procedure_shapes,
         ),
+        Opcode::HdlPush => decode_handler_pop(runtime, index, instructions),
         Opcode::CmpEq
         | Opcode::CmpNe
         | Opcode::CmpLt
@@ -872,6 +968,28 @@ fn decode_runtime_instruction(
         | Opcode::CmpGe => decode_compare_branch(runtime, index, instructions, labels),
         _ => runtime,
     }
+}
+
+fn decode_handler_pop(
+    runtime: RuntimeInstruction,
+    index: usize,
+    instructions: &[Instruction],
+) -> RuntimeInstruction {
+    find_matching_handler_pop(index.saturating_add(1), instructions)
+        .map_or(runtime, |pop_ip| runtime.with_branch_target(pop_ip))
+}
+
+fn find_matching_handler_pop(start: usize, instructions: &[Instruction]) -> Option<usize> {
+    let mut depth = 0usize;
+    for (index, instruction) in instructions.iter().enumerate().skip(start) {
+        match instruction.opcode {
+            Opcode::HdlPush => depth = depth.saturating_add(1),
+            Opcode::HdlPop if depth == 0 => return Some(index),
+            Opcode::HdlPop => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+    }
+    None
 }
 
 fn decode_fused_op(
@@ -889,6 +1007,11 @@ fn decode_fused_op(
         labels,
     )
     .or_else(|| decode_self_tail_dec_acc(current_procedure, param_count, index, instructions))
+    .or_else(|| decode_local_seq2_get_add_set(index, instructions))
+    .or_else(|| decode_local_seq2_const_set(index, instructions))
+    .or_else(|| decode_local_seq2_get_add(index, instructions))
+    .or_else(|| decode_local_data_new1_init(index, instructions))
+    .or_else(|| decode_local_copy_add_smi(index, instructions))
     .or_else(|| decode_local_data_tag_branch_table(index, instructions))
     .or_else(|| decode_local_data_get_const_store(index, instructions))
     .or_else(|| decode_local_smi_compare_branch(index, instructions, labels))
@@ -1028,6 +1151,282 @@ fn decode_local_smi_compare_branch(
         compare,
         target,
         fallthrough: index.saturating_add(4),
+    })
+}
+
+fn decode_local_data_new1_init(
+    index: usize,
+    instructions: &[Instruction],
+) -> Option<RuntimeFusedOp> {
+    let [
+        field_load,
+        tag_load,
+        data_new,
+        data_store,
+        zero_load,
+        zero_store,
+        data_reload,
+        match_store,
+    ] = instruction_window::<8>(index, instructions)?;
+    let (Opcode::LdLoc, Operand::Local(field_local)) = (field_load.opcode, &field_load.operand)
+    else {
+        return None;
+    };
+    let (Opcode::LdSmi, Operand::I16(tag)) = (tag_load.opcode, &tag_load.operand) else {
+        return None;
+    };
+    let (Opcode::DataNew, Operand::TypeLen { ty, len: 1 }) = (data_new.opcode, &data_new.operand)
+    else {
+        return None;
+    };
+    let (Opcode::StLoc, Operand::Local(data_local)) = (data_store.opcode, &data_store.operand)
+    else {
+        return None;
+    };
+    let (Opcode::LdSmi, Operand::I16(zero)) = (zero_load.opcode, &zero_load.operand) else {
+        return None;
+    };
+    let (Opcode::StLoc, Operand::Local(zero_local)) = (zero_store.opcode, &zero_store.operand)
+    else {
+        return None;
+    };
+    let (Opcode::LdLoc, Operand::Local(reloaded)) = (data_reload.opcode, &data_reload.operand)
+    else {
+        return None;
+    };
+    let (Opcode::StLoc, Operand::Local(match_local)) = (match_store.opcode, &match_store.operand)
+    else {
+        return None;
+    };
+    if data_local != reloaded || zero_local != match_local {
+        return None;
+    }
+    Some(RuntimeFusedOp::LocalDataNew1Init {
+        field_local: *field_local,
+        tag: *tag,
+        ty: *ty,
+        data_local: *data_local,
+        match_local: *match_local,
+        zero: *zero,
+        fallthrough: index.saturating_add(8),
+    })
+}
+
+fn decode_local_copy_add_smi(index: usize, instructions: &[Instruction]) -> Option<RuntimeFusedOp> {
+    let [load, store, reload, smi, add] = instruction_window::<5>(index, instructions)?;
+    let (Opcode::LdLoc, Operand::Local(source)) = (load.opcode, &load.operand) else {
+        return None;
+    };
+    let (Opcode::StLoc, Operand::Local(dest)) = (store.opcode, &store.operand) else {
+        return None;
+    };
+    let (Opcode::LdLoc, Operand::Local(reload)) = (reload.opcode, &reload.operand) else {
+        return None;
+    };
+    if dest != reload {
+        return None;
+    }
+    let (Opcode::LdSmi, Operand::I16(smi)) = (smi.opcode, &smi.operand) else {
+        return None;
+    };
+    if add.opcode != Opcode::IAdd {
+        return None;
+    }
+    Some(RuntimeFusedOp::LocalCopyAddSmi {
+        source: *source,
+        dest: *dest,
+        smi: *smi,
+        fallthrough: index.saturating_add(5),
+    })
+}
+
+fn decode_local_seq2_const_set(
+    index: usize,
+    instructions: &[Instruction],
+) -> Option<RuntimeFusedOp> {
+    let [
+        load,
+        first,
+        second,
+        value,
+        set,
+        scratch_value,
+        scratch_store,
+    ] = instruction_window::<7>(index, instructions)?;
+    let (Opcode::LdLoc, Operand::Local(local)) = (load.opcode, &load.operand) else {
+        return None;
+    };
+    let (Opcode::LdSmi, Operand::I16(first)) = (first.opcode, &first.operand) else {
+        return None;
+    };
+    let (Opcode::LdSmi, Operand::I16(second)) = (second.opcode, &second.operand) else {
+        return None;
+    };
+    let (Opcode::LdSmi, Operand::I16(value)) = (value.opcode, &value.operand) else {
+        return None;
+    };
+    let (Opcode::SeqSetN, Operand::I16(2)) = (set.opcode, &set.operand) else {
+        return None;
+    };
+    let (Opcode::LdSmi, Operand::I16(scratch_value)) =
+        (scratch_value.opcode, &scratch_value.operand)
+    else {
+        return None;
+    };
+    let (Opcode::StLoc, Operand::Local(scratch)) = (scratch_store.opcode, &scratch_store.operand)
+    else {
+        return None;
+    };
+    Some(RuntimeFusedOp::LocalSeq2ConstSet {
+        local: *local,
+        first: *first,
+        second: *second,
+        value: *value,
+        scratch: *scratch,
+        scratch_value: *scratch_value,
+        fallthrough: index.saturating_add(7),
+    })
+}
+
+fn decode_local_seq2_get_add_set(
+    index: usize,
+    instructions: &[Instruction],
+) -> Option<RuntimeFusedOp> {
+    let [
+        target_load,
+        target_first,
+        target_second,
+        source_load,
+        source_first,
+        source_second,
+        get,
+        add_value,
+        add,
+        set,
+        scratch_value,
+        scratch_store,
+    ] = instruction_window::<12>(index, instructions)?;
+    let (Opcode::LdLoc, Operand::Local(target)) = (target_load.opcode, &target_load.operand) else {
+        return None;
+    };
+    let (Opcode::LdSmi, Operand::I16(target_first)) = (target_first.opcode, &target_first.operand)
+    else {
+        return None;
+    };
+    let (Opcode::LdSmi, Operand::I16(target_second)) =
+        (target_second.opcode, &target_second.operand)
+    else {
+        return None;
+    };
+    let (Opcode::LdLoc, Operand::Local(source)) = (source_load.opcode, &source_load.operand) else {
+        return None;
+    };
+    let (Opcode::LdSmi, Operand::I16(source_first)) = (source_first.opcode, &source_first.operand)
+    else {
+        return None;
+    };
+    let (Opcode::LdSmi, Operand::I16(source_second)) =
+        (source_second.opcode, &source_second.operand)
+    else {
+        return None;
+    };
+    if !matches!(
+        (get.opcode, &get.operand),
+        (Opcode::SeqGetN, Operand::I16(2))
+    ) {
+        return None;
+    }
+    let (Opcode::LdSmi, Operand::I16(add_value)) = (add_value.opcode, &add_value.operand) else {
+        return None;
+    };
+    if add.opcode != Opcode::IAdd {
+        return None;
+    }
+    if !matches!(
+        (set.opcode, &set.operand),
+        (Opcode::SeqSetN, Operand::I16(2))
+    ) {
+        return None;
+    }
+    let (Opcode::LdSmi, Operand::I16(scratch_value)) =
+        (scratch_value.opcode, &scratch_value.operand)
+    else {
+        return None;
+    };
+    let (Opcode::StLoc, Operand::Local(scratch)) = (scratch_store.opcode, &scratch_store.operand)
+    else {
+        return None;
+    };
+    Some(RuntimeFusedOp::LocalSeq2GetAddSet {
+        target: *target,
+        target_first: *target_first,
+        target_second: *target_second,
+        source: *source,
+        source_first: *source_first,
+        source_second: *source_second,
+        add: *add_value,
+        scratch: *scratch,
+        scratch_value: *scratch_value,
+        fallthrough: index.saturating_add(12),
+    })
+}
+
+fn decode_local_seq2_get_add(index: usize, instructions: &[Instruction]) -> Option<RuntimeFusedOp> {
+    let [
+        left_load,
+        left_first,
+        left_second,
+        left_get,
+        right_load,
+        right_first,
+        right_second,
+        right_get,
+        add,
+    ] = instruction_window::<9>(index, instructions)?;
+    let (Opcode::LdLoc, Operand::Local(left)) = (left_load.opcode, &left_load.operand) else {
+        return None;
+    };
+    let (Opcode::LdSmi, Operand::I16(left_first)) = (left_first.opcode, &left_first.operand) else {
+        return None;
+    };
+    let (Opcode::LdSmi, Operand::I16(left_second)) = (left_second.opcode, &left_second.operand)
+    else {
+        return None;
+    };
+    if !matches!(
+        (left_get.opcode, &left_get.operand),
+        (Opcode::SeqGetN, Operand::I16(2))
+    ) {
+        return None;
+    }
+    let (Opcode::LdLoc, Operand::Local(right)) = (right_load.opcode, &right_load.operand) else {
+        return None;
+    };
+    let (Opcode::LdSmi, Operand::I16(right_first)) = (right_first.opcode, &right_first.operand)
+    else {
+        return None;
+    };
+    let (Opcode::LdSmi, Operand::I16(right_second)) = (right_second.opcode, &right_second.operand)
+    else {
+        return None;
+    };
+    if !matches!(
+        (right_get.opcode, &right_get.operand),
+        (Opcode::SeqGetN, Operand::I16(2))
+    ) {
+        return None;
+    }
+    if add.opcode != Opcode::IAdd {
+        return None;
+    }
+    Some(RuntimeFusedOp::LocalSeq2GetAdd {
+        left: *left,
+        left_first: *left_first,
+        left_second: *left_second,
+        right: *right,
+        right_first: *right_first,
+        right_second: *right_second,
+        fallthrough: index.saturating_add(9),
     })
 }
 
