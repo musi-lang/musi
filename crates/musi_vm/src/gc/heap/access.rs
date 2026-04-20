@@ -20,7 +20,6 @@ impl RuntimeHeap {
         let row0_slot = self.slot(row_refs[0])?;
         let row1_slot = self.slot(row_refs[1])?;
         let cache = Seq2x2ArgCache {
-            isolate: reference.isolate(),
             grid_slot,
             grid_generation,
             row0_slot: row_refs[0].slot(),

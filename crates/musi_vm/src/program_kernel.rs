@@ -134,7 +134,7 @@ fn decode_seq2_mutation_kernel(
         Some(fused)
     })?;
     let plan = seq2_mutation_plan(init, update, finish)?;
-    if is_seq2_plan_2x2(plan) {
+    if plan.is_2x2() {
         return Some(RuntimeKernel::Seq2Mutation2x2 {
             grid_local: plan.grid_local,
             init_value: plan.init_value,
@@ -142,19 +142,6 @@ fn decode_seq2_mutation_kernel(
         });
     }
     Some(RuntimeKernel::Seq2Mutation(plan))
-}
-
-const fn is_seq2_plan_2x2(plan: RuntimeSeq2Mutation) -> bool {
-    plan.init_first == 0
-        && plan.init_second == 1
-        && plan.update_target_first == 1
-        && plan.update_target_second == 0
-        && plan.update_source_first == 0
-        && plan.update_source_second == 1
-        && plan.finish_left_first == 0
-        && plan.finish_left_second == 1
-        && plan.finish_right_first == 1
-        && plan.finish_right_second == 0
 }
 
 const fn seq2_mutation_plan(

@@ -1,8 +1,10 @@
+use std::hint::unreachable_unchecked;
+
 use crate::program::RuntimeSeq2Mutation;
 use crate::types::VmResult;
 use crate::value::{GcRef, SequenceValue, Value};
 
-use super::super::error::{invalid_heap_ref, stale_heap_ref};
+use super::super::error::invalid_heap_ref;
 use super::super::object::HeapObject;
 use super::RuntimeHeap;
 use super::util::{arithmetic_overflow, fast_int};
@@ -41,7 +43,7 @@ impl RuntimeHeap {
         grid: GcRef,
         plan: RuntimeSeq2Mutation,
     ) -> VmResult<i64> {
-        if is_2x2_seq2_plan(plan) {
+        if plan.is_2x2() {
             return self.fast_seq2_mutation_2x2(grid, plan);
         }
         let (init_row, update_source_row, update_target_row, finish_left_row, finish_right_row) = {
@@ -148,38 +150,20 @@ impl RuntimeHeap {
         }
     }
 
-    pub(crate) fn fast_seq2_mutation_2x2_cached(
+    #[inline(always)]
+    pub(crate) fn fast_seq2_mutation_2x2_pinned(
         &mut self,
         cache: super::Seq2x2ArgCache,
         init_value: i64,
         update_add: i64,
     ) -> VmResult<i64> {
-        if cache.isolate != self.isolate {
-            return Err(VmError::new(VmErrorKind::InvalidProgramShape {
-                detail: "cross-isolate heap reference".into(),
-            }));
-        }
-        if cache.grid_slot >= self.slots.len() {
-            return Err(stale_heap_ref(GcRef::new(
-                cache.isolate,
-                cache.grid_slot,
-                cache.grid_generation,
-            )));
-        }
-        // SAFETY: checked above.
+        // SAFETY: cache comes from active pinned lease handle tied to VM borrow.
         let root_slot = unsafe { self.slots.get_unchecked_mut(cache.grid_slot) };
-        if root_slot.generation != cache.grid_generation || root_slot.object.is_none() {
-            return Err(stale_heap_ref(GcRef::new(
-                cache.isolate,
-                cache.grid_slot,
-                cache.grid_generation,
-            )));
-        }
-        let Some(HeapObject::PackedSeq2x2(packed)) = root_slot.object.as_mut() else {
-            return Err(invalid_heap_ref(
-                GcRef::new(cache.isolate, cache.grid_slot, cache.grid_generation),
-                "packed sequence([2][2]Int)",
-            ));
+        // SAFETY: pinned lease guarantees live packed grid object for slot lifetime.
+        let object = unsafe { root_slot.object.as_mut().unwrap_unchecked() };
+        let HeapObject::PackedSeq2x2(packed) = object else {
+            // SAFETY: packed lease handle only binds packed grid slots.
+            unsafe { unreachable_unchecked() };
         };
         packed.set_cell_for(0, 1, init_value);
         let source = packed.cell_for(0, 1);
@@ -191,19 +175,6 @@ impl RuntimeHeap {
         let right = packed.cell_for(1, 0);
         left.checked_add(right).ok_or_else(arithmetic_overflow)
     }
-}
-
-const fn is_2x2_seq2_plan(plan: RuntimeSeq2Mutation) -> bool {
-    plan.init_first == 0
-        && plan.init_second == 1
-        && plan.update_target_first == 1
-        && plan.update_target_second == 0
-        && plan.update_source_first == 0
-        && plan.update_source_second == 1
-        && plan.finish_left_first == 0
-        && plan.finish_left_second == 1
-        && plan.finish_right_first == 1
-        && plan.finish_right_second == 0
 }
 
 fn fast_sequence_index(index: i16, len: usize) -> VmResult<usize> {

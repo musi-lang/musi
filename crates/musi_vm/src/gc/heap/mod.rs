@@ -40,7 +40,6 @@ pub(super) const PROMOTE_SURVIVE_THRESHOLD: u8 = 2;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Seq2x2ArgCache {
-    pub isolate: IsolateId,
     pub grid_slot: usize,
     pub grid_generation: u32,
     pub row0_slot: usize,

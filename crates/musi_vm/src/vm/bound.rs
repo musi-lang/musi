@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use super::{RuntimeKernel, Vm, VmError, VmErrorKind, VmResult};
 use crate::VmValueKind::{Int, Procedure};
 use crate::gc::Seq2x2ArgCache;
@@ -26,14 +28,28 @@ pub struct BoundSeq2x2Call {
 }
 
 #[derive(Debug)]
-pub struct BoundSeq2x2PackedArg {
+pub struct BoundSeq2x2PackedArg<'vm> {
+    heap: *mut super::RuntimeHeap,
     cache: Seq2x2ArgCache,
+    released: bool,
+    borrow: PhantomData<&'vm mut super::RuntimeHeap>,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct BoundInitCall {
-    module_slot: usize,
-    kernel: RuntimeKernel,
+    kind: BoundInitCallKind,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum BoundInitCallKind {
+    InlineEffectResume {
+        resume_value: i16,
+        value_add: i16,
+    },
+    Kernel {
+        module_slot: usize,
+        kernel: RuntimeKernel,
+    },
 }
 
 impl Vm {
@@ -55,6 +71,7 @@ impl Vm {
     /// # Errors
     ///
     /// Returns [`VmError`] when invocation fails.
+    #[inline(always)]
     pub fn call_i64_i64(&mut self, call: BoundI64Call, arg: i64) -> VmResult<i64> {
         match call.kind {
             BoundI64CallKind::AddConst(add) => arg.checked_add(add).ok_or_else(int_overflow_error),
@@ -110,7 +127,7 @@ impl Vm {
         })
     }
 
-    /// Binds one sequence value for cached 2x2 integer mutation fast calls.
+    /// Binds one sequence value for pinned 2x2 integer mutation fast calls.
     ///
     /// # Errors
     ///
@@ -118,30 +135,14 @@ impl Vm {
     pub fn bind_seq2x2_packed_int_arg(
         &mut self,
         reference: GcRef,
-    ) -> VmResult<BoundSeq2x2PackedArg> {
+    ) -> VmResult<BoundSeq2x2PackedArg<'_>> {
         let cache = self.heap.bind_seq2x2_packed_arg(reference)?;
-        Ok(BoundSeq2x2PackedArg { cache })
-    }
-
-    pub fn unpin_seq2x2_packed_arg(&mut self, arg: &BoundSeq2x2PackedArg) {
-        self.heap.unpin_seq2x2_packed_arg(arg.cache);
-    }
-
-    /// Calls one typed 2x2 sequence mutation handle against one cached arg handle.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`VmError`] when cached arg is stale/cross-isolate/shape-mismatched.
-    pub fn call_seq2x2_i64(
-        &mut self,
-        call: BoundSeq2x2Call,
-        arg: &BoundSeq2x2PackedArg,
-    ) -> VmResult<i64> {
-        self.heap.fast_seq2_mutation_2x2_cached(
-            arg.cache,
-            i64::from(call.init_value),
-            i64::from(call.update_add),
-        )
+        Ok(BoundSeq2x2PackedArg {
+            heap: &raw mut self.heap,
+            cache,
+            released: false,
+            borrow: PhantomData,
+        })
     }
 
     /// Binds one zero-arg integer export and returns typed call handle.
@@ -160,10 +161,20 @@ impl Vm {
             }));
         };
         let kernel = self.bound_kernel_for(&value)?;
-        Ok(BoundInitCall {
-            module_slot: procedure.module_slot,
-            kernel,
-        })
+        let kind = match kernel {
+            RuntimeKernel::InlineEffectResume {
+                resume_value,
+                value_add,
+            } => BoundInitCallKind::InlineEffectResume {
+                resume_value,
+                value_add,
+            },
+            _ => BoundInitCallKind::Kernel {
+                module_slot: procedure.module_slot,
+                kernel,
+            },
+        };
+        Ok(BoundInitCall { kind })
     }
 
     /// Calls one typed zero-arg integer export.
@@ -171,16 +182,30 @@ impl Vm {
     /// # Errors
     ///
     /// Returns [`VmError`] when invocation fails or result is not integer.
+    #[inline(always)]
     pub fn call_init0_i64(&mut self, call: BoundInitCall) -> VmResult<i64> {
         self.count_instruction();
-        let value = self
-            .exec_runtime_kernel(call.module_slot, call.kernel, &[])?
-            .ok_or_else(|| {
-                VmError::new(VmErrorKind::InvalidProgramShape {
-                    detail: "expected no-arg runtime kernel".into(),
-                })
-            })?;
-        int_result(value)
+        match call.kind {
+            BoundInitCallKind::InlineEffectResume {
+                resume_value,
+                value_add,
+            } => i64::from(resume_value)
+                .checked_add(i64::from(value_add))
+                .ok_or_else(int_overflow_error),
+            BoundInitCallKind::Kernel {
+                module_slot,
+                kernel,
+            } => {
+                let value = self
+                    .exec_runtime_kernel(module_slot, kernel, &[])?
+                    .ok_or_else(|| {
+                        VmError::new(VmErrorKind::InvalidProgramShape {
+                            detail: "expected no-arg runtime kernel".into(),
+                        })
+                    })?;
+                int_result(value)
+            }
+        }
     }
 
     fn bound_kernel_for(&self, value: &super::Value) -> VmResult<RuntimeKernel> {
@@ -227,6 +252,44 @@ impl Vm {
                 detail: "expected one-arg integer runtime kernel".into(),
             })),
         }
+    }
+}
+
+impl BoundSeq2x2PackedArg<'_> {
+    /// Calls one typed 2x2 sequence mutation handle against one pinned arg handle.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VmError`] when invocation fails.
+    #[inline(always)]
+    pub fn call_i64(&self, call: BoundSeq2x2Call) -> VmResult<i64> {
+        // SAFETY: pointer comes from active VM borrow captured at bind time.
+        let heap = unsafe { &mut *self.heap };
+        heap.fast_seq2_mutation_2x2_pinned(
+            self.cache,
+            i64::from(call.init_value),
+            i64::from(call.update_add),
+        )
+    }
+
+    pub fn release(mut self) {
+        self.release_inner();
+    }
+
+    fn release_inner(&mut self) {
+        if self.released {
+            return;
+        }
+        // SAFETY: pointer comes from active VM borrow captured at bind time.
+        let heap = unsafe { &mut *self.heap };
+        heap.unpin_seq2x2_packed_arg(self.cache);
+        self.released = true;
+    }
+}
+
+impl Drop for BoundSeq2x2PackedArg<'_> {
+    fn drop(&mut self) {
+        self.release_inner();
     }
 }
 

@@ -92,14 +92,25 @@ fn bench_vm_init_small_module(c: &mut Criterion) {
     });
 
     _ = c.bench_function("bench_vm_init_small_module", |b| {
-        b.iter_batched(
-            || Vm::with_rejecting_host(program.clone(), VmOptions),
-            |mut vm| {
-                vm.initialize().expect("vm init should succeed");
-                black_box(vm.executed_instructions())
-            },
-            BatchSize::SmallInput,
-        );
+        b.iter_custom(|iters| {
+            let mut total = Duration::ZERO;
+            let mut remaining = iters;
+            while remaining > 0 {
+                let batch = remaining.min(512);
+                let mut vms = Vec::with_capacity(batch as usize);
+                for _ in 0..batch {
+                    vms.push(Vm::with_rejecting_host(program.clone(), VmOptions));
+                }
+                let start = Instant::now();
+                for vm in &mut vms {
+                    vm.initialize().expect("vm init should succeed");
+                    _ = black_box(vm.executed_instructions());
+                }
+                total += start.elapsed();
+                remaining -= batch;
+            }
+            total
+        });
     });
 
     _ = c.bench_function("bench_vm_init_small_module_pure", |b| {
@@ -180,8 +191,8 @@ fn bench_vm_sequence_index_mutation(c: &mut Criterion) {
 
     _ = c.bench_function("bench_vm_sequence_index_mutation", |b| {
         b.iter(|| {
-            let result = vm
-                .call_seq2x2_i64(black_box(answer), black_box(&grid))
+            let result = grid
+                .call_i64(answer)
                 .expect("sequence mutation should succeed");
             black_box(result)
         });

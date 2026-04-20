@@ -94,6 +94,22 @@ pub struct RuntimeSeq2Mutation {
     pub(crate) finish_right_second: i16,
 }
 
+impl RuntimeSeq2Mutation {
+    #[must_use]
+    pub(crate) const fn is_2x2(self) -> bool {
+        self.init_first == 0
+            && self.init_second == 1
+            && self.update_target_first == 1
+            && self.update_target_second == 0
+            && self.update_source_first == 0
+            && self.update_source_second == 1
+            && self.finish_left_first == 0
+            && self.finish_left_second == 1
+            && self.finish_right_first == 1
+            && self.finish_right_second == 0
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RuntimeCallShape {
     pub(crate) params: u16,
