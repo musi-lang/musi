@@ -339,6 +339,7 @@ impl RuntimeHeap {
         self.slots[slot_index].generation = self.slots[slot_index].generation.wrapping_add(1);
         self.slots[slot_index].survive_count = 0;
         self.slots[slot_index].is_marked = false;
+        self.slots[slot_index].pin_count = 0;
         self.slots[slot_index].is_pinned = false;
         self.allocated_bytes = self.allocated_bytes.saturating_sub(bytes);
         self.free_slots.push(slot_index);

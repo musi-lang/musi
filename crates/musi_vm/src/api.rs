@@ -10,4 +10,6 @@ pub use super::value::{
     ClosureView, ForeignView, IsolateId, ModuleView, ProcedureValue, RecordView, SeqView,
     StringView, SyntaxView, Value, ValueView, render_value_view,
 };
-pub use super::vm::{BoundExport, Vm, VmOptions, VmRuntime};
+pub use super::vm::{
+    BoundI64Call, BoundInitCall, BoundSeq2x2Call, BoundSeq2x2PackedArg, Vm, VmOptions, VmRuntime,
+};

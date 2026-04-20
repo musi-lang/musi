@@ -42,7 +42,7 @@ mod core;
 mod options;
 mod runtime;
 
-pub use bound::BoundExport;
+pub use bound::{BoundI64Call, BoundInitCall, BoundSeq2x2Call, BoundSeq2x2PackedArg};
 pub use options::{VmOptimizationLevel, VmOptions};
 pub use runtime::VmRuntime;
 
@@ -64,4 +64,5 @@ pub struct Vm {
     heap_dirty: bool,
     executed_instructions: u64,
     external_roots: Vec<Value>,
+    root_initialized: bool,
 }

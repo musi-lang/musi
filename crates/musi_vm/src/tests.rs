@@ -608,9 +608,11 @@ mod success {
             .expect("data match should run");
         assert_eq!(value, Value::Int(42));
 
-        let bound = vm.bind_export("answer").expect("answer should bind");
+        let bound = vm
+            .bind_export_i64_i64("answer")
+            .expect("answer should bind");
         let value = vm
-            .call1_i64_i64(&bound, 41)
+            .call_i64_i64(bound, 41)
             .expect("typed data match should run");
         assert_eq!(value, 42);
     }
@@ -658,8 +660,10 @@ mod success {
             "recursive sum should stay fused: {executed}"
         );
 
-        let bound = vm.bind_export("answer").expect("answer should bind");
-        let value = vm.call1_i64_i64(&bound, 200).expect("typed sum should run");
+        let bound = vm
+            .bind_export_i64_i64("answer")
+            .expect("answer should bind");
+        let value = vm.call_i64_i64(bound, 200).expect("typed sum should run");
         assert_eq!(value, 20_100);
     }
 
@@ -680,7 +684,9 @@ mod success {
         );
         let mut vm = Vm::with_rejecting_host(program, VmOptions);
         vm.initialize().expect("vm init should succeed");
-        let bound = vm.bind_export("answer").expect("answer should bind");
+        let bound = vm
+            .bind_export_seq2x2_i64("answer")
+            .expect("answer should bind");
         let ty = TypeId::from_raw(0);
         let first = vm
             .alloc_sequence(ty, [Value::Int(1), Value::Int(2)])
@@ -697,11 +703,100 @@ mod success {
         let Value::Seq(grid_ref) = grid else {
             panic!("grid should be sequence")
         };
+        let grid = vm
+            .bind_seq2x2_packed_int_arg(grid_ref)
+            .expect("grid should bind");
         let typed = vm
-            .call1_seq_i64(&bound, grid_ref)
+            .call_seq2x2_i64(bound, &grid)
             .expect("typed sequence call should run");
+        vm.unpin_seq2x2_packed_arg(&grid);
         assert_eq!(dynamic, Value::Int(85));
         assert_eq!(typed, 85);
+    }
+
+    #[test]
+    fn bound_packed_sequence_bind_rejects_plain_layout() {
+        let program = compile_program(
+            &[(
+                "main",
+                r"
+            export let answer (grid : mut [2][2]Int) : Int := (
+              grid.[0, 1] := 42;
+              grid.[1, 0] := grid.[0, 1] + 1;
+              grid.[0, 1] + grid.[1, 0]
+            );
+        ",
+            )],
+            "main",
+        );
+        let mut vm = Vm::with_rejecting_host(program, VmOptions);
+        vm.initialize().expect("vm init should succeed");
+        let ty = TypeId::from_raw(0);
+        let first = vm
+            .alloc_sequence(ty, [Value::Int(1), Value::Int(2)])
+            .expect("first row should allocate");
+        let second = vm
+            .alloc_sequence(ty, [Value::Int(3), Value::Int(4)])
+            .expect("second row should allocate");
+        let third = vm
+            .alloc_sequence(ty, [Value::Int(5), Value::Int(6)])
+            .expect("third row should allocate");
+        let grid = vm
+            .alloc_sequence(ty, [first, second, third])
+            .expect("grid should allocate");
+        let Value::Seq(grid_ref) = grid else {
+            panic!("grid should be sequence")
+        };
+        let error = vm
+            .bind_seq2x2_packed_int_arg(grid_ref)
+            .expect_err("plain layout should fail packed bind");
+        assert!(matches!(
+            error.kind(),
+            VmErrorKind::InvalidProgramShape { .. }
+        ));
+    }
+
+    #[test]
+    fn unpin_seq2x2_packed_arg_is_idempotent() {
+        let program = compile_program(
+            &[(
+                "main",
+                r"
+            export let answer (grid : mut [2][2]Int) : Int := (
+              grid.[0, 1] := 42;
+              grid.[1, 0] := grid.[0, 1] + 1;
+              grid.[0, 1] + grid.[1, 0]
+            );
+        ",
+            )],
+            "main",
+        );
+        let mut vm = Vm::with_rejecting_host(program, VmOptions);
+        vm.initialize().expect("vm init should succeed");
+        let ty = TypeId::from_raw(0);
+        let first = vm
+            .alloc_sequence(ty, [Value::Int(1), Value::Int(2)])
+            .expect("first row should allocate");
+        let second = vm
+            .alloc_sequence(ty, [Value::Int(3), Value::Int(4)])
+            .expect("second row should allocate");
+        let grid = vm
+            .alloc_sequence(ty, [first, second])
+            .expect("grid should allocate");
+        let Value::Seq(grid_ref) = grid else {
+            panic!("grid should be sequence")
+        };
+        let arg = vm
+            .bind_seq2x2_packed_int_arg(grid_ref)
+            .expect("packed grid should bind");
+        let bound = vm
+            .bind_export_seq2x2_i64("answer")
+            .expect("answer should bind");
+        let value = vm
+            .call_seq2x2_i64(bound, &arg)
+            .expect("typed seq call should run");
+        assert_eq!(value, 85);
+        vm.unpin_seq2x2_packed_arg(&arg);
     }
 
     #[test]

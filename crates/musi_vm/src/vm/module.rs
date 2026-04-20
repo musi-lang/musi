@@ -23,6 +23,9 @@ impl Vm {
     pub(crate) fn initialize_slot(&mut self, slot: usize) -> VmResult {
         let state = self.module(slot)?.state;
         if matches!(state, ModuleState::Initialized) {
+            if slot == 0 {
+                self.root_initialized = true;
+            }
             return Ok(());
         }
         if matches!(state, ModuleState::Initializing) {
@@ -36,10 +39,16 @@ impl Vm {
         match result {
             Ok(()) => {
                 self.module_mut(slot)?.state = ModuleState::Initialized;
+                if slot == 0 {
+                    self.root_initialized = true;
+                }
                 Ok(())
             }
             Err(error) => {
                 self.module_mut(slot)?.state = ModuleState::Uninitialized;
+                if slot == 0 {
+                    self.root_initialized = false;
+                }
                 Err(error)
             }
         }

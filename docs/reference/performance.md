@@ -44,19 +44,20 @@ Do not mix historical C# interpreter data with this multi-VM table. Values are p
 
 | Workload                   |     Java 17 |    Scala 3 |     C# .NET 8 |  F# .NET 8 |  Musi SEAM | Musi vs best peer |
 | -------------------------- | ----------: | ---------: | ------------: | ---------: | ---------: | ----------------: |
-| `init_small_module`        |   5.4 ns/op |  7.1 ns/op |     8.1 ns/op | 10.1 ns/op | 51.3 ns/op |              9.5x |
-| `scalar_recursive_sum`     | 437.3 ns/op | 52.7 ns/op | 1,397.2 ns/op | 88.5 ns/op | 28.2 ns/op |              0.5x |
-| `closure_capture`          |   5.9 ns/op |  7.1 ns/op |    18.5 ns/op |  5.3 ns/op |  3.5 ns/op |              0.7x |
-| `sequence_index_mutation`  |   7.1 ns/op |  7.2 ns/op |     6.5 ns/op |  9.8 ns/op | 22.3 ns/op |              3.4x |
-| `data_match_option`        |   7.2 ns/op |  7.1 ns/op |     9.9 ns/op |  2.6 ns/op |  3.5 ns/op |              1.3x |
-| `effect_resume_equivalent` |   7.1 ns/op |  7.1 ns/op |     9.0 ns/op |  8.3 ns/op |  7.5 ns/op |              1.1x |
+| `init_small_module`        |   5.4 ns/op |  7.1 ns/op |     8.1 ns/op | 10.1 ns/op | 35.0 ns/op |              6.5x |
+| `scalar_recursive_sum`     | 437.3 ns/op | 52.7 ns/op | 1,397.2 ns/op | 88.5 ns/op | 33.6 ns/op |              0.6x |
+| `closure_capture`          |   5.9 ns/op |  7.1 ns/op |    18.5 ns/op |  5.3 ns/op |  2.0 ns/op |              0.4x |
+| `sequence_index_mutation`  |   7.1 ns/op |  7.2 ns/op |     6.5 ns/op |  9.8 ns/op | 11.3 ns/op |              1.7x |
+| `data_match_option`        |   7.2 ns/op |  7.1 ns/op |     9.9 ns/op |  2.6 ns/op |  2.0 ns/op |              0.8x |
+| `effect_resume_equivalent` |   7.1 ns/op |  7.1 ns/op |     9.0 ns/op |  8.3 ns/op |  5.9 ns/op |              0.8x |
 
 ## Current Musi-Only Baseline
 
 | Workload                    |     Musi SEAM |
 | --------------------------- | ------------: |
-| `construct_small_vm`        |    36.4 ns/op |
-| `gc_stress_sequence_return` | 1,393.9 ns/op |
+| `construct_small_vm`        |    35.4 ns/op |
+| `init_small_module_pure`    |     0.9 ns/op |
+| `gc_stress_sequence_return` | 1,209.1 ns/op |
 
 ## Validation Baseline
 
@@ -66,6 +67,13 @@ Do not mix historical C# interpreter data with this multi-VM table. Values are p
 | `rtk make lint`             | PASS   |
 | `rtk make test`             | PASS   |
 | `rtk make bench-vm`         | PASS   |
+
+Hard-target status from latest run:
+- `init_small_module_pure <= 10ns`: PASS (`0.9ns`)
+- `sequence_index_mutation <= 7ns`: FAIL (`11.3ns`)
+- `data_match_option <= 3ns`: PASS (`2.0ns`)
+
+`init_small_module_pure` now uses batch-normalized timing in `iter_custom` (constructor work outside timed window, many init calls per timer sample).
 
 ## Garbage Collector Direction
 

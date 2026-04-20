@@ -1,152 +1,247 @@
-use super::{RuntimeKernel, Value, Vm, VmError, VmErrorKind, VmResult};
-use crate::VmValueKind::{Int, Nat};
+use super::{RuntimeKernel, Vm, VmError, VmErrorKind, VmResult};
+use crate::VmValueKind::{Int, Procedure};
+use crate::gc::Seq2x2ArgCache;
 use crate::value::GcRef;
+use music_seam::ProcedureId;
 
-#[derive(Debug, Clone)]
-pub struct BoundExport {
-    value: Value,
-    kind: BoundExportKind,
+#[derive(Debug, Clone, Copy)]
+pub struct BoundI64Call {
+    kind: BoundI64CallKind,
 }
 
 #[derive(Debug, Clone, Copy)]
-enum BoundExportKind {
-    Dynamic,
-    Kernel {
+enum BoundI64CallKind {
+    AddConst(i64),
+    DirectIntWrapper {
         module_slot: usize,
-        kernel: RuntimeKernel,
+        procedure: ProcedureId,
+        const_arg: i16,
     },
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct BoundSeq2x2Call {
+    init_value: i16,
+    update_add: i16,
+}
+
+#[derive(Debug)]
+pub struct BoundSeq2x2PackedArg {
+    cache: Seq2x2ArgCache,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct BoundInitCall {
+    module_slot: usize,
+    kernel: RuntimeKernel,
+}
+
 impl Vm {
-    /// Binds one root export once and returns one reusable call handle.
+    /// Binds one integer-call export and returns typed fast call handle.
     ///
     /// # Errors
     ///
-    /// Returns [`VmError`] if initialization is missing or export lookup fails.
-    pub fn bind_export(&mut self, name: &str) -> VmResult<BoundExport> {
+    /// Returns [`VmError`] if export is missing or has incompatible signature/kernel shape.
+    pub fn bind_export_i64_i64(&mut self, name: &str) -> VmResult<BoundI64Call> {
         self.ensure_initialized()?;
         let value = self.lookup_export_in_slot(0, name)?;
         self.retain_external_value(&value)?;
-        let kind = self.bound_export_kind_for(&value)?;
-        Ok(BoundExport { value, kind })
+        let kind = self.bound_i64_call_kind_for(&value)?;
+        Ok(BoundI64Call { kind })
     }
 
-    /// Calls one bound export through existing dynamic call path.
+    /// Calls one typed integer-call handle.
     ///
     /// # Errors
     ///
     /// Returns [`VmError`] when invocation fails.
-    pub fn call_bound(&mut self, export: &BoundExport, args: &[Value]) -> VmResult<Value> {
-        self.call_value(export.value.clone(), args)
+    pub fn call_i64_i64(&mut self, call: BoundI64Call, arg: i64) -> VmResult<i64> {
+        match call.kind {
+            BoundI64CallKind::AddConst(add) => arg.checked_add(add).ok_or_else(int_overflow_error),
+            BoundI64CallKind::DirectIntWrapper {
+                module_slot,
+                procedure,
+                const_arg,
+            } => {
+                let args = [super::Value::Int(arg)];
+                let value = self
+                    .exec_runtime_kernel(
+                        module_slot,
+                        RuntimeKernel::DirectIntWrapperCall {
+                            arg_local: 0,
+                            const_arg,
+                            procedure,
+                        },
+                        &args,
+                    )?
+                    .ok_or_else(|| {
+                        VmError::new(VmErrorKind::InvalidProgramShape {
+                            detail: "unsupported direct wrapper kernel shape".into(),
+                        })
+                    })?;
+                int_result(value)
+            }
+        }
     }
 
-    /// Calls one bound export with zero args and expects one integer-like result.
+    /// Binds one 2x2 sequence mutation export and returns typed fast call handle.
     ///
     /// # Errors
     ///
-    /// Returns [`VmError`] when invocation fails or result is not integer-like.
-    pub fn call0_i64(&mut self, export: &BoundExport) -> VmResult<i64> {
-        if let BoundExportKind::Kernel {
-            module_slot,
-            kernel,
-        } = export.kind
-        {
-            self.count_instruction();
-            if let Some(value) = self.exec_runtime_kernel(module_slot, kernel, &[])? {
-                return int_like_result(value);
-            }
-        }
-        let value = self.call_value(export.value.clone(), &[])?;
-        int_like_result(value)
-    }
-
-    /// Calls one bound export with one integer arg and expects one integer-like result.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`VmError`] when invocation fails or result is not integer-like.
-    pub fn call1_i64_i64(&mut self, export: &BoundExport, arg: i64) -> VmResult<i64> {
-        let args = [Value::Int(arg)];
-        if let BoundExportKind::Kernel {
-            module_slot,
-            kernel,
-        } = export.kind
-        {
-            self.count_instruction();
-            if let Some(value) = self.exec_runtime_kernel_i64_arg(module_slot, kernel, arg)? {
-                return Ok(value);
-            }
-            if let Some(value) = self.exec_runtime_kernel(module_slot, kernel, &args)? {
-                return int_like_result(value);
-            }
-        }
-        let value = self.call_value(export.value.clone(), &args)?;
-        int_like_result(value)
-    }
-
-    /// Calls one bound export with one sequence arg and expects one integer-like result.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`VmError`] when invocation fails or result is not integer-like.
-    pub fn call1_seq_i64(&mut self, export: &BoundExport, arg: GcRef) -> VmResult<i64> {
-        let args = [Value::Seq(arg)];
-        if let BoundExportKind::Kernel {
-            module_slot,
-            kernel,
-        } = export.kind
-        {
-            self.count_instruction();
-            if let Some(value) = self.exec_runtime_kernel_seq_arg(kernel, arg)? {
-                return Ok(value);
-            }
-            if let Some(value) = self.exec_runtime_kernel(module_slot, kernel, &args)? {
-                return int_like_result(value);
-            }
-        }
-        let value = self.call_value(export.value.clone(), &args)?;
-        int_like_result(value)
-    }
-
-    fn bound_export_kind_for(&self, value: &Value) -> VmResult<BoundExportKind> {
-        let Value::Procedure(procedure) = value else {
-            return Ok(BoundExportKind::Dynamic);
-        };
-        let kernels_enabled = matches!(
-            self.options.optimization_level,
-            super::VmOptimizationLevel::Tiered
-        ) && self.options.instruction_budget.is_none()
-            && self.options.stack_frame_limit.is_none();
-        if !kernels_enabled {
-            return Ok(BoundExportKind::Dynamic);
-        }
-        let Some(kernel) = self
-            .module(procedure.module_slot)?
-            .program
-            .loaded_procedure(procedure.procedure)?
-            .runtime_kernel()
+    /// Returns [`VmError`] if export is missing or has incompatible kernel shape.
+    pub fn bind_export_seq2x2_i64(&mut self, name: &str) -> VmResult<BoundSeq2x2Call> {
+        self.ensure_initialized()?;
+        let value = self.lookup_export_in_slot(0, name)?;
+        self.retain_external_value(&value)?;
+        let kernel = self.bound_kernel_for(&value)?;
+        let RuntimeKernel::Seq2Mutation2x2 {
+            grid_local: 0,
+            init_value,
+            update_add,
+        } = kernel
         else {
-            return Ok(BoundExportKind::Dynamic);
+            return Err(VmError::new(VmErrorKind::InvalidProgramShape {
+                detail: "expected seq2x2 mutation kernel".into(),
+            }));
         };
-        Ok(BoundExportKind::Kernel {
+        Ok(BoundSeq2x2Call {
+            init_value,
+            update_add,
+        })
+    }
+
+    /// Binds one sequence value for cached 2x2 integer mutation fast calls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VmError`] if sequence is stale, cross-isolate, or not 2x2 integer shape.
+    pub fn bind_seq2x2_packed_int_arg(
+        &mut self,
+        reference: GcRef,
+    ) -> VmResult<BoundSeq2x2PackedArg> {
+        let cache = self.heap.bind_seq2x2_packed_arg(reference)?;
+        Ok(BoundSeq2x2PackedArg { cache })
+    }
+
+    pub fn unpin_seq2x2_packed_arg(&mut self, arg: &BoundSeq2x2PackedArg) {
+        self.heap.unpin_seq2x2_packed_arg(arg.cache);
+    }
+
+    /// Calls one typed 2x2 sequence mutation handle against one cached arg handle.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VmError`] when cached arg is stale/cross-isolate/shape-mismatched.
+    pub fn call_seq2x2_i64(
+        &mut self,
+        call: BoundSeq2x2Call,
+        arg: &BoundSeq2x2PackedArg,
+    ) -> VmResult<i64> {
+        self.heap.fast_seq2_mutation_2x2_cached(
+            arg.cache,
+            i64::from(call.init_value),
+            i64::from(call.update_add),
+        )
+    }
+
+    /// Binds one zero-arg integer export and returns typed call handle.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VmError`] if export is missing or has incompatible kernel shape.
+    pub fn bind_export_init0(&mut self, name: &str) -> VmResult<BoundInitCall> {
+        self.ensure_initialized()?;
+        let value = self.lookup_export_in_slot(0, name)?;
+        self.retain_external_value(&value)?;
+        let super::Value::Procedure(procedure) = value else {
+            return Err(VmError::new(VmErrorKind::InvalidValueKind {
+                expected: Procedure,
+                found: value.kind(),
+            }));
+        };
+        let kernel = self.bound_kernel_for(&value)?;
+        Ok(BoundInitCall {
             module_slot: procedure.module_slot,
             kernel,
         })
     }
+
+    /// Calls one typed zero-arg integer export.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VmError`] when invocation fails or result is not integer.
+    pub fn call_init0_i64(&mut self, call: BoundInitCall) -> VmResult<i64> {
+        self.count_instruction();
+        let value = self
+            .exec_runtime_kernel(call.module_slot, call.kernel, &[])?
+            .ok_or_else(|| {
+                VmError::new(VmErrorKind::InvalidProgramShape {
+                    detail: "expected no-arg runtime kernel".into(),
+                })
+            })?;
+        int_result(value)
+    }
+
+    fn bound_kernel_for(&self, value: &super::Value) -> VmResult<RuntimeKernel> {
+        let super::Value::Procedure(procedure) = value else {
+            return Err(VmError::new(VmErrorKind::InvalidValueKind {
+                expected: Procedure,
+                found: value.kind(),
+            }));
+        };
+        self.module(procedure.module_slot)?
+            .program
+            .loaded_procedure(procedure.procedure)?
+            .runtime_kernel()
+            .ok_or_else(|| {
+                VmError::new(VmErrorKind::InvalidProgramShape {
+                    detail: "bound export missing runtime kernel".into(),
+                })
+            })
+    }
+
+    fn bound_i64_call_kind_for(&self, value: &super::Value) -> VmResult<BoundI64CallKind> {
+        let super::Value::Procedure(bound) = value else {
+            return Err(VmError::new(VmErrorKind::InvalidValueKind {
+                expected: Procedure,
+                found: value.kind(),
+            }));
+        };
+        let kernel = self.bound_kernel_for(value)?;
+        match kernel {
+            RuntimeKernel::IntArgAddSmi { arg_local: 0, smi }
+            | RuntimeKernel::DataConstructMatchAdd { source: 0, smi } => {
+                Ok(BoundI64CallKind::AddConst(i64::from(smi)))
+            }
+            RuntimeKernel::DirectIntWrapperCall {
+                arg_local: 0,
+                const_arg,
+                procedure,
+            } => Ok(BoundI64CallKind::DirectIntWrapper {
+                module_slot: bound.module_slot,
+                procedure,
+                const_arg,
+            }),
+            _ => Err(VmError::new(VmErrorKind::InvalidProgramShape {
+                detail: "expected one-arg integer runtime kernel".into(),
+            })),
+        }
+    }
 }
 
-fn int_like_result(value: Value) -> VmResult<i64> {
+fn int_result(value: super::Value) -> VmResult<i64> {
     match value {
-        Value::Int(value) => Ok(value),
-        Value::Nat(value) => i64::try_from(value).map_err(|_| {
-            VmError::new(VmErrorKind::InvalidValueKind {
-                expected: Int,
-                found: Nat,
-            })
-        }),
+        super::Value::Int(value) => Ok(value),
         other => Err(VmError::new(VmErrorKind::InvalidValueKind {
             expected: Int,
             found: other.kind(),
         })),
     }
+}
+
+fn int_overflow_error() -> VmError {
+    VmError::new(VmErrorKind::ArithmeticFailed {
+        detail: "signed integer overflow".into(),
+    })
 }

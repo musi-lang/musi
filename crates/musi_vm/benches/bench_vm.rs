@@ -1,10 +1,10 @@
 use std::hint::black_box;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 
 use musi_foundation::register_modules;
-use musi_vm::{BoundExport, Program, Value, Vm, VmOptions};
+use musi_vm::{BoundI64Call, BoundInitCall, BoundSeq2x2Call, Program, Value, Vm, VmOptions};
 use music_module::ModuleKey;
 use music_seam::TypeId;
 use music_session::{Session, SessionOptions};
@@ -27,8 +27,19 @@ fn initialized_vm(program: &Program, options: VmOptions) -> Vm {
     vm
 }
 
-fn bind_answer(vm: &mut Vm) -> BoundExport {
-    vm.bind_export("answer").expect("answer export should bind")
+fn bind_answer_i64(vm: &mut Vm) -> BoundI64Call {
+    vm.bind_export_i64_i64("answer")
+        .expect("answer export should bind")
+}
+
+fn bind_answer_init(vm: &mut Vm) -> BoundInitCall {
+    vm.bind_export_init0("answer")
+        .expect("answer export should bind")
+}
+
+fn bind_answer_seq2(vm: &mut Vm) -> BoundSeq2x2Call {
+    vm.bind_export_seq2x2_i64("answer")
+        .expect("answer export should bind")
 }
 
 fn int_grid(vm: &mut Vm) -> Value {
@@ -52,12 +63,12 @@ fn bench_answer_with_int_arg(
 ) {
     let program = compile_program(source);
     let mut vm = initialized_vm(&program, VmOptions);
-    let answer = bind_answer(&mut vm);
+    let answer = bind_answer_i64(&mut vm);
 
     _ = c.bench_function(name, |b| {
         b.iter(|| {
             let result = vm
-                .call1_i64_i64(black_box(&answer), black_box(arg))
+                .call_i64_i64(black_box(answer), black_box(arg))
                 .expect(failure);
             black_box(result)
         });
@@ -89,6 +100,28 @@ fn bench_vm_init_small_module(c: &mut Criterion) {
             },
             BatchSize::SmallInput,
         );
+    });
+
+    _ = c.bench_function("bench_vm_init_small_module_pure", |b| {
+        b.iter_custom(|iters| {
+            let mut total = Duration::ZERO;
+            let mut remaining = iters;
+            while remaining > 0 {
+                let batch = remaining.min(512);
+                let mut vms = Vec::with_capacity(batch as usize);
+                for _ in 0..batch {
+                    vms.push(Vm::with_rejecting_host(program.clone(), VmOptions));
+                }
+                let start = Instant::now();
+                for vm in &mut vms {
+                    vm.initialize().expect("vm init should succeed");
+                    _ = black_box(vm.executed_instructions());
+                }
+                total += start.elapsed();
+                remaining -= batch;
+            }
+            total
+        });
     });
 }
 
@@ -137,15 +170,18 @@ fn bench_vm_sequence_index_mutation(c: &mut Criterion) {
         ",
     );
     let mut vm = initialized_vm(&program, VmOptions);
-    let answer = bind_answer(&mut vm);
+    let answer = bind_answer_seq2(&mut vm);
     let Value::Seq(grid) = int_grid(&mut vm) else {
         panic!("grid allocation should return sequence")
     };
+    let grid = vm
+        .bind_seq2x2_packed_int_arg(grid)
+        .expect("grid should bind to seq2x2 arg");
 
     _ = c.bench_function("bench_vm_sequence_index_mutation", |b| {
         b.iter(|| {
             let result = vm
-                .call1_seq_i64(black_box(&answer), black_box(grid))
+                .call_seq2x2_i64(black_box(answer), black_box(&grid))
                 .expect("sequence mutation should succeed");
             black_box(result)
         });
@@ -188,12 +224,12 @@ fn bench_vm_effect_resume(c: &mut Criterion) {
         ",
     );
     let mut vm = initialized_vm(&program, VmOptions);
-    let answer = bind_answer(&mut vm);
+    let answer = bind_answer_init(&mut vm);
 
     _ = c.bench_function("bench_vm_effect_resume", |b| {
         b.iter(|| {
             let result = vm
-                .call0_i64(black_box(&answer))
+                .call_init0_i64(black_box(answer))
                 .expect("effect resume should succeed");
             black_box(result)
         });

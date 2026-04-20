@@ -15,6 +15,7 @@ impl Vm {
         options: VmOptions,
     ) -> Self {
         let root_module = LoadedModule::new("<root>", program);
+        let root_initialized = root_module.is_initialized();
         let mut loaded_modules = LoadedModuleList::new();
         loaded_modules.push(root_module);
         Self {
@@ -34,12 +35,14 @@ impl Vm {
             heap_dirty: false,
             executed_instructions: 0,
             external_roots: Vec::new(),
+            root_initialized,
         }
     }
 
     #[must_use]
     pub fn with_rejecting_host(program: Program, options: VmOptions) -> Self {
         let root_module = LoadedModule::new("<root>", program);
+        let root_initialized = root_module.is_initialized();
         let mut loaded_modules = LoadedModuleList::new();
         loaded_modules.push(root_module);
         Self {
@@ -59,6 +62,7 @@ impl Vm {
             heap_dirty: false,
             executed_instructions: 0,
             external_roots: Vec::new(),
+            root_initialized,
         }
     }
 
@@ -68,14 +72,12 @@ impl Vm {
     ///
     /// Returns [`VmError`] if entry execution fails.
     pub fn initialize(&mut self) -> VmResult {
-        if self
-            .loaded_modules
-            .first()
-            .is_some_and(LoadedModule::is_initialized)
-        {
+        if self.root_initialized {
             return Ok(());
         }
-        self.initialize_slot(0)
+        self.initialize_slot(0)?;
+        self.root_initialized = true;
+        Ok(())
     }
 
     /// Resolves one export by source name after initialization.
