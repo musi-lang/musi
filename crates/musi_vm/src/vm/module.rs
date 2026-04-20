@@ -113,14 +113,22 @@ impl Vm {
     }
 
     pub(crate) fn export_value(
-        &mut self,
+        &self,
         slot: usize,
         _name: &str,
         target: ExportTarget,
     ) -> VmResult<Value> {
         let module_name = self.module(slot)?.spec.clone();
         match target {
-            ExportTarget::Procedure(procedure) => self.alloc_closure(slot, procedure, Vec::new()),
+            ExportTarget::Procedure(procedure) => {
+                let loaded = self.module(slot)?.program.loaded_procedure(procedure)?;
+                Ok(Value::procedure(
+                    slot,
+                    procedure,
+                    loaded.params,
+                    loaded.locals,
+                ))
+            }
             ExportTarget::Global(global) => {
                 let globals = &self.module(slot)?.globals;
                 let raw_slot = usize::try_from(global.raw()).unwrap_or(usize::MAX);
@@ -185,14 +193,21 @@ impl Vm {
     }
 
     pub(crate) fn load_dynamic_module(&mut self, spec: &str) -> VmResult<usize> {
-        if let Some(slot) = self.module_slots.get(spec).copied() {
+        if let Some(slot) = self
+            .module_slots
+            .as_ref()
+            .and_then(|slots| slots.get(spec).copied())
+        {
             self.initialize_slot(slot)?;
             return Ok(slot);
         }
         let program = self.loader.load_program(spec)?;
         let slot = self.loaded_modules.len();
         self.loaded_modules.push(LoadedModule::new(spec, program));
-        let _ = self.module_slots.insert(spec.into(), slot);
+        let _ = self
+            .module_slots
+            .get_or_insert_with(Default::default)
+            .insert(spec.into(), slot);
         self.initialize_slot(slot)?;
         Ok(slot)
     }

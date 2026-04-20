@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use music_seam::{ProcedureId, TypeId};
 use music_term::SyntaxTerm;
 
@@ -12,7 +10,8 @@ pub use super::program::{
 };
 pub use super::value::{
     ClosureValue, ClosureView, ContinuationFrame, ContinuationHandler, ContinuationValue,
-    DataValue, ForeignValue, GcRef, ModuleValue, ModuleView, SequenceValue, SyntaxView, ValueList,
+    DataValue, ForeignValue, GcRef, ModuleValue, ModuleView, ProcedureValue, SequenceValue,
+    SyntaxView, ValueList,
 };
 
 pub use super::{
@@ -132,9 +131,9 @@ impl VmRuntime {
 
 pub struct Vm {
     loaded_modules: LoadedModuleList,
-    module_slots: ModuleSlotMap,
-    loader: Box<dyn VmLoader>,
-    host: Box<dyn VmHost>,
+    module_slots: Option<ModuleSlotMap>,
+    loader: LoaderState,
+    host: HostState,
     options: VmOptions,
     frames: CallFrameList,
     spare_frames: Vec<CallFrame>,
@@ -151,6 +150,51 @@ pub struct Vm {
 
 const DEFAULT_AUTO_COLLECT_THRESHOLD_BYTES: usize = 1024 * 1024;
 
+enum LoaderState {
+    Rejecting(RejectingLoader),
+    Custom(Box<dyn VmLoader>),
+}
+
+impl LoaderState {
+    fn load_program(&mut self, spec: &str) -> VmResult<Program> {
+        match self {
+            Self::Rejecting(loader) => loader.load_program(spec),
+            Self::Custom(loader) => loader.load_program(spec),
+        }
+    }
+}
+
+enum HostState {
+    Rejecting(RejectingHost),
+    Custom(Box<dyn VmHost>),
+}
+
+impl HostState {
+    fn call_foreign(
+        &mut self,
+        ctx: &mut VmHostContext<'_>,
+        foreign: &ForeignCall,
+        args: &[Value],
+    ) -> VmResult<Value> {
+        match self {
+            Self::Rejecting(host) => host.call_foreign(ctx, foreign, args),
+            Self::Custom(host) => host.call_foreign(ctx, foreign, args),
+        }
+    }
+
+    fn handle_effect(
+        &mut self,
+        ctx: &mut VmHostContext<'_>,
+        effect: &EffectCall,
+        args: &[Value],
+    ) -> VmResult<Value> {
+        match self {
+            Self::Rejecting(host) => host.handle_effect(ctx, effect, args),
+            Self::Custom(host) => host.handle_effect(ctx, effect, args),
+        }
+    }
+}
+
 impl Vm {
     #[must_use]
     pub fn new(
@@ -162,9 +206,9 @@ impl Vm {
         let root_module = LoadedModule::new("<root>", program);
         Self {
             loaded_modules: vec![root_module],
-            module_slots: HashMap::new(),
-            loader: Box::new(loader),
-            host: Box::new(host),
+            module_slots: None,
+            loader: LoaderState::Custom(Box::new(loader)),
+            host: HostState::Custom(Box::new(host)),
             options,
             frames: Vec::new(),
             spare_frames: Vec::new(),
@@ -182,7 +226,25 @@ impl Vm {
 
     #[must_use]
     pub fn with_rejecting_host(program: Program, options: VmOptions) -> Self {
-        Self::new(program, RejectingLoader, RejectingHost, options)
+        let root_module = LoadedModule::new("<root>", program);
+        Self {
+            loaded_modules: vec![root_module],
+            module_slots: None,
+            loader: LoaderState::Rejecting(RejectingLoader),
+            host: HostState::Rejecting(RejectingHost),
+            options,
+            frames: Vec::new(),
+            spare_frames: Vec::new(),
+            handlers: Vec::new(),
+            active_resumes: Vec::new(),
+            next_handler_id: 0,
+            continuation_target_handler: None,
+            return_depth: None,
+            heap: RuntimeHeap::new(),
+            heap_dirty: false,
+            executed_instructions: 0,
+            external_roots: Vec::new(),
+        }
     }
 
     /// Runs synthesized module/program initialization exactly once.
@@ -304,6 +366,7 @@ impl Vm {
         }
         let base_depth = self.frames.len();
         let result = match value {
+            Value::Procedure(procedure) => self.call_procedure_value(procedure, args, base_depth),
             Value::Closure(closure) => {
                 let (module_slot, procedure, params, locals, captures) = {
                     let closure = self.heap.closure(closure)?;
@@ -392,6 +455,39 @@ impl Vm {
         Ok(result)
     }
 
+    fn call_procedure_value(
+        &mut self,
+        procedure: ProcedureValue,
+        args: &[Value],
+        base_depth: usize,
+    ) -> VmResult<Value> {
+        if let Some(value) =
+            self.try_invoke_kernel_from_args(procedure.module_slot, procedure.procedure, args)?
+        {
+            return self.finish_call_value(base_depth, value);
+        }
+        let param_count = usize::from(procedure.params);
+        let local_count = usize::from(procedure.locals.max(procedure.params));
+        if base_depth == 0 {
+            self.invoke_procedure_from_args_shape(
+                procedure.module_slot,
+                procedure.procedure,
+                args,
+                param_count,
+                local_count,
+            )
+        } else {
+            self.invoke_procedure_in_context_from_args_shape(
+                procedure.module_slot,
+                procedure.procedure,
+                args,
+                base_depth,
+                param_count,
+                local_count,
+            )
+        }
+    }
+
     fn finish_call_value(&mut self, base_depth: usize, result: Value) -> VmResult<Value> {
         self.retain_external_value(&result)?;
         if base_depth == 0 && self.should_collect_after_call() {
@@ -442,6 +538,7 @@ impl Vm {
             Value::Closure(closure) => ValueView::Closure(ClosureView::new(
                 self.heap.closure(*closure).expect("live closure"),
             )),
+            Value::Procedure(procedure) => ValueView::Procedure(*procedure),
             Value::Continuation(_) => ValueView::Continuation,
             Value::Type(ty) => ValueView::Type(*ty),
             Value::Module(module) => {
@@ -680,18 +777,6 @@ impl Vm {
             .alloc_data(DataValue::new(ty, tag, fields), &self.heap_options())?;
         self.after_heap_allocation(&value)?;
         Ok(value)
-    }
-
-    pub(crate) fn alloc_closure<Captures>(
-        &mut self,
-        module_slot: usize,
-        procedure: ProcedureId,
-        captures: Captures,
-    ) -> VmResult<Value>
-    where
-        Captures: IntoIterator<Item = Value>,
-    {
-        self.alloc_closure_owned(module_slot, procedure, captures.into_iter().collect())
     }
 
     pub(crate) fn alloc_closure_owned(

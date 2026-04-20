@@ -79,6 +79,7 @@ pub enum Value {
     Seq(GcRef),
     Data(GcRef),
     Closure(GcRef),
+    Procedure(ProcedureValue),
     Continuation(GcRef),
     Type(TypeId),
     Module(GcRef),
@@ -152,6 +153,36 @@ impl ClosureValue {
     #[must_use]
     pub fn local_count(&self) -> usize {
         usize::from(self.locals.max(self.params))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProcedureValue {
+    pub(crate) module_slot: usize,
+    pub(crate) procedure: ProcedureId,
+    pub(crate) params: u16,
+    pub(crate) locals: u16,
+}
+
+impl ProcedureValue {
+    #[must_use]
+    pub const fn new(module_slot: usize, procedure: ProcedureId, params: u16, locals: u16) -> Self {
+        Self {
+            module_slot,
+            procedure,
+            params,
+            locals,
+        }
+    }
+
+    #[must_use]
+    pub const fn module_slot(self) -> usize {
+        self.module_slot
+    }
+
+    #[must_use]
+    pub const fn procedure(self) -> ProcedureId {
+        self.procedure
     }
 }
 
@@ -292,6 +323,7 @@ pub enum ValueView<'a> {
     Record(RecordView<'a>),
     Data(RecordView<'a>),
     Closure(ClosureView<'a>),
+    Procedure(ProcedureValue),
     Continuation,
     Type(TypeId),
     Module(ModuleView<'a>),
@@ -314,6 +346,11 @@ pub fn render_value_view(view: ValueView<'_>) -> Option<String> {
         ValueView::Record(record) => Some(format!("<record:{}>", record.len())),
         ValueView::Data(record) => Some(format!("<data:{}:{}>", record.tag(), record.len())),
         ValueView::Closure(_) => Some("<closure>".to_owned()),
+        ValueView::Procedure(procedure) => Some(format!(
+            "<procedure:{}:{}>",
+            procedure.module_slot(),
+            procedure.procedure().raw()
+        )),
         ValueView::Continuation => Some("<continuation>".to_owned()),
         ValueView::Type(ty) => Some(format!("<type:{}>", ty.raw())),
         ValueView::Module(module) => Some(format!("<module:{}>", module.spec())),
@@ -522,6 +559,16 @@ impl Value {
     }
 
     #[must_use]
+    pub const fn procedure(
+        module_slot: usize,
+        procedure: ProcedureId,
+        params: u16,
+        locals: u16,
+    ) -> Self {
+        Self::Procedure(ProcedureValue::new(module_slot, procedure, params, locals))
+    }
+
+    #[must_use]
     pub const fn kind(&self) -> VmValueKind {
         match self {
             Self::Unit => VmValueKind::Unit,
@@ -534,6 +581,7 @@ impl Value {
             Self::Seq(_) => VmValueKind::Seq,
             Self::Data(_) => VmValueKind::Data,
             Self::Closure(_) => VmValueKind::Closure,
+            Self::Procedure(_) => VmValueKind::Procedure,
             Self::Continuation(_) => VmValueKind::Continuation,
             Self::Type(_) => VmValueKind::Type,
             Self::Module(_) => VmValueKind::Module,
@@ -558,6 +606,7 @@ impl Value {
             | Self::Nat(_)
             | Self::Float(_)
             | Self::CPtr(_)
+            | Self::Procedure(_)
             | Self::Type(_)
             | Self::Foreign(_)
             | Self::Effect(_)
@@ -580,6 +629,7 @@ impl Value {
             | Self::Nat(_)
             | Self::Float(_)
             | Self::CPtr(_)
+            | Self::Procedure(_)
             | Self::Type(_)
             | Self::Foreign(_)
             | Self::Effect(_)

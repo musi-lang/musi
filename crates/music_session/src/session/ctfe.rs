@@ -261,6 +261,7 @@ fn value_to_comptime(
         Value::Seq(_) => seq_to_comptime(root_key, vm, value),
         Value::Data(_) => data_to_comptime(root_key, vm, value),
         Value::Closure(_) => closure_to_comptime(root_key, vm, value),
+        Value::Procedure(_) => procedure_to_comptime(root_key, vm, value),
         Value::Type(value) => Ok(ComptimeValue::Type(ComptimeTypeValue {
             term: root_program(vm)?.type_term(*value),
         })),
@@ -276,6 +277,25 @@ fn value_to_comptime(
         })),
         Value::Continuation(_) => Err("continuation escape rejected".into()),
     }
+}
+
+fn procedure_to_comptime(
+    root_key: &ModuleKey,
+    vm: &Vm,
+    value: &Value,
+) -> Result<ComptimeValue, Box<str>> {
+    let ValueView::Procedure(procedure) = vm.inspect(value) else {
+        return Err("procedure view missing".into());
+    };
+    let program = vm
+        .module_program(procedure.module_slot())
+        .ok_or_else(|| format!("module slot `{}` missing", procedure.module_slot()))?;
+    let module = module_key_for_slot(root_key, vm, procedure.module_slot())?;
+    Ok(ComptimeValue::Closure(ComptimeClosureValue {
+        module,
+        name: program.procedure_source_name(procedure.procedure()).into(),
+        captures: Box::default(),
+    }))
 }
 
 fn seq_to_comptime(

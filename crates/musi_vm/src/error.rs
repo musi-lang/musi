@@ -39,6 +39,7 @@ pub enum VmValueKind {
     Seq,
     Data,
     Closure,
+    Procedure,
     Continuation,
     Type,
     Module,
