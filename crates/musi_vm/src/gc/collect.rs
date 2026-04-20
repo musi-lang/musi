@@ -1,7 +1,7 @@
 use crate::value::{GcRef, Value};
 
 use super::heap::{HeapCollectionStats, RuntimeHeap};
-use super::object::HeapObject;
+use super::space::HeapAllocation;
 
 impl RuntimeHeap {
     pub(crate) fn collect_from_roots<'a>(
@@ -25,6 +25,7 @@ impl RuntimeHeap {
             if let Some(object) = self.slots[slot_index].object.as_mut() {
                 object.break_edges();
             }
+            self.release_allocation(self.slots[slot_index].allocation);
             let bytes = self.slots[slot_index].bytes;
             self.slots[slot_index].object = None;
             self.slots[slot_index].generation = self.slots[slot_index].generation.wrapping_add(1);
@@ -37,8 +38,9 @@ impl RuntimeHeap {
         for slot in &mut self.slots {
             slot.is_marked = false;
         }
-        let evacuated_objects = self.compact_live_allocations();
-        let free_blocks = self.blocks.iter().filter(|block| block.is_free()).count();
+        self.finish_line_sweep();
+        let evacuated_objects = self.evacuate_fragmented_blocks();
+        let free_blocks = self.free_blocks();
         HeapCollectionStats {
             before_bytes,
             after_bytes: self.allocated_bytes,
@@ -59,37 +61,57 @@ impl RuntimeHeap {
     }
 
     fn mark_ref(&mut self, reference: GcRef) {
-        let Ok(slot) = self.slot_mut(reference) else {
-            return;
+        let (allocation, children) = {
+            let Ok(slot) = self.slot_mut(reference) else {
+                return;
+            };
+            if slot.is_marked {
+                return;
+            }
+            slot.is_marked = true;
+            let allocation = slot.allocation;
+            let mut children = Vec::new();
+            if let Some(object) = slot.object.as_ref() {
+                object.visit_children(|child| {
+                    if let Some(reference) = child.gc_ref() {
+                        children.push(reference);
+                    }
+                });
+            }
+            (allocation, children)
         };
-        if slot.is_marked {
-            return;
-        }
-        slot.is_marked = true;
-        let children = slot
-            .object
-            .as_ref()
-            .map_or_else(Vec::new, HeapObject::children);
+        self.mark_allocation(allocation);
         for child in children {
-            self.mark_value(&child);
+            self.mark_ref(child);
         }
     }
 
-    pub(super) fn compact_live_allocations(&mut self) -> usize {
+    fn evacuate_fragmented_blocks(&mut self) -> usize {
+        let candidates = self.fragmented_blocks();
+        if candidates.is_empty() {
+            return 0;
+        }
         let live_slots = self
             .slots
             .iter()
             .enumerate()
-            .filter(|(_, slot)| slot.object.is_some())
+            .filter(|(_, slot)| {
+                slot.object.is_some()
+                    && !slot.is_pinned
+                    && matches!(
+                        slot.allocation,
+                        HeapAllocation::Immix { block, .. } if candidates.contains(&block)
+                    )
+            })
             .map(|(slot_index, slot)| (slot_index, slot.allocation, slot.line_count()))
             .collect::<Vec<_>>();
-        self.blocks.clear();
         let mut evacuated = 0;
         for (slot_index, old_allocation, line_count) in live_slots {
-            let allocation = self.allocate_lines(line_count);
+            let allocation = self.allocate_lines_excluding(line_count, &candidates);
             if allocation != old_allocation {
                 evacuated += 1;
             }
+            self.release_allocation(old_allocation);
             if let Some(slot) = self.slots.get_mut(slot_index) {
                 slot.allocation = allocation;
             }

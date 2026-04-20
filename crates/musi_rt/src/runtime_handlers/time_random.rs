@@ -1,5 +1,4 @@
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -52,12 +51,12 @@ pub(super) fn register(host: &mut NativeHost) {
         },
     );
 
-    let random_state = Rc::new(RefCell::new(random_seed()));
+    let random_state = Arc::new(Mutex::new(random_seed()));
     register_random(host, &random_state);
 }
 
 fn register_random(host: &mut NativeHost, random_state: &RandomStateCell) {
-    let int_random_state = Rc::clone(random_state);
+    let int_random_state = Arc::clone(random_state);
     host.register_effect_handler(
         foundation_runtime::EFFECT,
         foundation_runtime::RANDOM_INT_OP,
@@ -69,7 +68,7 @@ fn register_random(host: &mut NativeHost, random_state: &RandomStateCell) {
         },
     );
 
-    let ranged_random_state = Rc::clone(random_state);
+    let ranged_random_state = Arc::clone(random_state);
     host.register_effect_handler(
         foundation_runtime::EFFECT,
         foundation_runtime::RANDOM_INT_IN_RANGE_OP,
@@ -88,7 +87,7 @@ fn register_random(host: &mut NativeHost, random_state: &RandomStateCell) {
         },
     );
 
-    let bool_random_state = Rc::clone(random_state);
+    let bool_random_state = Arc::clone(random_state);
     host.register_effect_handler(
         foundation_runtime::EFFECT,
         foundation_runtime::RANDOM_BOOL_OP,
@@ -100,7 +99,7 @@ fn register_random(host: &mut NativeHost, random_state: &RandomStateCell) {
         },
     );
 
-    let float_random_state = Rc::clone(random_state);
+    let float_random_state = Arc::clone(random_state);
     host.register_effect_handler(
         foundation_runtime::EFFECT,
         foundation_runtime::RANDOM_FLOAT_01_OP,

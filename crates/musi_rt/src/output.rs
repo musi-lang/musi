@@ -1,7 +1,6 @@
-use std::cell::RefCell;
 use std::io::{self, Write};
 use std::mem::take;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use crate::RuntimeOutputMode;
 
@@ -30,12 +29,12 @@ pub struct RuntimeOutputSink {
     stderr: String,
 }
 
-pub type RuntimeOutputSinkCell = Rc<RefCell<RuntimeOutputSink>>;
+pub type RuntimeOutputSinkCell = Arc<Mutex<RuntimeOutputSink>>;
 
 impl RuntimeOutputSink {
     #[must_use]
     pub(crate) fn shared(mode: RuntimeOutputMode) -> RuntimeOutputSinkCell {
-        Rc::new(RefCell::new(Self {
+        Arc::new(Mutex::new(Self {
             mode,
             stdout: String::new(),
             stderr: String::new(),

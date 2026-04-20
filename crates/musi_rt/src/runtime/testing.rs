@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::sync::Arc;
 
 use musi_native::NativeTestReport;
 use musi_vm::Vm;
@@ -29,7 +29,7 @@ impl Runtime {
         export_name: &str,
     ) -> RuntimeResult<NativeTestReport> {
         let program = self.compile_registered_program(spec)?;
-        let loader = SessionLoader::new(Rc::clone(&self.store));
+        let loader = SessionLoader::new(Arc::clone(&self.store));
         let host = self.host.clone();
         let mut vm = Vm::new(program, loader, host, self.options.vm.clone());
         vm.initialize()?;
@@ -46,10 +46,14 @@ impl Runtime {
     }
 
     fn clear_output(&self) {
-        self.output.borrow_mut().clear();
+        if let Ok(mut output) = self.output.lock() {
+            output.clear();
+        }
     }
 
     fn take_output(&self) -> RuntimeOutput {
-        self.output.borrow_mut().take()
+        self.output
+            .lock()
+            .map_or_else(|_| RuntimeOutput::default(), |mut output| output.take())
     }
 }

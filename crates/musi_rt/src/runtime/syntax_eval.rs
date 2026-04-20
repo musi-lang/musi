@@ -1,5 +1,4 @@
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use musi_foundation::syntax;
 use musi_native::{NativeHost, WeakNativeHost};
@@ -23,7 +22,7 @@ impl Runtime {
         let body = self.syntax_term(syntax)?;
         let source = format!("export let answer () : {result_ty} := {};", body.text());
         let program = self.compile_synthetic_program("main", &source)?;
-        let loader = SessionLoader::new(Rc::clone(&self.store));
+        let loader = SessionLoader::new(Arc::clone(&self.store));
         let host = self.host.clone();
         let mut vm = Vm::new(program, loader, host, self.options.vm.clone());
         vm.initialize()?;
@@ -39,13 +38,15 @@ impl Runtime {
         let source = self.syntax_term(syntax)?.text().to_owned();
         let _ = self
             .store
-            .borrow_mut()
+            .lock()
+            .map_err(|_| runtime_store_lock_error())?
             .module_texts
             .insert(spec.into(), source);
         let program = self.compile_registered_program(spec)?;
         let _ = self
             .store
-            .borrow_mut()
+            .lock()
+            .map_err(|_| runtime_store_lock_error())?
             .programs
             .insert(spec.into(), program);
         Ok(self.vm_mut()?.load_module(spec)?)
@@ -66,11 +67,11 @@ impl Runtime {
 
 pub(super) fn register_syntax_handlers(
     host: &mut NativeHost,
-    store: Rc<RefCell<RuntimeStore>>,
+    store: Arc<Mutex<RuntimeStore>>,
     nested_host: &WeakNativeHost,
     vm_options: &VmOptions,
 ) {
-    let eval_store = Rc::clone(&store);
+    let eval_store = Arc::clone(&store);
     let eval_host = nested_host.clone();
     let eval_vm_options = vm_options.clone();
     host.register_effect_handler_with_context(
@@ -110,11 +111,14 @@ pub(super) fn register_syntax_handlers(
             let body = ctx
                 .syntax(body)
                 .ok_or_else(|| invalid_syntax_effect(effect, "invalid syntax register args"))?;
-            let mut store = store.borrow_mut();
+            let mut store = store
+                .lock()
+                .map_err(|_| invalid_syntax_effect(effect, "runtime store lock poisoned"))?;
             let _ = store
                 .module_texts
                 .insert(spec.as_str().into(), body.term().text().into());
             store.programs.clear();
+            drop(store);
             Ok(Value::Unit)
         },
     );
@@ -137,7 +141,7 @@ fn eval_syntax_value(
             reason: "runtime host unavailable".into(),
         }));
     };
-    let loader = SessionLoader::new(Rc::clone(store));
+    let loader = SessionLoader::new(Arc::clone(store));
     let mut vm = Vm::new(program, loader, host, vm_options.clone());
     vm.initialize()?;
     vm.call_export("answer", &[])
@@ -156,4 +160,12 @@ pub(super) const fn vm_syntax_value_kind_error(found: VmValueKind) -> VmError {
         expected: VmValueKind::Syntax,
         found,
     })
+}
+
+fn runtime_store_lock_error() -> RuntimeError {
+    RuntimeError::new(RuntimeErrorKind::VmExecutionFailed(VmError::new(
+        VmErrorKind::InvalidProgramShape {
+            detail: "runtime store lock poisoned".into(),
+        },
+    )))
 }

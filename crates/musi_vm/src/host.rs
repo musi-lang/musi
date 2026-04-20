@@ -225,7 +225,7 @@ impl EffectCall {
     }
 }
 
-pub trait VmHost {
+pub trait VmHost: Send {
     /// Handles one runtime foreign call.
     ///
     /// # Errors

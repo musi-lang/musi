@@ -1,5 +1,3 @@
-use std::iter::repeat_n;
-
 use crate::{VmIndexSpace, VmStackKind};
 use music_seam::{Instruction, ProcedureId};
 
@@ -63,31 +61,55 @@ impl Vm {
         let loaded = self
             .module(module_slot)?
             .program
-            .loaded_procedure(procedure)?
-            .clone();
+            .loaded_procedure(procedure)?;
         let param_count = usize::from(loaded.params);
         if args.len() != param_count {
             return Err(VmError::new(VmErrorKind::CallArityMismatch {
-                callee: loaded.name,
+                callee: loaded.name.clone(),
                 expected: param_count,
                 found: args.len(),
             }));
         }
 
         let local_count = usize::from(loaded.locals.max(loaded.params));
-        let mut locals = repeat_n(Value::Unit, local_count).collect::<ValueList>();
-        for (slot, arg) in args.into_iter().enumerate() {
-            if let Some(local) = locals.get_mut(slot) {
-                *local = arg;
-            }
-        }
+        let mut locals = args;
+        locals.resize(local_count, Value::Unit);
         self.frames.push(CallFrame::new(
             module_slot,
             procedure,
             locals,
             ValueList::new(),
         ));
-        self.after_value_mutation()?;
+        Ok(())
+    }
+
+    pub(crate) fn replace_frame(
+        &mut self,
+        module_slot: usize,
+        procedure: ProcedureId,
+        args: ValueList,
+    ) -> VmResult {
+        let loaded = self
+            .module(module_slot)?
+            .program
+            .loaded_procedure(procedure)?;
+        let param_count = usize::from(loaded.params);
+        if args.len() != param_count {
+            return Err(VmError::new(VmErrorKind::CallArityMismatch {
+                callee: loaded.name.clone(),
+                expected: param_count,
+                found: args.len(),
+            }));
+        }
+        let local_count = usize::from(loaded.locals.max(loaded.params));
+        let mut locals = args;
+        locals.resize(local_count, Value::Unit);
+        let frame = self.frames.last_mut().ok_or_else(|| {
+            VmError::new(VmErrorKind::StackEmpty {
+                stack: VmStackKind::CallFrame,
+            })
+        })?;
+        *frame = CallFrame::new(module_slot, procedure, locals, ValueList::new());
         Ok(())
     }
 
@@ -111,14 +133,12 @@ impl Vm {
     }
 
     pub(crate) fn push_value(&mut self, value: Value) -> VmResult {
-        self.observe_heap_value(&value)?;
         let frame = self.frames.last_mut().ok_or_else(|| {
             VmError::new(VmErrorKind::StackEmpty {
                 stack: VmStackKind::CallFrame,
             })
         })?;
         frame.stack.push(value);
-        self.after_value_mutation()?;
         Ok(())
     }
 

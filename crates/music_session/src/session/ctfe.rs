@@ -1,5 +1,4 @@
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use musi_vm::{
     EffectCall, ForeignCall, Program, RejectingHost, RejectingLoader, Value, ValueView, Vm,
@@ -192,11 +191,11 @@ impl Session {
 
 #[derive(Clone)]
 struct SafeCtfeHost {
-    host: Option<Rc<RefCell<Box<dyn VmHost>>>>,
+    host: Option<Arc<Mutex<Box<dyn VmHost>>>>,
 }
 
 impl SafeCtfeHost {
-    const fn new(host: Option<Rc<RefCell<Box<dyn VmHost>>>>) -> Self {
+    const fn new(host: Option<Arc<Mutex<Box<dyn VmHost>>>>) -> Self {
         Self { host }
     }
 }
@@ -229,7 +228,14 @@ impl VmHost for SafeCtfeHost {
         let Some(host) = &self.host else {
             return RejectingHost.handle_effect(ctx, effect, args);
         };
-        host.borrow_mut().handle_effect(ctx, effect, args)
+        let Ok(mut host) = host.lock() else {
+            return Err(VmError::new(VmErrorKind::EffectRejected {
+                effect: effect.effect_name().into(),
+                op: Some(effect.op_name().into()),
+                reason: "ctfe host lock poisoned".into(),
+            }));
+        };
+        host.handle_effect(ctx, effect, args)
     }
 }
 

@@ -3,9 +3,9 @@ use std::collections::HashMap;
 use musi_vm::{EffectCall, ForeignCall, Value, VmHostCallContext, VmResult};
 
 type ForeignHandler =
-    Box<dyn FnMut(VmHostCallContext<'_, '_>, &ForeignCall, &[Value]) -> VmResult<Value>>;
+    Box<dyn FnMut(VmHostCallContext<'_, '_>, &ForeignCall, &[Value]) -> VmResult<Value> + Send>;
 type EffectHandler =
-    Box<dyn FnMut(VmHostCallContext<'_, '_>, &EffectCall, &[Value]) -> VmResult<Value>>;
+    Box<dyn FnMut(VmHostCallContext<'_, '_>, &EffectCall, &[Value]) -> VmResult<Value> + Send>;
 type HandlerName = Box<str>;
 type ForeignHandlerMap = HashMap<Box<str>, ForeignHandler>;
 type EffectHandlerKey = (Box<str>, Box<str>);
@@ -21,7 +21,7 @@ impl RegisteredHost {
     pub fn register_foreign_handler<Name>(
         &mut self,
         name: Name,
-        mut handler: impl FnMut(&ForeignCall, &[Value]) -> VmResult<Value> + 'static,
+        mut handler: impl FnMut(&ForeignCall, &[Value]) -> VmResult<Value> + Send + 'static,
     ) where
         Name: Into<HandlerName>,
     {
@@ -34,6 +34,7 @@ impl RegisteredHost {
         &mut self,
         name: Name,
         handler: impl FnMut(VmHostCallContext<'_, '_>, &ForeignCall, &[Value]) -> VmResult<Value>
+        + Send
         + 'static,
     ) where
         Name: Into<HandlerName>,
@@ -45,7 +46,7 @@ impl RegisteredHost {
         &mut self,
         effect: Effect,
         op: Op,
-        mut handler: impl FnMut(&EffectCall, &[Value]) -> VmResult<Value> + 'static,
+        mut handler: impl FnMut(&EffectCall, &[Value]) -> VmResult<Value> + Send + 'static,
     ) where
         Effect: Into<HandlerName>,
         Op: Into<HandlerName>,
@@ -60,6 +61,7 @@ impl RegisteredHost {
         effect: Effect,
         op: Op,
         handler: impl FnMut(VmHostCallContext<'_, '_>, &EffectCall, &[Value]) -> VmResult<Value>
+        + Send
         + 'static,
     ) where
         Effect: Into<HandlerName>,

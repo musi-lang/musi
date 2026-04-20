@@ -1,11 +1,9 @@
-use std::cell::RefCell;
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
 use std::process::Command;
-use std::rc::Rc;
 use std::str::from_utf8;
-use std::sync::OnceLock;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use base64::Engine;
@@ -16,7 +14,7 @@ use musi_vm::{EffectCall, Value, VmError, VmErrorKind, VmHostCallContext, VmHost
 
 use crate::output::RuntimeOutputSinkCell;
 
-type RandomStateCell = Rc<RefCell<u64>>;
+type RandomStateCell = Arc<Mutex<u64>>;
 
 mod env;
 mod process;
@@ -35,7 +33,7 @@ pub fn register_runtime_handlers(host: &mut NativeHost, output: &RuntimeOutputSi
 }
 
 fn register_log_io_handlers(host: &mut NativeHost, output: &RuntimeOutputSinkCell) {
-    let log_info_output = Rc::clone(output);
+    let log_info_output = Arc::clone(output);
     host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::LOG_INFO_OP,
@@ -43,7 +41,8 @@ fn register_log_io_handlers(host: &mut NativeHost, output: &RuntimeOutputSinkCel
             let message = string_arg(ctx, effect, args, "logInfo")?;
             let line = format!("[musi:runtime] {message}");
             log_info_output
-                .borrow_mut()
+                .lock()
+                .map_err(|_| invalid_runtime_effect(effect, "runtime output lock poisoned"))?
                 .write_stderr(&line, true)
                 .map_err(|error| {
                     invalid_runtime_effect(effect, format!("logInfo failed (`{error}`)"))
@@ -52,7 +51,7 @@ fn register_log_io_handlers(host: &mut NativeHost, output: &RuntimeOutputSinkCel
         },
     );
 
-    let log_write_output = Rc::clone(output);
+    let log_write_output = Arc::clone(output);
     host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::LOG_WRITE_OP,
@@ -65,7 +64,8 @@ fn register_log_io_handlers(host: &mut NativeHost, output: &RuntimeOutputSinkCel
                 .ok_or_else(|| invalid_runtime_effect(effect, "invalid logWrite args"))?;
             let line = format!("[std:{level}] {}", message.as_str());
             log_write_output
-                .borrow_mut()
+                .lock()
+                .map_err(|_| invalid_runtime_effect(effect, "runtime output lock poisoned"))?
                 .write_stderr(&line, true)
                 .map_err(|error| {
                     invalid_runtime_effect(effect, format!("logWrite failed (`{error}`)"))
@@ -74,7 +74,7 @@ fn register_log_io_handlers(host: &mut NativeHost, output: &RuntimeOutputSinkCel
         },
     );
 
-    let stdout_output = Rc::clone(output);
+    let stdout_output = Arc::clone(output);
     host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::IO_PRINT_OP,
@@ -82,7 +82,7 @@ fn register_log_io_handlers(host: &mut NativeHost, output: &RuntimeOutputSinkCel
             write_stream(ctx, effect, args, StreamKind::Stdout, false, &stdout_output)
         },
     );
-    let stdout_line_output = Rc::clone(output);
+    let stdout_line_output = Arc::clone(output);
     host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::IO_PRINT_LINE_OP,
@@ -97,7 +97,7 @@ fn register_log_io_handlers(host: &mut NativeHost, output: &RuntimeOutputSinkCel
             )
         },
     );
-    let stderr_output = Rc::clone(output);
+    let stderr_output = Arc::clone(output);
     host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::IO_PRINT_ERROR_OP,
@@ -105,7 +105,7 @@ fn register_log_io_handlers(host: &mut NativeHost, output: &RuntimeOutputSinkCel
             write_stream(ctx, effect, args, StreamKind::Stderr, false, &stderr_output)
         },
     );
-    let stderr_line_output = Rc::clone(output);
+    let stderr_line_output = Arc::clone(output);
     host.register_effect_handler_with_context(
         foundation_runtime::EFFECT,
         foundation_runtime::IO_PRINT_ERROR_LINE_OP,
@@ -512,8 +512,14 @@ fn write_stream(
         return Err(invalid_runtime_effect(effect, format!("invalid {op} args")));
     };
     let write_result = match stream {
-        StreamKind::Stdout => output.borrow_mut().write_stdout(text.as_str(), line),
-        StreamKind::Stderr => output.borrow_mut().write_stderr(text.as_str(), line),
+        StreamKind::Stdout => output
+            .lock()
+            .map_err(|_| invalid_runtime_effect(effect, "runtime output lock poisoned"))?
+            .write_stdout(text.as_str(), line),
+        StreamKind::Stderr => output
+            .lock()
+            .map_err(|_| invalid_runtime_effect(effect, "runtime output lock poisoned"))?
+            .write_stderr(text.as_str(), line),
     };
     write_result.map_err(|error| {
         let op = match (stream, line) {
@@ -653,7 +659,7 @@ fn random_seed() -> u64 {
 }
 
 fn next_random_int(state: &RandomStateCell) -> i64 {
-    let mut value = state.borrow_mut();
+    let mut value = state.lock().expect("random state should lock");
     *value = value
         .wrapping_mul(6_364_136_223_846_793_005)
         .wrapping_add(1);

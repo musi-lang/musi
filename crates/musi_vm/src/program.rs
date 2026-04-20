@@ -9,7 +9,6 @@ use music_seam::{
 };
 use music_term::{TypeTerm, TypeTermKind};
 
-use super::opcode::classify_opcode;
 use super::{VmError, VmErrorKind, VmIndexSpace, VmResult};
 
 type InstructionList = Box<[Instruction]>;
@@ -512,7 +511,6 @@ fn build_procedures(artifact: &Artifact) -> VmResult<Box<[LoadedProcedure]>> {
                         let _ = labels.insert(label.id, instructions.len());
                     }
                     CodeEntry::Instruction(instruction) => {
-                        let _family = classify_opcode(instruction.opcode);
                         let _ = &procedure_name;
                         instructions.push(instruction.clone());
                     }

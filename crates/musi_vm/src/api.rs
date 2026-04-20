@@ -7,7 +7,7 @@ pub use super::program::{
 };
 #[allow(unused_imports)]
 pub use super::value::{
-    ClosureView, ForeignView, ModuleView, RecordView, SeqView, StringView, SyntaxView, Value,
-    ValueView, render_value_view,
+    ClosureView, ForeignView, IsolateId, ModuleView, RecordView, SeqView, StringView, SyntaxView,
+    Value, ValueView, render_value_view,
 };
-pub use super::vm::{Vm, VmOptions};
+pub use super::vm::{Vm, VmOptions, VmRuntime};

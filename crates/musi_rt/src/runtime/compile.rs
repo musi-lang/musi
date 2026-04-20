@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::sync::MutexGuard;
 
 use musi_foundation::register_modules;
 use musi_vm::{Program, VmError, VmErrorKind, VmLoader, VmResult};
@@ -23,7 +24,11 @@ impl SessionLoader {
 impl Runtime {
     pub(super) fn compile_registered_program(&self, spec: &str) -> RuntimeProgramResult {
         let spec = self.resolve_registered_spec(spec);
-        if let Some(program) = self.store.borrow().programs.get(spec.as_ref()).cloned() {
+        let cached_program = {
+            let store = lock_runtime_store(&self.store)?;
+            store.programs.get(spec.as_ref()).cloned()
+        };
+        if let Some(program) = cached_program {
             return Ok(program);
         }
         let Some(program) = self.compile_registered_program_uncached(spec.as_ref())? else {
@@ -31,9 +36,7 @@ impl Runtime {
                 spec,
             }));
         };
-        let _ = self
-            .store
-            .borrow_mut()
+        let _ = lock_runtime_store(&self.store)?
             .programs
             .insert(spec, program.clone());
         Ok(program)
@@ -48,12 +51,15 @@ impl Runtime {
     }
 
     fn resolve_registered_spec(&self, spec: &str) -> Box<str> {
-        let store = self.store.borrow();
+        let Ok(store) = self.store.lock() else {
+            return spec.into();
+        };
         resolve_store_spec(&store, spec)
     }
 
+    #[allow(clippy::significant_drop_tightening)]
     fn compile_registered_program_uncached(&self, spec: &str) -> RuntimeResult<Option<Program>> {
-        let store = self.store.borrow();
+        let store = lock_runtime_store(&self.store)?;
         if !store.module_texts.contains_key(spec) {
             return Ok(None);
         }
@@ -64,24 +70,30 @@ impl Runtime {
 impl VmLoader for SessionLoader {
     fn load_program(&mut self, spec: &str) -> VmResult<Program> {
         let spec = {
-            let store = self.store.borrow();
+            let store = lock_vm_store(&self.store)?;
             resolve_store_spec(&store, spec)
         };
-        if let Some(program) = self.store.borrow().programs.get(spec.as_ref()).cloned() {
+        let cached_program = {
+            let store = lock_vm_store(&self.store)?;
+            store.programs.get(spec.as_ref()).cloned()
+        };
+        if let Some(program) = cached_program {
             return Ok(program);
         }
 
-        if !self.store.borrow().module_texts.contains_key(spec.as_ref()) {
+        let has_source = {
+            let store = lock_vm_store(&self.store)?;
+            store.module_texts.contains_key(spec.as_ref())
+        };
+        if !has_source {
             return Err(VmError::new(VmErrorKind::MissingModuleSource { spec }));
         }
 
         let program = {
-            let store = self.store.borrow();
+            let store = lock_vm_store(&self.store)?;
             compile_registered_texts_for_vm(spec.as_ref(), &store)?
         };
-        let _ = self
-            .store
-            .borrow_mut()
+        let _ = lock_vm_store(&self.store)?
             .programs
             .insert(spec, program.clone());
         Ok(program)
@@ -93,7 +105,7 @@ pub(super) fn compile_synthetic_program_from_store(
     spec: &str,
     source: &str,
 ) -> RuntimeProgramResult {
-    let store = store.borrow();
+    let store = lock_runtime_store(store)?;
     let session_options = store.session_options.clone();
     let module_texts = store.module_texts.clone();
     drop(store);
@@ -115,6 +127,24 @@ pub(super) fn compile_synthetic_program_from_store(
         .compile_module(&ModuleKey::new(spec))
         .map_err(runtime_session_error)?;
     Program::from_bytes(&output.bytes).map_err(Into::into)
+}
+
+fn lock_runtime_store(store: &RuntimeStoreCell) -> RuntimeResult<MutexGuard<'_, RuntimeStore>> {
+    store.lock().map_err(|_| {
+        RuntimeError::new(RuntimeErrorKind::VmExecutionFailed(
+            runtime_store_lock_error(),
+        ))
+    })
+}
+
+fn lock_vm_store(store: &RuntimeStoreCell) -> VmResult<MutexGuard<'_, RuntimeStore>> {
+    store.lock().map_err(|_| runtime_store_lock_error())
+}
+
+fn runtime_store_lock_error() -> VmError {
+    VmError::new(VmErrorKind::InvalidProgramShape {
+        detail: "runtime store lock poisoned".into(),
+    })
 }
 
 fn compile_registered_texts(spec: &str, store: &RuntimeStore) -> RuntimeProgramResult {

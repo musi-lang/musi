@@ -6,7 +6,6 @@ use music_term::SyntaxTerm;
 use super::gc::{HeapCollectionStats, HeapOptions, RuntimeHeap};
 pub use super::host::{EffectCall, ForeignCall, VmHostContext};
 pub use super::loader::{RejectingLoader, VmLoader};
-use super::opcode::{VmOpcodeFamily, classify_opcode};
 pub use super::value::{
     ClosureValue, ClosureView, ContinuationFrame, ContinuationHandler, ContinuationValue,
     DataValue, ForeignValue, GcRef, ModuleValue, ModuleView, SequenceValue, SyntaxView, ValueList,
@@ -85,6 +84,27 @@ impl VmOptions {
 #[allow(non_upper_case_globals)]
 pub const VmOptions: VmOptions = VmOptions::DEFAULT;
 
+#[derive(Debug, Default, Clone, Copy)]
+pub struct VmRuntime;
+
+impl VmRuntime {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self
+    }
+
+    #[must_use]
+    pub fn isolate(
+        self,
+        program: Program,
+        loader: impl VmLoader + 'static,
+        host: impl VmHost + 'static,
+        options: VmOptions,
+    ) -> Vm {
+        Vm::new(program, loader, host, options)
+    }
+}
+
 pub struct Vm {
     loaded_modules: LoadedModuleList,
     module_slots: ModuleSlotMap,
@@ -121,7 +141,7 @@ impl Vm {
             active_resumes: Vec::new(),
             next_handler_id: 0,
             continuation_target_handler: None,
-            heap: RuntimeHeap::default(),
+            heap: RuntimeHeap::new(),
             executed_instructions: 0,
             external_roots: Vec::new(),
         }
@@ -223,15 +243,22 @@ impl Vm {
     }
 
     #[must_use]
+    pub const fn isolate_id(&self) -> super::value::IsolateId {
+        self.heap.isolate()
+    }
+
+    #[must_use]
     pub const fn executed_instructions(&self) -> u64 {
         self.executed_instructions
     }
 
     pub fn collect_garbage(&mut self) -> HeapCollectionStats {
-        let roots = self.heap_roots();
+        let roots = self.heap_roots(None);
         self.heap.collect_from_roots(roots.iter())
     }
+}
 
+impl Vm {
     /// Calls one runtime value if it is callable.
     ///
     /// # Errors
@@ -239,6 +266,10 @@ impl Vm {
     /// Returns [`VmError`] if initialization is missing or value is not callable.
     pub fn call_value(&mut self, value: Value, args: &[Value]) -> VmResult<Value> {
         self.ensure_initialized()?;
+        self.observe_heap_value(&value)?;
+        for arg in args {
+            self.observe_heap_value(arg)?;
+        }
         let base_depth = self.frames.len();
         let result = match value {
             Value::Closure(closure) => {
@@ -337,11 +368,7 @@ impl Vm {
 
     pub(crate) fn observe_heap_value(&self, value: &Value) -> VmResult {
         if let Some(reference) = value.gc_ref() {
-            if !self.heap.contains(reference) {
-                return Err(VmError::new(VmErrorKind::InvalidProgramShape {
-                    detail: "stale heap reference".into(),
-                }));
-            }
+            self.heap.validate_ref(reference)?;
         }
         Ok(())
     }
@@ -352,14 +379,16 @@ impl Vm {
         }
         self.observe_heap_value(value)?;
         self.external_roots.push(value.clone());
-        self.after_value_mutation()
+        self.enforce_heap_limit_with_extra(Some(value))
     }
 
-    pub(crate) fn after_value_mutation(&mut self) -> VmResult {
-        if self.options.gc_stress {
-            let _ = self.collect_garbage();
-        }
-        self.enforce_heap_limit()
+    pub(crate) fn after_heap_allocation(&mut self, allocated: &Value) -> VmResult {
+        self.enforce_heap_limit_with_extra(Some(allocated))
+    }
+
+    pub(crate) fn after_host_call_result(&mut self, result: &Value) -> VmResult {
+        self.observe_heap_value(result)?;
+        self.enforce_heap_limit_with_extra(Some(result))
     }
 
     pub(crate) fn before_instruction(&mut self) -> VmResult {
@@ -383,7 +412,9 @@ impl Vm {
     ) -> VmResult<Value> {
         let options = self.heap_options();
         let mut ctx = VmHostContext::new(&mut self.heap, options);
-        self.host.call_foreign(&mut ctx, foreign, args)
+        let result = self.host.call_foreign(&mut ctx, foreign, args)?;
+        self.after_host_call_result(&result)?;
+        Ok(result)
     }
 
     pub(crate) fn call_host_effect(
@@ -393,17 +424,22 @@ impl Vm {
     ) -> VmResult<Value> {
         let options = self.heap_options();
         let mut ctx = VmHostContext::new(&mut self.heap, options);
-        self.host.handle_effect(&mut ctx, effect, args)
+        let result = self.host.handle_effect(&mut ctx, effect, args)?;
+        self.after_host_call_result(&result)?;
+        Ok(result)
     }
 
-    fn enforce_heap_limit(&mut self) -> VmResult {
+    fn enforce_heap_limit_with_extra(&mut self, extra_root: Option<&Value>) -> VmResult {
+        if self.options.gc_stress {
+            let _ = self.collect_garbage_with_extra(extra_root);
+        }
         let Some(limit) = self.options.heap_limit_bytes else {
             return Ok(());
         };
         if self.heap.allocated_bytes() <= limit {
             return Ok(());
         }
-        let _ = self.collect_garbage();
+        let _ = self.collect_garbage_with_extra(extra_root);
         let allocated = self.heap.allocated_bytes();
         if allocated <= limit {
             Ok(())
@@ -421,28 +457,27 @@ impl Vm {
         }
     }
 
-    fn heap_roots(&self) -> Vec<Value> {
-        let module_globals = self
-            .loaded_modules
-            .iter()
-            .flat_map(|module| module.globals.iter().cloned());
-        let frame_values = self.frames.iter().flat_map(|frame| {
-            frame
-                .locals
-                .iter()
-                .chain(frame.stack.iter())
-                .cloned()
-                .collect::<Vec<_>>()
-        });
-        let handler_values = self.handlers.iter().map(|handler| handler.handler.clone());
-        let resume_values = self.active_resumes.iter().copied().map(Value::Continuation);
-        let external_values = self.external_roots.iter().cloned();
-        module_globals
-            .chain(frame_values)
-            .chain(handler_values)
-            .chain(resume_values)
-            .chain(external_values)
-            .collect()
+    fn collect_garbage_with_extra(&mut self, extra_root: Option<&Value>) -> HeapCollectionStats {
+        let roots = self.heap_roots(extra_root);
+        self.heap.collect_from_roots(roots.iter())
+    }
+
+    fn heap_roots(&self, extra_root: Option<&Value>) -> Vec<Value> {
+        let mut roots = Vec::new();
+        for module in &self.loaded_modules {
+            roots.extend(module.globals.iter().cloned());
+        }
+        for frame in &self.frames {
+            roots.extend(frame.locals.iter().cloned());
+            roots.extend(frame.stack.iter().cloned());
+        }
+        roots.extend(self.handlers.iter().map(|handler| handler.handler.clone()));
+        roots.extend(self.active_resumes.iter().copied().map(Value::Continuation));
+        roots.extend(self.external_roots.iter().cloned());
+        if let Some(root) = extra_root {
+            roots.push(root.clone());
+        }
+        roots
     }
 }
 
@@ -453,7 +488,9 @@ impl Vm {
     ///
     /// Returns [`VmError`] when heap limits reject the allocation.
     pub fn alloc_string(&mut self, text: impl Into<Box<str>>) -> VmResult<Value> {
-        self.heap.alloc_string(text, &self.heap_options())
+        let value = self.heap.alloc_string(text, &self.heap_options())?;
+        self.after_heap_allocation(&value)?;
+        Ok(value)
     }
 
     /// Allocates one VM-owned syntax term.
@@ -462,7 +499,9 @@ impl Vm {
     ///
     /// Returns [`VmError`] when heap limits reject the allocation.
     pub fn alloc_syntax(&mut self, term: SyntaxTerm) -> VmResult<Value> {
-        self.heap.alloc_syntax(term, &self.heap_options())
+        let value = self.heap.alloc_syntax(term, &self.heap_options())?;
+        self.after_heap_allocation(&value)?;
+        Ok(value)
     }
 
     /// Allocates one VM-owned sequence.
@@ -474,10 +513,12 @@ impl Vm {
     where
         Items: IntoIterator<Item = Value>,
     {
-        self.heap.alloc_sequence(
+        let value = self.heap.alloc_sequence(
             SequenceValue::new(ty, items.into_iter().collect()),
             &self.heap_options(),
-        )
+        )?;
+        self.after_heap_allocation(&value)?;
+        Ok(value)
     }
 
     /// Allocates one VM-owned data value.
@@ -489,10 +530,12 @@ impl Vm {
     where
         Fields: IntoIterator<Item = Value>,
     {
-        self.heap.alloc_data(
+        let value = self.heap.alloc_data(
             DataValue::new(ty, tag, fields.into_iter().collect()),
             &self.heap_options(),
-        )
+        )?;
+        self.after_heap_allocation(&value)?;
+        Ok(value)
     }
 
     pub(crate) fn alloc_closure<Captures>(
@@ -504,10 +547,12 @@ impl Vm {
     where
         Captures: IntoIterator<Item = Value>,
     {
-        self.heap.alloc_closure(
+        let value = self.heap.alloc_closure(
             ClosureValue::new(module_slot, procedure, captures.into_iter().collect()),
             &self.heap_options(),
-        )
+        )?;
+        self.after_heap_allocation(&value)?;
+        Ok(value)
     }
 
     pub(crate) fn alloc_module(
@@ -515,8 +560,11 @@ impl Vm {
         spec: impl Into<Box<str>>,
         slot: usize,
     ) -> VmResult<Value> {
-        self.heap
-            .alloc_module(ModuleValue::new(spec, slot), &self.heap_options())
+        let value = self
+            .heap
+            .alloc_module(ModuleValue::new(spec, slot), &self.heap_options())?;
+        self.after_heap_allocation(&value)?;
+        Ok(value)
     }
 
     pub(crate) fn alloc_continuation(
@@ -524,10 +572,12 @@ impl Vm {
         frames: super::value::ContinuationFrameList,
         handlers: super::value::ContinuationHandlerList,
     ) -> VmResult<Value> {
-        self.heap.alloc_continuation(
+        let value = self.heap.alloc_continuation(
             ContinuationValue::new(frames, handlers),
             &self.heap_options(),
-        )
+        )?;
+        self.after_heap_allocation(&value)?;
+        Ok(value)
     }
 }
 

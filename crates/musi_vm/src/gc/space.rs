@@ -44,14 +44,15 @@ impl HeapSlot {
     }
 
     pub(super) const fn is_live_generation(&self, reference: GcRef) -> bool {
-        self.generation == reference.generation && self.object.is_some()
+        self.generation == reference.generation() && self.object.is_some()
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LineState {
     Free,
-    Used,
+    Allocated,
+    Marked,
 }
 
 #[derive(Debug, Clone)]
@@ -72,6 +73,20 @@ impl ImmixBlock {
         self.lines.iter().all(|line| *line == LineState::Free)
     }
 
+    pub(super) fn live_lines(&self) -> usize {
+        self.lines
+            .iter()
+            .filter(|line| matches!(line, LineState::Allocated | LineState::Marked))
+            .count()
+    }
+
+    pub(super) fn free_lines(&self) -> usize {
+        self.lines
+            .iter()
+            .filter(|line| **line == LineState::Free)
+            .count()
+    }
+
     pub(super) fn reserve_lines(&mut self, line_count: usize) -> Option<usize> {
         if line_count > self.lines.len() {
             return None;
@@ -83,11 +98,34 @@ impl ImmixBlock {
                 .all(|line| *line == LineState::Free)
             {
                 for line in &mut self.lines[start..start + line_count] {
-                    *line = LineState::Used;
+                    *line = LineState::Allocated;
                 }
                 return Some(start);
             }
         }
         None
+    }
+
+    pub(super) fn mark_lines(&mut self, start_line: usize, line_count: usize) {
+        let end = start_line.saturating_add(line_count).min(self.lines.len());
+        for line in &mut self.lines[start_line..end] {
+            *line = LineState::Marked;
+        }
+    }
+
+    pub(super) fn release_lines(&mut self, start_line: usize, line_count: usize) {
+        let end = start_line.saturating_add(line_count).min(self.lines.len());
+        for line in &mut self.lines[start_line..end] {
+            *line = LineState::Free;
+        }
+    }
+
+    pub(super) fn finish_collection(&mut self) {
+        for line in &mut self.lines {
+            *line = match *line {
+                LineState::Marked => LineState::Allocated,
+                LineState::Allocated | LineState::Free => *line,
+            };
+        }
     }
 }

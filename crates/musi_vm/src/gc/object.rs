@@ -45,19 +45,34 @@ impl HeapObject {
         }
     }
 
-    pub(super) fn children(&self) -> Vec<Value> {
+    pub(super) fn visit_children(&self, mut visit: impl FnMut(&Value)) {
         match self {
-            Self::Seq(value) => value.items.iter().cloned().collect(),
-            Self::Data(value) => value.fields.iter().cloned().collect(),
-            Self::Closure(value) => value.captures.iter().cloned().collect(),
-            Self::Continuation(value) => value
-                .frames
-                .iter()
-                .flat_map(|frame| frame.locals.iter().chain(frame.stack.iter()))
-                .chain(value.handlers.iter().map(|handler| &handler.handler))
-                .cloned()
-                .collect(),
-            Self::String(_) | Self::Syntax(_) | Self::Module(_) => Vec::new(),
+            Self::Seq(value) => {
+                for child in &value.items {
+                    visit(child);
+                }
+            }
+            Self::Data(value) => {
+                for child in &value.fields {
+                    visit(child);
+                }
+            }
+            Self::Closure(value) => {
+                for child in &value.captures {
+                    visit(child);
+                }
+            }
+            Self::Continuation(value) => {
+                for frame in &value.frames {
+                    for child in frame.locals.iter().chain(frame.stack.iter()) {
+                        visit(child);
+                    }
+                }
+                for handler in &value.handlers {
+                    visit(&handler.handler);
+                }
+            }
+            Self::String(_) | Self::Syntax(_) | Self::Module(_) => {}
         }
     }
 

@@ -1,12 +1,9 @@
 use std::mem;
 
-use music_seam::{Instruction, ProcedureId};
+use music_seam::{Instruction, Opcode, ProcedureId};
 
 use super::state::{CallFrame, CallFrameList, EffectHandler, EffectHandlerList, StepOutcome};
-use super::{
-    GcRef, OperandShape, Value, ValueList, VmError, VmErrorKind, VmOpcodeFamily, VmResult,
-    classify_opcode,
-};
+use super::{GcRef, OperandShape, Value, ValueList, VmError, VmErrorKind, VmResult};
 
 use super::Vm;
 
@@ -101,16 +98,66 @@ impl Vm {
     }
 
     pub(crate) fn execute_instr(&mut self, instruction: &Instruction) -> VmResult<StepOutcome> {
-        match classify_opcode(instruction.opcode) {
-            VmOpcodeFamily::LoadStore => self.exec_load_store(instruction),
-            VmOpcodeFamily::Scalar => self.exec_scalar(instruction),
-            VmOpcodeFamily::Branch => self.exec_branch(instruction),
-            VmOpcodeFamily::Call => self.exec_call(instruction),
-            VmOpcodeFamily::Sequence => self.exec_seq(instruction),
-            VmOpcodeFamily::Data => self.exec_data(instruction),
-            VmOpcodeFamily::Types => self.exec_type(instruction),
-            VmOpcodeFamily::Effects => self.exec_effect(instruction),
-            VmOpcodeFamily::Host => self.exec_host_edge(instruction),
+        match instruction.opcode {
+            Opcode::LdLoc
+            | Opcode::StLoc
+            | Opcode::LdGlob
+            | Opcode::StGlob
+            | Opcode::LdConst
+            | Opcode::LdSmi
+            | Opcode::LdStr => self.exec_load_store(instruction),
+            Opcode::IAdd
+            | Opcode::ISub
+            | Opcode::IMul
+            | Opcode::IDiv
+            | Opcode::IRem
+            | Opcode::FAdd
+            | Opcode::FSub
+            | Opcode::FMul
+            | Opcode::FDiv
+            | Opcode::FRem
+            | Opcode::StrCat
+            | Opcode::CmpEq
+            | Opcode::CmpNe
+            | Opcode::CmpLt
+            | Opcode::CmpGt
+            | Opcode::CmpLe
+            | Opcode::CmpGe => self.exec_scalar(instruction),
+            Opcode::Br | Opcode::BrFalse | Opcode::BrTbl => self.exec_branch(instruction),
+            Opcode::Call
+            | Opcode::CallSeq
+            | Opcode::CallCls
+            | Opcode::CallClsSeq
+            | Opcode::CallTail
+            | Opcode::Ret
+            | Opcode::ClsNew => self.exec_call(instruction),
+            Opcode::SeqNew
+            | Opcode::SeqGet
+            | Opcode::SeqGetN
+            | Opcode::SeqSet
+            | Opcode::SeqSetN
+            | Opcode::SeqCat
+            | Opcode::SeqLen
+            | Opcode::RangeNew
+            | Opcode::RangeContains
+            | Opcode::RangeMaterialize
+            | Opcode::SeqHas => self.exec_seq(instruction),
+            Opcode::DataNew | Opcode::DataTag | Opcode::DataGet | Opcode::DataSet => {
+                self.exec_data(instruction)
+            }
+            Opcode::TyId | Opcode::TyApply | Opcode::TyChk | Opcode::TyCast => {
+                self.exec_type(instruction)
+            }
+            Opcode::HdlPush
+            | Opcode::HdlPop
+            | Opcode::EffInvk
+            | Opcode::EffInvkSeq
+            | Opcode::EffResume => self.exec_effect(instruction),
+            Opcode::FfiCall
+            | Opcode::FfiCallSeq
+            | Opcode::FfiRef
+            | Opcode::ModLoad
+            | Opcode::ModGet => self.exec_host_edge(instruction),
         }
     }
 

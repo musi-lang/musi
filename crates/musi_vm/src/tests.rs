@@ -1,9 +1,9 @@
 #![allow(unused_imports)]
 
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::iter::empty;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
+use std::thread::spawn;
 
 use crate::gc::{HeapOptions, RuntimeHeap};
 use crate::value::SequenceValue;
@@ -68,7 +68,7 @@ impl VmHost for TestHost {
 
 #[derive(Default)]
 struct SignatureHost {
-    log: Rc<RefCell<SignatureLog>>,
+    log: Arc<Mutex<SignatureLog>>,
 }
 
 type ForeignSignatureRecord = (Box<str>, Box<[Box<str>]>, Box<str>);
@@ -87,7 +87,12 @@ impl VmHost for SignatureHost {
         foreign: &ForeignCall,
         _args: &[Value],
     ) -> VmResult<Value> {
-        self.log.borrow_mut().foreign_calls.push((
+        let mut log = self.log.lock().map_err(|_| {
+            VmError::new(VmErrorKind::InvalidProgramShape {
+                detail: "signature log lock poisoned".into(),
+            })
+        })?;
+        log.foreign_calls.push((
             foreign.name().into(),
             foreign
                 .param_tys()
@@ -97,6 +102,7 @@ impl VmHost for SignatureHost {
                 .into_boxed_slice(),
             foreign.result_ty_name().into(),
         ));
+        drop(log);
         Ok(Value::Int(7))
     }
 
@@ -106,7 +112,12 @@ impl VmHost for SignatureHost {
         effect: &EffectCall,
         _args: &[Value],
     ) -> VmResult<Value> {
-        self.log.borrow_mut().effect_calls.push((
+        let mut log = self.log.lock().map_err(|_| {
+            VmError::new(VmErrorKind::InvalidProgramShape {
+                detail: "signature log lock poisoned".into(),
+            })
+        })?;
+        log.effect_calls.push((
             effect.effect_name().into(),
             effect.op_name().into(),
             effect
@@ -118,6 +129,7 @@ impl VmHost for SignatureHost {
             effect.result_ty_name().into(),
             effect.is_comptime_safe(),
         ));
+        drop(log);
         Ok(Value::Int(42))
     }
 }
@@ -317,6 +329,115 @@ mod success {
         assert!(before > 0);
         assert_eq!(stats.after_bytes, 0);
         assert_eq!(heap.allocated_bytes(), 0);
+    }
+
+    #[test]
+    fn immix_collection_evacuates_fragmented_blocks() {
+        let mut heap = RuntimeHeap::default();
+        let options = HeapOptions {
+            max_object_bytes: None,
+        };
+        let mut roots = Vec::new();
+        for index in 0usize..64 {
+            let value = heap
+                .alloc_string(format!("value-{index}"), &options)
+                .expect("string should allocate");
+            if index.is_multiple_of(2) {
+                roots.push(value);
+            }
+        }
+
+        let stats = heap.collect_from_roots(roots.iter());
+
+        assert_eq!(stats.after_objects, roots.len());
+        assert!(stats.reclaimed_objects > 0);
+        assert!(stats.evacuated_objects > 0);
+        assert!(stats.free_blocks > 0);
+        for root in &roots {
+            let Value::String(reference) = root else {
+                panic!("root should be string");
+            };
+            assert!(
+                heap.string(*reference)
+                    .expect("root should stay live")
+                    .starts_with("value-")
+            );
+        }
+    }
+
+    #[test]
+    fn large_objects_collect_outside_immix_blocks() {
+        let mut heap = RuntimeHeap::default();
+        let options = HeapOptions {
+            max_object_bytes: None,
+        };
+        let large = "x".repeat(40 * 1024);
+        let value = heap
+            .alloc_string(large, &options)
+            .expect("large string should allocate");
+        let rooted = heap.collect_from_roots([&value]);
+        assert_eq!(rooted.reclaimed_objects, 0);
+        assert!(rooted.after_bytes > 32 * 1024);
+
+        let unrooted = heap.collect_from_roots(empty::<&Value>());
+        assert_eq!(unrooted.after_bytes, 0);
+        assert_eq!(unrooted.reclaimed_objects, 1);
+    }
+
+    #[test]
+    fn isolate_heap_rejects_cross_isolate_values() {
+        let program = compile_program(
+            &[("main", "export let answer () : [2]Int := [1, 2];")],
+            "main",
+        );
+        let mut left = Vm::with_rejecting_host(program.clone(), VmOptions);
+        let mut right = Vm::with_rejecting_host(program, VmOptions);
+        left.initialize().expect("left vm init should succeed");
+        right.initialize().expect("right vm init should succeed");
+
+        let value = left
+            .call_export("answer", &[])
+            .expect("left value should allocate");
+        assert_ne!(left.isolate_id(), right.isolate_id());
+
+        let error = right
+            .observe_heap_value(&value)
+            .expect_err("right vm should reject left heap value");
+        assert!(matches!(
+            error.kind(),
+            VmErrorKind::InvalidProgramShape { detail }
+                if detail.as_ref() == "cross-isolate heap reference"
+        ));
+    }
+
+    #[test]
+    fn isolates_run_on_separate_threads() {
+        let program = compile_program(&[("main", "export let answer () : Int := 42;")], "main");
+        let left_program = program.clone();
+        let right_program = program;
+
+        let left = spawn(move || {
+            let mut vm = Vm::with_rejecting_host(left_program, VmOptions);
+            vm.initialize().expect("left vm init should succeed");
+            (vm.isolate_id(), vm.call_export("answer", &[]))
+        });
+        let right = spawn(move || {
+            let mut vm = Vm::with_rejecting_host(right_program, VmOptions);
+            vm.initialize().expect("right vm init should succeed");
+            (vm.isolate_id(), vm.call_export("answer", &[]))
+        });
+
+        let (left_id, left_value) = left.join().expect("left thread should join");
+        let (right_id, right_value) = right.join().expect("right thread should join");
+        assert_ne!(left_id, right_id);
+        assert_eq!(
+            left_value.expect("left call should succeed"),
+            Value::Int(42)
+        );
+        assert_eq!(
+            right_value.expect("right call should succeed"),
+            Value::Int(42)
+        );
     }
 
     #[test]
@@ -576,9 +697,9 @@ mod success {
             "main",
         );
 
-        let log = Rc::new(RefCell::new(SignatureLog::default()));
+        let log = Arc::new(Mutex::new(SignatureLog::default()));
         let host = SignatureHost {
-            log: Rc::clone(&log),
+            log: Arc::clone(&log),
         };
         let mut vm = Vm::new(program, RejectingLoader, host, VmOptions);
         vm.initialize().expect("vm init should succeed");
@@ -592,7 +713,7 @@ mod success {
 
         assert_eq!(foreign_value, Value::Int(7));
         assert_eq!(effect_value, Value::Int(42));
-        let log = log.borrow();
+        let log = log.lock().expect("signature log should lock");
         assert_eq!(log.foreign_calls.len(), 1);
         assert_eq!(log.foreign_calls[0].0.as_ref(), "main::puts");
         assert_eq!(log.foreign_calls[0].1.len(), 1);
@@ -605,6 +726,7 @@ mod success {
         assert_eq!(log.effect_calls[0].2[0].as_ref(), "String");
         assert_eq!(log.effect_calls[0].3.as_ref(), "Int");
         assert!(log.effect_calls[0].4);
+        drop(log);
     }
 
     #[test]

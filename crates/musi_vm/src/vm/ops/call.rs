@@ -82,8 +82,7 @@ impl Vm {
         let module_slot = self.current_module_slot()?;
         let params = self.call_arity(module_slot, procedure)?;
         let args = self.pop_args(params)?;
-        let _ = self.frames.pop();
-        self.push_frame(module_slot, procedure, args)?;
+        self.replace_frame(module_slot, procedure, args)?;
         Ok(StepOutcome::Continue)
     }
 

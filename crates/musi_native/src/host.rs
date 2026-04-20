@@ -1,5 +1,4 @@
-use std::cell::RefCell;
-use std::rc::{Rc, Weak};
+use std::sync::{Arc, Mutex, MutexGuard, Weak};
 
 use musi_vm::{
     EffectCall, ForeignCall, Value, VmError, VmErrorKind, VmHost, VmHostCallContext, VmResult,
@@ -20,12 +19,12 @@ struct NativeHostState {
 
 #[derive(Clone)]
 pub struct WeakNativeHost {
-    state: Weak<RefCell<NativeHostState>>,
+    state: Weak<Mutex<NativeHostState>>,
 }
 
 #[derive(Clone)]
 pub struct NativeHost {
-    state: Rc<RefCell<NativeHostState>>,
+    state: Arc<Mutex<NativeHostState>>,
 }
 
 impl Default for NativeHost {
@@ -38,7 +37,7 @@ impl NativeHost {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            state: Rc::new(RefCell::new(NativeHostState {
+            state: Arc::new(Mutex::new(NativeHostState {
                 fallback: None,
                 registered: RegisteredHost::default(),
                 testing: TestHost::default(),
@@ -50,7 +49,7 @@ impl NativeHost {
     #[must_use]
     pub fn with_fallback(host: impl VmHost + 'static) -> Self {
         Self {
-            state: Rc::new(RefCell::new(NativeHostState {
+            state: Arc::new(Mutex::new(NativeHostState {
                 fallback: Some(Box::new(host)),
                 registered: RegisteredHost::default(),
                 testing: TestHost::default(),
@@ -62,43 +61,45 @@ impl NativeHost {
     pub fn register_foreign_handler<Name>(
         &mut self,
         name: Name,
-        handler: impl FnMut(&ForeignCall, &[Value]) -> VmResult<Value> + 'static,
+        handler: impl FnMut(&ForeignCall, &[Value]) -> VmResult<Value> + Send + 'static,
     ) where
         Name: Into<HandlerName>,
     {
-        self.state
-            .borrow_mut()
-            .registered
-            .register_foreign_handler(name, handler);
+        if let Ok(mut state) = self.state.lock() {
+            state.registered.register_foreign_handler(name, handler);
+        }
     }
 
     pub fn register_foreign_handler_with_context<Name>(
         &mut self,
         name: Name,
         handler: impl FnMut(VmHostCallContext<'_, '_>, &ForeignCall, &[Value]) -> VmResult<Value>
+        + Send
         + 'static,
     ) where
         Name: Into<HandlerName>,
     {
-        self.state
-            .borrow_mut()
-            .registered
-            .register_foreign_handler_with_context(name, handler);
+        if let Ok(mut state) = self.state.lock() {
+            state
+                .registered
+                .register_foreign_handler_with_context(name, handler);
+        }
     }
 
     pub fn register_effect_handler<Effect, Op>(
         &mut self,
         effect: Effect,
         op: Op,
-        handler: impl FnMut(&EffectCall, &[Value]) -> VmResult<Value> + 'static,
+        handler: impl FnMut(&EffectCall, &[Value]) -> VmResult<Value> + Send + 'static,
     ) where
         Effect: Into<HandlerName>,
         Op: Into<HandlerName>,
     {
-        self.state
-            .borrow_mut()
-            .registered
-            .register_effect_handler(effect, op, handler);
+        if let Ok(mut state) = self.state.lock() {
+            state
+                .registered
+                .register_effect_handler(effect, op, handler);
+        }
     }
 
     pub fn register_effect_handler_with_context<Effect, Op>(
@@ -106,35 +107,51 @@ impl NativeHost {
         effect: Effect,
         op: Op,
         handler: impl FnMut(VmHostCallContext<'_, '_>, &EffectCall, &[Value]) -> VmResult<Value>
+        + Send
         + 'static,
     ) where
         Effect: Into<HandlerName>,
         Op: Into<HandlerName>,
     {
-        self.state
-            .borrow_mut()
-            .registered
-            .register_effect_handler_with_context(effect, op, handler);
+        if let Ok(mut state) = self.state.lock() {
+            state
+                .registered
+                .register_effect_handler_with_context(effect, op, handler);
+        }
     }
 
     pub fn begin_test_session(&mut self) {
-        self.state.borrow_mut().testing.begin_session();
+        if let Ok(mut state) = self.state.lock() {
+            state.testing.begin_session();
+        }
     }
 
     #[must_use]
     pub fn finish_test_session(&mut self, module: &str) -> NativeTestReport {
-        self.state.borrow_mut().testing.finish_session(module)
+        self.state.lock().map_or_else(
+            |_| NativeTestReport::new(module, Box::default()),
+            |mut state| state.testing.finish_session(module),
+        )
     }
 
     #[must_use]
     pub fn downgrade(&self) -> WeakNativeHost {
         WeakNativeHost {
-            state: Rc::downgrade(&self.state),
+            state: Arc::downgrade(&self.state),
         }
     }
 
+    fn state(&self) -> VmResult<MutexGuard<'_, NativeHostState>> {
+        self.state.lock().map_err(|_| {
+            VmError::new(VmErrorKind::InvalidProgramShape {
+                detail: "native host lock poisoned".into(),
+            })
+        })
+    }
+
+    #[allow(clippy::significant_drop_tightening)]
     fn call_fallback<R>(&self, f: impl FnOnce(&mut dyn VmHost) -> VmResult<R>) -> VmResult<R> {
-        let mut state = self.state.borrow_mut();
+        let mut state = self.state()?;
         let Some(fallback) = state.fallback.as_mut() else {
             return Err(VmError::new(VmErrorKind::InvalidProgramShape {
                 detail: "native host fallback missing".into(),
@@ -158,23 +175,17 @@ impl VmHost for NativeHost {
         foreign: &ForeignCall,
         args: &[Value],
     ) -> VmResult<Value> {
-        if let Some(result) = self
-            .state
-            .borrow_mut()
-            .registered
-            .call_foreign(ctx, foreign, args)
-        {
+        let registered_result = self.state()?.registered.call_foreign(ctx, foreign, args);
+        if let Some(result) = registered_result {
             return result;
         }
-        if let Some(result) = self
-            .state
-            .borrow()
-            .platform
-            .call_foreign(ctx, foreign, args)
-        {
+
+        let platform_result = self.state()?.platform.call_foreign(ctx, foreign, args);
+        if let Some(result) = platform_result {
             return result;
         }
-        if self.state.borrow().fallback.is_none() {
+
+        if self.state()?.fallback.is_none() {
             return Err(VmError::new(VmErrorKind::ForeignCallRejected {
                 foreign: foreign.name().into(),
             }));
@@ -188,26 +199,22 @@ impl VmHost for NativeHost {
         effect: &EffectCall,
         args: &[Value],
     ) -> VmResult<Value> {
-        if let Some(result) = self
-            .state
-            .borrow_mut()
-            .registered
-            .handle_effect(ctx, effect, args)
-        {
+        let registered_result = self.state()?.registered.handle_effect(ctx, effect, args);
+        if let Some(result) = registered_result {
             return result;
         }
-        if let Some(result) = self
-            .state
-            .borrow_mut()
-            .testing
-            .handle_effect(ctx, effect, args)
-        {
+
+        let testing_result = self.state()?.testing.handle_effect(ctx, effect, args);
+        if let Some(result) = testing_result {
             return result;
         }
-        if let Some(result) = self.state.borrow().platform.handle_effect(effect, args) {
+
+        let platform_result = self.state()?.platform.handle_effect(effect, args);
+        if let Some(result) = platform_result {
             return result;
         }
-        if self.state.borrow().fallback.is_none() {
+
+        if self.state()?.fallback.is_none() {
             return Err(VmError::new(VmErrorKind::EffectRejected {
                 effect: effect.effect_name().into(),
                 op: Some(effect.op_name().into()),
