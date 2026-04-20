@@ -37,24 +37,24 @@ These stay outside cross-runtime comparison unless an honest behavioral equivale
 
 ## Current Baseline
 
-Recorded on 2026-04-20 from `327ca532` on MacBook Pro `MacBookPro18,2`, Apple M1 Max, 10 cores, 32 GB, macOS 26.4.1 arm64. Rust used `cargo 1.95.0`; Java used OpenJDK `17.0.18`; Scala used Scala CLI `1.13.0`; .NET SDK was `10.0.202`; CLR runtime reported by the benches was `8.0.26`.
+Recorded on 2026-04-20 from the VM performance working tree based on `26afa885` on MacBook Pro `MacBookPro18,2`, Apple M1 Max, 10 cores, 32 GB, macOS 26.4.1 arm64. Rust used `cargo 1.95.0`; Java used OpenJDK `17.0.18`; Scala used Scala CLI `1.13.0`; .NET SDK was `10.0.202`; CLR runtime reported by the benches was `8.0.26`.
 
 Do not mix historical C# interpreter data with this multi-VM table. Values are point estimates from a full local run. Musi SEAM values are Criterion mean point estimates from `estimates.json`. Lower is better. Musi currently uses SEAM bytecode plus tiered runtime kernels for recognized hot procedure shapes.
 
-| Workload                   |     Java 17 |    Scala 3 |     C# .NET 8 |  F# .NET 8 |     Musi SEAM | Musi vs best peer |
-| -------------------------- | ----------: | ---------: | ------------: | ---------: | ------------: | ----------------: |
-| `init_small_module`        |   5.4 ns/op |  7.1 ns/op |     8.1 ns/op | 10.1 ns/op | 1,192.3 ns/op |            220.8x |
-| `scalar_recursive_sum`     | 434.9 ns/op | 53.2 ns/op | 1,397.4 ns/op | 89.0 ns/op |    64.6 ns/op |              1.2x |
-| `closure_capture`          |   5.8 ns/op |  7.6 ns/op |    18.5 ns/op |  5.3 ns/op |    43.1 ns/op |              8.1x |
-| `sequence_index_mutation`  |   9.8 ns/op | 22.7 ns/op |    25.0 ns/op | 26.0 ns/op | 1,417.4 ns/op |            144.6x |
-| `data_match_option`        |   7.1 ns/op |  7.1 ns/op |     9.3 ns/op |  2.6 ns/op |    42.6 ns/op |             16.4x |
-| `effect_resume_equivalent` |   7.2 ns/op |  7.5 ns/op |     9.0 ns/op |  8.5 ns/op | 3,256.7 ns/op |            452.3x |
+| Workload                   |     Java 17 |    Scala 3 |     C# .NET 8 |  F# .NET 8 |   Musi SEAM | Musi vs best peer |
+| -------------------------- | ----------: | ---------: | ------------: | ---------: | ----------: | ----------------: |
+| `init_small_module`        |   5.4 ns/op |  7.1 ns/op |     8.1 ns/op | 10.1 ns/op | 325.0 ns/op |             60.2x |
+| `scalar_recursive_sum`     | 433.0 ns/op | 52.7 ns/op | 1,387.9 ns/op | 88.4 ns/op |  62.5 ns/op |              1.2x |
+| `closure_capture`          |   5.8 ns/op |  7.1 ns/op |    18.5 ns/op |  5.4 ns/op |  41.0 ns/op |              7.6x |
+| `sequence_index_mutation`  |   8.0 ns/op | 20.3 ns/op |    24.9 ns/op | 25.9 ns/op | 525.1 ns/op |             65.6x |
+| `data_match_option`        |   7.1 ns/op |  7.1 ns/op |     9.4 ns/op |  2.6 ns/op |  41.1 ns/op |             15.8x |
+| `effect_resume_equivalent` |   7.2 ns/op |  7.1 ns/op |     9.0 ns/op |  8.5 ns/op |  45.3 ns/op |              6.4x |
 
 ## Current Musi-Only Baseline
 
 | Workload                    |     Musi SEAM |
 | --------------------------- | ------------: |
-| `gc_stress_sequence_return` | 2,213.0 ns/op |
+| `gc_stress_sequence_return` | 1,982.6 ns/op |
 
 ## Validation Baseline
 
@@ -91,11 +91,11 @@ Implementation checkpoints:
 
 ## Optimization Queue
 
-1. Effect resume: highest remaining semantic overhead; inspect continuation allocation, handler dispatch, and resume value flow without changing handler reuse semantics.
-2. Sequence mutation: reduce grid setup cost, heap slot checks, nested sequence lookup, and repeated bounds validation.
-3. Initialization: reduce module/closure export setup overhead and repeated heap-root retention.
+1. Sequence mutation: reduce grid setup cost, heap slot checks, nested sequence lookup, and repeated bounds validation.
+2. Initialization: reduce module/closure export setup overhead and repeated heap-root retention.
+3. Closure/data/effect kernels: keep scalar recursion, closure capture, data match, and inline effect resume fast while expanding only semantics-proven shapes.
 4. Immix GC: allocation fast path, line/block metadata, root tracing, sweep, and reuse.
-5. Tiered kernels: keep scalar recursion, closure capture, and data match fast while expanding only semantics-proven shapes.
+5. Generic effects: optimize continuation allocation, handler dispatch, and resume value flow without changing handler reuse semantics.
 
 ## Update Rules
 

@@ -35,12 +35,12 @@ fn lookup_answer(vm: &mut Vm) -> Value {
 fn int_grid(vm: &mut Vm) -> Value {
     let ty = TypeId::from_raw(0);
     let first = vm
-        .alloc_sequence(ty, [Value::Int(1), Value::Int(2)])
+        .alloc_pair_sequence(ty, Value::Int(1), Value::Int(2))
         .expect("first row should allocate");
     let second = vm
-        .alloc_sequence(ty, [Value::Int(3), Value::Int(4)])
+        .alloc_pair_sequence(ty, Value::Int(3), Value::Int(4))
         .expect("second row should allocate");
-    vm.alloc_sequence(ty, [first, second])
+    vm.alloc_pair_sequence(ty, first, second)
         .expect("grid should allocate")
 }
 

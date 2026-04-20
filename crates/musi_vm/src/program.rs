@@ -65,6 +65,10 @@ pub enum RuntimeKernel {
         update: RuntimeFusedOp,
         finish: RuntimeFusedOp,
     },
+    InlineEffectResume {
+        value_clause: ProcedureId,
+        op_clause: ProcedureId,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

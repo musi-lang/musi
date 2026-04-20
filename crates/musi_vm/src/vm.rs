@@ -149,6 +149,8 @@ pub struct Vm {
     external_roots: Vec<Value>,
 }
 
+const DEFAULT_AUTO_COLLECT_THRESHOLD_BYTES: usize = 1024 * 1024;
+
 impl Vm {
     #[must_use]
     pub fn new(
@@ -384,7 +386,7 @@ impl Vm {
             })),
         }?;
         self.retain_external_value(&result)?;
-        if base_depth == 0 && self.heap_dirty {
+        if base_depth == 0 && self.should_collect_after_call() {
             let _ = self.collect_garbage();
         }
         Ok(result)
@@ -392,10 +394,17 @@ impl Vm {
 
     fn finish_call_value(&mut self, base_depth: usize, result: Value) -> VmResult<Value> {
         self.retain_external_value(&result)?;
-        if base_depth == 0 && self.heap_dirty {
+        if base_depth == 0 && self.should_collect_after_call() {
             let _ = self.collect_garbage();
         }
         Ok(result)
+    }
+
+    const fn should_collect_after_call(&self) -> bool {
+        self.heap_dirty
+            && (self.options.gc_stress
+                || self.options.heap_limit_bytes.is_some()
+                || self.heap.allocated_bytes() >= DEFAULT_AUTO_COLLECT_THRESHOLD_BYTES)
     }
 
     /// Inspects one value through this VM heap.
@@ -621,6 +630,23 @@ impl Vm {
         Items: IntoIterator<Item = Value>,
     {
         self.alloc_sequence_owned(ty, items.into_iter().collect())
+    }
+
+    /// Allocates one two-element VM-owned sequence.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VmError`] when heap limits reject the allocation.
+    pub fn alloc_pair_sequence(
+        &mut self,
+        ty: TypeId,
+        first: Value,
+        second: Value,
+    ) -> VmResult<Value> {
+        let mut items = ValueList::new();
+        items.push(first);
+        items.push(second);
+        self.alloc_sequence_owned(ty, items)
     }
 
     pub(crate) fn alloc_sequence_owned(&mut self, ty: TypeId, items: ValueList) -> VmResult<Value> {

@@ -300,7 +300,7 @@ mod success {
 
         assert_eq!(value, Value::Int(42));
         assert!(before > 0);
-        assert_eq!(before, stats.after_bytes);
+        assert!(stats.after_bytes <= before);
         assert_eq!(stats.after_bytes, vm.heap_allocated_bytes());
     }
 
@@ -456,7 +456,6 @@ mod success {
             )],
             "main",
         );
-
         let mut vm = Vm::with_rejecting_host(program, VmOptions);
         vm.initialize().expect("vm init should succeed");
         let value = vm
@@ -633,7 +632,6 @@ mod success {
             )],
             "main",
         );
-
         let mut vm = Vm::with_rejecting_host(program, VmOptions);
         vm.initialize().expect("vm init should succeed");
         let value = vm
@@ -656,7 +654,6 @@ mod success {
             )],
             "main",
         );
-
         let mut vm = Vm::with_rejecting_host(program, VmOptions);
         vm.initialize().expect("vm init should succeed");
 
@@ -771,7 +768,6 @@ mod success {
             )],
             "main",
         );
-
         let mut vm = Vm::with_rejecting_host(program, VmOptions);
         vm.initialize().expect("vm init should succeed");
         let value = vm
@@ -779,6 +775,38 @@ mod success {
             .expect("handled effect should succeed");
 
         assert_eq!(value, Value::Int(42));
+    }
+
+    #[test]
+    fn fuses_inline_effect_resume() {
+        let program = compile_program(
+            &[(
+                "main",
+                r"
+            let Console := effect { let readLine () : Int; };
+            export let answer () : Int :=
+              handle request Console.readLine() using Console {
+                value => value + 1;
+                readLine(k) => resume 41;
+              };
+        ",
+            )],
+            "main",
+        );
+
+        let mut vm = Vm::with_rejecting_host(program, VmOptions);
+        vm.initialize().expect("vm init should succeed");
+        let answer = vm
+            .lookup_export("answer")
+            .expect("answer export should resolve");
+        let before = vm.executed_instructions();
+        let value = vm
+            .call_value(answer, &[])
+            .expect("handled effect should run");
+        let executed = vm.executed_instructions() - before;
+
+        assert_eq!(value, Value::Int(42));
+        assert_eq!(executed, 1);
     }
 
     #[test]

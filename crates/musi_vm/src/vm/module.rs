@@ -1,7 +1,8 @@
 use crate::{VmIndexSpace, VmStackKind};
 use music_seam::descriptor::ExportTarget;
+use music_seam::{GlobalId, Instruction, Opcode, Operand, ProcedureId};
 
-use super::{Value, ValueList, VmError, VmErrorKind, VmResult, VmValueKind};
+use super::{Program, Value, ValueList, VmError, VmErrorKind, VmResult, VmValueKind};
 
 use super::Vm;
 use super::state::{LoadedModule, ModuleState};
@@ -37,11 +38,7 @@ impl Vm {
         }
 
         self.module_mut(slot)?.state = ModuleState::Initializing;
-        let base_depth = self.frames.len();
-        let result = entry.map_or(Ok(()), |entry| {
-            self.invoke_procedure_in_context(slot, entry, ValueList::new(), base_depth)
-                .map(|_| ())
-        });
+        let result = entry.map_or(Ok(()), |entry| self.initialize_entry(slot, entry));
         match result {
             Ok(()) => {
                 self.module_mut(slot)?.state = ModuleState::Initialized;
@@ -52,6 +49,40 @@ impl Vm {
                 Err(error)
             }
         }
+    }
+
+    fn initialize_entry(&mut self, slot: usize, entry: ProcedureId) -> VmResult {
+        if self.try_initialize_simple_globals(slot, entry)? {
+            return Ok(());
+        }
+        let base_depth = self.frames.len();
+        self.invoke_procedure_in_context(slot, entry, ValueList::new(), base_depth)
+            .map(|_| ())
+    }
+
+    fn try_initialize_simple_globals(&mut self, slot: usize, entry: ProcedureId) -> VmResult<bool> {
+        let assignments = {
+            let program = &self.module(slot)?.program;
+            simple_global_assignments(program, entry)
+        };
+        let Some(assignments) = assignments else {
+            return Ok(false);
+        };
+        let globals = &mut self.module_mut(slot)?.globals;
+        for (global, value) in assignments {
+            let raw_slot = usize::try_from(global.raw()).unwrap_or(usize::MAX);
+            let len = globals.len();
+            let Some(global) = globals.get_mut(raw_slot) else {
+                return Err(VmError::new(VmErrorKind::IndexOutOfBounds {
+                    space: VmIndexSpace::Global,
+                    owner: None,
+                    index: i64::try_from(raw_slot).unwrap_or(i64::MAX),
+                    len,
+                }));
+            };
+            *global = Value::Int(value);
+        }
+        Ok(true)
     }
 
     pub(crate) fn lookup_export_in_slot(&mut self, slot: usize, name: &str) -> VmResult<Value> {
@@ -164,5 +195,57 @@ impl Vm {
         let _ = self.module_slots.insert(spec.into(), slot);
         self.initialize_slot(slot)?;
         Ok(slot)
+    }
+}
+
+fn simple_global_assignments(
+    program: &Program,
+    procedure: ProcedureId,
+) -> Option<Vec<(GlobalId, i64)>> {
+    let procedure = program.loaded_procedure(procedure).ok()?;
+    if let Some(assignment) = simple_global_init_assignment(&procedure.instructions) {
+        return Some(vec![assignment]);
+    }
+    let mut assignments = Vec::new();
+    let mut chunks = procedure.instructions.chunks_exact(2);
+    for chunk in &mut chunks {
+        let [call, store] = chunk else {
+            return None;
+        };
+        let (Opcode::Call, Operand::Procedure(callee)) = (call.opcode, &call.operand) else {
+            return None;
+        };
+        if !matches!(
+            (store.opcode, &store.operand),
+            (Opcode::StLoc, Operand::Local(_))
+        ) {
+            return None;
+        }
+        assignments.extend(simple_global_assignments(program, *callee)?);
+    }
+    let [ret] = chunks.remainder() else {
+        return None;
+    };
+    (ret.opcode == Opcode::Ret).then_some(assignments)
+}
+
+fn simple_global_init_assignment(instructions: &[Instruction]) -> Option<(GlobalId, i64)> {
+    let [load, store, unit, ret] = instructions else {
+        return None;
+    };
+    let (Opcode::LdSmi, Operand::I16(value)) = (load.opcode, &load.operand) else {
+        return None;
+    };
+    let (Opcode::StGlob, Operand::Global(global)) = (store.opcode, &store.operand) else {
+        return None;
+    };
+    if matches!(
+        (unit.opcode, &unit.operand),
+        (Opcode::LdSmi, Operand::I16(0))
+    ) && ret.opcode == Opcode::Ret
+    {
+        Some((*global, i64::from(*value)))
+    } else {
+        None
     }
 }

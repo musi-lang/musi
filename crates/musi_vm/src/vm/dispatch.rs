@@ -196,6 +196,9 @@ impl Vm {
         match runtime.opcode {
             Opcode::LdLoc => self.exec_fast_ldloc(runtime),
             Opcode::StLoc => self.exec_fast_stloc(runtime),
+            Opcode::LdGlob => self.exec_fast_ldglob(runtime),
+            Opcode::StGlob => self.exec_fast_stglob(runtime),
+            Opcode::LdConst => self.exec_fast_ldconst(runtime),
             Opcode::LdSmi => self.exec_fast_ldsmi(runtime),
             Opcode::IAdd => self.exec_fast_int_op(i64::checked_add),
             Opcode::ISub => self.exec_fast_int_op(i64::checked_sub),
@@ -843,6 +846,73 @@ impl Vm {
         self.current_frame_mut()?
             .stack
             .push(Value::Int(i64::from(value)));
+        Ok(StepOutcome::Continue)
+    }
+
+    fn exec_fast_ldglob(&mut self, runtime: &RuntimeInstruction) -> VmResult<StepOutcome> {
+        let RuntimeOperand::Global(slot) = runtime.operand else {
+            let instruction = self.current_raw_instruction(runtime.raw_index)?;
+            return Err(Self::invalid_operand(&instruction));
+        };
+        let module_slot = self.current_module_slot()?;
+        let raw_slot = usize::try_from(slot.raw()).unwrap_or(usize::MAX);
+        let value = self
+            .module(module_slot)?
+            .globals
+            .get(raw_slot)
+            .cloned()
+            .ok_or_else(|| {
+                VmError::new(VmErrorKind::IndexOutOfBounds {
+                    space: VmIndexSpace::Global,
+                    owner: None,
+                    index: i64::try_from(raw_slot).unwrap_or(i64::MAX),
+                    len: self
+                        .module(module_slot)
+                        .map_or(0, |module| module.globals.len()),
+                })
+            })?;
+        self.current_frame_mut()?.stack.push(value);
+        Ok(StepOutcome::Continue)
+    }
+
+    fn exec_fast_stglob(&mut self, runtime: &RuntimeInstruction) -> VmResult<StepOutcome> {
+        let RuntimeOperand::Global(slot) = runtime.operand else {
+            let instruction = self.current_raw_instruction(runtime.raw_index)?;
+            return Err(Self::invalid_operand(&instruction));
+        };
+        let value = self.pop_value()?;
+        let module_slot = self.current_module_slot()?;
+        let globals = &mut self.module_mut(module_slot)?.globals;
+        let raw_slot = usize::try_from(slot.raw()).unwrap_or(usize::MAX);
+        let len = globals.len();
+        let Some(global) = globals.get_mut(raw_slot) else {
+            return Err(VmError::new(VmErrorKind::IndexOutOfBounds {
+                space: VmIndexSpace::Global,
+                owner: None,
+                index: i64::try_from(raw_slot).unwrap_or(i64::MAX),
+                len,
+            }));
+        };
+        *global = value;
+        Ok(StepOutcome::Continue)
+    }
+
+    fn exec_fast_ldconst(&mut self, runtime: &RuntimeInstruction) -> VmResult<StepOutcome> {
+        let RuntimeOperand::Constant(constant) = runtime.operand else {
+            let instruction = self.current_raw_instruction(runtime.raw_index)?;
+            return Err(Self::invalid_operand(&instruction));
+        };
+        let module_slot = self.current_module_slot()?;
+        let constant_value = self
+            .module(module_slot)?
+            .program
+            .artifact()
+            .constants
+            .get(constant)
+            .value
+            .clone();
+        let value = self.constant_value(module_slot, &constant_value)?;
+        self.current_frame_mut()?.stack.push(value);
         Ok(StepOutcome::Continue)
     }
 

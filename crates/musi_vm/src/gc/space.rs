@@ -58,12 +58,14 @@ enum LineState {
 #[derive(Debug, Clone)]
 pub(super) struct ImmixBlock {
     lines: Vec<LineState>,
+    cursor: usize,
 }
 
 impl Default for ImmixBlock {
     fn default() -> Self {
         Self {
             lines: vec![LineState::Free; IMMIX_LINES_PER_BLOCK],
+            cursor: 0,
         }
     }
 }
@@ -92,15 +94,28 @@ impl ImmixBlock {
             return None;
         }
         let limit = self.lines.len().saturating_sub(line_count);
-        for start in 0..=limit {
-            if self.lines[start..start + line_count]
+        if let Some(start) = self.reserve_lines_in(line_count, self.cursor, limit) {
+            return Some(start);
+        }
+        if self.cursor > 0
+            && let Some(start) = self.reserve_lines_in(line_count, 0, self.cursor.saturating_sub(1))
+        {
+            return Some(start);
+        }
+        None
+    }
+
+    fn reserve_lines_in(&mut self, line_count: usize, start: usize, limit: usize) -> Option<usize> {
+        for start_line in start..=limit {
+            if self.lines[start_line..start_line + line_count]
                 .iter()
                 .all(|line| *line == LineState::Free)
             {
-                for line in &mut self.lines[start..start + line_count] {
+                for line in &mut self.lines[start_line..start_line + line_count] {
                     *line = LineState::Allocated;
                 }
-                return Some(start);
+                self.cursor = start_line.saturating_add(line_count).min(self.lines.len());
+                return Some(start_line);
             }
         }
         None
@@ -118,6 +133,7 @@ impl ImmixBlock {
         for line in &mut self.lines[start_line..end] {
             *line = LineState::Free;
         }
+        self.cursor = self.cursor.min(start_line);
     }
 
     pub(super) fn finish_collection(&mut self) {
