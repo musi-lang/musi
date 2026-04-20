@@ -75,12 +75,22 @@ fn bench_vm_init_small_module(c: &mut Criterion) {
         ",
     );
 
-    _ = c.bench_function("bench_vm_init_small_module", |b| {
+    _ = c.bench_function("bench_vm_construct_small_module", |b| {
         b.iter(|| {
-            let mut vm = Vm::with_rejecting_host(black_box(program.clone()), VmOptions);
-            vm.initialize().expect("vm init should succeed");
+            let vm = Vm::with_rejecting_host(black_box(program.clone()), VmOptions);
             black_box(vm.executed_instructions())
         });
+    });
+
+    _ = c.bench_function("bench_vm_init_small_module", |b| {
+        b.iter_batched(
+            || Vm::with_rejecting_host(program.clone(), VmOptions),
+            |mut vm| {
+                vm.initialize().expect("vm init should succeed");
+                black_box(vm.executed_instructions())
+            },
+            BatchSize::SmallInput,
+        );
     });
 }
 

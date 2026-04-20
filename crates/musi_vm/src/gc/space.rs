@@ -5,20 +5,33 @@ use super::object::HeapObject;
 pub(super) const IMMIX_LINE_BYTES: usize = 128;
 const IMMIX_BLOCK_BYTES: usize = 32 * 1024;
 pub(super) const IMMIX_LINES_PER_BLOCK: usize = IMMIX_BLOCK_BYTES / IMMIX_LINE_BYTES;
+pub(super) const IMMIX_CARD_LINES: usize = 8;
+pub(super) const IMMIX_CARDS_PER_BLOCK: usize = IMMIX_LINES_PER_BLOCK / IMMIX_CARD_LINES;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum HeapSpace {
+    Young,
+    Mature,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum HeapAllocation {
     Immix {
+        space: HeapSpace,
         block: usize,
         start_line: usize,
         line_count: usize,
     },
-    Large,
+    Large {
+        space: HeapSpace,
+    },
 }
 
 #[derive(Debug, Clone)]
 pub(super) struct HeapSlot {
     pub(super) generation: u32,
+    pub(super) space: HeapSpace,
+    pub(super) survive_count: u8,
     pub(super) object: Option<HeapObject>,
     pub(super) allocation: HeapAllocation,
     pub(super) bytes: usize,
@@ -27,10 +40,17 @@ pub(super) struct HeapSlot {
 }
 
 impl HeapSlot {
-    pub(super) fn live(generation: u32, object: HeapObject, allocation: HeapAllocation) -> Self {
-        let bytes = object.bytes();
+    pub(super) const fn live_with_bytes(
+        generation: u32,
+        space: HeapSpace,
+        object: HeapObject,
+        allocation: HeapAllocation,
+        bytes: usize,
+    ) -> Self {
         Self {
             generation,
+            space,
+            survive_count: 0,
             object: Some(object),
             allocation,
             bytes,
@@ -57,20 +77,21 @@ enum LineState {
 
 #[derive(Debug, Clone)]
 pub(super) struct ImmixBlock {
+    pub(super) space: HeapSpace,
     lines: Vec<LineState>,
     cursor: usize,
 }
 
-impl Default for ImmixBlock {
-    fn default() -> Self {
+impl ImmixBlock {
+    #[must_use]
+    pub(super) fn new(space: HeapSpace) -> Self {
         Self {
+            space,
             lines: vec![LineState::Free; IMMIX_LINES_PER_BLOCK],
             cursor: 0,
         }
     }
-}
 
-impl ImmixBlock {
     pub(super) fn is_free(&self) -> bool {
         self.lines.iter().all(|line| *line == LineState::Free)
     }

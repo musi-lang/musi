@@ -223,7 +223,7 @@ impl Vm {
         }
         reset_non_param_locals(frame, param_count);
         frame.stack.clear();
-        frame.ip = 0;
+        frame.set_ip(0);
         Ok(())
     }
 

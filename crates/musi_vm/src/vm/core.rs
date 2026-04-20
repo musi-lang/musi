@@ -1,5 +1,5 @@
 use super::boundary::{HostState, LoaderState};
-use super::state::LoadedModule;
+use super::state::{LoadedModule, LoadedModuleList};
 use super::{
     HeapCollectionStats, Program, RejectingHost, RejectingLoader, RuntimeHeap, Value, Vm, VmHost,
     VmLoader, VmOptions, VmResult,
@@ -15,8 +15,10 @@ impl Vm {
         options: VmOptions,
     ) -> Self {
         let root_module = LoadedModule::new("<root>", program);
+        let mut loaded_modules = LoadedModuleList::new();
+        loaded_modules.push(root_module);
         Self {
-            loaded_modules: vec![root_module],
+            loaded_modules,
             module_slots: None,
             loader: LoaderState::Custom(Box::new(loader)),
             host: HostState::Custom(Box::new(host)),
@@ -38,8 +40,10 @@ impl Vm {
     #[must_use]
     pub fn with_rejecting_host(program: Program, options: VmOptions) -> Self {
         let root_module = LoadedModule::new("<root>", program);
+        let mut loaded_modules = LoadedModuleList::new();
+        loaded_modules.push(root_module);
         Self {
-            loaded_modules: vec![root_module],
+            loaded_modules,
             module_slots: None,
             loader: LoaderState::Rejecting(RejectingLoader),
             host: HostState::Rejecting(RejectingHost),

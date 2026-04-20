@@ -58,7 +58,7 @@ impl Vm {
                 stack: VmStackKind::CallFrame,
             })
         })?;
-        frame.ip = ip;
+        frame.set_ip(ip);
         Ok(())
     }
 }

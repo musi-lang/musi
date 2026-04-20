@@ -20,7 +20,7 @@ These names must stay aligned across C#, F#, Java, Musi, and Scala where the beh
 
 | Workload                   | Behavior                                                        |
 | -------------------------- | --------------------------------------------------------------- |
-| `init_small_module`        | construct tiny module-like object and read answer               |
+| `init_small_module`        | initialize one pre-constructed VM for tiny module               |
 | `scalar_recursive_sum`     | recursive integer sum from 200                                  |
 | `closure_capture`          | closure captures one integer and applies through function value |
 | `sequence_index_mutation`  | mutate nested two-by-two integer sequence                       |
@@ -33,28 +33,30 @@ These stay outside cross-runtime comparison unless an honest behavioral equivale
 
 | Workload                    | Reason                             |
 | --------------------------- | ---------------------------------- |
+| `construct_small_vm`        | VM construction overhead only      |
 | `gc_stress_sequence_return` | SEAM heap/Immix collector behavior |
 
 ## Current Baseline
 
-Recorded on 2026-04-20 from the VM performance working tree based on `5660477a` on MacBook Pro `MacBookPro18,2`, Apple M1 Max, 10 cores, 32 GB, macOS 26.4.1 arm64. Rust used `cargo 1.95.0`; Java used OpenJDK `17.0.18`; Scala used Scala CLI `1.13.0`; .NET SDK was `10.0.202`; CLR runtime reported by the benches was `8.0.26`.
+Recorded on 2026-04-20 from the VM performance working tree based on `aaa15eeb` on MacBook Pro `MacBookPro18,2`, Apple M1 Max, 10 cores, 32 GB, macOS 26.4.1 arm64. Rust used `cargo 1.95.0`; Java used OpenJDK `17.0.18`; Scala used Scala CLI `1.13.0`; .NET SDK was `10.0.202`; CLR runtime reported by the benches was `8.0.26`.
 
-Do not mix historical C# interpreter data with this multi-VM table. Values are point estimates from a full local run. Musi SEAM values are Criterion mean point estimates from `estimates.json`. Lower is better. Musi currently uses SEAM bytecode plus tiered runtime kernels for recognized hot procedure shapes.
+Do not mix historical C# interpreter data with this multi-VM table. Values are point estimates from a full local run. Musi SEAM values are Criterion mean point estimates from `estimates.json`. Lower is better. Musi currently uses SEAM bytecode plus tiered runtime kernels for recognized hot procedure shapes. `init_small_module` now measures initialize-phase cost only; VM construction moved to Musi-only `construct_small_vm`.
 
 | Workload                   |     Java 17 |    Scala 3 |     C# .NET 8 |  F# .NET 8 |   Musi SEAM | Musi vs best peer |
 | -------------------------- | ----------: | ---------: | ------------: | ---------: | ----------: | ----------------: |
-| `init_small_module`        |   4.7 ns/op |  6.4 ns/op |     7.4 ns/op |  9.1 ns/op | 289.6 ns/op |             61.6x |
-| `scalar_recursive_sum`     | 385.0 ns/op | 46.4 ns/op | 1,281.7 ns/op | 79.4 ns/op |  42.7 ns/op |              0.9x |
-| `closure_capture`          |   5.7 ns/op |  6.3 ns/op |    16.7 ns/op |  4.6 ns/op |  26.6 ns/op |              5.8x |
-| `sequence_index_mutation`  |   8.8 ns/op | 15.4 ns/op |    23.2 ns/op | 23.3 ns/op | 466.5 ns/op |             53.0x |
-| `data_match_option`        |   6.1 ns/op |  6.5 ns/op |     8.2 ns/op |  2.3 ns/op |  27.5 ns/op |             12.0x |
-| `effect_resume_equivalent` |   6.1 ns/op |  6.3 ns/op |     8.3 ns/op |  7.5 ns/op |  27.7 ns/op |              4.5x |
+| `init_small_module`        |   4.6 ns/op |  6.3 ns/op |     6.9 ns/op |  8.7 ns/op |  90.7 ns/op |             19.7x |
+| `scalar_recursive_sum`     | 376.4 ns/op | 45.7 ns/op | 1,205.6 ns/op | 78.2 ns/op |  32.1 ns/op |              0.7x |
+| `closure_capture`          |   5.2 ns/op |  6.1 ns/op |    15.7 ns/op |  4.7 ns/op |  16.4 ns/op |              3.5x |
+| `sequence_index_mutation`  |   8.3 ns/op | 16.3 ns/op |    23.3 ns/op | 22.4 ns/op | 278.4 ns/op |             33.5x |
+| `data_match_option`        |   6.1 ns/op |  6.1 ns/op |     7.9 ns/op |  2.2 ns/op |  16.5 ns/op |              7.5x |
+| `effect_resume_equivalent` |   6.3 ns/op |  6.1 ns/op |     7.8 ns/op |  7.2 ns/op |  13.7 ns/op |              2.2x |
 
 ## Current Musi-Only Baseline
 
 | Workload                    |     Musi SEAM |
 | --------------------------- | ------------: |
-| `gc_stress_sequence_return` | 1,333.8 ns/op |
+| `construct_small_vm`        |    54.8 ns/op |
+| `gc_stress_sequence_return` | 1,301.9 ns/op |
 
 ## Validation Baseline
 
@@ -70,7 +72,7 @@ Do not mix historical C# interpreter data with this multi-VM table. Values are p
 
 The VM GC is Immix/mark-region.
 
-Current implementation owns observed heap payloads in the VM heap, assigns objects to Immix blocks/lines, traces precise roots, sweeps unreachable records, rebuilds line maps, and breaks unrooted cycles.
+Current implementation uses generational Immix (young+mature), card-table remembered edges for old->young writes, precise root tracing, and major sweep/line rebuild.
 
 Track GC work against three goals:
 

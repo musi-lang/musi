@@ -20,6 +20,9 @@ impl Vm {
 
     pub(crate) fn after_heap_allocation(&mut self, allocated: &Value) -> VmResult {
         self.heap_dirty = true;
+        if self.heap.should_collect_young() {
+            let _ = self.collect_minor_with_extra(Some(allocated));
+        }
         self.enforce_heap_limit_with_extra(Some(allocated))
     }
 
@@ -68,7 +71,28 @@ impl Vm {
         let handlers = &self.handlers;
         let active_resumes = &self.active_resumes;
         let external_roots = &self.external_roots;
-        let stats = self.heap.collect_from_refs(Self::heap_root_refs(
+        let stats = self.heap.collect_major_from_refs(Self::heap_root_refs(
+            loaded_modules,
+            frames,
+            handlers,
+            active_resumes,
+            external_roots,
+            extra_root,
+        ));
+        self.heap_dirty = false;
+        stats
+    }
+
+    pub(super) fn collect_minor_with_extra(
+        &mut self,
+        extra_root: Option<&Value>,
+    ) -> HeapCollectionStats {
+        let loaded_modules = &self.loaded_modules;
+        let frames = &self.frames;
+        let handlers = &self.handlers;
+        let active_resumes = &self.active_resumes;
+        let external_roots = &self.external_roots;
+        let stats = self.heap.collect_minor_from_refs(Self::heap_root_refs(
             loaded_modules,
             frames,
             handlers,

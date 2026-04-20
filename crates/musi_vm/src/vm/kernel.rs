@@ -1,11 +1,8 @@
-use music_seam::ProcedureId;
-use music_seam::{Opcode, Operand};
-
-use crate::program::LoadedProcedure;
 use crate::{VmIndexSpace, VmValueKind};
+use music_seam::ProcedureId;
 
 use super::{
-    CompareOp, GcRef, RuntimeFusedOp, RuntimeKernel, Value, Vm, VmError, VmErrorKind,
+    CompareOp, GcRef, RuntimeKernel, RuntimeSeq2Mutation, Value, Vm, VmError, VmErrorKind,
     VmOptimizationLevel, VmResult,
 };
 
@@ -89,37 +86,23 @@ impl Vm {
                         .ok_or_else(int_overflow_error)?,
                 )))
             }
-            RuntimeKernel::Seq2Mutation {
-                init,
-                update,
-                finish,
-            } => self.exec_seq2_mutation_kernel(args, init, update, finish),
+            RuntimeKernel::Seq2Mutation(plan) => self.exec_seq2_mutation_kernel(args, plan),
             RuntimeKernel::InlineEffectResume {
-                value_clause,
-                op_clause,
-            } => self.exec_inline_effect_resume_kernel(module_slot, value_clause, op_clause, args),
+                resume_value,
+                value_add,
+            } => Self::exec_inline_effect_resume_kernel(args, resume_value, value_add),
+            RuntimeKernel::InlineEffectResumeClauses { .. } => Ok(None),
         }
     }
 
     fn exec_inline_effect_resume_kernel(
-        &self,
-        module_slot: usize,
-        value_clause: ProcedureId,
-        op_clause: ProcedureId,
         args: &[Value],
+        resume_value: i16,
+        value_add: i16,
     ) -> VmResult<Option<Value>> {
         if !args.is_empty() {
             return Ok(None);
         }
-        let program = &self.module(module_slot)?.program;
-        let Some(value_add) = decode_value_clause_add(program.loaded_procedure(value_clause)?)
-        else {
-            return Ok(None);
-        };
-        let Some(resume_value) = decode_op_clause_resume(program.loaded_procedure(op_clause)?)
-        else {
-            return Ok(None);
-        };
         Ok(Some(Value::Int(
             i64::from(resume_value)
                 .checked_add(i64::from(value_add))
@@ -179,124 +162,12 @@ impl Vm {
     fn exec_seq2_mutation_kernel(
         &mut self,
         args: &[Value],
-        init: RuntimeFusedOp,
-        update: RuntimeFusedOp,
-        finish: RuntimeFusedOp,
+        plan: RuntimeSeq2Mutation,
     ) -> VmResult<Option<Value>> {
-        let RuntimeFusedOp::LocalSeq2ConstSet {
-            local,
-            first,
-            second,
-            value,
-            ..
-        } = init
-        else {
-            return Ok(None);
-        };
-        let seq = expect_kernel_seq(kernel_arg(args, local)?)?;
-        self.set_seq2_int_kernel(seq, first, second, i64::from(value))?;
-
-        let RuntimeFusedOp::LocalSeq2GetAddSet {
-            target,
-            target_first,
-            target_second,
-            source,
-            source_first,
-            source_second,
-            add,
-            ..
-        } = update
-        else {
-            return Ok(None);
-        };
-        let source_seq = expect_kernel_seq(kernel_arg(args, source)?)?;
-        let value = self
-            .seq2_int_kernel(source_seq, source_first, source_second)?
-            .checked_add(i64::from(add))
-            .ok_or_else(int_overflow_error)?;
-        let target_seq = expect_kernel_seq(kernel_arg(args, target)?)?;
-        self.set_seq2_int_kernel(target_seq, target_first, target_second, value)?;
-
-        let RuntimeFusedOp::LocalSeq2GetAdd {
-            left,
-            left_first,
-            left_second,
-            right,
-            right_first,
-            right_second,
-            ..
-        } = finish
-        else {
-            return Ok(None);
-        };
-        let left_seq = expect_kernel_seq(kernel_arg(args, left)?)?;
-        let right_seq = expect_kernel_seq(kernel_arg(args, right)?)?;
-        let total = self
-            .seq2_int_kernel(left_seq, left_first, left_second)?
-            .checked_add(self.seq2_int_kernel(right_seq, right_first, right_second)?)
-            .ok_or_else(int_overflow_error)?;
-        Ok(Some(Value::Int(total)))
-    }
-
-    fn seq2_int_kernel(&self, seq: GcRef, first: i16, second: i16) -> VmResult<i64> {
-        let row = self.seq2_row_kernel(seq, first)?;
-        let row_ref = self.heap.sequence(row)?;
-        let index = sequence_index(i64::from(second), row_ref.items.len())?;
-        expect_kernel_int(&row_ref.items[index])
-    }
-
-    fn set_seq2_int_kernel(&mut self, seq: GcRef, first: i16, second: i16, next: i64) -> VmResult {
-        let row = self.seq2_row_kernel(seq, first)?;
-        let row_ref = self.heap.sequence_mut(row)?;
-        let index = sequence_index(i64::from(second), row_ref.items.len())?;
-        row_ref.items[index] = Value::Int(next);
-        Ok(())
-    }
-
-    fn seq2_row_kernel(&self, seq: GcRef, first: i16) -> VmResult<GcRef> {
-        let seq_ref = self.heap.sequence(seq)?;
-        let index = sequence_index(i64::from(first), seq_ref.items.len())?;
-        expect_kernel_seq(&seq_ref.items[index])
-    }
-}
-
-fn decode_value_clause_add(procedure: &LoadedProcedure) -> Option<i16> {
-    let [load, smi, add, ret] = procedure.instructions.as_ref() else {
-        return None;
-    };
-    if procedure.params != 1 {
-        return None;
-    }
-    if !matches!(
-        (load.opcode, &load.operand),
-        (Opcode::LdLoc, Operand::Local(0))
-    ) {
-        return None;
-    }
-    let (Opcode::LdSmi, Operand::I16(value)) = (smi.opcode, &smi.operand) else {
-        return None;
-    };
-    if add.opcode == Opcode::IAdd && ret.opcode == Opcode::Ret {
-        Some(*value)
-    } else {
-        None
-    }
-}
-
-fn decode_op_clause_resume(procedure: &LoadedProcedure) -> Option<i16> {
-    let [smi, resume, ret] = procedure.instructions.as_ref() else {
-        return None;
-    };
-    if procedure.params != 1 {
-        return None;
-    }
-    let (Opcode::LdSmi, Operand::I16(value)) = (smi.opcode, &smi.operand) else {
-        return None;
-    };
-    if resume.opcode == Opcode::EffResume && ret.opcode == Opcode::Ret {
-        Some(*value)
-    } else {
-        None
+        let grid = expect_kernel_seq(kernel_arg(args, plan.grid_local)?)?;
+        self.heap
+            .fast_seq2_mutation(grid, plan)
+            .map(|value| Some(Value::Int(value)))
     }
 }
 
@@ -353,22 +224,6 @@ const fn expect_kernel_seq(value: &Value) -> VmResult<GcRef> {
         Value::Seq(reference) => Ok(*reference),
         other => Err(Vm::invalid_value_kind(VmValueKind::Seq, other)),
     }
-}
-
-fn sequence_index(index: i64, len: usize) -> VmResult<usize> {
-    let Ok(slot) = usize::try_from(index) else {
-        return Err(VmError::new(VmErrorKind::InvalidSequenceIndex {
-            index,
-            len,
-        }));
-    };
-    if slot >= len {
-        return Err(VmError::new(VmErrorKind::InvalidSequenceIndex {
-            index,
-            len,
-        }));
-    }
-    Ok(slot)
 }
 
 fn local_index_error(local: u16, len: usize) -> VmError {

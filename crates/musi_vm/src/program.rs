@@ -9,7 +9,8 @@ use music_seam::{
 };
 use music_term::{TypeTerm, TypeTermKind};
 
-use super::{VmError, VmErrorKind, VmIndexSpace, VmResult};
+use super::{Value, VmError, VmErrorKind, VmIndexSpace, VmResult};
+use crate::program_init::{build_global_init_image, specialize_runtime_kernels};
 use crate::program_kernel::decode_runtime_kernel;
 
 type InstructionList = Box<[Instruction]>;
@@ -60,15 +61,32 @@ pub enum RuntimeKernel {
         source: u16,
         smi: i16,
     },
-    Seq2Mutation {
-        init: RuntimeFusedOp,
-        update: RuntimeFusedOp,
-        finish: RuntimeFusedOp,
-    },
+    Seq2Mutation(RuntimeSeq2Mutation),
     InlineEffectResume {
+        resume_value: i16,
+        value_add: i16,
+    },
+    InlineEffectResumeClauses {
         value_clause: ProcedureId,
         op_clause: ProcedureId,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RuntimeSeq2Mutation {
+    pub(crate) grid_local: u16,
+    pub(crate) init_first: i16,
+    pub(crate) init_second: i16,
+    pub(crate) init_value: i16,
+    pub(crate) update_target_first: i16,
+    pub(crate) update_target_second: i16,
+    pub(crate) update_source_first: i16,
+    pub(crate) update_source_second: i16,
+    pub(crate) update_add: i16,
+    pub(crate) finish_left_first: i16,
+    pub(crate) finish_left_second: i16,
+    pub(crate) finish_right_first: i16,
+    pub(crate) finish_right_second: i16,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -559,6 +577,7 @@ pub struct ProgramInner {
     data_layout_list: Box<[ProgramDataLayout]>,
     entry_procedure: Option<ProcedureId>,
     module_init_procedure: Option<ProcedureId>,
+    global_init_image: Option<Box<[Value]>>,
 }
 
 #[derive(Debug, Clone)]
@@ -625,11 +644,17 @@ impl Program {
     }
 
     pub(crate) fn from_artifact(artifact: Artifact) -> VmResult<Self> {
-        let procedures = build_procedures(&artifact)?;
+        let mut procedures = build_procedures(&artifact)?;
+        specialize_runtime_kernels(&mut procedures);
         let (exports, export_list) = build_exports(&artifact);
         let (data_layouts, data_layout_list) = build_data_layouts(&artifact);
         let entry_procedure = find_suffix_procedure(&artifact, "::__entry");
         let module_init_procedure = find_suffix_procedure(&artifact, "::__module_init");
+        let global_init_image = build_global_init_image(
+            &procedures,
+            artifact.globals.len(),
+            entry_procedure.or(module_init_procedure),
+        );
         Ok(Self {
             inner: Arc::new(ProgramInner {
                 artifact,
@@ -640,10 +665,13 @@ impl Program {
                 data_layout_list,
                 entry_procedure,
                 module_init_procedure,
+                global_init_image,
             }),
         })
     }
+}
 
+impl Program {
     #[must_use]
     pub fn string_text(&self, id: StringId) -> &str {
         self.inner.artifact.string_text(id)
@@ -698,7 +726,9 @@ impl Program {
     pub fn class_source_name(&self, id: ClassId) -> &str {
         source_export_name(self.class_name(id))
     }
+}
 
+impl Program {
     /// # Errors
     ///
     /// Returns [`VmErrorKind::InvalidTypeTerm`] when the stored type-term JSON cannot be decoded.
@@ -794,7 +824,9 @@ impl Program {
             _ => ProgramTypeAbiKind::Unsupported,
         }
     }
+}
 
+impl Program {
     #[must_use]
     pub(crate) fn artifact(&self) -> &Artifact {
         &self.inner.artifact
@@ -838,6 +870,11 @@ impl Program {
         self.inner
             .entry_procedure
             .or(self.inner.module_init_procedure)
+    }
+
+    #[must_use]
+    pub(crate) fn global_init_image(&self) -> Option<&[Value]> {
+        self.inner.global_init_image.as_deref()
     }
 }
 

@@ -53,10 +53,11 @@ impl Vm {
         first: Value,
         second: Value,
     ) -> VmResult<Value> {
-        let mut items = ValueList::new();
-        items.push(first);
-        items.push(second);
-        self.alloc_sequence_owned(ty, items)
+        let value = self
+            .heap
+            .alloc_pair_sequence(ty, first, second, &self.heap_options())?;
+        self.after_heap_allocation(&value)?;
+        Ok(value)
     }
 
     pub(crate) fn alloc_sequence_owned(&mut self, ty: TypeId, items: ValueList) -> VmResult<Value> {

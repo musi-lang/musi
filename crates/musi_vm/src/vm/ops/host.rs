@@ -18,7 +18,7 @@ impl Vm {
         ForeignCall {
             program: module.program.clone(),
             foreign: foreign_id,
-            module: module.spec.clone(),
+            module: module.spec.as_ref().into(),
             name: module.program.string_text(foreign.name).into(),
             abi: module.program.string_text(foreign.abi).into(),
             symbol: module.program.string_text(foreign.symbol).into(),

@@ -201,7 +201,7 @@ impl Vm {
             let effect_call = EffectCall {
                 program: module.program.clone(),
                 effect,
-                module: module.spec.clone(),
+                module: module.spec.as_ref().into(),
                 effect_name,
                 op,
                 op_name: module.program.string_text(op_desc.name).into(),
@@ -317,7 +317,7 @@ impl Vm {
             })
         })?;
         frame.stack.truncate(handler.stack_depth);
-        frame.ip = handler.pop_ip.saturating_add(1);
+        frame.set_ip(handler.pop_ip.saturating_add(1));
         Ok(result)
     }
 

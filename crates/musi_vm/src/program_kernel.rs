@@ -1,6 +1,6 @@
 use music_seam::{Instruction, Opcode, Operand};
 
-use crate::program::{RuntimeFusedOp, RuntimeInstruction, RuntimeKernel};
+use crate::program::{RuntimeFusedOp, RuntimeInstruction, RuntimeKernel, RuntimeSeq2Mutation};
 
 pub fn decode_runtime_kernel(
     param_count: u16,
@@ -133,10 +133,69 @@ fn decode_seq2_mutation_kernel(
         };
         Some(fused)
     })?;
-    Some(RuntimeKernel::Seq2Mutation {
-        init,
-        update,
-        finish,
+    seq2_mutation_plan(init, update, finish).map(RuntimeKernel::Seq2Mutation)
+}
+
+const fn seq2_mutation_plan(
+    init: RuntimeFusedOp,
+    update: RuntimeFusedOp,
+    finish: RuntimeFusedOp,
+) -> Option<RuntimeSeq2Mutation> {
+    let RuntimeFusedOp::LocalSeq2ConstSet {
+        local: grid_local,
+        first: init_first,
+        second: init_second,
+        value: init_value,
+        ..
+    } = init
+    else {
+        return None;
+    };
+    let RuntimeFusedOp::LocalSeq2GetAddSet {
+        target,
+        target_first: update_target_first,
+        target_second: update_target_second,
+        source,
+        source_first: update_source_first,
+        source_second: update_source_second,
+        add: update_add,
+        ..
+    } = update
+    else {
+        return None;
+    };
+    if target != grid_local || source != grid_local {
+        return None;
+    }
+    let RuntimeFusedOp::LocalSeq2GetAdd {
+        left,
+        left_first: finish_left_first,
+        left_second: finish_left_second,
+        right,
+        right_first: finish_right_first,
+        right_second: finish_right_second,
+        ..
+    } = finish
+    else {
+        return None;
+    };
+    if left != grid_local || right != grid_local {
+        return None;
+    }
+    Some(RuntimeSeq2Mutation {
+        grid_local,
+        init_first,
+        init_second,
+        init_value,
+        update_target_first,
+        update_target_second,
+        update_source_first,
+        update_source_second,
+        update_add,
+        finish_left_first,
+        finish_left_second,
+        finish_right_first,
+        finish_right_second,
     })
 }
 
@@ -166,7 +225,7 @@ fn decode_inline_effect_resume_kernel(instructions: &[Instruction]) -> Option<Ru
         .iter()
         .any(|instruction| instruction.opcode == Opcode::HdlPop);
     if has_handler && has_effect && has_pop {
-        Some(RuntimeKernel::InlineEffectResume {
+        Some(RuntimeKernel::InlineEffectResumeClauses {
             value_clause,
             op_clause,
         })

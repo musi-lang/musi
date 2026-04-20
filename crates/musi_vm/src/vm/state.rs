@@ -1,12 +1,17 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::iter::repeat_n;
+use std::ptr::null;
 
 use music_seam::{EffectId, ProcedureId};
+use smallvec::SmallVec;
 
 use super::{GcRef, Program, RuntimeInstruction, RuntimeInstructionList, Value, ValueList};
 
-pub type LoadedModuleList = Vec<LoadedModule>;
+pub type LoadedModuleList = SmallVec<[LoadedModule; 2]>;
 pub type ModuleSlotMap = HashMap<Box<str>, usize>;
+pub type ModuleSpec = Cow<'static, str>;
+type RuntimeInstructionPtr = *const RuntimeInstruction;
 pub type CallFrameList = Vec<CallFrame>;
 pub type EffectHandlerList = Vec<EffectHandler>;
 pub type ResumeList = Vec<GcRef>;
@@ -20,7 +25,7 @@ pub enum ModuleState {
 
 #[derive(Debug, Clone)]
 pub struct LoadedModule {
-    pub(crate) spec: Box<str>,
+    pub(crate) spec: ModuleSpec,
     pub(crate) program: Program,
     pub(crate) globals: ValueList,
     pub(crate) state: ModuleState,
@@ -31,6 +36,8 @@ pub struct CallFrame {
     pub(crate) module_slot: usize,
     pub(crate) procedure: ProcedureId,
     pub(crate) ip: usize,
+    pub(crate) ip_ptr: RuntimeInstructionPtr,
+    pub(crate) code_end_ptr: RuntimeInstructionPtr,
     pub(crate) locals: ValueList,
     pub(crate) stack: ValueList,
     pub(crate) code: Option<RuntimeInstructionList>,
@@ -48,6 +55,8 @@ impl CallFrame {
             module_slot,
             procedure,
             ip: 0,
+            ip_ptr: null(),
+            code_end_ptr: null(),
             locals,
             stack,
             code: None,
@@ -55,23 +64,52 @@ impl CallFrame {
     }
 
     #[must_use]
-    pub const fn with_ip(mut self, ip: usize) -> Self {
-        self.ip = ip;
+    pub fn with_ip(mut self, ip: usize) -> Self {
+        self.set_ip(ip);
         self
     }
 
     #[must_use]
     pub fn with_runtime_code(mut self, code: RuntimeInstructionList) -> Self {
         self.code = Some(code);
+        self.rebind_ip_cache();
         self
     }
 
     pub(crate) fn set_runtime_code(&mut self, code: RuntimeInstructionList) {
         self.code = Some(code);
+        self.rebind_ip_cache();
     }
 
-    pub(crate) fn runtime_instruction(&self) -> Option<RuntimeInstruction> {
-        self.code.as_ref()?.get(self.ip).copied()
+    pub(crate) fn set_ip(&mut self, ip: usize) {
+        self.ip = ip;
+        self.rebind_ip_cache();
+    }
+
+    pub(crate) const fn advance_ip(&mut self) {
+        self.ip = self.ip.saturating_add(1);
+        self.ip_ptr = advance_ptr(self.ip_ptr);
+    }
+
+    pub(crate) fn next_runtime_instruction_cached(&mut self) -> Option<RuntimeInstruction> {
+        if self.ip_ptr.is_null() || self.ip_ptr >= self.code_end_ptr {
+            return None;
+        }
+        let instruction = read_instruction(self.ip_ptr);
+        self.advance_ip();
+        Some(instruction)
+    }
+
+    fn rebind_ip_cache(&mut self) {
+        let code = self.code.as_deref().unwrap_or(&[]);
+        let start = code.as_ptr();
+        let end = add_ptr(start, code.len());
+        self.code_end_ptr = end;
+        self.ip_ptr = if self.ip <= code.len() {
+            add_ptr(start, self.ip)
+        } else {
+            end
+        };
     }
 
     pub(crate) fn reset_empty(
@@ -86,14 +124,32 @@ impl CallFrame {
         self.locals.clear();
         self.stack.clear();
         self.code = Some(code);
+        self.rebind_ip_cache();
     }
 
     pub(crate) fn recycle(&mut self) {
         self.ip = 0;
+        self.ip_ptr = null();
+        self.code_end_ptr = null();
         self.locals.clear();
         self.stack.clear();
         self.code = None;
     }
+}
+
+const fn add_ptr(base: RuntimeInstructionPtr, offset: usize) -> RuntimeInstructionPtr {
+    // SAFETY: caller passes pointer derived from runtime-code slice; offset is checked by caller.
+    unsafe { base.add(offset) }
+}
+
+const fn advance_ptr(ptr: RuntimeInstructionPtr) -> RuntimeInstructionPtr {
+    // SAFETY: caller ensures pointer is within valid runtime-code range before advancing.
+    unsafe { ptr.add(1) }
+}
+
+const fn read_instruction(ptr: RuntimeInstructionPtr) -> RuntimeInstruction {
+    // SAFETY: caller ensures pointer is non-null and within runtime-code range.
+    unsafe { ptr.read() }
 }
 
 #[derive(Debug, Clone)]
@@ -139,13 +195,21 @@ pub enum StepOutcome {
 }
 
 impl LoadedModule {
-    pub(crate) fn new(spec: impl Into<Box<str>>, program: Program) -> Self {
-        let globals = repeat_n(Value::Unit, program.artifact().globals.len()).collect();
+    pub(crate) fn new(spec: impl Into<ModuleSpec>, program: Program) -> Self {
+        let (globals, state) = program.global_init_image().map_or_else(
+            || {
+                (
+                    repeat_n(Value::Unit, program.artifact().globals.len()).collect(),
+                    ModuleState::Uninitialized,
+                )
+            },
+            |image| (image.iter().cloned().collect(), ModuleState::Initialized),
+        );
         Self {
             spec: spec.into(),
             program,
             globals,
-            state: ModuleState::Uninitialized,
+            state,
         }
     }
 

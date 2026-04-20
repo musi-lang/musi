@@ -26,7 +26,7 @@ impl Vm {
                     return Err(Self::invalid_operand(instruction));
                 };
                 let module_slot = self.current_module_slot()?;
-                let module_name = self.module(module_slot)?.spec.clone();
+                let module_name: Box<str> = self.module(module_slot)?.spec.as_ref().into();
                 let globals = &self.module(module_slot)?.globals;
                 let raw_slot = usize::try_from(slot.raw()).unwrap_or(usize::MAX);
                 let value = globals.get(raw_slot).cloned().ok_or_else(|| {
@@ -46,7 +46,7 @@ impl Vm {
                 };
                 let value = self.pop_value()?;
                 let module_slot = self.current_module_slot()?;
-                let module_name = self.module(module_slot)?.spec.clone();
+                let module_name: Box<str> = self.module(module_slot)?.spec.as_ref().into();
                 let globals = &mut self.module_mut(module_slot)?.globals;
                 let raw_slot = usize::try_from(slot.raw()).unwrap_or(usize::MAX);
                 let len = globals.len();

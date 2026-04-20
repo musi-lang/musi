@@ -23,7 +23,7 @@ impl Vm {
                 stack: VmStackKind::CallFrame,
             })
         })?;
-        let Some(instruction) = frame.runtime_instruction() else {
+        let Some(instruction) = frame.next_runtime_instruction_cached() else {
             return Err(VmError::new(VmErrorKind::InvalidBranchTarget {
                 procedure: Box::from("<runtime>"),
                 label: Some(u16::MAX),
@@ -31,7 +31,6 @@ impl Vm {
                 len: None,
             }));
         };
-        frame.ip = frame.ip.saturating_add(1);
         Ok(instruction)
     }
 
@@ -41,7 +40,7 @@ impl Vm {
                 stack: VmStackKind::CallFrame,
             })
         })?;
-        frame.ip = ip;
+        frame.set_ip(ip);
         Ok(())
     }
 
@@ -51,7 +50,7 @@ impl Vm {
                 stack: VmStackKind::CallFrame,
             })
         })?;
-        frame.ip = frame.ip.saturating_add(1);
+        frame.advance_ip();
         Ok(())
     }
 

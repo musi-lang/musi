@@ -3,7 +3,7 @@ pub use super::host::{EffectCall, ForeignCall, VmHostContext};
 pub use super::loader::{RejectingLoader, VmLoader};
 pub use super::program::{
     CompareOp, RuntimeCallMode, RuntimeCallShape, RuntimeFusedOp, RuntimeInstruction,
-    RuntimeInstructionList, RuntimeKernel, RuntimeOperand,
+    RuntimeInstructionList, RuntimeKernel, RuntimeOperand, RuntimeSeq2Mutation,
 };
 pub use super::value::{
     ClosureValue, ClosureView, ContinuationFrame, ContinuationHandler, ContinuationValue,

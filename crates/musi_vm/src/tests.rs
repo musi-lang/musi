@@ -255,6 +255,30 @@ mod success {
     }
 
     #[test]
+    fn initializes_simple_globals_from_cached_image() {
+        let program = compile_program(
+            &[(
+                "main",
+                r"
+            let base : Int := 41;
+            let offset : Int := 1;
+            export let answer () : Int := base + offset;
+        ",
+            )],
+            "main",
+        );
+
+        let mut vm = Vm::with_rejecting_host(program, VmOptions);
+        vm.initialize().expect("vm init should succeed");
+        assert_eq!(vm.executed_instructions(), 0);
+
+        let value = vm
+            .call_export("answer", &[])
+            .expect("export call should succeed");
+        assert_eq!(value, Value::Int(42));
+    }
+
+    #[test]
     fn garbage_collection_preserves_returned_external_values() {
         let program = compile_program(
             &[("main", "export let answer () : [2]Int := [1, 2];")],
@@ -521,6 +545,17 @@ mod success {
         let value = vm
             .call_export("answer", &[grid])
             .expect("sequence mutation should run");
+        assert_eq!(value, Value::Int(85));
+
+        let shared = vm
+            .alloc_sequence(ty, [Value::Int(1), Value::Int(2)])
+            .expect("shared row should allocate");
+        let aliased = vm
+            .alloc_sequence(ty, [shared.clone(), shared])
+            .expect("aliased grid should allocate");
+        let value = vm
+            .call_export("answer", &[aliased])
+            .expect("aliased sequence mutation should run");
         assert_eq!(value, Value::Int(85));
     }
 

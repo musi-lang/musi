@@ -11,6 +11,9 @@ impl Vm {
     /// Returns [`VmError`] if initialization is missing or value is not callable.
     pub fn call_value(&mut self, value: Value, args: &[Value]) -> VmResult<Value> {
         self.ensure_initialized()?;
+        if let Some(result) = self.try_call_primitive_kernel_fast(&value, args)? {
+            return self.finish_call_value(self.frames.len(), result);
+        }
         self.observe_heap_value(&value)?;
         for arg in args {
             self.observe_heap_value(arg)?;
@@ -106,6 +109,43 @@ impl Vm {
         Ok(result)
     }
 
+    fn try_call_primitive_kernel_fast(
+        &mut self,
+        value: &Value,
+        args: &[Value],
+    ) -> VmResult<Option<Value>> {
+        if args.iter().any(Value::is_heap_value) {
+            return Ok(None);
+        }
+        match value {
+            Value::Procedure(procedure) => {
+                self.try_invoke_kernel_from_args(procedure.module_slot, procedure.procedure, args)
+            }
+            Value::Closure(reference) => {
+                let closure = self.heap.closure(*reference)?;
+                if !closure.captures.is_empty() {
+                    return Ok(None);
+                }
+                self.try_invoke_kernel_from_args(closure.module_slot, closure.procedure, args)
+            }
+            Value::Unit
+            | Value::Int(_)
+            | Value::Nat(_)
+            | Value::Float(_)
+            | Value::String(_)
+            | Value::CPtr(_)
+            | Value::Syntax(_)
+            | Value::Seq(_)
+            | Value::Data(_)
+            | Value::Continuation(_)
+            | Value::Type(_)
+            | Value::Module(_)
+            | Value::Foreign(_)
+            | Value::Effect(_)
+            | Value::Class(_) => Ok(None),
+        }
+    }
+
     fn call_procedure_value(
         &mut self,
         procedure: ProcedureValue,
@@ -152,5 +192,20 @@ impl Vm {
             && (self.options.gc_stress
                 || self.options.heap_limit_bytes.is_some()
                 || self.heap.allocated_bytes() >= DEFAULT_AUTO_COLLECT_THRESHOLD_BYTES)
+    }
+}
+
+impl Value {
+    const fn is_heap_value(&self) -> bool {
+        matches!(
+            self,
+            Self::String(_)
+                | Self::Syntax(_)
+                | Self::Seq(_)
+                | Self::Data(_)
+                | Self::Closure(_)
+                | Self::Continuation(_)
+                | Self::Module(_)
+        )
     }
 }

@@ -538,7 +538,7 @@ impl Vm {
             frame.locals[mirror_index] = Value::Int(next_dec);
         }
         frame.stack.clear();
-        frame.ip = loop_ip;
+        frame.set_ip(loop_ip);
         Ok(())
     }
 
@@ -783,7 +783,7 @@ impl Vm {
             }));
         };
         *local = field_value;
-        frame.ip = fallthrough;
+        frame.set_ip(fallthrough);
         Ok(StepOutcome::Continue)
     }
 

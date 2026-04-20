@@ -7,6 +7,7 @@ mod gc;
 mod host;
 mod loader;
 pub(crate) mod program;
+mod program_init;
 mod program_kernel;
 mod types;
 pub(crate) mod value;
