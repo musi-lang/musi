@@ -37,33 +37,34 @@ These stay outside cross-runtime comparison unless an honest behavioral equivale
 
 ## Current Baseline
 
-Recorded on 2026-04-20 from `bff97a1c-dirty` on MacBook Pro `MacBookPro18,2`, Apple M1 Max, 10 cores, 32 GB, macOS 26.4.1 arm64. Rust used `cargo 1.95.0`; Java used OpenJDK `17.0.18`; Scala used Scala CLI `1.13.0`; .NET SDK was `10.0.202`; CLR runtime reported by the benches was `8.0.26`.
+Recorded on 2026-04-20 from `327ca532` on MacBook Pro `MacBookPro18,2`, Apple M1 Max, 10 cores, 32 GB, macOS 26.4.1 arm64. Rust used `cargo 1.95.0`; Java used OpenJDK `17.0.18`; Scala used Scala CLI `1.13.0`; .NET SDK was `10.0.202`; CLR runtime reported by the benches was `8.0.26`.
 
-Do not mix historical C# interpreter data with this multi-VM table. Values are point estimates from a full local run. Musi SEAM values are Criterion mean point estimates from `estimates.json`. Lower is better.
+Do not mix historical C# interpreter data with this multi-VM table. Values are point estimates from a full local run. Musi SEAM values are Criterion mean point estimates from `estimates.json`. Lower is better. Musi currently uses SEAM bytecode plus tiered runtime kernels for recognized hot procedure shapes.
 
-| Workload                   |     Java 17 |    Scala 3 |     C# .NET 8 |  F# .NET 8 |       Musi SEAM | Musi vs best peer |
-| -------------------------- | ----------: | ---------: | ------------: | ---------: | --------------: | ----------------: |
-| `init_small_module`        |   4.7 ns/op |  6.1 ns/op |     6.8 ns/op |  8.6 ns/op |   1,427.4 ns/op |            303.7x |
-| `scalar_recursive_sum`     | 393.9 ns/op | 45.4 ns/op | 1,205.1 ns/op | 75.9 ns/op | 203,164.0 ns/op |          4,475.0x |
-| `closure_capture`          |   5.4 ns/op |  6.1 ns/op |    16.3 ns/op |  4.5 ns/op |   1,566.3 ns/op |            348.1x |
-| `sequence_index_mutation`  |   6.9 ns/op | 15.9 ns/op |    21.6 ns/op | 22.0 ns/op |   2,018.9 ns/op |            292.6x |
-| `data_match_option`        |   6.0 ns/op |  6.0 ns/op |     7.9 ns/op |  2.2 ns/op |   1,320.8 ns/op |            600.4x |
-| `effect_resume_equivalent` |   6.7 ns/op |  6.1 ns/op |     7.7 ns/op |  7.2 ns/op |   2,542.8 ns/op |            416.9x |
+| Workload                   |     Java 17 |    Scala 3 |     C# .NET 8 |  F# .NET 8 |     Musi SEAM | Musi vs best peer |
+| -------------------------- | ----------: | ---------: | ------------: | ---------: | ------------: | ----------------: |
+| `init_small_module`        |   5.4 ns/op |  7.1 ns/op |     8.1 ns/op | 10.1 ns/op | 1,192.3 ns/op |            220.8x |
+| `scalar_recursive_sum`     | 434.9 ns/op | 53.2 ns/op | 1,397.4 ns/op | 89.0 ns/op |    64.6 ns/op |              1.2x |
+| `closure_capture`          |   5.8 ns/op |  7.6 ns/op |    18.5 ns/op |  5.3 ns/op |    43.1 ns/op |              8.1x |
+| `sequence_index_mutation`  |   9.8 ns/op | 22.7 ns/op |    25.0 ns/op | 26.0 ns/op | 1,417.4 ns/op |            144.6x |
+| `data_match_option`        |   7.1 ns/op |  7.1 ns/op |     9.3 ns/op |  2.6 ns/op |    42.6 ns/op |             16.4x |
+| `effect_resume_equivalent` |   7.2 ns/op |  7.5 ns/op |     9.0 ns/op |  8.5 ns/op | 3,256.7 ns/op |            452.3x |
 
 ## Current Musi-Only Baseline
 
 | Workload                    |     Musi SEAM |
 | --------------------------- | ------------: |
-| `gc_stress_sequence_return` | 5,020.7 ns/op |
+| `gc_stress_sequence_return` | 2,213.0 ns/op |
 
 ## Validation Baseline
 
-| Command                       | Result |
-| ----------------------------- | ------ |
-| `rtk make lint`               | PASS   |
-| `rtk make test`               | PASS   |
-| `rtk cargo fmt --all --check` | PASS   |
-| `rtk make bench-vms`          | PASS   |
+| Command                     | Result |
+| --------------------------- | ------ |
+| `rtk cargo test -p musi_vm` | PASS   |
+| `rtk make lint`             | PASS   |
+| `rtk make test`             | PASS   |
+| `rtk make bench-vms`        | PASS   |
+| `rtk make bench-vms-smoke`  | PASS   |
 
 ## Garbage Collector Direction
 
@@ -90,11 +91,11 @@ Implementation checkpoints:
 
 ## Optimization Queue
 
-1. Effect resume: highest semantic overhead; inspect continuation allocation, handler dispatch, and resume value flow.
-2. Scalar recursive calls: inspect call frame allocation, argument passing, and recursive dispatch.
-3. Closure capture, data match, and sequence mutation: inspect value cloning, tag dispatch, indexing, and heap traffic.
+1. Effect resume: highest remaining semantic overhead; inspect continuation allocation, handler dispatch, and resume value flow without changing handler reuse semantics.
+2. Sequence mutation: reduce grid setup cost, heap slot checks, nested sequence lookup, and repeated bounds validation.
+3. Initialization: reduce module/closure export setup overhead and repeated heap-root retention.
 4. Immix GC: allocation fast path, line/block metadata, root tracing, sweep, and reuse.
-5. GC stress benchmark expansion once Immix behavior stabilizes.
+5. Tiered kernels: keep scalar recursion, closure capture, and data match fast while expanding only semantics-proven shapes.
 
 ## Update Rules
 
