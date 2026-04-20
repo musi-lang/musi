@@ -64,6 +64,8 @@ private object Workloads:
   )
 
 private object VmBaselines:
+  private val sharedGrid = Array(Array(1L, 2L), Array(3L, 4L))
+
   def initSmallModule(): Long =
     val module = SmallModule()
     module.answer()
@@ -75,7 +77,7 @@ private object VmBaselines:
     apply(makeAdder(41L), 1L)
 
   def sequenceIndexMutation(): Long =
-    val grid = Array(Array(1L, 2L), Array(3L, 4L))
+    val grid = sharedGrid
     grid(0)(1) = 42L
     grid(1)(0) = grid(0)(1) + 1L
     grid(0)(1) + grid(1)(0)

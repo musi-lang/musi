@@ -34,7 +34,7 @@ impl Vm {
             && self.options.stack_frame_limit.is_none()
     }
 
-    fn exec_runtime_kernel(
+    pub(super) fn exec_runtime_kernel(
         &mut self,
         module_slot: usize,
         kernel: RuntimeKernel,

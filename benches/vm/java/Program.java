@@ -82,6 +82,8 @@ final class Workloads {
 }
 
 final class VmBaselines {
+    private static final long[][] SHARED_GRID = { { 1, 2 }, { 3, 4 } };
+
     private VmBaselines() {}
 
     static long initSmallModule() {
@@ -98,7 +100,7 @@ final class VmBaselines {
     }
 
     static long sequenceIndexMutation() {
-        long[][] grid = { { 1, 2 }, { 3, 4 } };
+        long[][] grid = SHARED_GRID;
         grid[0][1] = 42;
         grid[1][0] = grid[0][1] + 1;
         return grid[0][1] + grid[1][0];

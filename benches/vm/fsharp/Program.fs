@@ -57,6 +57,8 @@ type SmallModule() =
     member _.Answer() = baseValue + offset
 
 module VmBaselines =
+    let sharedGrid = [| [| 1L; 2L |]; [| 3L; 4L |] |]
+
     [<MethodImpl(MethodImplOptions.NoInlining)>]
     let initSmallModule () =
         let moduleValue = SmallModule()
@@ -84,7 +86,7 @@ module VmBaselines =
 
     [<MethodImpl(MethodImplOptions.NoInlining)>]
     let sequenceIndexMutation () =
-        let grid = [| [| 1L; 2L |]; [| 3L; 4L |] |]
+        let grid = sharedGrid
         grid[0][1] <- 42L
         grid[1][0] <- grid[0][1] + 1L
         grid[0][1] + grid[1][0]

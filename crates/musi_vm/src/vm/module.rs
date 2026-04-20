@@ -21,21 +21,15 @@ impl Vm {
     }
 
     pub(crate) fn initialize_slot(&mut self, slot: usize) -> VmResult {
-        let (spec, state, entry) = {
-            let module = self.module(slot)?;
-            (
-                module.spec.as_ref().into(),
-                module.state,
-                module.program.entry_procedure(),
-            )
-        };
-        match state {
-            ModuleState::Initialized => return Ok(()),
-            ModuleState::Initializing => {
-                return Err(VmError::new(VmErrorKind::ModuleInitCycle { spec }));
-            }
-            ModuleState::Uninitialized => {}
+        let state = self.module(slot)?.state;
+        if matches!(state, ModuleState::Initialized) {
+            return Ok(());
         }
+        if matches!(state, ModuleState::Initializing) {
+            let spec: Box<str> = self.module(slot)?.spec.as_ref().into();
+            return Err(VmError::new(VmErrorKind::ModuleInitCycle { spec }));
+        }
+        let entry = self.module(slot)?.program.entry_procedure();
 
         self.module_mut(slot)?.state = ModuleState::Initializing;
         let result = entry.map_or(Ok(()), |entry| self.initialize_entry(slot, entry));

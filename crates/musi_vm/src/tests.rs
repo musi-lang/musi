@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::iter::empty;
+use std::slice::from_ref;
 use std::sync::{Arc, Mutex};
 use std::thread::spawn;
 
@@ -606,6 +607,12 @@ mod success {
             .call_export("answer", &[Value::Int(41)])
             .expect("data match should run");
         assert_eq!(value, Value::Int(42));
+
+        let bound = vm.bind_export("answer").expect("answer should bind");
+        let value = vm
+            .call1_i64_i64(&bound, 41)
+            .expect("typed data match should run");
+        assert_eq!(value, 42);
     }
 
     #[test]
@@ -650,6 +657,53 @@ mod success {
             executed <= 220,
             "recursive sum should stay fused: {executed}"
         );
+
+        let bound = vm.bind_export("answer").expect("answer should bind");
+        let value = vm
+            .call1_i64_i64(&bound, 200)
+            .expect("typed sum should run");
+        assert_eq!(value, 20_100);
+    }
+
+    #[test]
+    fn bound_sequence_call_matches_dynamic_call() {
+        let program = compile_program(
+            &[(
+                "main",
+                r"
+            export let answer (grid : mut [2][2]Int) : Int := (
+              grid.[0, 1] := 42;
+              grid.[1, 0] := grid.[0, 1] + 1;
+              grid.[0, 1] + grid.[1, 0]
+            );
+        ",
+            )],
+            "main",
+        );
+        let mut vm = Vm::with_rejecting_host(program, VmOptions);
+        vm.initialize().expect("vm init should succeed");
+        let bound = vm.bind_export("answer").expect("answer should bind");
+        let ty = TypeId::from_raw(0);
+        let first = vm
+            .alloc_sequence(ty, [Value::Int(1), Value::Int(2)])
+            .expect("first row should allocate");
+        let second = vm
+            .alloc_sequence(ty, [Value::Int(3), Value::Int(4)])
+            .expect("second row should allocate");
+        let grid = vm
+            .alloc_sequence(ty, [first, second])
+            .expect("grid should allocate");
+        let dynamic = vm
+            .call_export("answer", from_ref(&grid))
+            .expect("dynamic sequence call should run");
+        let Value::Seq(grid_ref) = grid else {
+            panic!("grid should be sequence")
+        };
+        let typed = vm
+            .call1_seq_i64(&bound, grid_ref)
+            .expect("typed sequence call should run");
+        assert_eq!(dynamic, Value::Int(85));
+        assert_eq!(typed, 85);
     }
 
     #[test]

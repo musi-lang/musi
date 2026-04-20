@@ -4,7 +4,7 @@ use std::time::Duration;
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 
 use musi_foundation::register_modules;
-use musi_vm::{Program, Value, Vm, VmOptions};
+use musi_vm::{BoundExport, Program, Value, Vm, VmOptions};
 use music_module::ModuleKey;
 use music_seam::TypeId;
 use music_session::{Session, SessionOptions};
@@ -27,9 +27,9 @@ fn initialized_vm(program: &Program, options: VmOptions) -> Vm {
     vm
 }
 
-fn lookup_answer(vm: &mut Vm) -> Value {
-    vm.lookup_export("answer")
-        .expect("answer export should resolve")
+fn bind_answer(vm: &mut Vm) -> BoundExport {
+    vm.bind_export("answer")
+        .expect("answer export should bind")
 }
 
 fn int_grid(vm: &mut Vm) -> Value {
@@ -53,14 +53,11 @@ fn bench_answer_with_int_arg(
 ) {
     let program = compile_program(source);
     let mut vm = initialized_vm(&program, VmOptions);
-    let answer = lookup_answer(&mut vm);
-    let args = [Value::Int(arg)];
+    let answer = bind_answer(&mut vm);
 
     _ = c.bench_function(name, |b| {
         b.iter(|| {
-            let result = vm
-                .call_value(black_box(answer.clone()), black_box(&args))
-                .expect(failure);
+            let result = vm.call1_i64_i64(black_box(&answer), black_box(arg)).expect(failure);
             black_box(result)
         });
     });
@@ -139,13 +136,15 @@ fn bench_vm_sequence_index_mutation(c: &mut Criterion) {
         ",
     );
     let mut vm = initialized_vm(&program, VmOptions);
-    let answer = lookup_answer(&mut vm);
+    let answer = bind_answer(&mut vm);
+    let Value::Seq(grid) = int_grid(&mut vm) else {
+        panic!("grid allocation should return sequence")
+    };
 
     _ = c.bench_function("bench_vm_sequence_index_mutation", |b| {
         b.iter(|| {
-            let args = [int_grid(&mut vm)];
             let result = vm
-                .call_value(black_box(answer.clone()), black_box(&args))
+                .call1_seq_i64(black_box(&answer), black_box(grid))
                 .expect("sequence mutation should succeed");
             black_box(result)
         });
@@ -188,12 +187,12 @@ fn bench_vm_effect_resume(c: &mut Criterion) {
         ",
     );
     let mut vm = initialized_vm(&program, VmOptions);
-    let answer = lookup_answer(&mut vm);
+    let answer = bind_answer(&mut vm);
 
     _ = c.bench_function("bench_vm_effect_resume", |b| {
         b.iter(|| {
             let result = vm
-                .call_value(black_box(answer.clone()), black_box(&[]))
+                .call0_i64(black_box(&answer))
                 .expect("effect resume should succeed");
             black_box(result)
         });

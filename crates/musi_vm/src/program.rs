@@ -577,7 +577,7 @@ pub struct ProgramInner {
     data_layout_list: Box<[ProgramDataLayout]>,
     entry_procedure: Option<ProcedureId>,
     module_init_procedure: Option<ProcedureId>,
-    global_init_image: Option<Box<[Value]>>,
+    global_init_image: Option<Arc<[Value]>>,
 }
 
 #[derive(Debug, Clone)]
@@ -654,7 +654,8 @@ impl Program {
             &procedures,
             artifact.globals.len(),
             entry_procedure.or(module_init_procedure),
-        );
+        )
+        .map(Arc::from);
         Ok(Self {
             inner: Arc::new(ProgramInner {
                 artifact,
@@ -873,8 +874,8 @@ impl Program {
     }
 
     #[must_use]
-    pub(crate) fn global_init_image(&self) -> Option<&[Value]> {
-        self.inner.global_init_image.as_deref()
+    pub(crate) fn global_init_image(&self) -> Option<&Arc<[Value]>> {
+        self.inner.global_init_image.as_ref()
     }
 }
 

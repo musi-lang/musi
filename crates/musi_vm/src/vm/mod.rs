@@ -16,6 +16,7 @@ pub use super::{
     VmError, VmErrorKind, VmHost, VmResult, VmValueKind,
 };
 
+mod bound;
 mod alloc;
 mod call;
 mod dispatch;
@@ -41,6 +42,7 @@ mod core;
 mod options;
 mod runtime;
 
+pub use bound::BoundExport;
 pub use options::{VmOptimizationLevel, VmOptions};
 pub use runtime::VmRuntime;
 

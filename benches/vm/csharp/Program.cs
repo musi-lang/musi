@@ -80,6 +80,12 @@ static class Workloads
 
 static class VmBaselines
 {
+    private static readonly long[][] SharedGrid =
+    [
+        [1, 2],
+        [3, 4],
+    ];
+
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static long InitSmallModule()
     {
@@ -102,7 +108,7 @@ static class VmBaselines
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static long SequenceIndexMutation()
     {
-        var grid = new[] { new[] { 1L, 2L }, new[] { 3L, 4L } };
+        var grid = SharedGrid;
         grid[0][1] = 42;
         grid[1][0] = grid[0][1] + 1;
         return grid[0][1] + grid[1][0];

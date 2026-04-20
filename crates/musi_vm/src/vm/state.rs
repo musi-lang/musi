@@ -2,6 +2,8 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::iter::repeat_n;
 use std::ptr::null;
+use std::slice::Iter;
+use std::sync::Arc;
 
 use music_seam::{EffectId, ProcedureId};
 use smallvec::SmallVec;
@@ -27,8 +29,55 @@ pub enum ModuleState {
 pub struct LoadedModule {
     pub(crate) spec: ModuleSpec,
     pub(crate) program: Program,
-    pub(crate) globals: ValueList,
+    pub(crate) globals: ModuleGlobals,
     pub(crate) state: ModuleState,
+}
+
+#[derive(Debug, Clone)]
+pub enum ModuleGlobals {
+    Shared(Arc<[Value]>),
+    Owned(Box<ValueList>),
+}
+
+impl ModuleGlobals {
+    #[must_use]
+    pub(crate) fn len(&self) -> usize {
+        match self {
+            Self::Shared(values) => values.len(),
+            Self::Owned(values) => values.len(),
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn get(&self, index: usize) -> Option<&Value> {
+        match self {
+            Self::Shared(values) => values.get(index),
+            Self::Owned(values) => values.get(index),
+        }
+    }
+
+    pub(crate) fn get_mut(&mut self, index: usize) -> Option<&mut Value> {
+        self.make_owned().get_mut(index)
+    }
+
+    pub(crate) fn iter(&self) -> Iter<'_, Value> {
+        match self {
+            Self::Shared(values) => values.iter(),
+            Self::Owned(values) => values.iter(),
+        }
+    }
+
+    fn make_owned(&mut self) -> &mut ValueList {
+        loop {
+            match self {
+                Self::Owned(values) => return values,
+                Self::Shared(values) => {
+                    let owned = values.iter().cloned().collect();
+                    *self = Self::Owned(Box::new(owned));
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -199,11 +248,13 @@ impl LoadedModule {
         let (globals, state) = program.global_init_image().map_or_else(
             || {
                 (
-                    repeat_n(Value::Unit, program.artifact().globals.len()).collect(),
+                    ModuleGlobals::Owned(
+                        Box::new(repeat_n(Value::Unit, program.artifact().globals.len()).collect()),
+                    ),
                     ModuleState::Uninitialized,
                 )
             },
-            |image| (image.iter().cloned().collect(), ModuleState::Initialized),
+            |image| (ModuleGlobals::Shared(Arc::clone(image)), ModuleState::Initialized),
         );
         Self {
             spec: spec.into(),
