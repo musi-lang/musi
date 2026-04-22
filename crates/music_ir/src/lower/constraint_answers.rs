@@ -5,7 +5,7 @@ use music_sema::{ConstraintAnswer, ConstraintKey, SemaModule};
 use crate::api::{IrArg, IrExpr, IrExprKind, IrNameRef, IrOrigin, IrParam};
 
 use super::types::render_ty_name;
-use super::{ConstraintAnswerBindingMap, LowerCtx, invalid_lowering_path};
+use super::{ConstraintAnswerBindingMap, LowerCtx, lowering_invariant_violation};
 
 fn hidden_constraint_answer_name(owner: &str, index: usize) -> Box<str> {
     format!("__answer::{owner}::{index}").into_boxed_str()
@@ -55,7 +55,7 @@ pub(super) fn lower_constraint_answer_expr(
     match constraint_answer {
         ConstraintAnswer::Param { key } => {
             let Some(name) = resolve_constraint_answer_binding_name(ctx, key) else {
-                invalid_lowering_path("missing evidence binding for constraint");
+                lowering_invariant_violation("missing evidence binding for constraint");
             };
             IrExpr::new(
                 origin,

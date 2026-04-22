@@ -10,14 +10,14 @@ pub(super) fn lower_range_expr(
     let ty = ctx
         .sema
         .try_expr_ty(expr_id)
-        .unwrap_or_else(|| invalid_lowering_path("expr type missing for range"));
+        .unwrap_or_else(|| lowering_invariant_violation("expr type missing for range"));
     let ty_name = render_ty_name(ctx.sema, ty, ctx.interner);
     let kind = match op {
         HirBinaryOp::Range {
             include_lower,
             include_upper,
         } => IrRangeKind::bounded(*include_lower, *include_upper),
-        _ => invalid_lowering_path("invalid range op"),
+        _ => lowering_invariant_violation("invalid range op"),
     };
     IrExprKind::Range {
         ty_name,
@@ -37,7 +37,7 @@ pub(super) fn lower_partial_range_expr(
     let ty = ctx
         .sema
         .try_expr_ty(expr_id)
-        .unwrap_or_else(|| invalid_lowering_path("expr type missing for partial range"));
+        .unwrap_or_else(|| lowering_invariant_violation("expr type missing for partial range"));
     let ty_name = render_ty_name(ctx.sema, ty, ctx.interner);
     let origin = IrOrigin::new(
         ctx.sema.module().store.exprs.get(expr_id).origin.source_id,
@@ -77,7 +77,7 @@ pub(super) fn lower_in_expr(
         .expr_constraint_answers(expr_id)
         .and_then(|items| items.first())
         .map_or_else(
-            || invalid_lowering_path("range membership evidence missing"),
+            || lowering_invariant_violation("range membership evidence missing"),
             |item| lower_constraint_answer_expr(ctx, origin, item),
         );
     IrExprKind::RangeContains {

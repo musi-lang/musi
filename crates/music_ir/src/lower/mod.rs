@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 
 use music_arena::SliceRange;
-use music_base::diag::Diag;
+use music_base::diag::{Diag, DiagContext};
 use music_hir::{
     HirArg, HirArrayItem, HirBinaryOp, HirDim, HirExprId, HirExprKind, HirHandleClause, HirLetMods,
     HirLitId, HirLitKind, HirMatchArm, HirParam, HirPartialRangeKind, HirPatId, HirPatKind,
@@ -37,6 +37,7 @@ mod constraint_answers;
 mod destructure;
 mod effects;
 mod foreign;
+mod lower_errors;
 mod meta;
 mod pats;
 mod range;
@@ -113,7 +114,8 @@ type LoweringResult<T = IrExprKind> = Result<T, Box<str>>;
 
 #[derive(Debug)]
 struct LoweringInvariant {
-    description: Box<str>,
+    kind: IrDiagKind,
+    context: DiagContext,
 }
 
 /// Lowers sema-owned module facts into the codegen-facing IR surface.
@@ -126,14 +128,17 @@ pub fn lower_module(sema: &SemaModule, interner: &Interner) -> Result<IrModule, 
     match catch_unwind(AssertUnwindSafe(|| lower_module_impl(sema, interner))) {
         Ok(result) => result,
         Err(payload) => {
-            let detail = payload.downcast_ref::<LoweringInvariant>().map_or_else(
-                || panic_payload_text(payload.as_ref()),
-                |invariant| invariant.description.clone(),
+            let (kind, context) = payload.downcast_ref::<LoweringInvariant>().map_or_else(
+                || {
+                    (
+                        IrDiagKind::LoweringInvariantViolated,
+                        DiagContext::new().with("subject", panic_payload_text(payload.as_ref())),
+                    )
+                },
+                |invariant| (invariant.kind, invariant.context.clone()),
             );
             Err(vec![
-                Diag::error(IrDiagKind::LoweringInvariantViolated.message())
-                    .with_code(IrDiagKind::LoweringInvariantViolated.code())
-                    .with_note(format!("detail `{detail}`")),
+                Diag::error(kind.message_with(&context)).with_code(kind.code()),
             ])
         }
     }
@@ -372,7 +377,7 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
         | HirExprKind::Import { .. }
         | HirExprKind::Quote { .. }
         | HirExprKind::Splice { .. } => lower_misc_expr(ctx, expr_id, &expr.kind),
-        other => invalid_lowering_path(format!("missing IR lowering for {other:?}")),
+        other => lowering_invariant_violation(format!("missing IR lowering for {other:?}")),
     };
     bind_expr_constraint_answers(ctx, expr_id, origin, IrExpr::new(origin, kind))
 }
@@ -389,11 +394,11 @@ fn lower_value_expr(
         HirExprKind::Sequence { exprs } => lower_sequence_expr(ctx, *exprs),
         HirExprKind::Tuple { items } => lower_tuple_expr(ctx, expr_id, *items),
         HirExprKind::Array { items } => lower_array_expr(ctx, expr_id, items.clone())
-            .unwrap_or_else(|description| invalid_lowering_path(description)),
+            .unwrap_or_else(|description| lowering_invariant_violation(description)),
         HirExprKind::Template { parts } => lower_template_expr(ctx, origin, parts.clone()),
         HirExprKind::Record { items } => lower_record_expr(ctx, expr_id, items.clone())
-            .unwrap_or_else(|description| invalid_lowering_path(description)),
-        _ => invalid_lowering_path("value expr dispatcher mismatch"),
+            .unwrap_or_else(|description| lowering_invariant_violation(description)),
+        _ => lowering_invariant_violation("value expr dispatcher mismatch"),
     }
 }
 
@@ -419,7 +424,7 @@ fn lower_operation_expr(
             lower_partial_range_expr(ctx, expr_id, *kind, *expr)
         }
         HirExprKind::Call { callee, args } => lower_call_expr(ctx, *callee, args)
-            .unwrap_or_else(|description| invalid_lowering_path(description)),
+            .unwrap_or_else(|description| lowering_invariant_violation(description)),
         HirExprKind::Prefix { op, expr } => lower_prefix_expr(ctx, expr_id, op, *expr, origin),
         HirExprKind::Index { base, args } => lower_index_expr(ctx, *base, *args),
         HirExprKind::Field { base, name, .. } => {
@@ -427,9 +432,9 @@ fn lower_operation_expr(
         }
         HirExprKind::RecordUpdate { base, items } => {
             lower_record_update_expr(ctx, expr_id, *base, items.clone())
-                .unwrap_or_else(|description| invalid_lowering_path(description))
+                .unwrap_or_else(|description| lowering_invariant_violation(description))
         }
-        _ => invalid_lowering_path("operation expr dispatcher mismatch"),
+        _ => lowering_invariant_violation("operation expr dispatcher mismatch"),
     }
 }
 
@@ -444,12 +449,12 @@ fn lower_control_expr(
         HirExprKind::Variant { tag, args } => lower_variant_expr(ctx, expr_id, *tag, args.clone()),
         HirExprKind::Lambda { params, body, .. } => lower_lambda_expr(ctx, origin, params, *body),
         HirExprKind::Request { expr } => lower_request_expr(ctx, *expr)
-            .unwrap_or_else(|description| invalid_lowering_path(description)),
+            .unwrap_or_else(|description| lowering_invariant_violation(description)),
         HirExprKind::AnswerLit { effect, clauses } => {
             lower_answer_literal_expr(ctx, expr_id, *effect, clauses.clone())
         }
         HirExprKind::Handle { expr, handler } => lower_handle_expr(ctx, expr_id, *expr, *handler),
-        _ => invalid_lowering_path("control expr dispatcher mismatch"),
+        _ => lowering_invariant_violation("control expr dispatcher mismatch"),
     }
 }
 
@@ -471,8 +476,9 @@ fn lower_misc_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId, kind: &HirExprKin
             base: lower_boxed_expr(ctx, *base),
             ty_name: render_ty_name(
                 sema,
-                sema.try_expr_ty(expr_id)
-                    .unwrap_or_else(|| invalid_lowering_path("expr type missing for type cast")),
+                sema.try_expr_ty(expr_id).unwrap_or_else(|| {
+                    lowering_invariant_violation("expr type missing for type cast")
+                }),
                 interner,
             ),
         },
@@ -490,7 +496,7 @@ fn lower_misc_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId, kind: &HirExprKin
         }
         HirExprKind::Quote { kind } => lower_quote_expr(kind),
         HirExprKind::Splice { kind } => lower_splice_expr(kind),
-        _ => invalid_lowering_path("misc expr dispatcher mismatch"),
+        _ => lowering_invariant_violation("misc expr dispatcher mismatch"),
     }
 }
 
@@ -501,8 +507,10 @@ fn is_type_value_expr(sema: &SemaModule, expr_id: HirExprId, interner: &Interner
             if matches!(
                 sema.ty(sema
                     .try_expr_ty(expr_id)
-                    .unwrap_or_else(|| invalid_lowering_path("expr type missing for name ref")))
-                    .kind,
+                    .unwrap_or_else(|| lowering_invariant_violation(
+                        "expr type missing for name ref"
+                    )))
+                .kind,
                 HirTyKind::Type
             ) {
                 return true;
@@ -562,8 +570,10 @@ fn is_type_value_expr(sema: &SemaModule, expr_id: HirExprId, interner: &Interner
         HirExprKind::Field { .. } => matches!(
             sema.ty(sema
                 .try_expr_ty(expr_id)
-                .unwrap_or_else(|| invalid_lowering_path("expr type missing for field ref")))
-                .kind,
+                .unwrap_or_else(|| lowering_invariant_violation(
+                    "expr type missing for field ref"
+                )))
+            .kind,
             HirTyKind::Type
         ),
         _ => false,
@@ -599,7 +609,7 @@ fn lower_prefix_expr(
             let ty = ctx
                 .sema
                 .try_expr_ty(expr_id)
-                .unwrap_or_else(|| invalid_lowering_path("expr type missing for prefix op"));
+                .unwrap_or_else(|| lowering_invariant_violation("expr type missing for prefix op"));
             let (zero, op) = match &ctx.sema.ty(ty).kind {
                 HirTyKind::Float | HirTyKind::Float32 | HirTyKind::Float64 => (
                     IrExpr::new(origin, IrExprKind::Lit(IrLit::Float { raw: "0.0".into() })),
@@ -619,7 +629,9 @@ fn lower_prefix_expr(
                     IrExpr::new(origin, IrExprKind::Lit(IrLit::Int { raw: "0".into() })),
                     IrBinaryOp::ISub,
                 ),
-                other => invalid_lowering_path(format!("invalid neg operand type {other:?}")),
+                other => {
+                    lowering_invariant_violation(format!("invalid neg operand type {other:?}"))
+                }
             };
             let expr = lower_expr(ctx, expr);
             IrExprKind::Binary {
@@ -677,9 +689,15 @@ fn lower_splice_expr(kind: &HirSpliceKind) -> IrExprKind {
     IrExprKind::SyntaxValue { raw }
 }
 
-fn invalid_lowering_path(description: impl AsRef<str>) -> ! {
-    let description = description.as_ref().to_owned().into_boxed_str();
-    resume_unwind(Box::new(LoweringInvariant { description }));
+fn lowering_invariant_violation(description: impl AsRef<str>) -> ! {
+    lowering_invariant(
+        IrDiagKind::LoweringInvariantViolated,
+        DiagContext::new().with("subject", description.as_ref()),
+    )
+}
+
+fn lowering_invariant(kind: IrDiagKind, context: DiagContext) -> ! {
+    resume_unwind(Box::new(LoweringInvariant { kind, context }));
 }
 
 fn lower_template_expr(
@@ -763,8 +781,9 @@ fn lower_tuple_expr(
     IrExprKind::Tuple {
         ty_name: render_ty_name(
             sema,
-            sema.try_expr_ty(expr_id)
-                .unwrap_or_else(|| invalid_lowering_path("expr type missing for tuple literal")),
+            sema.try_expr_ty(expr_id).unwrap_or_else(|| {
+                lowering_invariant_violation("expr type missing for tuple literal")
+            }),
             ctx.interner,
         ),
         items: lower_expr_list(ctx, items),
@@ -821,15 +840,16 @@ fn record_layout_for_ty(
         _ => return None,
     };
 
-    let field_count = u16::try_from(items.len())
-        .unwrap_or_else(|_| invalid_lowering_path("record field count exceeds u16 in lowering"));
+    let field_count = u16::try_from(items.len()).unwrap_or_else(|_| {
+        lowering_invariant_violation("record field count exceeds u16 in lowering")
+    });
     let mut indices = BTreeMap::<Box<str>, u16>::new();
     let layout = items
         .into_iter()
         .enumerate()
         .map(|(idx, name)| {
             let idx = u16::try_from(idx).unwrap_or_else(|_| {
-                invalid_lowering_path("record field index exceeds u16 in lowering")
+                lowering_invariant_violation("record field index exceeds u16 in lowering")
             });
             let _ = indices.insert(name.clone(), idx);
             IrRecordLayoutField::new(name, idx)
@@ -857,7 +877,7 @@ fn lower_variant_expr(
     let interner = ctx.interner;
     let ty = sema
         .try_expr_ty(expr_id)
-        .unwrap_or_else(|| invalid_lowering_path("expr type missing for variant"));
+        .unwrap_or_else(|| lowering_invariant_violation("expr type missing for variant"));
     let data = match &sema.ty(ty).kind {
         HirTyKind::Named { name, .. } => {
             let data_name = interner.resolve(*name);
@@ -870,17 +890,17 @@ fn lower_variant_expr(
         _ => None,
     };
     let Some(data) = data else {
-        invalid_lowering_path("variant without data type definition");
+        lowering_invariant_violation("variant without data type definition");
     };
     let tag_name = interner.resolve(tag.name);
     let tag_index = data.variant_index(tag_name).unwrap_or(u16::MAX);
     let variant_count = u16::try_from(data.variant_count()).unwrap_or(u16::MAX);
     if tag_index == u16::MAX {
-        invalid_lowering_path("unknown variant tag");
+        lowering_invariant_violation("unknown variant tag");
     }
 
     let Some(variant) = data.variant(tag_name) else {
-        invalid_lowering_path("unknown variant payload metadata");
+        lowering_invariant_violation("unknown variant payload metadata");
     };
     let arg_exprs = ordered_variant_arg_exprs(sema, variant, args, interner);
     let lowered_args = arg_exprs
@@ -912,7 +932,7 @@ fn ordered_variant_arg_exprs(
     let mut ordered = vec![None; variant.field_names().len()];
     for arg in arg_nodes {
         let Some(name) = arg.name else {
-            invalid_lowering_path("named variant arg missing field name after sema");
+            lowering_invariant_violation("named variant arg missing field name after sema");
         };
         let name = interner.resolve(name.name);
         let Some(index) = variant
@@ -920,14 +940,16 @@ fn ordered_variant_arg_exprs(
             .iter()
             .position(|field| field.as_deref() == Some(name))
         else {
-            invalid_lowering_path("unknown named variant field after sema");
+            lowering_invariant_violation("unknown named variant field after sema");
         };
         ordered[index] = Some(arg.expr);
     }
     ordered
         .into_iter()
         .map(|expr| {
-            expr.unwrap_or_else(|| invalid_lowering_path("missing named variant field after sema"))
+            expr.unwrap_or_else(|| {
+                lowering_invariant_violation("missing named variant field after sema")
+            })
         })
         .collect()
 }
@@ -962,7 +984,7 @@ fn lower_let_expr(
             value: Box::new(lower_expr(ctx, value)),
         },
         _ => destructure::lower_destructure_let(ctx, origin, pat, value)
-            .unwrap_or_else(|description| invalid_lowering_path(description)),
+            .unwrap_or_else(|description| lowering_invariant_violation(description)),
     }
 }
 
@@ -1012,7 +1034,7 @@ fn lower_index_expr(
     let sema = ctx.sema;
     let indices = sema.module().store.expr_ids.get(args);
     if indices.is_empty() {
-        invalid_lowering_path("index without argument");
+        lowering_invariant_violation("index without argument");
     }
     IrExprKind::Index {
         base: lower_boxed_expr(ctx, base),
@@ -1075,7 +1097,7 @@ fn lower_field_expr(
 
     let base_ty = sema
         .try_expr_ty(base)
-        .unwrap_or_else(|| invalid_lowering_path("expr type missing for field base"));
+        .unwrap_or_else(|| lowering_invariant_violation("expr type missing for field base"));
     let record_ty = match sema.ty(base_ty).kind {
         HirTyKind::Mut { inner } => inner,
         _ => base_ty,
@@ -1083,7 +1105,7 @@ fn lower_field_expr(
     if let Some((indices, _layout, _field_count)) = record_layout_for_ty(sema, record_ty, interner)
     {
         let Some(index) = indices.get(interner.resolve(symbol)).copied() else {
-            invalid_lowering_path("record field access missing field");
+            lowering_invariant_violation("record field access missing field");
         };
         return IrExprKind::RecordGet {
             base: Box::new(lower_expr(ctx, base)),
@@ -1097,7 +1119,7 @@ fn lower_field_expr(
 
     if let Some(import_record_target) = sema.expr_import_record_target(expr_id).cloned() {
         let expr_ty = sema.try_expr_ty(expr_id).unwrap_or_else(|| {
-            invalid_lowering_path("expr type missing for dot-callable field ref")
+            lowering_invariant_violation("expr type missing for dot-callable field ref")
         });
         if matches!(sema.ty(expr_ty).kind, HirTyKind::Arrow { .. }) {
             return IrExprKind::ClosureNew {
@@ -1108,7 +1130,7 @@ fn lower_field_expr(
         }
     }
 
-    invalid_lowering_path(format!("{kind:?}"))
+    lowering_invariant_violation(format!("{kind:?}"))
 }
 
 fn lower_attached_method_field(
@@ -1148,7 +1170,7 @@ fn lower_record_update_expr(
 
 fn lower_assign_expr(ctx: &mut LowerCtx<'_>, left: HirExprId, right: HirExprId) -> IrExprKind {
     assign::lower_assign_expr(ctx, left, right)
-        .unwrap_or_else(|description| invalid_lowering_path(description))
+        .unwrap_or_else(|description| lowering_invariant_violation(description))
 }
 
 fn lower_binary_expr(
@@ -1198,10 +1220,10 @@ fn lower_binary_op(
     let sema = ctx.sema;
     let left_ty = sema.ty(sema
         .try_expr_ty(left)
-        .unwrap_or_else(|| invalid_lowering_path("expr type missing for binary left")));
+        .unwrap_or_else(|| lowering_invariant_violation("expr type missing for binary left")));
     let right_ty = sema.ty(sema
         .try_expr_ty(right)
-        .unwrap_or_else(|| invalid_lowering_path("expr type missing for binary right")));
+        .unwrap_or_else(|| lowering_invariant_violation("expr type missing for binary right")));
     let wants_float = matches!(
         left_ty.kind,
         HirTyKind::Float | HirTyKind::Float32 | HirTyKind::Float64

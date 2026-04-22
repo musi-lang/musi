@@ -1,3 +1,4 @@
+use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
@@ -10,7 +11,10 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use musi_foundation::runtime as foundation_runtime;
 use musi_native::NativeHost;
-use musi_vm::{EffectCall, Value, VmError, VmErrorKind, VmHostCallContext, VmHostContext};
+use musi_vm::{
+    EffectCall, Value, VmDiagKind, VmError, VmErrorKind, VmHostCallContext, VmHostContext,
+};
+use music_base::diag::DiagContext;
 
 use crate::output::RuntimeOutputSinkCell;
 
@@ -42,11 +46,9 @@ fn register_log_io_handlers(host: &mut NativeHost, output: &RuntimeOutputSinkCel
             let line = format!("[musi:runtime] {message}");
             log_info_output
                 .lock()
-                .map_err(|_| invalid_runtime_effect(effect, "runtime output lock poisoned"))?
+                .map_err(|_| runtime_host_unavailable(effect, "runtime output lock"))?
                 .write_stderr(&line, true)
-                .map_err(|error| {
-                    invalid_runtime_effect(effect, format!("logInfo failed (`{error}`)"))
-                })?;
+                .map_err(|error| runtime_effect_failed(effect, error))?;
             Ok(Value::Unit)
         },
     );
@@ -57,19 +59,21 @@ fn register_log_io_handlers(host: &mut NativeHost, output: &RuntimeOutputSinkCel
         foundation_runtime::LOG_WRITE_OP,
         move |ctx, effect, args| {
             let [Value::Int(level), message] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid logWrite args"));
+                return Err(invalid_runtime_args(
+                    effect,
+                    "integer level and string message",
+                    args.len(),
+                ));
             };
             let message = ctx
                 .string(message)
-                .ok_or_else(|| invalid_runtime_effect(effect, "invalid logWrite args"))?;
+                .ok_or_else(|| invalid_runtime_args(effect, "string message", message.kind()))?;
             let line = format!("[std:{level}] {}", message.as_str());
             log_write_output
                 .lock()
-                .map_err(|_| invalid_runtime_effect(effect, "runtime output lock poisoned"))?
+                .map_err(|_| runtime_host_unavailable(effect, "runtime output lock"))?
                 .write_stderr(&line, true)
-                .map_err(|error| {
-                    invalid_runtime_effect(effect, format!("logWrite failed (`{error}`)"))
-                })?;
+                .map_err(|error| runtime_effect_failed(effect, error))?;
             Ok(Value::Unit)
         },
     );
@@ -125,7 +129,7 @@ fn register_log_io_handlers(host: &mut NativeHost, output: &RuntimeOutputSinkCel
         foundation_runtime::IO_READ_LINE_OP,
         |ctx, effect, args| {
             if !args.is_empty() {
-                return Err(invalid_runtime_effect(effect, "invalid ioReadLine args"));
+                return Err(invalid_runtime_args(effect, "no arguments", args.len()));
             }
             ctx.alloc_string(read_line(effect)?)
         },
@@ -138,9 +142,8 @@ fn register_fs_handlers(host: &mut NativeHost) {
         foundation_runtime::FS_READ_TEXT_OP,
         |ctx, effect, args| {
             let path = string_arg(ctx, effect, args, "fsReadText")?.to_owned();
-            let text = fs::read_to_string(path).map_err(|error| {
-                invalid_runtime_effect(effect, format!("fsReadText failed (`{error}`)"))
-            })?;
+            let text =
+                fs::read_to_string(path).map_err(|error| runtime_effect_failed(effect, error))?;
             ctx.alloc_string(text)
         },
     );
@@ -150,17 +153,20 @@ fn register_fs_handlers(host: &mut NativeHost) {
         foundation_runtime::FS_WRITE_TEXT_OP,
         |ctx, effect, args| {
             let [path, text] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid fsWriteText args"));
+                return Err(invalid_runtime_args(
+                    effect,
+                    "path and text strings",
+                    args.len(),
+                ));
             };
             let path = ctx
                 .string(path)
-                .ok_or_else(|| invalid_runtime_effect(effect, "invalid fsWriteText args"))?;
+                .ok_or_else(|| invalid_runtime_args(effect, "path string", path.kind()))?;
             let text = ctx
                 .string(text)
-                .ok_or_else(|| invalid_runtime_effect(effect, "invalid fsWriteText args"))?;
-            fs::write(path.as_str(), text.as_str()).map_err(|error| {
-                invalid_runtime_effect(effect, format!("fsWriteText failed (`{error}`)"))
-            })?;
+                .ok_or_else(|| invalid_runtime_args(effect, "text string", text.kind()))?;
+            fs::write(path.as_str(), text.as_str())
+                .map_err(|error| runtime_effect_failed(effect, error))?;
             Ok(Value::Unit)
         },
     );
@@ -179,14 +185,18 @@ fn register_fs_handlers(host: &mut NativeHost) {
         foundation_runtime::FS_APPEND_TEXT_OP,
         |ctx, effect, args| {
             let [path, text] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid fsAppendText args"));
+                return Err(invalid_runtime_args(
+                    effect,
+                    "path and text strings",
+                    args.len(),
+                ));
             };
             let path = ctx
                 .string(path)
-                .ok_or_else(|| invalid_runtime_effect(effect, "invalid fsAppendText args"))?;
+                .ok_or_else(|| invalid_runtime_args(effect, "path string", path.kind()))?;
             let text = ctx
                 .string(text)
-                .ok_or_else(|| invalid_runtime_effect(effect, "invalid fsAppendText args"))?;
+                .ok_or_else(|| invalid_runtime_args(effect, "text string", text.kind()))?;
             let result = fs::OpenOptions::new()
                 .create(true)
                 .append(true)
@@ -282,14 +292,18 @@ fn register_path_handlers(host: &mut NativeHost) {
         foundation_runtime::PATH_JOIN_OP,
         |ctx, effect, args| {
             let [left, right] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid pathJoin args"));
+                return Err(invalid_runtime_args(
+                    effect,
+                    "left and right path strings",
+                    args.len(),
+                ));
             };
             let left = ctx
                 .string(left)
-                .ok_or_else(|| invalid_runtime_effect(effect, "invalid pathJoin args"))?;
+                .ok_or_else(|| invalid_runtime_args(effect, "left path string", left.kind()))?;
             let right = ctx
                 .string(right)
-                .ok_or_else(|| invalid_runtime_effect(effect, "invalid pathJoin args"))?;
+                .ok_or_else(|| invalid_runtime_args(effect, "right path string", right.kind()))?;
             ctx.alloc_string(
                 Path::new(left.as_str())
                     .join(right.as_str())
@@ -451,7 +465,7 @@ fn register_encoding_handlers(host: &mut NativeHost) {
     );
 }
 
-fn invalid_runtime_effect(effect: &EffectCall, reason: impl Into<Box<str>>) -> VmError {
+fn effect_rejected(effect: &EffectCall, reason: impl Into<Box<str>>) -> VmError {
     VmError::new(VmErrorKind::EffectRejected {
         effect: effect.effect_name().into(),
         op: Some(effect.op_name().into()),
@@ -459,12 +473,57 @@ fn invalid_runtime_effect(effect: &EffectCall, reason: impl Into<Box<str>>) -> V
     })
 }
 
+fn invalid_runtime_args(effect: &EffectCall, expected: &str, found: impl Display) -> VmError {
+    runtime_effect_reason(
+        effect,
+        VmDiagKind::RuntimeEffectArgsInvalid,
+        DiagContext::new()
+            .with("effect", effect.effect_name())
+            .with("op", effect.op_name())
+            .with("expected", expected)
+            .with("found", found),
+    )
+}
+
+fn runtime_effect_failed(effect: &EffectCall, source: impl Display) -> VmError {
+    runtime_effect_reason(
+        effect,
+        VmDiagKind::RuntimeEffectOperationFailed,
+        DiagContext::new()
+            .with("effect", effect.effect_name())
+            .with("op", effect.op_name())
+            .with("source", source),
+    )
+}
+
+fn runtime_host_unavailable(effect: &EffectCall, subject: &str) -> VmError {
+    runtime_effect_reason(
+        effect,
+        VmDiagKind::RuntimeHostUnavailable,
+        DiagContext::new().with("subject", subject),
+    )
+}
+
+fn runtime_effect_unsupported(effect: &EffectCall) -> VmError {
+    runtime_effect_reason(
+        effect,
+        VmDiagKind::RuntimeEffectUnsupported,
+        DiagContext::new()
+            .with("effect", effect.effect_name())
+            .with("op", effect.op_name()),
+    )
+}
+
+fn runtime_effect_reason(effect: &EffectCall, kind: VmDiagKind, context: DiagContext) -> VmError {
+    let reason = kind.message_with(&context);
+    drop(context);
+    effect_rejected(effect, reason)
+}
+
 fn current_unix_millis(effect: &EffectCall) -> Result<i64, VmError> {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_err(|error| {
-            invalid_runtime_effect(effect, format!("timeNowUnixMs failed (`{error}`)"))
-        })?;
+        .map_err(|error| runtime_effect_failed(effect, error))?;
     Ok(i64::try_from(now.as_millis()).unwrap_or(i64::MAX))
 }
 
@@ -476,10 +535,11 @@ fn run_shell_command(command: &str, effect: &EffectCall) -> Result<i64, VmError>
     } else {
         Command::new("sh").args(["-c", command]).status()
     }
-    .map_err(|error| invalid_runtime_effect(effect, format!("processRun failed (`{error}`)")))?;
+    .map_err(|error| runtime_effect_failed(effect, error))?;
     Ok(i64::from(status.code().unwrap_or(-1)))
 }
 
+#[derive(Clone, Copy)]
 enum StreamKind {
     Stdout,
     Stderr,
@@ -494,50 +554,30 @@ fn write_stream(
     output: &RuntimeOutputSinkCell,
 ) -> Result<Value, VmError> {
     let [text] = args else {
-        let op = match (stream, line) {
-            (StreamKind::Stdout, false) => "ioPrint",
-            (StreamKind::Stdout, true) => "ioPrintLine",
-            (StreamKind::Stderr, false) => "ioPrintError",
-            (StreamKind::Stderr, true) => "ioPrintErrorLine",
-        };
-        return Err(invalid_runtime_effect(effect, format!("invalid {op} args")));
+        return Err(invalid_runtime_args(effect, "one string", args.len()));
     };
     let Some(text) = ctx.string(text) else {
-        let op = match (stream, line) {
-            (StreamKind::Stdout, false) => "ioPrint",
-            (StreamKind::Stdout, true) => "ioPrintLine",
-            (StreamKind::Stderr, false) => "ioPrintError",
-            (StreamKind::Stderr, true) => "ioPrintErrorLine",
-        };
-        return Err(invalid_runtime_effect(effect, format!("invalid {op} args")));
+        return Err(invalid_runtime_args(effect, "string argument", text.kind()));
     };
     let write_result = match stream {
         StreamKind::Stdout => output
             .lock()
-            .map_err(|_| invalid_runtime_effect(effect, "runtime output lock poisoned"))?
+            .map_err(|_| runtime_host_unavailable(effect, "runtime output lock"))?
             .write_stdout(text.as_str(), line),
         StreamKind::Stderr => output
             .lock()
-            .map_err(|_| invalid_runtime_effect(effect, "runtime output lock poisoned"))?
+            .map_err(|_| runtime_host_unavailable(effect, "runtime output lock"))?
             .write_stderr(text.as_str(), line),
     };
-    write_result.map_err(|error| {
-        let op = match (stream, line) {
-            (StreamKind::Stdout, false) => "ioPrint",
-            (StreamKind::Stdout, true) => "ioPrintLine",
-            (StreamKind::Stderr, false) => "ioPrintError",
-            (StreamKind::Stderr, true) => "ioPrintErrorLine",
-        };
-        invalid_runtime_effect(effect, format!("{op} failed (`{error}`)"))
-    })?;
+    write_result.map_err(|error| runtime_effect_failed(effect, error))?;
     Ok(Value::Unit)
 }
 
 fn read_line(effect: &EffectCall) -> Result<String, VmError> {
     let mut line = String::new();
-    let _bytes = io::stdin().read_line(&mut line).map_err(|error| {
-        invalid_runtime_effect(effect, format!("ioReadLine failed (`{error}`)"))
-    })?;
+    let _bytes = io::stdin()
+        .read_line(&mut line)
+        .map_err(|error| runtime_effect_failed(effect, error))?;
     if line.ends_with('\n') {
         let _ = line.pop();
         if line.ends_with('\r') {
@@ -562,31 +602,25 @@ fn text_predicate(
     ctx: &VmHostContext<'_>,
     effect: &EffectCall,
     args: &[Value],
-    op_name: &str,
+    _op_name: &str,
     f: impl FnOnce(&str, &str) -> bool,
 ) -> Result<Value, VmError> {
     let [value, needle] = args else {
-        return Err(invalid_runtime_effect(
-            effect,
-            format!("invalid {op_name} args"),
-        ));
+        return Err(invalid_runtime_args(effect, "two strings", args.len()));
     };
     let value = ctx
         .string(value)
-        .ok_or_else(|| invalid_runtime_effect(effect, format!("invalid {op_name} args")))?;
+        .ok_or_else(|| invalid_runtime_args(effect, "string argument 0", value.kind()))?;
     let needle = ctx
         .string(needle)
-        .ok_or_else(|| invalid_runtime_effect(effect, format!("invalid {op_name} args")))?;
+        .ok_or_else(|| invalid_runtime_args(effect, "string argument 1", needle.kind()))?;
     Ok(Value::Int(i64::from(f(value.as_str(), needle.as_str()))))
 }
 
 fn normalize_json(source: &str, effect: &EffectCall) -> Result<String, VmError> {
-    let parsed: serde_json::Value = serde_json::from_str(source).map_err(|error| {
-        invalid_runtime_effect(effect, format!("jsonNormalize failed (`{error}`)"))
-    })?;
-    serde_json::to_string(&parsed).map_err(|error| {
-        invalid_runtime_effect(effect, format!("jsonNormalize failed (`{error}`)"))
-    })
+    let parsed: serde_json::Value =
+        serde_json::from_str(source).map_err(|error| runtime_effect_failed(effect, error))?;
+    serde_json::to_string(&parsed).map_err(|error| runtime_effect_failed(effect, error))
 }
 
 fn decode_utf8_encoded(
@@ -597,9 +631,8 @@ fn decode_utf8_encoded(
     decoder: impl FnOnce(&str) -> Result<Vec<u8>, Box<str>>,
 ) -> Result<Value, VmError> {
     let source = string_arg(ctx, effect, args, op_name)?;
-    let bytes = decoder(source).map_err(|reason| invalid_runtime_effect(effect, reason))?;
-    let text = String::from_utf8(bytes)
-        .map_err(|error| invalid_runtime_effect(effect, format!("{op_name} failed (`{error}`)")))?;
+    let bytes = decoder(source).map_err(|reason| runtime_effect_failed(effect, reason))?;
+    let text = String::from_utf8(bytes).map_err(|error| runtime_effect_failed(effect, error))?;
     ctx.alloc_string(text)
 }
 
@@ -607,17 +640,14 @@ fn string_arg<'a>(
     ctx: &'a VmHostContext<'_>,
     effect: &EffectCall,
     args: &'a [Value],
-    op_name: &str,
+    _op_name: &str,
 ) -> Result<&'a str, VmError> {
     let [value] = args else {
-        return Err(invalid_runtime_effect(
-            effect,
-            format!("invalid {op_name} args"),
-        ));
+        return Err(invalid_runtime_args(effect, "one string", args.len()));
     };
     ctx.string(value)
         .map(|text| text.as_str())
-        .ok_or_else(|| invalid_runtime_effect(effect, format!("invalid {op_name} args")))
+        .ok_or_else(|| invalid_runtime_args(effect, "string argument", value.kind()))
 }
 
 fn hex_encode(bytes: &[u8]) -> String {
@@ -632,7 +662,7 @@ fn hex_encode(bytes: &[u8]) -> String {
 
 fn decode_hex(source: &str) -> Result<Vec<u8>, Box<str>> {
     if !source.len().is_multiple_of(2) {
-        return Err("hexDecode failed (`odd-length input`)".into());
+        return Err(DecodeHexError::OddLength.to_string().into_boxed_str());
     }
     let mut bytes = Vec::with_capacity(source.len() / 2);
     let chars: Vec<char> = source.chars().collect();
@@ -642,11 +672,25 @@ fn decode_hex(source: &str) -> Result<Vec<u8>, Box<str>> {
             .into_iter()
             .collect::<String>();
         let byte = u8::from_str_radix(&chunk, 16)
-            .map_err(|_| format!("hexDecode failed (`invalid byte `{chunk}``)"))?;
+            .map_err(|_| DecodeHexError::InvalidByte(chunk.clone()).to_string())?;
         bytes.push(byte);
         index += 2;
     }
     Ok(bytes)
+}
+
+enum DecodeHexError {
+    OddLength,
+    InvalidByte(String),
+}
+
+impl Display for DecodeHexError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        match self {
+            Self::OddLength => write!(f, "hexDecode failed (`odd-length input`)"),
+            Self::InvalidByte(chunk) => write!(f, "hexDecode failed (`invalid byte `{chunk}``)"),
+        }
+    }
 }
 
 fn random_seed() -> u64 {

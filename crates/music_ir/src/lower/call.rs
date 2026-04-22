@@ -79,7 +79,9 @@ pub(super) fn lower_call_expr(
                 .collect::<Option<Vec<_>>>()
                 .map(Vec::into_boxed_slice);
             let Some(args) = args else {
-                return Err("call spread lowering invariant".into());
+                return Err(super::lower_errors::lowering_error(
+                    "call spread lowering invariant",
+                ));
             };
             IrExprKind::Call {
                 callee: Box::new(callee_expr),
@@ -124,7 +126,9 @@ fn lower_comptime_call_expr(
         let is_comptime = scheme.comptime_params.get(index).copied().unwrap_or(false);
         if is_comptime {
             let Some(value) = ctx.sema.expr_comptime_value(arg.expr).cloned() else {
-                return Err("comptime call argument missing sema value".into());
+                return Err(super::lower_errors::lowering_error(
+                    "comptime call argument missing sema value",
+                ));
             };
             comptime_values.push((index, value));
         } else {
@@ -411,7 +415,7 @@ fn lower_runtime_params(ctx: &LowerCtx<'_>, params: &[HirParam]) -> Vec<IrParam>
         .map(|param| {
             IrParam::new(
                 super::decl_binding_id(ctx.sema, param.name)
-                    .unwrap_or_else(|| invalid_lowering_path("param binding missing")),
+                    .unwrap_or_else(|| lowering_invariant_violation("param binding missing")),
                 ctx.interner.resolve(param.name.name),
             )
         })
@@ -721,7 +725,9 @@ fn lower_dot_callable_call_expr(
                 .collect::<Option<Vec<_>>>()
                 .map(Vec::into_boxed_slice);
             let Some(args) = args else {
-                return Err("dot-callable spread lowering invariant".into());
+                return Err(super::lower_errors::lowering_error(
+                    "dot-callable spread lowering invariant",
+                ));
             };
             IrExprKind::Call {
                 callee: Box::new(callee_expr),
@@ -884,8 +890,7 @@ pub(super) fn lower_request_expr(
 ) -> Result<IrExprKind, Box<str>> {
     let sema = ctx.sema;
     let interner = ctx.interner;
-    let (effect_key, op_index, callee, args) =
-        resolve_request_target(sema, interner, expr).map_err(Box::<str>::from)?;
+    let (effect_key, op_index, callee, args) = resolve_request_target(sema, interner, expr)?;
     let args_nodes = ordered_call_args(sema, interner, callee, sema.module().store.args.get(args));
     if !args_nodes.iter().any(|arg| arg.spread) {
         let lowered_args = args_nodes
@@ -922,7 +927,9 @@ pub(super) fn lower_request_expr(
                 .collect::<Option<Vec<_>>>()
                 .map(Vec::into_boxed_slice);
             let Some(args) = args else {
-                return Err("ask spread lowering invariant".into());
+                return Err(super::lower_errors::lowering_error(
+                    "ask spread lowering invariant",
+                ));
             };
             IrExprKind::Request {
                 effect_key,
@@ -974,24 +981,32 @@ fn resolve_request_target(
     sema: &SemaModule,
     interner: &Interner,
     expr: HirExprId,
-) -> Result<(DefinitionKey, u16, HirExprId, SliceRange<HirArg>), &'static str> {
+) -> Result<(DefinitionKey, u16, HirExprId, SliceRange<HirArg>), Box<str>> {
     let HirExprKind::Call { callee, ref args } = sema.module().store.exprs.get(expr).kind else {
-        return Err("ask without call");
+        return Err(super::lower_errors::lowering_error("ask without call"));
     };
     let HirExprKind::Field { base, name, .. } = sema.module().store.exprs.get(callee).kind else {
-        return Err("ask without effect op field access");
+        return Err(super::lower_errors::lowering_error(
+            "ask without effect op field access",
+        ));
     };
     let HirExprKind::Name { name: effect_name } = sema.module().store.exprs.get(base).kind else {
-        return Err("ask without effect name");
+        return Err(super::lower_errors::lowering_error(
+            "ask without effect name",
+        ));
     };
     let effect_name = interner.resolve(effect_name.name);
     let op_name = interner.resolve(name.name);
     let Some(effect) = sema.effect_def(effect_name) else {
-        return Err("ask with unknown effect");
+        return Err(super::lower_errors::lowering_error(
+            "ask with unknown effect",
+        ));
     };
     let op_index = effect.op_index(op_name).unwrap_or(u16::MAX);
     if op_index == u16::MAX {
-        return Err("ask with unknown effect op");
+        return Err(super::lower_errors::lowering_error(
+            "ask with unknown effect op",
+        ));
     }
     Ok((effect.key().clone(), op_index, callee, args.clone()))
 }
@@ -1036,7 +1051,7 @@ fn lower_spread_arg(
     let sema = ctx.sema;
     let spread_ty = sema
         .try_expr_ty(spread_expr)
-        .unwrap_or_else(|| invalid_lowering_path("expr type missing for spread arg"));
+        .unwrap_or_else(|| lowering_invariant_violation("expr type missing for spread arg"));
     match &sema.ty(spread_ty).kind {
         HirTyKind::Tuple { items } => {
             for (index, _) in sema.module().store.ty_ids.get(*items).iter().enumerate() {
@@ -1070,7 +1085,9 @@ fn lower_spread_arg(
                 .and_then(|items| items.first())
                 .map(|item| super::lower_constraint_answer_expr(ctx, origin, item));
             let Some(constraint_answer) = constraint_answer else {
-                return Err("range spread evidence missing".into());
+                return Err(super::lower_errors::lowering_error(
+                    "range spread evidence missing",
+                ));
             };
             parts.push(IrSeqPart::Spread(IrExpr::new(
                 origin,

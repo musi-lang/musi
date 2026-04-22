@@ -675,6 +675,7 @@ name = "musi_native_ffi"
 version = "0.1.0-alpha.1"
 dependencies = [
  "musi_vm",
+ "music_base",
  "music_seam",
 ]
 

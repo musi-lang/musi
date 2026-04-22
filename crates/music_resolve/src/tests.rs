@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 
 use music_base::SourceId;
+use music_base::diag::DiagContext;
 use music_hir::HirExprKind;
 use music_module::{
     ImportEnv, ImportError, ImportErrorKind, ImportResolveResult, ModuleKey, ModuleSpecifier,
@@ -667,11 +668,17 @@ mod failure {
             .iter()
             .find(|diag| resolve_diag_kind(diag) == Some(ResolveDiagKind::ImportResolveFailed))
             .expect("expected import resolve diag");
+        let context = DiagContext::new()
+            .with("spec", "std/missing")
+            .with("reason", "module not found");
         assert_eq!(
             diag.message(),
-            "unresolved source import specifier `std/missing`"
+            ResolveDiagKind::ImportResolveFailed.message_with(&context)
         );
-        assert_eq!(diag.labels()[0].message(), "module not found `std/missing`");
+        assert_eq!(
+            diag.labels()[0].message(),
+            ResolveDiagKind::ImportResolveFailed.label_with(&context)
+        );
         assert_eq!(diag.hint(), None);
     }
 

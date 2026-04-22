@@ -1,10 +1,13 @@
+use std::fmt::Display;
 use std::sync::{Arc, Mutex};
 
 use musi_foundation::syntax;
 use musi_native::{NativeHost, WeakNativeHost};
 use musi_vm::{
-    EffectCall, Value, ValueView, Vm, VmError, VmErrorKind, VmOptions, VmResult, VmValueKind,
+    EffectCall, Value, ValueView, Vm, VmDiagKind, VmError, VmErrorKind, VmOptions, VmResult,
+    VmValueKind,
 };
+use music_base::diag::DiagContext;
 use music_term::SyntaxTerm;
 
 use super::compile::{SessionLoader, compile_synthetic_program_from_store};
@@ -79,11 +82,15 @@ pub(super) fn register_syntax_handlers(
         syntax::EVAL_OP,
         move |ctx, effect, args| {
             let [body, Value::Type(result_ty)] = args else {
-                return Err(invalid_syntax_effect(effect, "invalid syntax eval args"));
+                return Err(invalid_syntax_args(
+                    effect,
+                    "syntax body and result type",
+                    args.len(),
+                ));
             };
             let body = ctx
                 .syntax(body)
-                .ok_or_else(|| invalid_syntax_effect(effect, "invalid syntax eval args"))?;
+                .ok_or_else(|| invalid_syntax_args(effect, "syntax body", body.kind()))?;
             let result_ty_name = effect.type_term(*result_ty).to_string();
             eval_syntax_value(
                 &eval_store,
@@ -100,20 +107,21 @@ pub(super) fn register_syntax_handlers(
         syntax::REGISTER_MODULE_OP,
         move |ctx, effect, args| {
             let [spec, body] = args else {
-                return Err(invalid_syntax_effect(
+                return Err(invalid_syntax_args(
                     effect,
-                    "invalid syntax register args",
+                    "module spec and syntax body",
+                    args.len(),
                 ));
             };
             let spec = ctx
                 .string(spec)
-                .ok_or_else(|| invalid_syntax_effect(effect, "invalid syntax register args"))?;
+                .ok_or_else(|| invalid_syntax_args(effect, "module spec string", spec.kind()))?;
             let body = ctx
                 .syntax(body)
-                .ok_or_else(|| invalid_syntax_effect(effect, "invalid syntax register args"))?;
+                .ok_or_else(|| invalid_syntax_args(effect, "syntax body", body.kind()))?;
             let mut store = store
                 .lock()
-                .map_err(|_| invalid_syntax_effect(effect, "runtime store lock poisoned"))?;
+                .map_err(|_| runtime_host_unavailable(effect, "runtime store lock"))?;
             let _ = store
                 .module_texts
                 .insert(spec.as_str().into(), body.term().text().into());
@@ -138,7 +146,9 @@ fn eval_syntax_value(
         return Err(VmError::new(VmErrorKind::EffectRejected {
             effect: syntax::EFFECT.into(),
             op: Some(syntax::EVAL_OP.into()),
-            reason: "runtime host unavailable".into(),
+            reason: VmDiagKind::RuntimeHostUnavailable
+                .message_with(&DiagContext::new().with("subject", "runtime host"))
+                .into(),
         }));
     };
     let loader = SessionLoader::new(Arc::clone(store));
@@ -147,12 +157,33 @@ fn eval_syntax_value(
     vm.call_export("result", &[])
 }
 
-fn invalid_syntax_effect(effect: &EffectCall, reason: &'static str) -> VmError {
+fn syntax_effect_rejected(effect: &EffectCall, reason: impl Into<Box<str>>) -> VmError {
     VmError::new(VmErrorKind::EffectRejected {
         effect: effect.effect_name().into(),
         op: Some(effect.op_name().into()),
         reason: reason.into(),
     })
+}
+
+fn invalid_syntax_args(effect: &EffectCall, expected: &str, found: impl Display) -> VmError {
+    syntax_effect_rejected(
+        effect,
+        VmDiagKind::RuntimeEffectArgsInvalid.message_with(
+            &DiagContext::new()
+                .with("effect", effect.effect_name())
+                .with("op", effect.op_name())
+                .with("expected", expected)
+                .with("found", found),
+        ),
+    )
+}
+
+fn runtime_host_unavailable(effect: &EffectCall, subject: &str) -> VmError {
+    syntax_effect_rejected(
+        effect,
+        VmDiagKind::RuntimeHostUnavailable
+            .message_with(&DiagContext::new().with("subject", subject)),
+    )
 }
 
 pub(super) const fn vm_syntax_value_kind_error(found: VmValueKind) -> VmError {
@@ -165,7 +196,9 @@ pub(super) const fn vm_syntax_value_kind_error(found: VmValueKind) -> VmError {
 fn runtime_store_lock_error() -> RuntimeError {
     RuntimeError::new(RuntimeErrorKind::VmExecutionFailed(VmError::new(
         VmErrorKind::InvalidProgramShape {
-            detail: "runtime store lock poisoned".into(),
+            detail: VmDiagKind::RuntimeHostUnavailable
+                .message_with(&DiagContext::new().with("subject", "runtime store lock"))
+                .into(),
         },
     )))
 }

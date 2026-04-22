@@ -7,14 +7,15 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use music_base::diag::DiagContext;
 use music_module::ModuleKey;
 use music_sema::SemaDiagKind;
 use music_session::{Session, SessionOptions};
 
-use musi_project::{Project, ProjectError, ProjectOptions};
+use musi_project::{Project, ProjectDiagKind, ProjectError, ProjectOptions};
 
 use crate::{
-    ToolInlayHintKind, ToolSemanticModifier, ToolSemanticTokenKind, ToolingError,
+    ToolInlayHintKind, ToolSemanticModifier, ToolSemanticTokenKind, ToolingDiagKind, ToolingError,
     collect_project_diagnostics_with_overlay, hover_for_project_file_with_overlay,
     inlay_hints_for_project_file_with_overlay, load_direct_graph,
     module_docs_for_project_file_with_overlay, project_error_report,
@@ -25,6 +26,10 @@ static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(0);
 
 const APP_MANIFEST: &str =
     "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"entry\": \"index.ms\"\n}\n";
+
+fn diag_code(raw: u16) -> String {
+    format!("MS{raw:04}")
+}
 
 struct TempDir {
     path: PathBuf,
@@ -535,8 +540,14 @@ export let Type := Type;
 
         assert!(
             diagnostics.iter().all(|diag| {
-                !diag.message.contains("`@musi.known` needs `musi:*` module")
-                    && !diag.message.contains("unresolved import `musi:intrinsics`")
+                !diag
+                    .message
+                    .contains(SemaDiagKind::AttrKnownRequiresFoundationModule.message())
+                    && !diag.message.contains(
+                        ProjectDiagKind::SourceImportUnresolved
+                            .message_with(&DiagContext::new().with("spec", "musi:intrinsics"))
+                            .as_str(),
+                    )
             }),
             "{diagnostics:?}"
         );
@@ -877,19 +888,22 @@ mod failure {
         let report = tooling_error_report("music", "check", None, None, &error);
 
         assert_eq!(report.diagnostics[0].phase, "tooling");
-        assert_eq!(report.diagnostics[0].code.as_deref(), Some("MS5101"));
+        let code = diag_code(ToolingDiagKind::PackageImportRequiresMusi.code().raw());
+        assert_eq!(report.diagnostics[0].code.as_deref(), Some(code.as_str()));
     }
 
     #[test]
     fn project_error_report_carries_typed_code() {
+        let validation_message = ProjectDiagKind::ManifestPackageNameMissing.message();
         let error = ProjectError::ManifestValidationFailed {
-            message: "name is required".into(),
+            message: validation_message.into(),
         };
 
         let report = project_error_report("musi", "check", None, None, &error);
 
         assert_eq!(report.diagnostics[0].phase, "project");
-        assert_eq!(report.diagnostics[0].code.as_deref(), Some("MS5006"));
+        let code = diag_code(ProjectDiagKind::ManifestValidationFailed.code().raw());
+        assert_eq!(report.diagnostics[0].code.as_deref(), Some(code.as_str()));
     }
 
     #[test]
@@ -909,10 +923,13 @@ mod failure {
         let report = project_error_report("musi", "check", None, None, &error);
 
         assert_eq!(report.diagnostics[0].phase, "project");
-        assert_eq!(report.diagnostics[0].code.as_deref(), Some("MS3606"));
+        let kind = ProjectDiagKind::ManifestExportKeyInvalid;
+        let context = DiagContext::new().with("key", "bad");
+        let code = diag_code(kind.code().raw());
+        assert_eq!(report.diagnostics[0].code.as_deref(), Some(code.as_str()));
         assert!(report.diagnostics[0].file.is_some());
         assert!(report.diagnostics[0].range.is_some());
-        assert_eq!(report.diagnostics[0].message, "invalid export key `bad`");
+        assert_eq!(report.diagnostics[0].message, kind.message_with(&context));
     }
 
     #[test]
@@ -929,13 +946,16 @@ mod failure {
         let report = project_error_report("musi", "check", None, None, &error);
 
         assert_eq!(report.diagnostics[0].phase, "project");
-        assert_eq!(report.diagnostics[0].code.as_deref(), Some("MS3615"));
-        assert_eq!(report.diagnostics[0].message, "unresolved import `missing`");
+        let kind = ProjectDiagKind::SourceImportUnresolved;
+        let context = DiagContext::new().with("spec", "missing");
+        let code = diag_code(kind.code().raw());
+        assert_eq!(report.diagnostics[0].code.as_deref(), Some(code.as_str()));
+        assert_eq!(report.diagnostics[0].message, kind.message_with(&context));
         assert!(report.diagnostics[0].file.is_some());
         assert!(report.diagnostics[0].range.is_some());
         assert_eq!(
             report.diagnostics[0].labels[0].message,
-            "import `missing` does not resolve"
+            kind.label_with(&context)
         );
     }
 }

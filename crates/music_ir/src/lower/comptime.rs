@@ -9,7 +9,7 @@ use music_term::{TypeModuleRef, TypeTerm, TypeTermKind};
 
 use crate::api::{IrExpr, IrExprKind, IrLit, IrNameRef, IrOrigin};
 
-use super::{LowerCtx, invalid_lowering_path};
+use super::{LowerCtx, lowering_invariant_violation};
 
 pub(super) fn lower_comptime_value(ctx: &mut LowerCtx<'_>, value: &ComptimeValue) -> IrExprKind {
     match value {
@@ -32,7 +32,7 @@ pub(super) fn lower_comptime_value(ctx: &mut LowerCtx<'_>, value: &ComptimeValue
         ComptimeValue::ImportRecord(value) => lower_comptime_import_record(value),
         ComptimeValue::Foreign(value) => lower_comptime_foreign(value),
         ComptimeValue::Continuation(_) => {
-            invalid_lowering_path("escaping compile-time continuation")
+            lowering_invariant_violation("escaping compile-time continuation")
         }
         ComptimeValue::Effect(value) => lower_comptime_effect(ctx, value),
         ComptimeValue::Shape(value) => lower_comptime_shape(ctx, value),
@@ -58,10 +58,10 @@ fn lower_comptime_data(ctx: &mut LowerCtx<'_>, value: &ComptimeDataValue) -> IrE
         .data_defs()
         .find(|data| data.key() == &data_key)
         .or_else(|| ctx.sema.data_def(data_key.name.as_ref()))
-        .unwrap_or_else(|| invalid_lowering_path("compile-time data definition missing"));
+        .unwrap_or_else(|| lowering_invariant_violation("compile-time data definition missing"));
     let tag_index = data
         .variant_index(value.variant.as_ref())
-        .unwrap_or_else(|| invalid_lowering_path("compile-time data variant missing"));
+        .unwrap_or_else(|| lowering_invariant_violation("compile-time data variant missing"));
     let args = value
         .fields
         .iter()
@@ -140,7 +140,7 @@ fn lower_comptime_shape(ctx: &LowerCtx<'_>, value: &ComptimeShapeValue) -> IrExp
 
 fn lower_comptime_module_export(ctx: &LowerCtx<'_>, module: &ModuleKey, name: &str) -> IrExprKind {
     if module == &ctx.module_key {
-        invalid_lowering_path("compile-time nominal shape needs module export boundary");
+        lowering_invariant_violation("compile-time nominal shape needs module export boundary");
     }
     IrExprKind::ModuleGet {
         base: Box::new(IrExpr::new(
@@ -160,7 +160,7 @@ fn lower_comptime_module_export(ctx: &LowerCtx<'_>, module: &ModuleKey, name: &s
 
 fn definition_key_for_type(ctx: &LowerCtx<'_>, ty: &TypeTerm) -> DefinitionKey {
     let TypeTermKind::Named { module, name, .. } = &ty.kind else {
-        invalid_lowering_path("compile-time data type is not named");
+        lowering_invariant_violation("compile-time data type is not named");
     };
     let (module, name) = split_qualified_type_name(ctx, module.as_ref(), name);
     DefinitionKey::new(module, name)

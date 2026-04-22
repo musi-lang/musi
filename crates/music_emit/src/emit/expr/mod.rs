@@ -97,23 +97,6 @@ impl ProcedureEmitter<'_, '_> {
                 self.compile_array_cat(ty_name, parts, diags);
                 true
             }
-            IrExprKind::Range {
-                ty_name,
-                kind,
-                lower,
-                upper,
-                bounds_evidence,
-            } => {
-                self.compile_range(
-                    ty_name,
-                    *kind,
-                    lower,
-                    upper,
-                    bounds_evidence.as_deref(),
-                    diags,
-                );
-                true
-            }
             IrExprKind::Record {
                 ty_name,
                 field_count,
@@ -169,6 +152,32 @@ impl ProcedureEmitter<'_, '_> {
                 self.compile_index(base, indices, diags);
                 true
             }
+            _ => {
+                self.compile_expr_range_ops(expr, diags)
+                    || self.compile_expr_module_and_type_ops(expr, diags)
+            }
+        }
+    }
+
+    fn compile_expr_range_ops(&mut self, expr: &IrExpr, diags: &mut EmitDiagList) -> bool {
+        match &expr.kind {
+            IrExprKind::Range {
+                ty_name,
+                kind,
+                lower,
+                upper,
+                bounds_evidence,
+            } => {
+                self.compile_range(
+                    ty_name,
+                    *kind,
+                    lower,
+                    upper,
+                    bounds_evidence.as_deref(),
+                    diags,
+                );
+                true
+            }
             IrExprKind::RangeContains {
                 value,
                 range,
@@ -185,7 +194,7 @@ impl ProcedureEmitter<'_, '_> {
                 self.compile_range_materialize(range, evidence, result_ty_name, diags);
                 true
             }
-            _ => self.compile_expr_module_and_type_ops(expr, diags),
+            _ => false,
         }
     }
 

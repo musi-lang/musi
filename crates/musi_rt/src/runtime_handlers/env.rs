@@ -4,7 +4,7 @@ use musi_foundation::runtime as foundation_runtime;
 use musi_native::NativeHost;
 use musi_vm::{EffectCall, Value, VmError, VmHostContext};
 
-use super::invalid_runtime_effect;
+use super::invalid_runtime_args;
 
 pub(super) fn register(host: &mut NativeHost) {
     host.register_effect_handler_with_context(
@@ -30,14 +30,18 @@ pub(super) fn register(host: &mut NativeHost) {
         foundation_runtime::ENV_SET_OP,
         |ctx, effect, args| {
             let [name, value] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid envSet args"));
+                return Err(invalid_runtime_args(
+                    effect,
+                    "name and value strings",
+                    args.len(),
+                ));
             };
             let name = ctx
                 .string(name)
-                .ok_or_else(|| invalid_runtime_effect(effect, "invalid envSet args"))?;
+                .ok_or_else(|| invalid_runtime_args(effect, "name string", name.kind()))?;
             let value = ctx
                 .string(value)
-                .ok_or_else(|| invalid_runtime_effect(effect, "invalid envSet args"))?;
+                .ok_or_else(|| invalid_runtime_args(effect, "value string", value.kind()))?;
             let name = name.as_str();
             let value = value.as_str();
             if !valid_env_key(name) || value.contains('\0') {
@@ -77,14 +81,11 @@ fn string_arg<'a>(
     op_name: &str,
 ) -> Result<&'a str, VmError> {
     let [value] = args else {
-        return Err(invalid_runtime_effect(
-            effect,
-            format!("invalid {op_name} args"),
-        ));
+        return Err(invalid_runtime_args(effect, "one string", args.len()));
     };
-    ctx.string(value)
-        .map(|text| text.as_str())
-        .ok_or_else(|| invalid_runtime_effect(effect, format!("invalid {op_name} args")))
+    ctx.string(value).map(|text| text.as_str()).ok_or_else(|| {
+        invalid_runtime_args(effect, format!("{op_name} string").as_str(), value.kind())
+    })
 }
 
 fn valid_env_key(name: &str) -> bool {

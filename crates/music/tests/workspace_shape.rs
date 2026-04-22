@@ -34,6 +34,26 @@ fn collect_files(root: &Path, extension: &str, out: &mut Vec<PathBuf>) {
     }
 }
 
+fn read_files_under(root: &Path, out: &mut Vec<PathBuf>) {
+    let entries = fs::read_dir(root).expect("directory should be readable");
+    for entry in entries {
+        let path = entry.expect("directory entry should be readable").path();
+        if path.file_name().is_some_and(|name| {
+            matches!(
+                name.to_str(),
+                Some(".astro" | ".git" | ".vscode-test" | "dist" | "node_modules" | "target")
+            )
+        }) {
+            continue;
+        }
+        if path.is_dir() {
+            read_files_under(&path, out);
+        } else {
+            out.push(path);
+        }
+    }
+}
+
 fn rust_files_under(root: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();
     collect_files(root, "rs", &mut files);
@@ -178,5 +198,52 @@ mod failure {
             .collect::<Vec<_>>();
 
         assert_eq!(missing, Vec::<String>::new());
+    }
+
+    #[test]
+    fn musi_source_extension_is_ms_not_musi() {
+        let mut extension_files = Vec::new();
+        collect_files(&repo_root(), "musi", &mut extension_files);
+        assert_eq!(extension_files, Vec::<PathBuf>::new());
+
+        let source_extension = [".", "musi"].concat();
+        let forbidden_needles = [
+            ["*.", "musi"].concat(),
+            ["`.", "musi", "` source"].concat(),
+            ["source `.", "musi", "`"].concat(),
+            ["extension `.", "musi", "`"].concat(),
+            ["extension .", "musi"].concat(),
+        ];
+        let mut files = Vec::new();
+        for root in ["README.md", "docs", "crates", "packages", "specs"] {
+            let path = repo_root().join(root);
+            if path.is_file() {
+                files.push(path);
+            } else if path.is_dir() {
+                read_files_under(&path, &mut files);
+            }
+        }
+        let violations = files
+            .into_iter()
+            .filter_map(|path| {
+                let text = fs::read_to_string(&path).ok()?;
+                let lower = text.to_ascii_lowercase();
+                forbidden_needles
+                    .iter()
+                    .any(|needle| lower.contains(needle))
+                    .then(|| relative_to_repo(&path))
+            })
+            .filter(|path| {
+                path != "crates/music/tests/workspace_shape.rs"
+                    && !path.ends_with("diag_catalog_gen.rs")
+                    && !path.ends_with("target")
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            violations,
+            Vec::<String>::new(),
+            "{source_extension} must not be used as Musi source extension"
+        );
     }
 }

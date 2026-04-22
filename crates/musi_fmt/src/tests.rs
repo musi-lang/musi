@@ -1230,6 +1230,15 @@ mod failure {
     use super::*;
 
     #[test]
+    fn musi_extension_is_not_source_extension() {
+        assert_eq!(
+            FormatInputKind::from_extension(MUSI_SOURCE_EXTENSION),
+            Some(FormatInputKind::Musi)
+        );
+        assert_eq!(FormatInputKind::from_extension("musi"), None);
+    }
+
+    #[test]
     fn syntax_errors_fail_without_formatting() {
         let error = format_source("let := 1;", &options()).unwrap_err();
 

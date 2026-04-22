@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use musi_foundation::{extend_import_map, register_modules};
-use music_base::diag::DiagCode;
+use music_base::diag::DiagContext;
 use music_base::{SourceId, Span};
 use music_emit::EmitOptions;
 use music_module::{ImportMap, ImportSiteKind, ModuleKey, collect_import_sites};
@@ -13,7 +13,6 @@ use music_sema::TargetInfo;
 use music_session::{CompiledOutput, Session, SessionError, SessionOptions};
 use music_syntax::{Lexer, parse};
 
-use crate::ProjectResult;
 use crate::builtin_std::{
     STD_FILES, STD_MANIFEST, STD_MANIFEST_PATH, STD_PACKAGE_NAME, STD_ROOT_DIR,
 };
@@ -26,6 +25,7 @@ use crate::project::module_graph::{
     resolve_module_target,
 };
 use crate::registry::{RegistryPackage, copy_dir_recursive, resolve_registry_package};
+use crate::{ProjectDiagKind, ProjectResult};
 
 mod git;
 mod module_graph;
@@ -511,20 +511,18 @@ impl Project {
     /// Returns [`ProjectError::NoRootPackage`] when the loaded manifest is workspace-only.
     pub fn root_package(&self) -> ProjectResult<&ResolvedPackage> {
         let Some(id) = &self.workspace.root_package else {
-            return Err(self.root_manifest_source.error_with_hint(
-                DiagCode::new(3610),
-                "missing root package entry",
+            return Err(self.root_manifest_source.catalog_error_with_hint(
+                ProjectDiagKind::ManifestPackageNameMissing,
+                DiagContext::new().with("path", self.root_manifest_path.display()),
                 self.root_manifest_source.insertion_span(),
-                "missing `name` field",
                 "add `name` and `version`, or target workspace member explicitly",
             ));
         };
         self.workspace.packages.get(id).ok_or_else(|| {
-            self.root_manifest_source.error_with_hint(
-                DiagCode::new(3610),
-                "missing root package entry",
+            self.root_manifest_source.catalog_error_with_hint(
+                ProjectDiagKind::NoRootPackage,
+                DiagContext::new(),
                 self.root_manifest_source.insertion_span(),
-                "missing root package record",
                 "declare `name` and `version` in `musi.json`",
             )
         })
@@ -866,11 +864,10 @@ fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> Pro
             let span = source
                 .value_span(&json_pointer(&["name"]))
                 .unwrap_or_else(|| source.insertion_span());
-            return Err(source.error(
-                DiagCode::new(3606),
-                "package name empty",
+            return Err(source.catalog_error(
+                ProjectDiagKind::ManifestPackageNameEmpty,
+                DiagContext::new().with("path", source.path().display()),
                 span,
-                "`name` must not be empty",
             ));
         }
     }
@@ -881,11 +878,10 @@ fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> Pro
                 .value_span(&pointer)
                 .or_else(|| source.value_span(&json_pointer(&["lib"])))
                 .unwrap_or_else(|| source.insertion_span());
-            return Err(source.error(
-                DiagCode::new(3606),
-                format!("unknown lib `{lib}`"),
+            return Err(source.catalog_error(
+                ProjectDiagKind::ManifestLibUnknown,
+                DiagContext::new().with("lib", lib),
                 span,
-                format!("lib `{lib}` is not supported"),
             ));
         }
     }
@@ -893,11 +889,10 @@ fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> Pro
         let span = source
             .value_span(&json_pointer(&["publish"]))
             .unwrap_or_else(|| source.insertion_span());
-        return Err(source.error(
-            DiagCode::new(3606),
-            "invalid publish value",
+        return Err(source.catalog_error(
+            ProjectDiagKind::ManifestPublishUnsupported,
+            DiagContext::new().with("value", true),
             span,
-            "`publish` boolean must be false",
         ));
     }
     if matches!(
@@ -907,11 +902,10 @@ fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> Pro
         let span = source
             .value_span(&json_pointer(&["musiModulesDir"]))
             .unwrap_or_else(|| source.insertion_span());
-        return Err(source.error(
-            DiagCode::new(3606),
-            "invalid musiModulesDir value",
+        return Err(source.catalog_error(
+            ProjectDiagKind::ManifestModulesDirUnsupported,
+            DiagContext::new().with("value", true),
             span,
-            "`musiModulesDir` boolean must be false",
         ));
     }
     validate_fmt_config(manifest, source)?;
@@ -922,11 +916,10 @@ fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> Pro
                 .key_span(&pointer)
                 .or_else(|| source.value_span(&json_pointer(&["exports"])))
                 .unwrap_or_else(|| source.insertion_span());
-            return Err(source.error(
-                DiagCode::new(3606),
-                format!("invalid export key `{export_name}`"),
+            return Err(source.catalog_error(
+                ProjectDiagKind::ManifestExportKeyInvalid,
+                DiagContext::new().with("key", &export_name),
                 span,
-                "export key must be `.` or start with `./`",
             ));
         }
         if !export_path.starts_with("./") {
@@ -935,11 +928,10 @@ fn validate_manifest(manifest: &PackageManifest, source: &ManifestSource) -> Pro
                 .value_span(&pointer)
                 .or_else(|| source.value_span(&json_pointer(&["exports"])))
                 .unwrap_or_else(|| source.insertion_span());
-            return Err(source.error(
-                DiagCode::new(3606),
-                format!("invalid export target `{export_path}`"),
+            return Err(source.catalog_error(
+                ProjectDiagKind::ManifestExportTargetInvalid,
+                DiagContext::new().with("target", &export_path),
                 span,
-                "export target must start with `./`",
             ));
         }
     }
@@ -955,44 +947,40 @@ fn validate_fmt_config(manifest: &PackageManifest, source: &ManifestSource) -> P
         let span = source
             .value_span(&json_pointer(&["fmt", "lineWidth"]))
             .unwrap_or_else(|| source.insertion_span());
-        return Err(source.error(
-            DiagCode::new(3606),
-            "invalid fmt.lineWidth value",
+        return Err(source.catalog_error(
+            ProjectDiagKind::ManifestFmtLineWidthInvalid,
+            DiagContext::new().with("value", 0),
             span,
-            "`fmt.lineWidth` must be at least 1",
         ));
     }
     if matches!(config.indent_width, Some(0)) {
         let span = source
             .value_span(&json_pointer(&["fmt", "indentWidth"]))
             .unwrap_or_else(|| source.insertion_span());
-        return Err(source.error(
-            DiagCode::new(3606),
-            "invalid fmt.indentWidth value",
+        return Err(source.catalog_error(
+            ProjectDiagKind::ManifestFmtIndentWidthInvalid,
+            DiagContext::new().with("value", 0),
             span,
-            "`fmt.indentWidth` must be at least 1",
         ));
     }
     if let Some(pattern) = first_duplicate(&config.include) {
         let span = source
             .value_span(&json_pointer(&["fmt", "include"]))
             .unwrap_or_else(|| source.insertion_span());
-        return Err(source.error(
-            DiagCode::new(3606),
-            format!("duplicate fmt.include pattern `{pattern}`"),
+        return Err(source.catalog_error(
+            ProjectDiagKind::ManifestFmtIncludeDuplicate,
+            DiagContext::new().with("pattern", pattern),
             span,
-            "`fmt.include` patterns must be unique",
         ));
     }
     if let Some(pattern) = first_duplicate(&config.exclude) {
         let span = source
             .value_span(&json_pointer(&["fmt", "exclude"]))
             .unwrap_or_else(|| source.insertion_span());
-        return Err(source.error(
-            DiagCode::new(3606),
-            format!("duplicate fmt.exclude pattern `{pattern}`"),
+        return Err(source.catalog_error(
+            ProjectDiagKind::ManifestFmtExcludeDuplicate,
+            DiagContext::new().with("pattern", pattern),
             span,
-            "`fmt.exclude` patterns must be unique",
         ));
     }
     Ok(())
@@ -1054,20 +1042,18 @@ fn load_embedded_package_record(
 ) -> ProjectResult<PackageRecord> {
     let id = PackageId::new(
         manifest.name.clone().ok_or_else(|| {
-            manifest_source.error_with_hint(
-                DiagCode::new(3606),
-                "package name missing",
+            manifest_source.catalog_error_with_hint(
+                ProjectDiagKind::ManifestPackageNameMissing,
+                DiagContext::new().with("path", manifest_source.path().display()),
                 manifest_source.insertion_span(),
-                "`name` field missing",
                 "add `name` to this package manifest",
             )
         })?,
         manifest.version.clone().ok_or_else(|| {
-            manifest_source.error_with_hint(
-                DiagCode::new(3606),
-                "package version missing",
+            manifest_source.catalog_error_with_hint(
+                ProjectDiagKind::ManifestPackageVersionMissing,
+                DiagContext::new().with("name", manifest.name.as_deref().unwrap_or("<unknown>")),
                 manifest_source.insertion_span(),
-                "`version` field missing",
                 "add `version` to this package manifest",
             )
         })?,
@@ -1150,11 +1136,12 @@ fn validate_task_node(
                 let span = source
                     .value_span(&pointer)
                     .unwrap_or_else(|| source.insertion_span());
-                return Err(source.error(
-                    DiagCode::new(3606),
-                    format!("task dependency `{dependency}` not found"),
+                return Err(source.catalog_error(
+                    ProjectDiagKind::ManifestTaskDependencyUnknown,
+                    DiagContext::new()
+                        .with("task", name)
+                        .with("dependency", &dependency),
                     span,
-                    format!("task `{name}` depends on unknown task `{dependency}`"),
                 ));
             }
             validate_task_node(&dependency, manifest, source, seen, active)?;
@@ -1239,11 +1226,10 @@ fn load_local_packages(
         } = read_manifest(&member_manifest_path)?;
         validate_manifest(&member_manifest, &member_source)?;
         let name = member_manifest.name.clone().ok_or_else(|| {
-            member_source.error_with_hint(
-                DiagCode::new(3606),
-                "workspace member name missing",
+            member_source.catalog_error_with_hint(
+                ProjectDiagKind::ManifestPackageNameMissing,
+                DiagContext::new().with("path", member_source.path().display()),
                 member_source.insertion_span(),
-                "`name` field missing",
                 "add `name` to this workspace member manifest",
             )
         })?;
@@ -1268,11 +1254,10 @@ fn member_manifest_name(root_dir: &Path, member: &str) -> ProjectResult<String> 
     let manifest_path = manifest_path_for(&root_dir.join(member))?;
     let LoadedManifest { manifest, source } = read_manifest(&manifest_path)?;
     manifest.name.ok_or_else(|| {
-        source.error_with_hint(
-            DiagCode::new(3606),
-            "workspace member name missing",
+        source.catalog_error_with_hint(
+            ProjectDiagKind::ManifestPackageNameMissing,
+            DiagContext::new().with("path", source.path().display()),
             source.insertion_span(),
-            "`name` field missing",
             "add `name` to this workspace member manifest",
         )
     })
@@ -1581,20 +1566,18 @@ fn load_package_record(
 ) -> ProjectResult<PackageRecord> {
     let id = PackageId::new(
         manifest.name.clone().ok_or_else(|| {
-            manifest_source.error_with_hint(
-                DiagCode::new(3606),
-                "package name missing",
+            manifest_source.catalog_error_with_hint(
+                ProjectDiagKind::ManifestPackageNameMissing,
+                DiagContext::new().with("path", manifest_source.path().display()),
                 manifest_source.insertion_span(),
-                "`name` field missing",
                 "add `name` to this package manifest",
             )
         })?,
         manifest.version.clone().ok_or_else(|| {
-            manifest_source.error_with_hint(
-                DiagCode::new(3606),
-                "package version missing",
+            manifest_source.catalog_error_with_hint(
+                ProjectDiagKind::ManifestPackageVersionMissing,
+                DiagContext::new().with("name", manifest.name.as_deref().unwrap_or("<unknown>")),
                 manifest_source.insertion_span(),
-                "`version` field missing",
                 "add `version` to this package manifest",
             )
         })?,
@@ -1664,20 +1647,23 @@ fn package_entry_missing(
     let span = entry_target
         .and_then(|_| manifest_source.value_span(&json_pointer(&["entry"])))
         .unwrap_or_else(|| manifest_source.insertion_span());
-    let label = entry_target.map_or_else(
-        || "missing `entry` field and root `index.ms`".into(),
-        |target| format!("entry target `{target}` does not resolve"),
-    );
-    let hint = match entry_target {
-        Some(_) => "update `entry` to existing module path",
-        None => "add `entry`, or create `index.ms` at package root",
-    };
-    manifest_source.error_with_hint(
-        DiagCode::new(3611),
-        format!("missing entry module for package `{package_name}`"),
-        span,
-        label,
-        hint,
+    entry_target.map_or_else(
+        || {
+            manifest_source.catalog_error(
+                ProjectDiagKind::ManifestEntryDefaultMissing,
+                DiagContext::new().with("package", package_name),
+                span,
+            )
+        },
+        |target| {
+            manifest_source.catalog_error(
+                ProjectDiagKind::ManifestEntryTargetMissing,
+                DiagContext::new()
+                    .with("package", package_name)
+                    .with("target", target),
+                span,
+            )
+        },
     )
 }
 
@@ -1701,11 +1687,13 @@ fn missing_export_target(
         .value_span(&pointer)
         .or_else(|| manifest_source.key_span(&pointer))
         .unwrap_or_else(|| manifest_source.insertion_span());
-    manifest_source.error_with_hint(
-        DiagCode::new(3606),
-        format!("export target `{target}` missing"),
+    manifest_source.catalog_error_with_hint(
+        ProjectDiagKind::ManifestExportTargetMissing,
+        DiagContext::new()
+            .with("package", package_name)
+            .with("export", export_name)
+            .with("target", target),
         span,
-        format!("export `{export_name}` in package `{package_name}` points to missing module"),
         "update export target or add target module",
     )
 }

@@ -415,17 +415,17 @@ fn parse_module_header(
         break;
     }
     let Some((line_no, raw)) = lines.next() else {
-        return Err(AssemblyError::TextParseFailed("empty HIL text".into()));
+        return Err(AssemblyError::text_parse_source("empty HIL text"));
     };
     let line = raw.trim();
     let Some(rest) = line.strip_prefix("module ") else {
-        return Err(AssemblyError::TextParseFailed(format!(
+        return Err(AssemblyError::text_parse_source(format!(
             "line {}: module header expected",
             line_no + 1
         )));
     };
     let Some(name) = rest.strip_suffix(" {") else {
-        return Err(AssemblyError::TextParseFailed(format!(
+        return Err(AssemblyError::text_parse_source(format!(
             "line {}: malformed module header",
             line_no + 1
         )));
@@ -436,26 +436,26 @@ fn parse_module_header(
 fn parse_function(lines: HilLineCursorRef<'_, '_>) -> Result<HilFunction, AssemblyError> {
     let (header_line_no, header) = lines
         .next()
-        .ok_or_else(|| AssemblyError::TextParseFailed("function header expected".into()))?;
+        .ok_or_else(|| AssemblyError::text_parse_source("function header expected"))?;
     let header = header.trim();
     let Some(head) = header
         .strip_prefix("fn ")
         .or_else(|| header.strip_prefix("  fn "))
     else {
-        return Err(AssemblyError::TextParseFailed(format!(
+        return Err(AssemblyError::text_parse_source(format!(
             "line {}: function header expected",
             header_line_no + 1
         )));
     };
     let Some((name_part, after_name)) = head.split_once('(') else {
-        return Err(AssemblyError::TextParseFailed(format!(
+        return Err(AssemblyError::text_parse_source(format!(
             "line {}: malformed function header",
             header_line_no + 1
         )));
     };
     let name = name_part.trim().to_owned();
     let Some((params_text, mut tail)) = after_name.split_once(')') else {
-        return Err(AssemblyError::TextParseFailed(format!(
+        return Err(AssemblyError::text_parse_source(format!(
             "line {}: malformed parameter list",
             header_line_no + 1
         )));
@@ -469,7 +469,7 @@ fn parse_function(lines: HilLineCursorRef<'_, '_>) -> Result<HilFunction, Assemb
             .find(" capabilities [")
             .or_else(|| after_arrow.find(" {"));
         let idx = split_at.ok_or_else(|| {
-            AssemblyError::TextParseFailed(format!(
+            AssemblyError::text_parse_source(format!(
                 "line {}: malformed function result type",
                 header_line_no + 1
             ))
@@ -480,7 +480,7 @@ fn parse_function(lines: HilLineCursorRef<'_, '_>) -> Result<HilFunction, Assemb
     }
     if let Some(after_capabilities) = tail.strip_prefix("capabilities [") {
         let Some((caps_text, after_caps)) = after_capabilities.split_once(']') else {
-            return Err(AssemblyError::TextParseFailed(format!(
+            return Err(AssemblyError::text_parse_source(format!(
                 "line {}: malformed capability list",
                 header_line_no + 1
             )));
@@ -489,7 +489,7 @@ fn parse_function(lines: HilLineCursorRef<'_, '_>) -> Result<HilFunction, Assemb
         tail = after_caps.trim();
     }
     if tail != "{" {
-        return Err(AssemblyError::TextParseFailed(format!(
+        return Err(AssemblyError::text_parse_source(format!(
             "line {}: function body opener expected",
             header_line_no + 1
         )));
@@ -514,7 +514,7 @@ fn parse_function(lines: HilLineCursorRef<'_, '_>) -> Result<HilFunction, Assemb
 fn parse_block(lines: &mut HilLineCursor<'_>) -> Result<HilBlock, AssemblyError> {
     let (line_no, block_header_raw) = lines
         .next()
-        .ok_or_else(|| AssemblyError::TextParseFailed("block header expected".into()))?;
+        .ok_or_else(|| AssemblyError::text_parse_source("block header expected"))?;
     let block_header = block_header_raw.trim();
     let block_name = if let Some(name) = block_header
         .strip_prefix("block ")
@@ -522,7 +522,7 @@ fn parse_block(lines: &mut HilLineCursor<'_>) -> Result<HilBlock, AssemblyError>
     {
         name.trim().to_owned()
     } else {
-        return Err(AssemblyError::TextParseFailed(format!(
+        return Err(AssemblyError::text_parse_source(format!(
             "line {}: block header expected",
             line_no + 1
         )));
@@ -532,7 +532,7 @@ fn parse_block(lines: &mut HilLineCursor<'_>) -> Result<HilBlock, AssemblyError>
     loop {
         let (line_no, raw) = lines
             .next()
-            .ok_or_else(|| AssemblyError::TextParseFailed("block terminator expected".into()))?;
+            .ok_or_else(|| AssemblyError::text_parse_source("block terminator expected"))?;
         let line = raw.trim();
         if line.is_empty() {
             continue;
@@ -542,7 +542,7 @@ fn parse_block(lines: &mut HilLineCursor<'_>) -> Result<HilBlock, AssemblyError>
             break;
         }
         let instr = parse_instruction(line).map_err(|msg| {
-            AssemblyError::TextParseFailed(format!("line {}: {msg}", line_no + 1))
+            AssemblyError::text_parse_source(format!("line {}: {msg}", line_no + 1))
         })?;
         instructions.push(instr);
     }
@@ -557,17 +557,17 @@ fn parse_params(text: &str) -> Result<Vec<HilParam>, AssemblyError> {
         .map(|part| {
             let part = part.trim();
             let Some((left, ty_text)) = part.split_once(':') else {
-                return Err(AssemblyError::TextParseFailed(
-                    "parameter type separator `:` missing".into(),
+                return Err(AssemblyError::text_parse_source(
+                    "parameter type separator `:` missing",
                 ));
             };
             let mut left_parts = left.split_whitespace();
-            let id_text = left_parts.next().ok_or_else(|| {
-                AssemblyError::TextParseFailed("parameter value id missing".into())
-            })?;
+            let id_text = left_parts
+                .next()
+                .ok_or_else(|| AssemblyError::text_parse_source("parameter value id missing"))?;
             let name_text = left_parts
                 .next()
-                .ok_or_else(|| AssemblyError::TextParseFailed("parameter name missing".into()))?;
+                .ok_or_else(|| AssemblyError::text_parse_source("parameter name missing"))?;
             Ok(HilParam::new(
                 name_text,
                 parse_value_id(id_text)?,
@@ -587,14 +587,14 @@ fn parse_capabilities(text: &str) -> Result<Vec<HilShape>, AssemblyError> {
             "native" => Ok(HilShape::Native),
             "syntax" => Ok(HilShape::Syntax),
             "comptime" => Ok(HilShape::Comptime),
-            other => Err(AssemblyError::TextParseFailed(format!(
+            other => Err(AssemblyError::text_parse_source(format!(
                 "unknown shape `{other}`"
             ))),
         })
         .collect()
 }
 
-fn parse_instruction(line: &str) -> Result<HilInstruction, &'static str> {
+fn parse_instruction(line: &str) -> Result<HilInstruction, Box<str>> {
     if let Some(rest) = line.strip_prefix("call ")
         && let Some((callee, args)) = parse_named_call(rest)
     {
@@ -602,7 +602,7 @@ fn parse_instruction(line: &str) -> Result<HilInstruction, &'static str> {
             out: None,
             result_ty: None,
             callee: callee.into(),
-            args: parse_value_id_list(args).map_err(|_| "call args malformed")?,
+            args: parse_value_id_list(args).map_err(|_| hil_parse_error("call args malformed"))?,
         });
     }
     if let Some(rest) = line.strip_prefix("native.call ")
@@ -612,22 +612,34 @@ fn parse_instruction(line: &str) -> Result<HilInstruction, &'static str> {
             out: None,
             result_ty: None,
             foreign: foreign.into(),
-            args: parse_value_id_list(args).map_err(|_| "native.call args malformed")?,
+            args: parse_value_id_list(args)
+                .map_err(|_| hil_parse_error("native.call args malformed"))?,
         });
     }
     let Some((lhs, rhs)) = line.split_once(" = ") else {
-        return Err("instruction assignment `=` missing");
+        return Err(hil_parse_error("instruction assignment `=` missing"));
     };
     let Some((out_text, ty_text)) = lhs.split_once(':') else {
-        return Err("instruction lhs type annotation `:` missing");
+        return Err(hil_parse_error(
+            "instruction lhs type annotation `:` missing",
+        ));
     };
-    let out = parse_value_id(out_text.trim()).map_err(|_| "output value id malformed")?;
+    let out = parse_value_id(out_text.trim())
+        .map_err(|_| hil_parse_error("output value id malformed"))?;
     let ty = HilType::new(ty_text.trim());
+    parse_assigned_instruction(out, ty, rhs)
+}
+
+fn parse_assigned_instruction(
+    out: HilValueId,
+    ty: HilType,
+    rhs: &str,
+) -> Result<HilInstruction, Box<str>> {
     if let Some(value_text) = rhs.strip_prefix("const.int ") {
         let value = value_text
             .trim()
             .parse::<i64>()
-            .map_err(|_| "const.int value malformed")?;
+            .map_err(|_| hil_parse_error("const.int value malformed"))?;
         return Ok(HilInstruction::ConstInt { out, ty, value });
     }
     if let Some(rest) = rhs.strip_prefix("call ")
@@ -637,7 +649,7 @@ fn parse_instruction(line: &str) -> Result<HilInstruction, &'static str> {
             out: Some(out),
             result_ty: Some(ty),
             callee: callee.into(),
-            args: parse_value_id_list(args).map_err(|_| "call args malformed")?,
+            args: parse_value_id_list(args).map_err(|_| hil_parse_error("call args malformed"))?,
         });
     }
     if let Some(rest) = rhs.strip_prefix("native.call ")
@@ -647,7 +659,8 @@ fn parse_instruction(line: &str) -> Result<HilInstruction, &'static str> {
             out: Some(out),
             result_ty: Some(ty),
             foreign: foreign.into(),
-            args: parse_value_id_list(args).map_err(|_| "native.call args malformed")?,
+            args: parse_value_id_list(args)
+                .map_err(|_| hil_parse_error("native.call args malformed"))?,
         });
     }
     if let Some(rest) = rhs.strip_prefix("effect.call ")
@@ -659,7 +672,8 @@ fn parse_instruction(line: &str) -> Result<HilInstruction, &'static str> {
             result_ty: ty,
             effect: effect.into(),
             op: op.into(),
-            args: parse_value_id_list(args).map_err(|_| "effect.call args malformed")?,
+            args: parse_value_id_list(args)
+                .map_err(|_| hil_parse_error("effect.call args malformed"))?,
         });
     }
     if let Some(rest) = rhs.strip_prefix("data.new .")
@@ -669,7 +683,8 @@ fn parse_instruction(line: &str) -> Result<HilInstruction, &'static str> {
             out,
             ty,
             variant: variant.into(),
-            fields: parse_value_id_list(args).map_err(|_| "data.new args malformed")?,
+            fields: parse_value_id_list(args)
+                .map_err(|_| hil_parse_error("data.new args malformed"))?,
         });
     }
     for (op_text, op) in [
@@ -687,13 +702,17 @@ fn parse_instruction(line: &str) -> Result<HilInstruction, &'static str> {
                 op,
                 ty,
                 left: parse_value_id(left_text.trim())
-                    .map_err(|_| "binary left operand malformed")?,
+                    .map_err(|_| hil_parse_error("binary left operand malformed"))?,
                 right: parse_value_id(right_text.trim())
-                    .map_err(|_| "binary right operand malformed")?,
+                    .map_err(|_| hil_parse_error("binary right operand malformed"))?,
             });
         }
     }
-    Err("unknown instruction")
+    Err(hil_parse_error("unknown instruction"))
+}
+
+fn hil_parse_error(message: impl Into<Box<str>>) -> Box<str> {
+    message.into()
 }
 
 fn parse_terminator(line: &str) -> Result<Option<HilTerminator>, AssemblyError> {
@@ -751,10 +770,10 @@ fn parse_value_id(text: &str) -> Result<HilValueId, AssemblyError> {
     let number = text
         .strip_prefix('%')
         .ok_or_else(|| {
-            AssemblyError::TextParseFailed(format!("value id `%n` expected, found `{text}`"))
+            AssemblyError::text_parse_source(format!("value id `%n` expected, found `{text}`"))
         })?
         .parse::<u32>()
-        .map_err(|_| AssemblyError::TextParseFailed(format!("invalid value id `{text}`")))?;
+        .map_err(|_| AssemblyError::text_parse_source(format!("invalid value id `{text}`")))?;
     Ok(HilValueId(number))
 }
 

@@ -94,6 +94,80 @@ diag SessionCompilationFailed 5027
   message "project session compilation failed (`{source}`)"
   primary "project session compilation failed"
 
+diag ManifestPackageNameMissing 5028
+  message "missing manifest package name for `{path}`"
+  primary "missing `name` field"
+  help "add `name` to this package manifest"
+
+diag ManifestPackageNameEmpty 5029
+  message "empty package name for `{path}`"
+  primary "`name` must not be empty"
+
+diag ManifestPackageVersionMissing 5030
+  message "missing package version for `{name}`"
+  primary "missing `version` field"
+  help "add `version` to this package manifest"
+
+diag ManifestLibUnknown 5031
+  message "unknown lib `{lib}`"
+  primary "unsupported lib `{lib}`"
+
+diag ManifestPublishUnsupported 5032
+  message "unsupported publish value `{value}`"
+  primary "`publish` boolean must be false"
+
+diag ManifestModulesDirUnsupported 5033
+  message "unsupported musiModulesDir value `{value}`"
+  primary "`musiModulesDir` boolean must be false"
+
+diag ManifestExportKeyInvalid 5034
+  message "invalid export key `{key}`"
+  primary "export key `{key}` must be `.` or start with `./`"
+
+diag ManifestExportTargetInvalid 5035
+  message "invalid export target `{target}`"
+  primary "export target `{target}` must start with `./`"
+
+diag ManifestFmtLineWidthInvalid 5036
+  message "invalid fmt.lineWidth `{value}`"
+  primary "`fmt.lineWidth` must be at least `1`"
+
+diag ManifestFmtIndentWidthInvalid 5037
+  message "invalid fmt.indentWidth `{value}`"
+  primary "`fmt.indentWidth` must be at least `1`"
+
+diag ManifestFmtIncludeDuplicate 5038
+  message "duplicate fmt.include pattern `{pattern}`"
+  primary "`fmt.include` pattern `{pattern}` repeats"
+
+diag ManifestFmtExcludeDuplicate 5039
+  message "duplicate fmt.exclude pattern `{pattern}`"
+  primary "`fmt.exclude` pattern `{pattern}` repeats"
+
+diag ManifestTaskDependencyUnknown 5040
+  message "unknown task dependency `{dependency}` in task `{task}`"
+  primary "task dependency `{dependency}` not found"
+
+diag ManifestEntryTargetMissing 5041
+  message "missing entry target `{target}` for package `{package}`"
+  primary "entry target `{target}` does not resolve"
+  help "update `entry` to existing module path"
+
+diag ManifestEntryDefaultMissing 5042
+  message "missing default entry module for package `{package}`"
+  primary "missing `entry` field and root `index.ms`"
+  help "add `entry`, or create `index.ms` at package root"
+
+diag ManifestExportTargetMissing 5043
+  message "missing export target `{target}` for export `{export}` in package `{package}`"
+  primary "export target `{target}` does not resolve"
+  help "update export target or add target module"
+
+diag SourceImportUnresolved 5044
+  message "unresolved import `{spec}`"
+  primary "import `{spec}` does not resolve"
+  help "declare import target or fix import spec"
+
 map project_error_kind crate::ProjectError option
   case "MissingManifest { .. }" MissingManifest
   case "MissingManifestAncestor { .. }" MissingManifestAncestor

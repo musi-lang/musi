@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use music_base::diag::Diag;
+use music_base::diag::{Diag, DiagContext};
 use music_base::{DiagCode, SourceId};
 use music_hir::{HirExprId, HirExprKind, HirTyKind};
 use music_module::{
@@ -1539,7 +1539,11 @@ mod success {
         );
         let diag =
             find_diag(&module, SemaDiagKind::UnsupportedPinTarget).expect("pin target diagnostic");
-        assert_eq!(diag.message(), "unsupported pin target `Int`");
+        assert_eq!(
+            diag.message(),
+            SemaDiagKind::UnsupportedPinTarget
+                .message_with(&DiagContext::new().with("target", "Int"))
+        );
     }
 
     #[test]
@@ -1552,7 +1556,11 @@ mod success {
         );
         let diag =
             find_diag(&module, SemaDiagKind::PinnedValueEscapes).expect("pin escape diagnostic");
-        assert_eq!(diag.message(), "pinned value `pinned` escapes pin scope");
+        assert_eq!(
+            diag.message(),
+            SemaDiagKind::PinnedValueEscapes
+                .message_with(&DiagContext::new().with("name", "pinned"))
+        );
     }
 
     #[test]

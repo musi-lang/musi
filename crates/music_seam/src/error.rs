@@ -37,6 +37,19 @@ impl AssemblyError {
             Self::TextParseFailed(source) => DiagContext::new().with("source", source),
         }
     }
+
+    #[must_use]
+    pub fn text_parse(kind: SeamDiagKind, context: &DiagContext) -> Self {
+        Self::TextParseFailed(kind.message_with(context))
+    }
+
+    #[must_use]
+    pub fn text_parse_source(source: impl Display) -> Self {
+        Self::text_parse(
+            SeamDiagKind::TextParseFailed,
+            &DiagContext::new().with("source", source),
+        )
+    }
 }
 
 impl Display for AssemblyError {

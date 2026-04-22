@@ -8,6 +8,8 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use musi_project::ProjectDiagKind;
+use music_base::diag::DiagContext;
 use serde_json::Value;
 
 static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(0);
@@ -81,6 +83,10 @@ fn parse_json(output: &[u8]) -> Value {
 
 fn golden_json(text: &str) -> Value {
     serde_json::from_str(text).expect("golden JSON should parse")
+}
+
+fn diag_code(kind: ProjectDiagKind) -> String {
+    format!("MS{:04}", kind.code().raw())
 }
 
 fn normalize_project_paths(mut payload: Value) -> Value {
@@ -872,6 +878,18 @@ mod failure {
     }
 
     #[test]
+    fn fmt_rejects_musi_extension_override() {
+        let temp = TempDir::new();
+
+        let output = run_musi_with_input(&["fmt", "--ext", "musi", "-"], temp.path(), "let x:=1;");
+
+        assert!(!output.status.success());
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("unsupported formatter extension")
+        );
+    }
+
+    #[test]
     fn json_check_manifest_failure_writes_only_json_to_stdout() {
         let temp = TempDir::new();
         write_file(temp.path(), "musi.json", "{ invalid json\n");
@@ -883,7 +901,10 @@ mod failure {
         let payload = parse_json(&output.stdout);
         assert_eq!(payload["status"], "error");
         assert_eq!(payload["diagnostics"][0]["phase"], "project");
-        assert_eq!(payload["diagnostics"][0]["code"], "MS3604");
+        assert_eq!(
+            payload["diagnostics"][0]["code"],
+            diag_code(ProjectDiagKind::InvalidManifestJson)
+        );
         assert!(payload["diagnostics"][0]["range"].is_object());
     }
 
@@ -919,16 +940,27 @@ mod failure {
         let payload = parse_json(&output.stdout);
         assert_eq!(payload["status"], "error");
         assert_eq!(payload["diagnostics"][0]["phase"], "project");
-        assert_eq!(payload["diagnostics"][0]["code"], "MS3610");
+        assert_eq!(
+            payload["diagnostics"][0]["code"],
+            diag_code(ProjectDiagKind::ManifestPackageNameMissing)
+        );
+        let manifest_path = temp
+            .path()
+            .join("musi.json")
+            .canonicalize()
+            .expect("manifest path should canonicalize");
+        let context = DiagContext::new().with("path", manifest_path.display());
         assert_eq!(
             payload["diagnostics"][0]["message"],
-            "missing root package entry"
+            ProjectDiagKind::ManifestPackageNameMissing.message_with(&context)
         );
-        assert!(
-            !payload["diagnostics"][0]["message"]
-                .as_str()
-                .expect("project message should be string")
-                .contains("manifest validation failed")
+        let fallback_context = DiagContext::new().with(
+            "message",
+            ProjectDiagKind::ManifestPackageNameMissing.message_with(&context),
+        );
+        assert_ne!(
+            payload["diagnostics"][0]["message"],
+            ProjectDiagKind::ManifestValidationFailed.message_with(&fallback_context)
         );
         assert!(payload["diagnostics"][0]["range"].is_object());
     }
@@ -953,10 +985,14 @@ mod failure {
         assert!(String::from_utf8_lossy(&output.stderr).is_empty());
         let payload = parse_json(&output.stdout);
         assert_eq!(payload["diagnostics"][0]["phase"], "project");
-        assert_eq!(payload["diagnostics"][0]["code"], "MS3615");
+        assert_eq!(
+            payload["diagnostics"][0]["code"],
+            diag_code(ProjectDiagKind::SourceImportUnresolved)
+        );
+        let context = DiagContext::new().with("spec", "missing");
         assert_eq!(
             payload["diagnostics"][0]["message"],
-            "unresolved import `missing`"
+            ProjectDiagKind::SourceImportUnresolved.message_with(&context)
         );
         assert!(payload["diagnostics"][0]["file"].as_str().is_some());
         assert!(payload["diagnostics"][0]["range"].is_object());

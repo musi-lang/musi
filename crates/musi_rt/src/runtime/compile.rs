@@ -2,7 +2,8 @@ use std::collections::BTreeMap;
 use std::sync::MutexGuard;
 
 use musi_foundation::register_modules;
-use musi_vm::{Program, VmError, VmErrorKind, VmLoader, VmResult};
+use musi_vm::{Program, VmDiagKind, VmError, VmErrorKind, VmLoader, VmResult};
+use music_base::diag::DiagContext;
 use music_module::{ModuleKey, ModuleSpecifier};
 use music_session::Session;
 
@@ -143,7 +144,9 @@ fn lock_vm_store(store: &RuntimeStoreCell) -> VmResult<MutexGuard<'_, RuntimeSto
 
 fn runtime_store_lock_error() -> VmError {
     VmError::new(VmErrorKind::InvalidProgramShape {
-        detail: "runtime store lock poisoned".into(),
+        detail: VmDiagKind::RuntimeHostUnavailable
+            .message_with(&DiagContext::new().with("subject", "runtime store lock"))
+            .into(),
     })
 }
 

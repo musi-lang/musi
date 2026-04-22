@@ -1,6 +1,9 @@
 #![allow(unsafe_code)]
 
-use musi_vm::{ForeignCall, NativeFailureStage, Value, VmError, VmErrorKind, VmResult};
+use std::fmt::Display;
+
+use musi_vm::{ForeignCall, NativeFailureStage, Value, VmDiagKind, VmError, VmErrorKind, VmResult};
+use music_base::diag::DiagContext;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct NativeFfi;
@@ -42,7 +45,7 @@ pub(crate) const fn native_call_failed(
     })
 }
 
-pub(crate) fn native_abi_unsupported(foreign: &ForeignCall, reason: NativeErrorText) -> VmError {
+pub(crate) fn native_abi_detail(foreign: &ForeignCall, reason: NativeErrorText) -> VmError {
     native_call_failed(
         foreign.name().into(),
         NativeFailureStage::AbiUnsupported,
@@ -52,7 +55,7 @@ pub(crate) fn native_abi_unsupported(foreign: &ForeignCall, reason: NativeErrorT
     )
 }
 
-pub(crate) fn native_result_invalid(foreign: &ForeignCall, reason: NativeErrorText) -> VmError {
+pub(crate) fn native_result_detail(foreign: &ForeignCall, reason: NativeErrorText) -> VmError {
     native_call_failed(
         foreign.name().into(),
         NativeFailureStage::ResultInvalid,
@@ -90,7 +93,7 @@ pub(crate) fn native_library_load_failed(
     )
 }
 
-pub(crate) fn native_arg_invalid(
+pub(crate) fn native_arg_detail(
     foreign: &ForeignCall,
     index: usize,
     reason: NativeErrorText,
@@ -110,9 +113,56 @@ pub(crate) fn invalid_arg_type<T>(
     expected: &str,
     found: &Value,
 ) -> VmResult<T> {
-    Err(native_arg_invalid(
+    Err(native_arg_detail(
         foreign,
         index,
-        format!("expected type `{expected}`, found `{:?}`", found.kind()).into(),
+        native_diag_text(
+            VmDiagKind::NativeArgumentTypeMismatch,
+            &DiagContext::new()
+                .with("index", index)
+                .with("expected", expected)
+                .with("found", found.kind()),
+        ),
     ))
+}
+
+pub(crate) fn native_diag_text(kind: VmDiagKind, context: &DiagContext) -> NativeErrorText {
+    kind.message_with(context).into_boxed_str()
+}
+
+pub(crate) fn native_abi_issue(foreign: &ForeignCall, subject: impl Display) -> VmError {
+    native_abi_detail(
+        foreign,
+        native_diag_text(
+            VmDiagKind::NativeAbiUnsupported,
+            &DiagContext::new().with("subject", subject),
+        ),
+    )
+}
+
+pub(crate) fn native_arg_issue(
+    foreign: &ForeignCall,
+    index: usize,
+    subject: impl Display,
+) -> VmError {
+    native_arg_detail(
+        foreign,
+        index,
+        native_diag_text(
+            VmDiagKind::NativeArgumentInvalid,
+            &DiagContext::new()
+                .with("index", index)
+                .with("subject", subject),
+        ),
+    )
+}
+
+pub(crate) fn native_result_issue(foreign: &ForeignCall, subject: impl Display) -> VmError {
+    native_result_detail(
+        foreign,
+        native_diag_text(
+            VmDiagKind::NativeResultInvalid,
+            &DiagContext::new().with("subject", subject),
+        ),
+    )
 }

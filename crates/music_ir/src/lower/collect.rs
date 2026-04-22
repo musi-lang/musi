@@ -96,12 +96,7 @@ impl<'a> SyntheticNameSetMut<'a> {
             }
             IrExprKind::Match { scrutinee, arms } => {
                 self.collect_used(scrutinee);
-                for arm in arms {
-                    if let Some(guard) = &arm.guard {
-                        self.collect_used(guard);
-                    }
-                    self.collect_used(&arm.expr);
-                }
+                self.collect_used_in_match_arms(arms);
             }
             IrExprKind::Call { callee, args } => {
                 self.collect_used(callee);
@@ -141,6 +136,15 @@ impl<'a> SyntheticNameSetMut<'a> {
     fn collect_expr_slice(&mut self, exprs: &[IrExpr]) {
         for expr in exprs {
             self.collect_used(expr);
+        }
+    }
+
+    fn collect_used_in_match_arms(&mut self, arms: &[IrLoweredMatchArm]) {
+        for arm in arms {
+            if let Some(guard) = &arm.guard {
+                self.collect_used(guard);
+            }
+            self.collect_used(&arm.expr);
         }
     }
 

@@ -14,7 +14,7 @@ pub(super) fn lower_answer_literal_expr(
     let interner = ctx.interner;
     let answer_name = interner.resolve(effect_name.name);
     let Some(effect) = sema.effect_def(answer_name) else {
-        invalid_lowering_path("handle with unknown effect");
+        lowering_invariant_violation("handle with unknown effect");
     };
     let origin = sema.module().store.exprs.get(expr_id).origin;
     let origin = IrOrigin::new(origin.source_id, origin.span);
@@ -31,7 +31,7 @@ pub(super) fn lower_answer_literal_expr(
         }
     }
     let Some(value_clause) = value_clause else {
-        invalid_lowering_path("handle without value clause");
+        lowering_invariant_violation("handle without value clause");
     };
 
     let value_closure = lower_answer_clause_closure(
@@ -46,7 +46,7 @@ pub(super) fn lower_answer_literal_expr(
     for clause in op_clauses {
         let op_name = interner.resolve(clause.op.name);
         let Some(op_index) = effect.op_index(op_name).map(usize::from) else {
-            invalid_lowering_path("handle clause with unknown effect op");
+            lowering_invariant_violation("handle clause with unknown effect op");
         };
         let closure = lower_answer_clause_closure(
             ctx,
@@ -63,7 +63,7 @@ pub(super) fn lower_answer_literal_expr(
     }
 
     if ops_by_index.iter().any(Option::is_none) {
-        invalid_lowering_path("handle missing op clause");
+        lowering_invariant_violation("handle missing op clause");
     }
 
     IrExprKind::AnswerLit {
@@ -101,16 +101,16 @@ fn lower_answer_effect_key(ctx: &LowerCtx<'_>, answer: HirExprId) -> DefinitionK
     let sema = ctx.sema;
     let answer_ty = sema
         .try_expr_ty(answer)
-        .unwrap_or_else(|| invalid_lowering_path("answer type missing"));
+        .unwrap_or_else(|| lowering_invariant_violation("answer type missing"));
     let effect_name = match sema.ty(answer_ty).kind {
         HirTyKind::Handler { effect, .. } => match sema.ty(effect).kind {
             HirTyKind::Named { name, .. } => Box::<str>::from(ctx.interner.resolve(name)),
-            _ => invalid_lowering_path("answer effect type missing"),
+            _ => lowering_invariant_violation("answer effect type missing"),
         },
-        _ => invalid_lowering_path("invalid answer type"),
+        _ => lowering_invariant_violation("invalid answer type"),
     };
     sema.effect_def(&effect_name).map_or_else(
-        || invalid_lowering_path("answer effect missing"),
+        || lowering_invariant_violation("answer effect missing"),
         |effect| effect.key().clone(),
     )
 }

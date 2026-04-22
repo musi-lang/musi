@@ -40,7 +40,7 @@ pub(super) fn lower_match_expr(
         lowered.extend(lower_match_arm(ctx, arm));
     }
     if lowered.is_empty() {
-        invalid_lowering_path("case without emit-compatible arms");
+        lowering_invariant_violation("case without emit-compatible arms");
     }
     IrExprKind::Match {
         scrutinee: Box::new(lower_expr(ctx, scrutinee)),
@@ -123,8 +123,9 @@ fn lower_record_case_patterns(
 ) -> Vec<IrCasePattern> {
     let Some((indices, _layout, _field_count)) = record_layout_for_ty(
         sema,
-        sema.try_pat_ty(pat)
-            .unwrap_or_else(|| invalid_lowering_path("pattern type missing for record case")),
+        sema.try_pat_ty(pat).unwrap_or_else(|| {
+            lowering_invariant_violation("pattern type missing for record case")
+        }),
         interner,
     ) else {
         return Vec::new();
@@ -206,7 +207,7 @@ fn lower_variant_patterns(
 ) -> Vec<IrCasePattern> {
     let ty = sema
         .try_pat_ty(pat)
-        .unwrap_or_else(|| invalid_lowering_path("pattern type missing for variant case"));
+        .unwrap_or_else(|| lowering_invariant_violation("pattern type missing for variant case"));
     let data = match &sema.ty(ty).kind {
         HirTyKind::Named { name, .. } => {
             let data_name = interner.resolve(*name);
@@ -255,14 +256,14 @@ fn ordered_variant_pat_args(
     let mut ordered = vec![None; variant.field_names().len()];
     for arg in arg_nodes {
         let Some(name) = variant_pat_arg_name(sema, variant, arg, interner) else {
-            invalid_lowering_path("named variant pattern missing field name after sema");
+            lowering_invariant_violation("named variant pattern missing field name after sema");
         };
         let Some(index) = variant
             .field_names()
             .iter()
             .position(|field| field.as_deref() == Some(name.as_ref()))
         else {
-            invalid_lowering_path("unknown named variant pattern field after sema");
+            lowering_invariant_violation("unknown named variant pattern field after sema");
         };
         ordered[index] = Some(arg.pat);
     }
@@ -270,7 +271,7 @@ fn ordered_variant_pat_args(
         .into_iter()
         .map(|pat| {
             pat.unwrap_or_else(|| {
-                invalid_lowering_path("missing named variant pattern field after sema")
+                lowering_invariant_violation("missing named variant pattern field after sema")
             })
         })
         .collect()

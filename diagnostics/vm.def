@@ -140,6 +140,62 @@ diag StackFrameLimitExceeded 6137
 diag InstructionBudgetExhausted 6138
   message "instruction budget `{budget}` exhausted"
 
+diag RuntimeEffectArgsInvalid 6139
+  message "runtime effect `{effect}` operation `{op}` expected `{expected}`, found `{found}`"
+  primary "invalid runtime effect `{op}` arguments"
+
+diag RuntimeEffectOperationFailed 6140
+  message "runtime effect `{effect}` operation `{op}` failed (`{source}`)"
+  primary "runtime effect `{op}` failed"
+
+diag RuntimeHostUnavailable 6141
+  message "runtime host `{subject}` unavailable"
+  primary "runtime host `{subject}` unavailable"
+
+diag RuntimeEffectUnsupported 6149
+  message "unsupported runtime effect `{effect}` operation `{op}`"
+  primary "unsupported runtime effect operation `{op}`"
+
+diag NativeArgumentTypeMismatch 6142
+  message "native argument `{index}` expected `{expected}`, found `{found}`"
+  primary "native argument `{index}` type mismatch"
+
+diag NativeArgumentOutOfRange 6143
+  message "native argument `{index}` out of range for `{expected}`"
+  primary "native argument `{index}` out of range"
+
+diag NativeArgumentInvalid 6150
+  message "invalid native argument `{index}` `{subject}`"
+  primary "invalid native argument `{index}`"
+
+diag NativeLayoutMissing 6144
+  message "missing native ABI layout for `{ty}`"
+  primary "missing native ABI layout `{ty}`"
+
+diag NativeFieldMissing 6145
+  message "missing native `{subject}` field `{field}`"
+  primary "missing native field `{field}`"
+
+diag NativeCStringInvalid 6146
+  message "invalid native CString `{subject}` (`{source}`)"
+  primary "invalid native CString `{subject}`"
+
+diag NativeFfiPrepFailed 6147
+  message "native `ffi_prep_cif` failed with status `{status}` for ABI `{abi}`"
+  primary "native `ffi_prep_cif` status `{status}` failed"
+
+diag NativeAbiUnsupported 6151
+  message "unsupported native ABI `{subject}`"
+  primary "unsupported native ABI `{subject}`"
+
+diag NativeResultInvalid 6152
+  message "invalid native result `{subject}`"
+  primary "invalid native result `{subject}`"
+
+diag PointerArgumentInvalid 6148
+  message "pointer intrinsic argument `{index}` expected `{expected}`, found `{found}`"
+  primary "invalid pointer argument `{index}`"
+
 map vm_error_kind crate::VmErrorKind required
   case "SeamDecodeFailed { .. }" SeamDecodeFailed
   case "InvalidProgramShape { .. }" InvalidProgramShape

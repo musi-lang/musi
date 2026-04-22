@@ -1,7 +1,8 @@
 use std::sync::MutexGuard;
 
 use musi_vm::Program;
-use musi_vm::{VmError, VmErrorKind};
+use musi_vm::{VmDiagKind, VmError, VmErrorKind};
+use music_base::diag::DiagContext;
 
 use super::Runtime;
 use crate::error::{RuntimeError, RuntimeErrorKind, RuntimeResult};
@@ -51,7 +52,9 @@ impl Runtime {
         self.store.lock().map_err(|_| {
             RuntimeError::new(RuntimeErrorKind::VmExecutionFailed(VmError::new(
                 VmErrorKind::InvalidProgramShape {
-                    detail: "runtime store lock poisoned".into(),
+                    detail: VmDiagKind::RuntimeHostUnavailable
+                        .message_with(&DiagContext::new().with("subject", "runtime store lock"))
+                        .into(),
                 },
             )))
         })

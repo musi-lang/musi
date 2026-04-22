@@ -73,9 +73,7 @@ pub fn decode_binary(bytes: &[u8]) -> AssemblyResult<Artifact> {
         if next == section_tag_byte(SectionTag::Meta) {
             decode_meta(&mut cursor, &mut artifact)?;
         } else {
-            return Err(AssemblyError::TextParseFailed(
-                "unknown trailing section".into(),
-            ));
+            return Err(AssemblyError::text_parse_source("unknown trailing section"));
         }
     }
     artifact.validate()?;
@@ -465,7 +463,7 @@ fn decode_strings(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyR
     for _ in 0..cursor.read_u32()? {
         let bytes = cursor.read_bytes()?;
         let text = String::from_utf8(bytes)
-            .map_err(|err| AssemblyError::TextParseFailed(err.to_string()))?;
+            .map_err(|err| AssemblyError::text_parse_source(err.to_string()))?;
         let _ = artifact.push_string_record(&text);
     }
     Ok(())
@@ -496,17 +494,13 @@ fn decode_constants(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Assembl
                     0 => SyntaxShape::Expr,
                     1 => SyntaxShape::Module,
                     _ => {
-                        return Err(AssemblyError::TextParseFailed(
-                            "unknown syntax shape".into(),
-                        ));
+                        return Err(AssemblyError::text_parse_source("unknown syntax shape"));
                     }
                 },
                 text: cursor.read_idx()?,
             },
             _ => {
-                return Err(AssemblyError::TextParseFailed(
-                    "unknown constant kind".into(),
-                ));
+                return Err(AssemblyError::text_parse_source("unknown constant kind"));
             }
         };
         let _ = artifact
@@ -566,9 +560,7 @@ fn decode_procedures(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Assemb
                     CodeEntry::Instruction(Instruction::new(opcode, operand))
                 }
                 _ => {
-                    return Err(AssemblyError::TextParseFailed(
-                        "unknown code entry kind".into(),
-                    ));
+                    return Err(AssemblyError::text_parse_source("unknown code entry kind"));
                 }
             };
             code.push(entry);
@@ -635,8 +627,8 @@ fn decode_foreigns(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Assembly
             0 => None,
             1 => Some(cursor.read_idx()?),
             _ => {
-                return Err(AssemblyError::TextParseFailed(
-                    "invalid foreign link marker".into(),
+                return Err(AssemblyError::text_parse_source(
+                    "invalid foreign link marker",
                 ));
             }
         };
@@ -785,7 +777,7 @@ fn decode_operand(cursor: &mut Cursor<'_>) -> AssemblyResult<Operand> {
             }
             Operand::BranchTable(labels.into_boxed_slice())
         }
-        _ => return Err(AssemblyError::TextParseFailed("unknown operand tag".into())),
+        _ => return Err(AssemblyError::text_parse_source("unknown operand tag")),
     })
 }
 
@@ -958,5 +950,5 @@ impl<'bytes> Cursor<'bytes> {
 
 fn read_len(cursor: &mut Cursor<'_>, what: &'static str) -> AssemblyResult<usize> {
     usize::try_from(cursor.read_u32()?)
-        .map_err(|_| AssemblyError::TextParseFailed(format!("{what} does not fit in usize")))
+        .map_err(|_| AssemblyError::text_parse_source(format!("{what} does not fit in usize")))
 }

@@ -36,14 +36,14 @@ pub(super) fn render_type_value_expr_name(
                 HirBinaryOp::Arrow => format!("{left} -> {right}").into(),
                 HirBinaryOp::EffectArrow => format!("{left} ~> {right}").into(),
                 HirBinaryOp::Add => format!("{left} + {right}").into(),
-                _ => invalid_lowering_path("invalid type-value binary op"),
+                _ => lowering_invariant_violation("invalid type-value binary op"),
             }
         }
         HirExprKind::Prefix {
             op: HirPrefixOp::Mut,
             expr,
         } => format!("mut {}", render_type_value_expr_name(sema, *expr, interner)).into(),
-        other => invalid_lowering_path(format!("invalid type value expr {other:?}")),
+        other => lowering_invariant_violation(format!("invalid type value expr {other:?}")),
     }
 }
 
@@ -106,7 +106,7 @@ fn render_apply_type_value_expr_name(
     interner: &Interner,
 ) -> Box<str> {
     let HirExprKind::Name { name } = sema.module().store.exprs.get(callee).kind else {
-        invalid_lowering_path("invalid type-value callee");
+        lowering_invariant_violation("invalid type-value callee");
     };
     let callee_name = interner.resolve(name.name);
     let args = sema
@@ -129,7 +129,7 @@ fn render_type_value_apply_arg_name(
     match &sema.module().store.exprs.get(expr_id).kind {
         HirExprKind::Lit { lit } => match &sema.module().store.lits.get(*lit).kind {
             HirLitKind::Int { raw } => raw.clone(),
-            _ => invalid_lowering_path("invalid type-value literal arg"),
+            _ => lowering_invariant_violation("invalid type-value literal arg"),
         },
         _ => render_type_value_expr_name(sema, expr_id, interner),
     }
@@ -207,7 +207,7 @@ pub(super) fn render_ty_name(sema: &SemaModule, ty: HirTyId, interner: &Interner
             format!("some {}", render_ty_name(sema, *capability, interner)).into()
         }
         HirTyKind::Record { fields } => render_record_ty_name(sema, fields, interner),
-        _ => invalid_lowering_path("invalid type name kind"),
+        _ => lowering_invariant_violation("invalid type name kind"),
     }
 }
 

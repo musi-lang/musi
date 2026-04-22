@@ -8,6 +8,11 @@ pub enum IrDiagKind {
     InvalidSurfaceTypeId,
     LoweringRequiresSemaCleanModule,
     LoweringInvariantViolated,
+    LoweringInputMissing,
+    LoweringStateInvalid,
+    LoweringTargetUnsupported,
+    LoweringSymbolUnknown,
+    LoweringOverflow,
 }
 
 impl IrDiagKind {

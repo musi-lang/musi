@@ -23,6 +23,8 @@ use thiserror::Error;
 
 pub type FormatResultOf<T = FormatResult> = Result<T, FormatError>;
 
+pub const MUSI_SOURCE_EXTENSION: &str = "ms";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrailingCommas {
     Never,
@@ -200,7 +202,7 @@ impl FormatInputKind {
     #[must_use]
     pub fn from_extension(extension: &str) -> Option<Self> {
         match extension.to_ascii_lowercase().as_str() {
-            "ms" => Some(Self::Musi),
+            MUSI_SOURCE_EXTENSION => Some(Self::Musi),
             "md" | "mkd" | "mkdn" | "mdwn" | "mdown" | "markdown" => Some(Self::Markdown),
             _ => None,
         }

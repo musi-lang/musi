@@ -8,11 +8,12 @@ use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use music_base::diag::DiagCode;
+use music_base::diag::{DiagCode, DiagContext};
 use music_module::ModuleKey;
 use music_seam::Artifact;
 
 use crate::builtin_std::STD_FILES;
+use crate::diag::ProjectDiagKind;
 use crate::manifest::{
     FmtGroupLayout, FmtMatchArmArrowAlignment, FmtOperatorBreak, FmtProfile, License, LicenseFile,
     PackageManifest, PublishConfig,
@@ -71,15 +72,24 @@ fn run_git(root: &Path, args: &[&str]) {
     );
 }
 
-fn assert_manifest_validation_error(manifest: &str, load_note: &str, message: &str) {
+fn assert_manifest_validation_error(
+    manifest: &str,
+    load_note: &str,
+    kind: ProjectDiagKind,
+    context: &DiagContext,
+) {
     let temp = TempDir::new();
     write_file(temp.path(), "musi.json", manifest);
     write_file(temp.path(), "index.ms", r"export let result : Int := 42;");
 
     let error = Project::load(temp.path(), ProjectOptions::default()).expect_err(load_note);
 
-    assert_eq!(error.diag_code(), Some(DiagCode::new(3606)));
-    assert_eq!(error.diag_message().as_deref(), Some(message));
+    let expected_message = kind.message_with(context);
+    assert_eq!(error.diag_code(), Some(kind.code()));
+    assert_eq!(
+        error.diag_message().as_deref(),
+        Some(expected_message.as_str())
+    );
 }
 
 fn write_option_prelude_entry(root: &Path) {
@@ -1059,10 +1069,15 @@ export let test () := Testing.it("adds values", Testing.toBe(1 + 2, 3));
         let error = Project::load(temp.path(), ProjectOptions::default())
             .expect_err("std should be disabled");
 
-        assert_eq!(error.diag_code(), Some(DiagCode::new(3615)));
+        assert_eq!(error.diag_code(), Some(DiagCode::new(5044)));
+        let context = DiagContext::new().with("spec", "@std/testing");
         assert_eq!(
             error.diag_message().as_deref(),
-            Some("unresolved import `@std/testing`")
+            Some(
+                ProjectDiagKind::SourceImportUnresolved
+                    .message_with(&context)
+                    .as_str()
+            )
         );
     }
 
@@ -1104,19 +1119,31 @@ mod failure {
         let error =
             Project::load(temp.path(), ProjectOptions::default()).expect_err("load should fail");
         assert!(matches!(error, ProjectError::MissingFrozenLockfile { .. }));
-        assert_eq!(error.diag_code(), Some(DiagCode::new(5020)));
+        assert_eq!(
+            error.diag_code(),
+            Some(ProjectDiagKind::MissingFrozenLockfile.code())
+        );
     }
 
     #[test]
     fn validation_error_carries_typed_diag_identity() {
+        let validation_message = ProjectDiagKind::ManifestPackageNameMissing.message();
         let error = ProjectError::ManifestValidationFailed {
-            message: "name is required".into(),
+            message: validation_message.into(),
         };
 
-        assert_eq!(error.diag_code(), Some(DiagCode::new(5006)));
+        assert_eq!(
+            error.diag_code(),
+            Some(ProjectDiagKind::ManifestValidationFailed.code())
+        );
+        let context = DiagContext::new().with("message", validation_message);
         assert_eq!(
             error.diag_message().as_deref(),
-            Some("manifest validation failed (`name is required`)")
+            Some(
+                ProjectDiagKind::ManifestValidationFailed
+                    .message_with(&context)
+                    .as_str()
+            )
         );
     }
 
@@ -1203,7 +1230,8 @@ mod failure {
   }
 }"#,
             "load should fail",
-            "invalid fmt.lineWidth value",
+            ProjectDiagKind::ManifestFmtLineWidthInvalid,
+            &DiagContext::new().with("value", 0),
         );
     }
 
@@ -1218,7 +1246,8 @@ mod failure {
   }
 }"#,
             "load should fail",
-            "invalid fmt.indentWidth value",
+            ProjectDiagKind::ManifestFmtIndentWidthInvalid,
+            &DiagContext::new().with("value", 0),
         );
     }
 
@@ -1233,7 +1262,8 @@ mod failure {
   }
 }"#,
             "load should fail",
-            "duplicate fmt.include pattern `src/**`",
+            ProjectDiagKind::ManifestFmtIncludeDuplicate,
+            &DiagContext::new().with("pattern", "src/**"),
         );
         assert_manifest_validation_error(
             r#"{
@@ -1244,7 +1274,8 @@ mod failure {
   }
 }"#,
             "load should fail",
-            "duplicate fmt.exclude pattern `target/**`",
+            ProjectDiagKind::ManifestFmtExcludeDuplicate,
+            &DiagContext::new().with("pattern", "target/**"),
         );
     }
 
@@ -1257,7 +1288,8 @@ mod failure {
   "publish": true
 }"#,
             "load should fail",
-            "invalid publish value",
+            ProjectDiagKind::ManifestPublishUnsupported,
+            &DiagContext::new().with("value", true),
         );
     }
 
@@ -1280,20 +1312,30 @@ mod failure {
 
         let error =
             Project::load(temp.path(), ProjectOptions::default()).expect_err("load should fail");
-        assert_eq!(error.diag_code(), Some(DiagCode::new(3615)));
+        assert_eq!(
+            error.diag_code(),
+            Some(ProjectDiagKind::SourceImportUnresolved.code())
+        );
+        let context = DiagContext::new().with("spec", "missing");
         assert_eq!(
             error.diag_message().as_deref(),
-            Some("unresolved import `missing`")
+            Some(
+                ProjectDiagKind::SourceImportUnresolved
+                    .message_with(&context)
+                    .as_str()
+            )
         );
         let diag = error.source_diag().expect("source diagnostic expected");
         assert!(diag.path().ends_with("index.ms"));
         assert_eq!(
             diag.diag().labels()[0].message(),
-            "import `missing` does not resolve"
+            ProjectDiagKind::SourceImportUnresolved
+                .label_with(&context)
+                .as_str()
         );
         assert_eq!(
             diag.diag().hint(),
-            Some("declare package/import map entry or fix import spec")
+            ProjectDiagKind::SourceImportUnresolved.hint()
         );
     }
 
@@ -1314,10 +1356,18 @@ mod failure {
         let error = project
             .package_entry("missing")
             .expect_err("package should be missing");
-        assert_eq!(error.diag_code(), Some(DiagCode::new(5022)));
+        assert_eq!(
+            error.diag_code(),
+            Some(ProjectDiagKind::UnknownPackage.code())
+        );
+        let context = DiagContext::new().with("name", "missing");
         assert_eq!(
             error.diag_message().as_deref(),
-            Some("unknown package `missing`")
+            Some(
+                ProjectDiagKind::UnknownPackage
+                    .message_with(&context)
+                    .as_str()
+            )
         );
     }
 
@@ -1341,7 +1391,8 @@ mod failure {
   "lib": ["!std"]
 }"#,
             "lib should be invalid",
-            "unknown lib `!std`",
+            ProjectDiagKind::ManifestLibUnknown,
+            &DiagContext::new().with("lib", "!std"),
         );
     }
 }

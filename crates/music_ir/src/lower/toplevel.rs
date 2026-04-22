@@ -143,7 +143,9 @@ fn collect_bound_let_item(
     });
     let effects = sema
         .try_expr_effects(value)
-        .unwrap_or_else(|| super::invalid_lowering_path("expr effects missing for top-level value"))
+        .unwrap_or_else(|| {
+            super::lowering_invariant_violation("expr effects missing for top-level value")
+        })
         .clone();
     if let Some(global) = lower_exported_import_global(
         ctx,
@@ -466,7 +468,7 @@ fn lower_given_member_value(
     let sema = ctx.sema;
     let body_id = member
         .value
-        .unwrap_or_else(|| super::invalid_lowering_path("given member value missing"));
+        .unwrap_or_else(|| super::lowering_invariant_violation("given member value missing"));
     let origin = IrOrigin::new(
         sema.module().store.exprs.get(body_id).origin.source_id,
         sema.module().store.exprs.get(body_id).origin.span,
@@ -645,7 +647,7 @@ fn lower_data_item(ctx: &LowerCtx<'_>, name: Ident, value: HirExprId) -> Option<
                 .max()
                 .unwrap_or_else(|| sema.module().store.fields.get(fields.clone()).len())
         )
-        .unwrap_or_else(|_| super::invalid_lowering_path("field count overflow"))
+        .unwrap_or_else(|_| super::lowering_invariant_violation("field count overflow"))
     );
     if let Some(repr_kind) = repr_kind {
         data_def = data_def.with_repr_kind(repr_kind);
@@ -723,7 +725,7 @@ fn render_hir_ty_name(sema: &SemaModule, ty: HirTyId, interner: &Interner) -> Bo
         | HirTyKind::Rune
         | HirTyKind::CString
         | HirTyKind::CPtr
-        | HirTyKind::NatLit(_) => super::invalid_lowering_path("simple type should render"),
+        | HirTyKind::NatLit(_) => super::lowering_invariant_violation("simple type should render"),
     }
 }
 
@@ -871,8 +873,9 @@ fn lower_params(ctx: &LowerCtx<'_>, params: SliceRange<HirParam>) -> Box<[IrPara
         .filter(|param| !param.is_comptime)
         .map(|param| {
             IrParam::new(
-                super::decl_binding_id(sema, param.name)
-                    .unwrap_or_else(|| super::invalid_lowering_path("param binding missing")),
+                super::decl_binding_id(sema, param.name).unwrap_or_else(|| {
+                    super::lowering_invariant_violation("param binding missing")
+                }),
                 interner.resolve(param.name.name),
             )
         })

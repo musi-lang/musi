@@ -44,7 +44,7 @@ pub(super) fn lower_local_callable_let(
         ),
         HirPatKind::Wildcard => (None, Box::<str>::from("_")),
         other => {
-            invalid_lowering_path(format!("local callable let pattern {other:?}"));
+            lowering_invariant_violation(format!("local callable let pattern {other:?}"));
         }
     };
 
@@ -135,7 +135,7 @@ pub(super) fn lower_user_params(ctx: &LowerCtx<'_>, params: &HirParamRange) -> L
     let mut bindings = Vec::new();
     for param in sema.module().store.params.get(params.clone()) {
         let binding = decl_binding_id(sema, param.name)
-            .unwrap_or_else(|| invalid_lowering_path("param binding missing"));
+            .unwrap_or_else(|| lowering_invariant_violation("param binding missing"));
         bindings.push(binding);
         lowered.push(IrParam::new(binding, interner.resolve(param.name.name)));
     }
@@ -151,8 +151,9 @@ pub(super) fn lower_named_params(ctx: &LowerCtx<'_>, params: &[Ident]) -> Lowere
     let mut lowered = Vec::new();
     let mut bindings = Vec::new();
     for param in params {
-        let binding = decl_binding_id(sema, *param)
-            .unwrap_or_else(|| invalid_lowering_path("named param binding missing in lowering"));
+        let binding = decl_binding_id(sema, *param).unwrap_or_else(|| {
+            lowering_invariant_violation("named param binding missing in lowering")
+        });
         bindings.push(binding);
         lowered.push(IrParam::new(binding, interner.resolve(param.name)));
     }
@@ -220,7 +221,9 @@ pub(super) fn lower_closure_callable(
         .with_binding_opt(input.binding)
         .with_effects(
             sema.try_expr_effects(input.body_id)
-                .unwrap_or_else(|| invalid_lowering_path("expr effects missing for closure body"))
+                .unwrap_or_else(|| {
+                    lowering_invariant_violation("expr effects missing for closure body")
+                })
                 .clone(),
         )
         .with_import_record_target_opt(input.callable_import_record_target),

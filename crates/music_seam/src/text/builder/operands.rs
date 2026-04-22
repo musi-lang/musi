@@ -34,7 +34,7 @@ impl TextBuilder {
         Ok(Operand::I16(
             must_get(parts.get(1), "i16 operand")?
                 .parse()
-                .map_err(|_| AssemblyError::TextParseFailed("invalid i16 operand".into()))?,
+                .map_err(|_| text_invalid_operand("i16 operand", parts[1].as_str()))?,
         ))
     }
 
@@ -49,7 +49,7 @@ impl TextBuilder {
         let ty = *self
             .types
             .get(&name)
-            .ok_or_else(|| AssemblyError::TextParseFailed(format!("unknown type ${name}")))?;
+            .ok_or_else(|| text_unknown_symbol("type", &name))?;
         Ok(Operand::Type(ty))
     }
 
@@ -58,7 +58,7 @@ impl TextBuilder {
         let constant = *self
             .constants
             .get(&name)
-            .ok_or_else(|| AssemblyError::TextParseFailed(format!("unknown constant ${name}")))?;
+            .ok_or_else(|| text_unknown_symbol("constant", &name))?;
         Ok(Operand::Constant(constant))
     }
 
@@ -80,7 +80,7 @@ impl TextBuilder {
         let procedure = self.ensure_procedure_symbol(&name);
         let captures = must_get(parts.get(2), "capture count")?
             .parse::<u8>()
-            .map_err(|_| AssemblyError::TextParseFailed("invalid capture count".into()))?;
+            .map_err(|_| text_invalid_operand("capture count", parts[2].as_str()))?;
         Ok(Operand::WideProcedureCaptures {
             procedure,
             captures,
@@ -92,36 +92,35 @@ impl TextBuilder {
         let foreign = *self
             .foreigns
             .get(&name)
-            .ok_or_else(|| AssemblyError::TextParseFailed(format!("unknown native ${name}")))?;
+            .ok_or_else(|| text_unknown_symbol("native", &name))?;
         Ok(Operand::Foreign(foreign))
     }
 
     fn parse_effect_operand(&self, parts: &[String]) -> AssemblyResult<Operand> {
         let effect_name = parse_symbol(must_get(parts.get(1), "effect")?)?;
         let op_name = parse_symbol(must_get(parts.get(2), "effect op")?)?;
-        let effect_id = *self.effects.get(&effect_name).ok_or_else(|| {
-            AssemblyError::TextParseFailed(format!("unknown effect ${effect_name}"))
-        })?;
+        let effect_id = *self
+            .effects
+            .get(&effect_name)
+            .ok_or_else(|| text_unknown_symbol("effect", &effect_name))?;
         let effect = self.artifact.effects.get(effect_id);
         let op = effect
             .ops
             .iter()
             .position(|candidate| self.artifact.string_text(candidate.name) == op_name)
-            .ok_or_else(|| {
-                AssemblyError::TextParseFailed(format!("unknown effect op ${op_name}"))
-            })?;
+            .ok_or_else(|| text_unknown_symbol("effect op", &op_name))?;
         Ok(Operand::Effect {
             effect: effect_id,
-            op: u16::try_from(op)
-                .map_err(|_| AssemblyError::TextParseFailed("effect op index overflow".into()))?,
+            op: u16::try_from(op).map_err(|_| text_invalid_operand("effect op index", op))?,
         })
     }
 
     fn parse_effect_id_operand(&self, parts: &[String]) -> AssemblyResult<Operand> {
         let effect_name = parse_symbol(must_get(parts.get(1), "effect")?)?;
-        let effect_id = *self.effects.get(&effect_name).ok_or_else(|| {
-            AssemblyError::TextParseFailed(format!("unknown effect ${effect_name}"))
-        })?;
+        let effect_id = *self
+            .effects
+            .get(&effect_name)
+            .ok_or_else(|| text_unknown_symbol("effect", &effect_name))?;
         Ok(Operand::EffectId(effect_id))
     }
 
@@ -145,10 +144,10 @@ impl TextBuilder {
         let ty = *self
             .types
             .get(&type_name)
-            .ok_or_else(|| AssemblyError::TextParseFailed(format!("unknown type ${type_name}")))?;
+            .ok_or_else(|| text_unknown_symbol("type", &type_name))?;
         let len = must_get(parts.get(2), "length")?
             .parse()
-            .map_err(|_| AssemblyError::TextParseFailed("invalid sequence length".into()))?;
+            .map_err(|_| text_invalid_operand("sequence length", parts[2].as_str()))?;
         Ok(Operand::TypeLen { ty, len })
     }
 

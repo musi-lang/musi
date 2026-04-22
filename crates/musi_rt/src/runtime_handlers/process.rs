@@ -4,7 +4,10 @@ use musi_foundation::runtime as foundation_runtime;
 use musi_native::NativeHost;
 use musi_vm::{EffectCall, Value, VmError, VmHostContext};
 
-use super::{invalid_runtime_effect, run_shell_command, saturating_usize_to_i64};
+use super::{
+    invalid_runtime_args, run_shell_command, runtime_effect_failed, runtime_effect_unsupported,
+    saturating_usize_to_i64,
+};
 
 pub(super) fn register(host: &mut NativeHost) {
     host.register_effect_handler(
@@ -12,10 +15,7 @@ pub(super) fn register(host: &mut NativeHost) {
         foundation_runtime::PROCESS_ARG_COUNT_OP,
         |effect, args| {
             if !args.is_empty() {
-                return Err(invalid_runtime_effect(
-                    effect,
-                    "invalid processArgCount args",
-                ));
+                return Err(invalid_runtime_args(effect, "no arguments", args.len()));
             }
             Ok(Value::Int(saturating_usize_to_i64(args_os().count())))
         },
@@ -26,7 +26,7 @@ pub(super) fn register(host: &mut NativeHost) {
         foundation_runtime::PROCESS_ARG_AT_OP,
         |ctx, effect, args| {
             let [Value::Int(index)] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid processArgAt args"));
+                return Err(invalid_runtime_args(effect, "integer index", args.len()));
             };
             let value = usize::try_from(*index).map_or_else(
                 |_| String::new(),
@@ -46,11 +46,9 @@ pub(super) fn register(host: &mut NativeHost) {
         foundation_runtime::PROCESS_CWD_OP,
         |ctx, effect, args| {
             if !args.is_empty() {
-                return Err(invalid_runtime_effect(effect, "invalid processCwd args"));
+                return Err(invalid_runtime_args(effect, "no arguments", args.len()));
             }
-            let cwd = current_dir().map_err(|error| {
-                invalid_runtime_effect(effect, format!("processCwd failed (`{error}`)"))
-            })?;
+            let cwd = current_dir().map_err(|error| runtime_effect_failed(effect, error))?;
             ctx.alloc_string(cwd.to_string_lossy().into_owned())
         },
     );
@@ -69,12 +67,9 @@ pub(super) fn register(host: &mut NativeHost) {
         foundation_runtime::PROCESS_EXIT_OP,
         |effect, args| {
             let [Value::Int(_code)] = args else {
-                return Err(invalid_runtime_effect(effect, "invalid processExit args"));
+                return Err(invalid_runtime_args(effect, "integer code", args.len()));
             };
-            Err(invalid_runtime_effect(
-                effect,
-                "processExit unsupported in current runtime",
-            ))
+            Err(runtime_effect_unsupported(effect))
         },
     );
 }
@@ -86,12 +81,9 @@ fn string_arg<'a>(
     op_name: &str,
 ) -> Result<&'a str, VmError> {
     let [value] = args else {
-        return Err(invalid_runtime_effect(
-            effect,
-            format!("invalid {op_name} args"),
-        ));
+        return Err(invalid_runtime_args(effect, "one string", args.len()));
     };
-    ctx.string(value)
-        .map(|text| text.as_str())
-        .ok_or_else(|| invalid_runtime_effect(effect, format!("invalid {op_name} args")))
+    ctx.string(value).map(|text| text.as_str()).ok_or_else(|| {
+        invalid_runtime_args(effect, format!("{op_name} string").as_str(), value.kind())
+    })
 }

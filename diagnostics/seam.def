@@ -73,6 +73,50 @@ diag HilReturnValueUnexpected 5420
 diag HilShapeRequired 5421
   message "HIL shape `{shape}` required"
 
+diag TextExpectedForm 5422
+  message "expected SEAM text form `{form}`"
+  primary "expected `{form}`"
+
+diag TextMissingOperand 5423
+  message "missing SEAM text operand `{operand}`"
+  primary "missing operand `{operand}`"
+
+diag TextInvalidOperand 5424
+  message "invalid SEAM text operand `{operand}` value `{value}`"
+  primary "invalid operand `{operand}`"
+
+diag TextUnknownDirective 5425
+  message "unknown SEAM directive `{directive}`"
+  primary "unknown directive `{directive}`"
+
+diag TextUnknownOpcode 5426
+  message "unknown SEAM opcode `{opcode}`"
+  primary "unknown opcode `{opcode}`"
+
+diag TextUnknownSymbol 5427
+  message "unknown SEAM `{kind}` symbol `{symbol}`"
+  primary "unknown `{kind}` symbol `{symbol}`"
+
+diag TextDuplicateSymbol 5428
+  message "duplicate SEAM `{kind}` symbol `{symbol}`"
+  primary "duplicate `{kind}` symbol `{symbol}`"
+
+diag TextUnterminatedString 5429
+  message "unterminated SEAM string literal `{literal}`"
+  primary "unterminated string literal"
+
+diag TextUnexpectedEnd 5430
+  message "unexpected `.end` outside procedure"
+  primary "unexpected `.end`"
+
+diag TextUnterminatedProcedure 5431
+  message "unterminated procedure block `{procedure}`"
+  primary "missing `.end` for procedure `{procedure}`"
+
+diag TextCountMismatch 5432
+  message "SEAM `{kind}` count expected `{expected}`, found `{found}`"
+  primary "`{kind}` count mismatch"
+
 map assembly_error_kind crate::AssemblyError required
   case "ArtifactValidationFailed(_)" ArtifactValidationFailed
   case "InvalidBinaryHeader" InvalidBinaryHeader

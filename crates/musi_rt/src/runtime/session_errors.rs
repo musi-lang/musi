@@ -1,5 +1,5 @@
 use musi_foundation::syntax;
-use musi_vm::{VmError, VmErrorKind};
+use musi_vm::{VmDiagKind, VmError, VmErrorKind};
 use music_session::SessionError;
 
 use crate::error::{RuntimeError, RuntimeErrorKind};
@@ -23,7 +23,7 @@ pub(super) fn vm_runtime_error(err: &RuntimeError) -> VmError {
         }
         RuntimeErrorKind::InvalidSyntaxValue { found } => vm_syntax_value_kind_error(*found),
         RuntimeErrorKind::RootModuleRequired => VmError::new(VmErrorKind::InvalidProgramShape {
-            detail: "root module required".into(),
+            detail: VmDiagKind::RootModuleRequired.message().into(),
         }),
         RuntimeErrorKind::VmExecutionFailed(err) => err.clone(),
     }

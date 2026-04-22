@@ -7,4 +7,25 @@ diag LoweringRequiresSemaCleanModule 3401
   message "IR lowering needs semantic-clean module"
 
 diag LoweringInvariantViolated 3402
-  message "IR lowering invariant violated"
+  message "IR lowering invariant `{subject}` violated"
+  primary "IR lowering invariant `{subject}` violated"
+
+diag LoweringInputMissing 3403
+  message "missing IR lowering input `{input}`"
+  primary "missing lowering input `{input}`"
+
+diag LoweringStateInvalid 3404
+  message "invalid IR lowering state `{state}`"
+  primary "invalid lowering state `{state}`"
+
+diag LoweringTargetUnsupported 3405
+  message "unsupported IR lowering target `{target}`"
+  primary "unsupported lowering target `{target}`"
+
+diag LoweringSymbolUnknown 3406
+  message "unknown IR lowering symbol `{symbol}`"
+  primary "unknown lowering symbol `{symbol}`"
+
+diag LoweringOverflow 3407
+  message "IR lowering `{subject}` exceeds `{limit}`"
+  primary "lowering `{subject}` too large"

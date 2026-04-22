@@ -435,7 +435,8 @@ mod success {
     #[test]
     fn emit_diag_kind_extracts_every_known_emit_code() {
         for code in 3500u16..=3517u16 {
-            let diag = Diag::error("emit failure").with_code(DiagCode::new(code));
+            let diag = Diag::error(EmitDiagKind::EmitInvariantViolated.message())
+                .with_code(DiagCode::new(code));
             let kind = emit_diag_kind(&diag).expect("all emit diagnostic codes must map to a kind");
             assert_eq!(kind.code().raw(), code);
         }
@@ -443,7 +444,8 @@ mod success {
 
     #[test]
     fn emit_diag_kind_is_code_based_not_message_based() {
-        let diag = Diag::error("plain text").with_code(EmitDiagKind::UnknownEffect.code());
+        let diag = Diag::error(EmitDiagKind::EmitInvariantViolated.message())
+            .with_code(EmitDiagKind::UnknownEffect.code());
         let kind = emit_diag_kind(&diag).expect("emit diagnostic code should map");
         assert_eq!(kind, EmitDiagKind::UnknownEffect);
     }
@@ -454,7 +456,8 @@ mod failure {
 
     #[test]
     fn emit_diag_kind_rejects_unknown_emit_code() {
-        let diag = Diag::error("unknown emit failure").with_code(DiagCode::new(3999));
+        let diag = Diag::error(EmitDiagKind::EmitInvariantViolated.message())
+            .with_code(DiagCode::new(3999));
 
         assert_eq!(emit_diag_kind(&diag), None);
     }
