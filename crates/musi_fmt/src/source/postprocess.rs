@@ -124,7 +124,7 @@ fn split_top_level_commas(text: &str) -> Vec<&str> {
 }
 
 pub(super) fn compact_record_fields(text: String, options: &FormatOptions) -> String {
-    if options.record_field_layout == GroupLayout::Block || options.line_width == 0 {
+    if options.record_field_layout == GroupLayout::Block {
         return text;
     }
     let mut out = Vec::new();
@@ -137,40 +137,81 @@ pub(super) fn compact_record_fields(text: String, options: &FormatOptions) -> St
             index = index.saturating_add(1);
             continue;
         }
-        let mut cursor = index.saturating_add(1);
-        let mut fields = Vec::new();
-        while let Some(field_line) = lines.get(cursor).copied() {
-            let trimmed = field_line.trim();
-            if trimmed == "};" {
-                break;
-            }
-            if !trimmed.ends_with(',') || trimmed.contains('{') || trimmed.contains('}') {
-                fields.clear();
-                break;
-            }
-            fields.push(trimmed.trim_end_matches(',').to_owned());
-            cursor = cursor.saturating_add(1);
-        }
-        if fields.is_empty() || lines.get(cursor).copied() != Some("};") {
+        let Some((candidate, next_index)) = compact_field_block(&lines, index, options) else {
             out.push(line.to_owned());
             index = index.saturating_add(1);
             continue;
-        }
-        let prefix = line.trim_end().trim_end_matches('{').trim_end();
-        let candidate = format!("{prefix} {{ {} }};", fields.join(", "));
-        if candidate.chars().count() > options.line_width {
-            out.push(line.to_owned());
-            index = index.saturating_add(1);
-            continue;
-        }
+        };
         out.push(candidate);
-        index = cursor.saturating_add(1);
+        index = next_index;
     }
     let mut formatted = out.join("\n");
     if text.ends_with('\n') {
         formatted.push('\n');
     }
     formatted
+}
+
+fn compact_field_block(
+    lines: &[&str],
+    start: usize,
+    options: &FormatOptions,
+) -> Option<(String, usize)> {
+    let line = *lines.get(start)?;
+    let mut cursor = start.saturating_add(1);
+    let mut fields = Vec::new();
+    while let Some(field_line) = lines.get(cursor).copied() {
+        let trimmed = field_line.trim();
+        if trimmed == "};" {
+            break;
+        }
+        fields.push(trimmed.to_owned());
+        cursor = cursor.saturating_add(1);
+    }
+    if fields.is_empty() || lines.get(cursor).copied().map(str::trim) != Some("};") {
+        return None;
+    }
+    let prefix = line.trim_end().trim_end_matches('{').trim_end();
+    let candidate = compact_comma_fields(prefix, &fields)
+        .or_else(|| compact_semicolon_fields(prefix, &fields))?;
+    (options.line_width == 0 || candidate.chars().count() <= options.line_width)
+        .then_some((candidate, cursor.saturating_add(1)))
+}
+
+fn compact_comma_fields(prefix: &str, fields: &[String]) -> Option<String> {
+    let mut compacted = Vec::with_capacity(fields.len());
+    for field in fields {
+        if !field.ends_with(',') || field.contains('{') || field.contains('}') {
+            return None;
+        }
+        compacted.push(field.trim_end_matches(',').to_owned());
+    }
+    Some(format!("{prefix} {{ {} }};", compacted.join(", ")))
+}
+
+fn compact_semicolon_fields(prefix: &str, fields: &[String]) -> Option<String> {
+    let mut compacted = Vec::with_capacity(fields.len());
+    for field in fields {
+        if !is_simple_semicolon_field(field) {
+            return None;
+        }
+        compacted.push(field.trim_end_matches(';').to_owned());
+    }
+    Some(format!("{prefix} {{ {} }};", compacted.join("; ")))
+}
+
+fn is_simple_semicolon_field(field: &str) -> bool {
+    field.contains(':')
+        && !field.contains(":=")
+        && !field.contains('{')
+        && !field.contains('}')
+        && !field.starts_with('|')
+        && !field.starts_with("let ")
+        && !field.starts_with("law ")
+        && !field.starts_with("export ")
+        && !field.starts_with("native ")
+        && !field.starts_with("--")
+        && !field.starts_with(['/', '-'])
 }
 
 pub(super) fn align_match_arrows(text: String, options: &FormatOptions) -> String {

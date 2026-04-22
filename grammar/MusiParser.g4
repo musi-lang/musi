@@ -137,6 +137,7 @@ atom:
 	| ask_expr
 	| answer_lit_expr
 	| unsafe_expr
+	| pin_expr
 	| handle_expr
 	| quote_expr
 	| with_mods_expr;
@@ -277,9 +278,9 @@ given_expr:
 
 ask_expr: KW_ASK expr;
 
-unsafe_expr:
-	KW_UNSAFE LBRACE stmt* RBRACE
-	| KW_UNSAFE KW_PIN expr KW_AS IDENT KW_IN expr;
+unsafe_expr: KW_UNSAFE LBRACE stmt* RBRACE;
+
+pin_expr: KW_PIN expr KW_AS IDENT KW_IN expr;
 
 answer_lit_expr:
 	KW_ANSWER prefix_expr LBRACE structural_fn_members RBRACE;

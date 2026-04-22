@@ -225,8 +225,8 @@ const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: VmDiagKind::ForeignCallRejected,
         code: 6126,
-        message: "foreign call `{foreign}` rejected",
-        primary: "foreign call `{foreign}` rejected",
+        message: "native call `{native}` rejected",
+        primary: "native call `{native}` rejected",
         secondary: None,
         help: None,
     },
@@ -241,8 +241,8 @@ const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: VmDiagKind::NativeCallFailed,
         code: 6128,
-        message: "native call `{foreign}` failed during `{stage}` for `{subject}` (`{detail}`)",
-        primary: "native call `{foreign}` failed",
+        message: "native call `{native}` failed during `{stage}` for `{subject}` (`{detail}`)",
+        primary: "native call `{native}` failed",
         secondary: None,
         help: None,
     },

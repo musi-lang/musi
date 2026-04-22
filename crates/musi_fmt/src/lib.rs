@@ -94,7 +94,7 @@ impl Default for FormatOptions {
             match_arm_arrow_alignment: MatchArmArrowAlignment::None,
             call_argument_layout: GroupLayout::Auto,
             declaration_parameter_layout: GroupLayout::Auto,
-            record_field_layout: GroupLayout::Block,
+            record_field_layout: GroupLayout::Auto,
             effect_member_parameter_layout: GroupLayout::Auto,
             operator_break: OperatorBreak::Before,
             include: Vec::new(),

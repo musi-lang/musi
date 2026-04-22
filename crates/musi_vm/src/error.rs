@@ -355,7 +355,7 @@ impl VmErrorKind {
             Self::ModuleLoadRejected { spec } | Self::MissingModuleSource { spec } => {
                 DiagContext::new().with("spec", spec)
             }
-            Self::ForeignCallRejected { foreign } => DiagContext::new().with("foreign", foreign),
+            Self::ForeignCallRejected { foreign } => DiagContext::new().with("native", foreign),
             Self::PointerIntrinsicFailed { intrinsic, detail } => DiagContext::new()
                 .with("intrinsic", intrinsic)
                 .with("detail", detail),
@@ -373,7 +373,7 @@ impl VmErrorKind {
                 index,
                 detail,
             } => DiagContext::new()
-                .with("foreign", foreign)
+                .with("native", foreign)
                 .with("stage", stage)
                 .with("subject", native_subject(subject.as_deref(), *index))
                 .with("detail", detail),

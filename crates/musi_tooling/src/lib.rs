@@ -2,6 +2,7 @@ mod analysis;
 mod analysis_support;
 pub use diag::ToolingDiagKind;
 mod artifact;
+mod completion;
 mod diag;
 mod diagnostics;
 mod direct;
@@ -16,6 +17,10 @@ pub use analysis::{
     module_docs_for_project_file_with_overlay,
 };
 pub use artifact::{read_artifact_bytes, write_artifact_bytes, write_text_output};
+pub use completion::{
+    ToolCompletion, ToolCompletionKind, ToolCompletionList, completions_for_project_file,
+    completions_for_project_file_with_overlay,
+};
 pub use diagnostics::{
     CliDiagnostic, CliDiagnosticLabel, CliDiagnosticRange, CliDiagnosticsReport, DiagnosticsFormat,
     project_error_report, render_project_error, render_session_error, render_tooling_error,

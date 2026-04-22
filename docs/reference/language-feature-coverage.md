@@ -39,10 +39,6 @@ Each feature should have one current-language explanation and at least one snipp
 - Contextual `shape` plus `given` values, contextual parameters, operator members, and ambiguity diagnostics: `abstractions/contextual-capabilities.md`
 - Effects, `effect`, `ask`, `answer`, `handle`, `resume`, and answer members: `effects-runtime/effects-and-answers.md`
 - Proofs, `law`, `Proof[P]`, contextual proof evidence, and `@axiom` trust roots: `specs/language/first-class-everything.md`, `specs/language/type-core.md`, `specs/language/syntax.md`, `specs/language/items-and-attributes.md`
-- Unsafe pin scopes use `unsafe pin value as name in body`; `name` has type `Pin[T]`, remains scoped to `body`, and cannot be returned from that body.
+- Pin action scopes are only valid inside `unsafe` blocks; `name` has type `Pin[T]`, remains scoped to `body`, and cannot be returned from that body.
 - Foundation, runtime, stdlib layering, attributes, hygienic `quote`, `#` splices, comptime, templates, tests, and tooling: `effects-runtime/foundation.md`, `effects-runtime/runtime.md`, `effects-runtime/stdlib.md`, `advanced/attributes.md`, `advanced/quote-and-syntax.md`, `advanced/comptime.md`, `advanced/templates-and-splices.md`, `advanced/testing.md`, `advanced/running-and-tooling.md`
 
-## Removed source model
-
-- `borrow` is not source model term in current docs.
-- `capability`, `class`, `instance`, `request`, `with`, `via`, `using`, `for`, `of`, and `provide` are not source model terms in current docs. They are ordinary identifiers unless later grammar assigns meaning.

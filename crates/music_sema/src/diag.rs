@@ -100,6 +100,7 @@ pub enum SemaDiagKind {
     CallNamedArgumentsAfterRuntimeSpread,
     CallNamedSpreadArgument,
     UnsafeCallRequiresUnsafeBlock,
+    PinRequiresUnsafeBlock,
     UnsupportedPinTarget,
     PinnedValueEscapes,
     InvalidTypeApplication,

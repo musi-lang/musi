@@ -427,6 +427,7 @@ mod success {
     #[test]
     fn trailing_commas_apply_to_record_comma_lists() {
         let mut options = options();
+        options.record_field_layout = GroupLayout::Block;
         options.trailing_commas = TrailingCommas::MultiLine;
         let source = "let value := { left := 1, right := 2 };";
 
@@ -641,6 +642,79 @@ mod success {
         let result = format_source(source, &options).unwrap();
 
         assert_eq!(result.text, "let value := { left := 1, right := 2 };\n");
+    }
+
+    #[test]
+    fn auto_record_field_layout_keeps_simple_data_fields_one_line_when_fitting() {
+        let mut options = options();
+        options.record_field_layout = GroupLayout::Auto;
+        let source = "let p := data { x : Int; y : Int };";
+
+        let result = format_source(source, &options).unwrap();
+
+        assert_eq!(result.text, "let p := data { x : Int; y : Int };\n");
+    }
+
+    #[test]
+    fn zero_line_width_compacts_simple_data_fields() {
+        let mut options = options();
+        options.line_width = 0;
+        options.record_field_layout = GroupLayout::Auto;
+        let source = "let p := data { x : Int; y : Int };";
+
+        let result = format_source(source, &options).unwrap();
+
+        assert_eq!(result.text, "let p := data { x : Int; y : Int };\n");
+    }
+
+    #[test]
+    fn auto_record_field_layout_keeps_comment_blocks_expanded() {
+        let mut options = options();
+        options.record_field_layout = GroupLayout::Auto;
+        let source = r"let p := data {
+  --- x coordinate
+  x : Int;
+  y : Int
+};
+";
+
+        let result = format_source(source, &options).unwrap();
+
+        assert_eq!(
+            result.text,
+            r"let p := data {
+  --- x coordinate
+  x : Int;
+  y : Int
+};
+"
+        );
+    }
+
+    #[test]
+    fn block_record_field_layout_expands_simple_data_fields() {
+        let mut options = options();
+        options.record_field_layout = GroupLayout::Block;
+        let source = "let p := data { x : Int; y : Int };";
+
+        let result = format_source(source, &options).unwrap();
+
+        assert_eq!(result.text, "let p := data {\n  x : Int;\n  y : Int\n};\n");
+    }
+
+    #[test]
+    fn auto_record_field_layout_expands_data_fields_when_width_overflows() {
+        let mut options = options();
+        options.line_width = 32;
+        options.record_field_layout = GroupLayout::Auto;
+        let source = "let p := data { longLeftName : Int; longRightName : Int };";
+
+        let result = format_source(source, &options).unwrap();
+
+        assert_eq!(
+            result.text,
+            "let p := data {\n  longLeftName : Int;\n  longRightName : Int\n};\n"
+        );
     }
 
     #[test]

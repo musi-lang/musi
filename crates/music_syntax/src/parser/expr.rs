@@ -238,6 +238,7 @@ impl Parser<'_> {
                 | TokenKind::KwNative
                 | TokenKind::KwQuote
                 | TokenKind::KwUnsafe
+                | TokenKind::KwPin
                 | TokenKind::KwComptime
                 | TokenKind::KwGiven
                 | TokenKind::KwAnswer

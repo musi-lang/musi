@@ -2,14 +2,53 @@ use std::ffi::OsStr;
 use std::path::{Component, Path, PathBuf};
 
 use async_lsp::lsp_types::{
-    Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, InlayHint, InlayHintKind,
+    CompletionItem, CompletionItemKind, CompletionTextEdit, Diagnostic,
+    DiagnosticRelatedInformation, DiagnosticSeverity, Documentation, InlayHint, InlayHintKind,
     InlayHintLabel, InlayHintTooltip, Location, NumberOrString, Position, Range, SemanticToken,
-    SemanticTokenModifier, SemanticTokenType, SemanticTokensLegend, Url,
+    SemanticTokenModifier, SemanticTokenType, SemanticTokensLegend, TextEdit, Url,
 };
 use musi_tooling::{
-    CliDiagnostic, CliDiagnosticLabel, CliDiagnosticRange, ToolInlayHint, ToolInlayHintKind,
-    ToolPosition, ToolRange, ToolSemanticModifier, ToolSemanticToken, ToolSemanticTokenKind,
+    CliDiagnostic, CliDiagnosticLabel, CliDiagnosticRange, ToolCompletion, ToolCompletionKind,
+    ToolInlayHint, ToolInlayHintKind, ToolPosition, ToolRange, ToolSemanticModifier,
+    ToolSemanticToken, ToolSemanticTokenKind,
 };
+
+pub(super) fn to_lsp_completion(completion: ToolCompletion) -> CompletionItem {
+    let text = completion
+        .insert_text
+        .clone()
+        .unwrap_or_else(|| completion.label.clone());
+    CompletionItem {
+        label: completion.label,
+        kind: Some(to_completion_item_kind(completion.kind)),
+        detail: completion.detail,
+        documentation: completion.documentation.map(Documentation::String),
+        sort_text: completion.sort_text,
+        filter_text: completion.filter_text,
+        text_edit: Some(CompletionTextEdit::Edit(TextEdit::new(
+            to_tool_range(&completion.replace_range),
+            text,
+        ))),
+        ..CompletionItem::default()
+    }
+}
+
+const fn to_completion_item_kind(kind: ToolCompletionKind) -> CompletionItemKind {
+    match kind {
+        ToolCompletionKind::Keyword => CompletionItemKind::KEYWORD,
+        ToolCompletionKind::Function | ToolCompletionKind::Procedure => {
+            CompletionItemKind::FUNCTION
+        }
+        ToolCompletionKind::Variable | ToolCompletionKind::Parameter => {
+            CompletionItemKind::VARIABLE
+        }
+        ToolCompletionKind::TypeParameter => CompletionItemKind::TYPE_PARAMETER,
+        ToolCompletionKind::Type => CompletionItemKind::CLASS,
+        ToolCompletionKind::Module => CompletionItemKind::MODULE,
+        ToolCompletionKind::Property => CompletionItemKind::PROPERTY,
+        ToolCompletionKind::EnumMember => CompletionItemKind::ENUM_MEMBER,
+    }
+}
 
 pub(super) fn semantic_tokens_legend() -> SemanticTokensLegend {
     SemanticTokensLegend {

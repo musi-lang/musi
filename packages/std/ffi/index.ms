@@ -6,7 +6,7 @@ export let CString := core.CString;
 --- Raw C pointer ABI value.
 export let CPtr := core.CPtr;
 
---- Scoped pinned value handle created by `unsafe pin`.
+--- Scoped pinned value handle created by `pin` inside `unsafe`.
 export let Pin := core.Pin;
 
 --- C char ABI type.

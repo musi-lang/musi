@@ -194,7 +194,7 @@ lt-dot-dot        = "<.."
 
 dot-dot-lt        = "..<"
 
-dot-dot          = ".."
+dot-dot           = ".."
 
 gt-eq             = ">="
 
@@ -518,6 +518,7 @@ atom                  = literal
                         / ask-expr
                         / answer-lit-expr
                         / unsafe-expr
+                        / pin-expr
                         / handle-expr
                         / quote-expr
                         / with-mods-expr
@@ -621,7 +622,8 @@ given-expr            = kw-given [bracket-params] expr [where-clause] lbrace
 ask-expr              = kw-ask expr
 
 unsafe-expr           = kw-unsafe lbrace *stmt rbrace
-                      / kw-unsafe kw-pin expr kw-as ident kw-in expr
+
+pin-expr              = kw-pin expr kw-as ident kw-in expr
 
 answer-lit-expr       = kw-answer prefix-expr lbrace structural-fn-members
                         rbrace

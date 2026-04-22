@@ -759,6 +759,14 @@ const ENTRIES: &[CatalogEntry] = &[
         help: None,
     },
     CatalogEntry {
+        kind: SemaDiagKind::PinRequiresUnsafeBlock,
+        code: 3126,
+        message: "unsafe block required for pin action",
+        primary: "pin action must appear inside `unsafe` block",
+        secondary: None,
+        help: None,
+    },
+    CatalogEntry {
         kind: SemaDiagKind::UnsupportedPinTarget,
         code: 3124,
         message: "unsupported pin target `{target}`",

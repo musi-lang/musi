@@ -59,6 +59,7 @@ impl Parser<'_> {
             TokenKind::KwHandle => self.parse_handle_expr(),
             TokenKind::KwNative => self.parse_foreign_expr(Vec::new()),
             TokenKind::KwUnsafe => self.parse_unsafe_expr(),
+            TokenKind::KwPin => self.parse_pin_expr(),
             _ => return None,
         })
     }

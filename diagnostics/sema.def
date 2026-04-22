@@ -309,6 +309,10 @@ diag UnsafeCallRequiresUnsafeBlock 3118
   message "unsafe block required for call"
   primary "call must appear inside `unsafe` block"
 
+diag PinRequiresUnsafeBlock 3126
+  message "unsafe block required for pin action"
+  primary "pin action must appear inside `unsafe` block"
+
 diag UnsupportedPinTarget 3124
   message "unsupported pin target `{target}`"
   primary "`{target}` cannot be pinned"

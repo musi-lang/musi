@@ -434,12 +434,12 @@ mod success {
     }
 
     #[test]
-    fn parses_unsafe_pin_expr() {
+    fn parses_pin_expr_inside_unsafe_block() {
         let parsed = parse(
             Lexer::new(
                 r"
             let xs := [1, 2];
-            let value := unsafe pin xs as pinned in 1;
+            let value := unsafe { pin xs as pinned in 1; };
         ",
             )
             .lex(),
@@ -449,7 +449,7 @@ mod success {
             "unexpected errors: {:?}",
             parsed.errors()
         );
-        let kinds = parse_kinds("unsafe pin xs as pinned in 1;");
+        let kinds = parse_kinds("pin xs as pinned in 1;");
         assert_eq!(kinds, vec![SyntaxNodeKind::PinExpr]);
     }
 

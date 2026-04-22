@@ -752,7 +752,7 @@ fn render_hir_ty(sema: &SemaModule, session: &Session, ty: HirTyId) -> String {
         } => {
             let arrow = if *is_effectful { " ~> " } else { " -> " };
             format!(
-                "forall ({} : {}){arrow}{}",
+                "({} : {}){arrow}{}",
                 session.resolve_symbol(*binder),
                 render_hir_ty(sema, session, *binder_ty),
                 render_hir_ty(sema, session, *body)

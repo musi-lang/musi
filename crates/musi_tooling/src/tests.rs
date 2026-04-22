@@ -16,9 +16,9 @@ use musi_project::{Project, ProjectDiagKind, ProjectError, ProjectOptions};
 
 use crate::{
     ToolInlayHintKind, ToolSemanticModifier, ToolSemanticTokenKind, ToolingDiagKind, ToolingError,
-    collect_project_diagnostics_with_overlay, hover_for_project_file_with_overlay,
-    inlay_hints_for_project_file_with_overlay, load_direct_graph,
-    module_docs_for_project_file_with_overlay, project_error_report,
+    collect_project_diagnostics_with_overlay, completions_for_project_file_with_overlay,
+    hover_for_project_file_with_overlay, inlay_hints_for_project_file_with_overlay,
+    load_direct_graph, module_docs_for_project_file_with_overlay, project_error_report,
     semantic_tokens_for_project_file_with_overlay, session_error_report, tooling_error_report,
 };
 
@@ -121,6 +121,97 @@ mod success {
             &ModuleKey::new(expected.display().to_string())
         );
         assert_eq!(texts.count(), 2);
+    }
+
+    #[test]
+    fn completions_include_current_terms_and_visible_bindings() {
+        let temp = TempDir::new();
+        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let source = r"let before := 1;
+let current := bef;
+";
+        write_file(temp.path(), "index.ms", source);
+
+        let completions = completions_for_project_file_with_overlay(
+            &temp.path().join("index.ms"),
+            Some(source),
+            2,
+            19,
+        );
+
+        assert!(completions.iter().any(|item| item.label == "before"));
+        assert!(completions.iter().any(|item| item.label == "let"));
+    }
+
+    #[test]
+    fn completions_replace_current_identifier_prefix() {
+        let temp = TempDir::new();
+        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let source = r"let before := 1;
+let current := bef;
+";
+        write_file(temp.path(), "index.ms", source);
+
+        let completions = completions_for_project_file_with_overlay(
+            &temp.path().join("index.ms"),
+            Some(source),
+            2,
+            19,
+        );
+        let before = completions
+            .iter()
+            .find(|item| item.label == "before")
+            .expect("before completion should exist");
+
+        assert_eq!(before.replace_range.start_line, 2);
+        assert_eq!(before.replace_range.start_col, 16);
+        assert_eq!(before.replace_range.end_line, 2);
+        assert_eq!(before.replace_range.end_col, 19);
+    }
+
+    #[test]
+    fn completions_after_dot_return_record_members_without_keywords() {
+        let temp = TempDir::new();
+        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let source = r"let point := { x := 1, y := 2 };
+point.
+";
+        write_file(temp.path(), "index.ms", source);
+
+        let completions = completions_for_project_file_with_overlay(
+            &temp.path().join("index.ms"),
+            Some(source),
+            2,
+            7,
+        );
+
+        assert!(completions.iter().any(|item| item.label == "x"));
+        assert!(completions.iter().any(|item| item.label == "y"));
+        assert!(!completions.iter().any(|item| item.label == "let"));
+    }
+
+    #[test]
+    fn completions_after_dot_filter_member_prefix() {
+        let temp = TempDir::new();
+        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let source = r"let span := 1 .. 4;
+span.lower
+";
+        write_file(temp.path(), "index.ms", source);
+
+        let completions = completions_for_project_file_with_overlay(
+            &temp.path().join("index.ms"),
+            Some(source),
+            2,
+            11,
+        );
+        let labels: Vec<_> = completions.iter().map(|item| item.label.as_str()).collect();
+
+        assert_eq!(labels, ["lowerBound"]);
+        assert_eq!(completions[0].replace_range.start_line, 2);
+        assert_eq!(completions[0].replace_range.start_col, 6);
+        assert_eq!(completions[0].replace_range.end_line, 2);
+        assert_eq!(completions[0].replace_range.end_col, 11);
     }
 
     #[test]

@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use async_lsp::lsp_types::{
-    DiagnosticSeverity, InlayHintKind, Position, SemanticToken, TextDocumentIdentifier,
+    CompletionItemKind, CompletionTextEdit, DiagnosticSeverity, InlayHintKind, PartialResultParams,
+    Position, SemanticToken, TextDocumentIdentifier, TextDocumentPositionParams,
     WorkDoneProgressParams,
 };
 use musi_tooling::{
@@ -52,6 +53,7 @@ mod success {
         );
         assert!(result.capabilities.semantic_tokens_provider.is_some());
         assert!(result.capabilities.inlay_hint_provider.is_some());
+        assert!(result.capabilities.completion_provider.is_some());
     }
 
     #[test]
@@ -149,6 +151,119 @@ mod success {
         assert_eq!(
             edits[0].new_text,
             "export let describe (\n  target : Ordering\n) : String :=\n  match target (\n  | .Less                  => \"less\"\n  | .GreaterThanEverything => \"greater\"\n  | _                      => \"same\"\n  );\n"
+        );
+    }
+
+    #[test]
+    fn completion_returns_keywords_and_current_bindings() {
+        let root = temp_project();
+        fs::write(
+            root.join("musi.json"),
+            r#"{
+  "name": "app",
+  "version": "0.1.0",
+  "entry": "index.ms"
+}
+"#,
+        )
+        .expect("manifest should be written");
+        let path = root.join("index.ms");
+        let source = r"let before := 1;
+let current := bef;
+";
+        fs::write(&path, source).expect("entry should be written");
+        let uri = Url::from_file_path(&path).expect("file URI should build");
+        let mut server = MusiLanguageServer::new(ClientSocket::new_closed());
+        let _ = server.open_documents.insert(uri.clone(), source.to_owned());
+
+        let response = server
+            .completions(CompletionParams {
+                text_document_position: TextDocumentPositionParams {
+                    text_document: TextDocumentIdentifier { uri },
+                    position: Position::new(1, 18),
+                },
+                work_done_progress_params: WorkDoneProgressParams::default(),
+                partial_result_params: PartialResultParams::default(),
+                context: None,
+            })
+            .expect("completion response should exist");
+        assert!(matches!(response, CompletionResponse::List(_)));
+        let items = match response {
+            CompletionResponse::List(list) => {
+                assert!(!list.is_incomplete);
+                list.items
+            }
+            CompletionResponse::Array(items) => items,
+        };
+        let before = items
+            .iter()
+            .find(|item| item.label == "before")
+            .expect("before completion should exist");
+
+        assert!(items.iter().any(|item| item.label == "let"));
+        assert_eq!(before.kind, Some(CompletionItemKind::VARIABLE));
+        let edit = before
+            .text_edit
+            .as_ref()
+            .and_then(|edit| match edit {
+                CompletionTextEdit::Edit(edit) => Some(edit),
+                CompletionTextEdit::InsertAndReplace(_) => None,
+            })
+            .expect("completion should provide replacement edit");
+        assert_eq!(edit.range.start, Position::new(1, 15));
+        assert_eq!(edit.range.end, Position::new(1, 18));
+        assert_eq!(edit.new_text, "before");
+    }
+
+    #[test]
+    fn completion_after_dot_returns_member_items() {
+        let root = temp_project();
+        fs::write(
+            root.join("musi.json"),
+            r#"{
+  "name": "app",
+  "version": "0.1.0",
+  "entry": "index.ms"
+}
+"#,
+        )
+        .expect("manifest should be written");
+        let path = root.join("index.ms");
+        let source = r"let point := { x := 1, y := 2 };
+point.
+";
+        fs::write(&path, source).expect("entry should be written");
+        let uri = Url::from_file_path(&path).expect("file URI should build");
+        let mut server = MusiLanguageServer::new(ClientSocket::new_closed());
+        let _ = server.open_documents.insert(uri.clone(), source.to_owned());
+
+        let response = server
+            .completions(CompletionParams {
+                text_document_position: TextDocumentPositionParams {
+                    text_document: TextDocumentIdentifier { uri },
+                    position: Position::new(1, 6),
+                },
+                work_done_progress_params: WorkDoneProgressParams::default(),
+                partial_result_params: PartialResultParams::default(),
+                context: None,
+            })
+            .expect("completion response should exist");
+        assert!(matches!(response, CompletionResponse::List(_)));
+        let items = match response {
+            CompletionResponse::List(list) => {
+                assert!(!list.is_incomplete);
+                list.items
+            }
+            CompletionResponse::Array(items) => items,
+        };
+
+        assert!(items.iter().any(|item| item.label == "x"));
+        assert!(items.iter().any(|item| item.label == "y"));
+        assert!(!items.iter().any(|item| item.label == "let"));
+        assert!(
+            items
+                .iter()
+                .all(|item| item.kind == Some(CompletionItemKind::PROPERTY))
         );
     }
 

@@ -13,7 +13,7 @@ HIL and BC/IL use different textual syntaxes by design:
 
 - HIL text is frontend/tooling-readable typed keyword IR.
 - BC/IL text is runtime/transport-readable assembly form.
-- HIL keeps source intent, not source sugar. It does not model `class`, `instance`, `with`, `via`, `using`, `for`, `provide`, or `borrow` as source forms. Source `unsafe pin` scopes lower to ordinary local scope unless FFI address extraction needs VM pin leases.
+- HIL keeps source intent, not source sugar. Pin action scopes inside `unsafe` blocks lower to ordinary local scope unless FFI address extraction needs VM pin leases.
 
 BC/IL mnemonics are canonical, short, and strict:
 
@@ -29,7 +29,7 @@ BC/IL is stack based:
 - branches transfer the whole current stack after condition/index pop
 - target stack must exactly match target block `stack [...]`
 
-BC/IL is not source syntax. It has no opcodes named `given`, `shape`, `law`, `proof`, `answer`, `ask`, `class`, `instance`, `option`, `result`, `tuple`, or `sum`.
+BC/IL is not source syntax. It has no opcodes named `given`, `shape`, `law`, `proof`, `answer`, `ask`, `option`, `result`, `tuple`, or `sum`.
 
 Core lowering examples:
 

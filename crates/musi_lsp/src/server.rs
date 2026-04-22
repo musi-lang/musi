@@ -5,6 +5,7 @@ use std::path::Path;
 use std::pin::Pin;
 
 use async_lsp::lsp_types::{
+    CompletionList, CompletionOptions, CompletionParams, CompletionResponse,
     DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
     DidSaveTextDocumentParams, DocumentFormattingParams, FormattingOptions, Hover, HoverContents,
     HoverParams, HoverProviderCapability, InitializeParams, InitializeResult, InitializedParams,
@@ -20,8 +21,9 @@ use async_lsp::{ClientSocket, LanguageServer, ResponseError};
 use musi_fmt::{FormatOptions, format_source};
 use musi_project::{ProjectOptions, load_project_ancestor};
 use musi_tooling::{
-    collect_project_diagnostics_with_overlay, hover_for_project_file_with_overlay,
-    inlay_hints_for_project_file_with_overlay, semantic_tokens_for_project_file_with_overlay,
+    collect_project_diagnostics_with_overlay, completions_for_project_file_with_overlay,
+    hover_for_project_file_with_overlay, inlay_hints_for_project_file_with_overlay,
+    semantic_tokens_for_project_file_with_overlay,
 };
 
 mod config;
@@ -30,7 +32,7 @@ mod convert;
 use config::LspConfig;
 use convert::{
     diagnostic_matches_path, encode_semantic_tokens, full_document_range, position_in_range,
-    semantic_tokens_legend, to_lsp_diagnostic, to_lsp_inlay_hint, to_tool_range,
+    semantic_tokens_legend, to_lsp_completion, to_lsp_diagnostic, to_lsp_inlay_hint, to_tool_range,
     truncate_hover_contents,
 };
 
@@ -62,6 +64,11 @@ impl MusiLanguageServer {
                 )),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 document_formatting_provider: Some(OneOf::Left(true)),
+                completion_provider: Some(CompletionOptions {
+                    resolve_provider: Some(false),
+                    trigger_characters: Some(vec![".".to_owned()]),
+                    ..CompletionOptions::default()
+                }),
                 inlay_hint_provider: Some(OneOf::Right(InlayHintServerCapabilities::Options(
                     InlayHintOptions {
                         work_done_progress_options: WorkDoneProgressOptions {
@@ -131,6 +138,32 @@ impl MusiLanguageServer {
         if let Ok(path) = uri.to_file_path() {
             self.publish_document_diagnostics(uri, &path);
         }
+    }
+
+    fn completions(&self, params: CompletionParams) -> Option<CompletionResponse> {
+        let text_document = params.text_document_position.text_document;
+        let position = params.text_document_position.position;
+        let path = text_document.uri.to_file_path().ok()?;
+        if path.file_name().is_some_and(|name| name == "musi.json") {
+            return None;
+        }
+        let overlay = self
+            .open_documents
+            .get(&text_document.uri)
+            .map(String::as_str);
+        let items = completions_for_project_file_with_overlay(
+            &path,
+            overlay,
+            usize::try_from(position.line).ok()?.saturating_add(1),
+            usize::try_from(position.character).ok()?.saturating_add(1),
+        )
+        .into_iter()
+        .map(to_lsp_completion)
+        .collect();
+        Some(CompletionResponse::List(CompletionList {
+            is_incomplete: false,
+            items,
+        }))
     }
 
     fn hover_at(&self, params: HoverParams) -> Option<Hover> {
@@ -287,6 +320,11 @@ impl LanguageServer for MusiLanguageServer {
     fn did_save(&mut self, params: DidSaveTextDocumentParams) -> NotifyResult {
         self.did_save_document(&params.text_document.uri);
         ControlFlow::Continue(())
+    }
+
+    fn completion(&mut self, params: CompletionParams) -> ServerFuture<Option<CompletionResponse>> {
+        let result = self.completions(params);
+        Box::pin(async move { Ok(result) })
     }
 
     fn hover(&mut self, params: HoverParams) -> ServerFuture<Option<Hover>> {

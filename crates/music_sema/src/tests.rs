@@ -1519,11 +1519,11 @@ mod success {
     }
 
     #[test]
-    fn unsafe_pin_accepts_pinnable_target() {
+    fn pin_inside_unsafe_accepts_pinnable_target() {
         let module = check(
             r"
         let xs := [1, 2];
-        let value := unsafe pin xs as pinned in 1;
+        let value := unsafe { pin xs as pinned in 1; };
     ",
         );
         assert!(!has_diag(&module, SemaDiagKind::UnsupportedPinTarget));
@@ -1531,10 +1531,21 @@ mod success {
     }
 
     #[test]
-    fn unsafe_pin_rejects_scalar_target() {
+    fn pin_outside_unsafe_reports_unsafe_block_requirement() {
         let module = check(
             r"
-        let value := unsafe pin 1 as pinned in 0;
+        let xs := [1, 2];
+        let value := pin xs as pinned in 1;
+    ",
+        );
+        assert!(has_diag(&module, SemaDiagKind::PinRequiresUnsafeBlock));
+    }
+
+    #[test]
+    fn pin_inside_unsafe_rejects_scalar_target() {
+        let module = check(
+            r"
+        let value := unsafe { pin 1 as pinned in 0; };
     ",
         );
         let diag =
@@ -1547,11 +1558,11 @@ mod success {
     }
 
     #[test]
-    fn unsafe_pin_rejects_returned_pin_handle() {
+    fn pin_inside_unsafe_rejects_returned_pin_handle() {
         let module = check(
             r"
         let xs := [1, 2];
-        let value := unsafe pin xs as pinned in pinned;
+        let value := unsafe { pin xs as pinned in pinned; };
     ",
         );
         let diag =

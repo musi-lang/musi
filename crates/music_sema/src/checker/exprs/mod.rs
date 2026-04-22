@@ -155,7 +155,9 @@ impl CheckPass<'_, '_, '_> {
     }
 
     fn check_pin_expr(&mut self, value: HirExprId, name: Ident, body: HirExprId) -> ExprFacts {
-        self.enter_unsafe_block();
+        if !self.in_unsafe_block() {
+            self.diag(name.span, DiagKind::PinRequiresUnsafeBlock, "");
+        }
         let value_facts = check_expr(self, value);
         let target_ty = value_facts.ty;
         let mut effects = value_facts.effects;
@@ -181,7 +183,6 @@ impl CheckPass<'_, '_, '_> {
 
         let body_facts = check_expr(self, body);
         effects.union_with(&body_facts.effects);
-        self.exit_unsafe_block();
 
         if self.is_pin_ty(body_facts.ty) {
             let name_text = self.resolve_symbol(name.name).to_owned();

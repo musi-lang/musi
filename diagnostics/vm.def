@@ -93,15 +93,15 @@ diag ModuleLoadRejected 6125
   message "module `{spec}` load rejected"
 
 diag ForeignCallRejected 6126
-  message "foreign call `{foreign}` rejected"
+  message "native call `{native}` rejected"
 
 diag PointerIntrinsicFailed 6127
   message "pointer intrinsic `{intrinsic}` failed (`{detail}`)"
   primary "pointer intrinsic `{intrinsic}` failed"
 
 diag NativeCallFailed 6128
-  message "native call `{foreign}` failed during `{stage}` for `{subject}` (`{detail}`)"
-  primary "native call `{foreign}` failed"
+  message "native call `{native}` failed during `{stage}` for `{subject}` (`{detail}`)"
+  primary "native call `{native}` failed"
 
 diag EffectRejected 6129
   message "effect `{effect}` operation `{op}` rejected (`{reason}`)"
