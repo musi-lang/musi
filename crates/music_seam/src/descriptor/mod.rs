@@ -1,4 +1,3 @@
-mod class;
 mod constant;
 mod data;
 mod effect;
@@ -7,9 +6,9 @@ mod foreign;
 mod global;
 mod meta;
 mod procedure;
+mod shape;
 mod type_desc;
 
-pub use class::ClassDescriptor;
 pub use constant::{ConstantDescriptor, ConstantValue};
 pub use data::{DataDescriptor, DataVariantDescriptor};
 pub use effect::{EffectDescriptor, EffectOpDescriptor};
@@ -18,4 +17,5 @@ pub use foreign::ForeignDescriptor;
 pub use global::GlobalDescriptor;
 pub use meta::MetaDescriptor;
 pub use procedure::ProcedureDescriptor;
+pub use shape::ShapeDescriptor;
 pub use type_desc::TypeDescriptor;

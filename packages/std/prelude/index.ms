@@ -55,14 +55,8 @@ export let String := core.String;
 export let Rune := core.Rune;
 --- Prelude alias for core Range.
 export let Range := core.Range;
---- Prelude alias for core ClosedRange.
-export let ClosedRange := core.ClosedRange;
---- Prelude alias for core PartialRangeFrom.
-export let PartialRangeFrom := core.PartialRangeFrom;
---- Prelude alias for core PartialRangeUpTo.
-export let PartialRangeUpTo := core.PartialRangeUpTo;
---- Prelude alias for core PartialRangeThru.
-export let PartialRangeThru := core.PartialRangeThru;
+--- Prelude alias for core Pin.
+export let Pin := core.Pin;
 --- Prelude alias for core CString.
 export let CString := core.CString;
 --- Prelude alias for core CPtr.
@@ -96,7 +90,7 @@ export let abort () : Empty := core.abort();
 
 --- Prelude abort effect contract.
 export opaque let Abort := core.Abort;
---- Prelude rangeable class.
+--- Prelude rangeable shape.
 export opaque let Rangeable := core.Rangeable;
---- Prelude range bounds class.
+--- Prelude range bounds shape.
 export opaque let RangeBounds := core.RangeBounds;

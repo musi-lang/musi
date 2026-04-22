@@ -150,6 +150,7 @@ impl RuntimeHeap {
         }
     }
 
+    #[allow(clippy::inline_always)]
     #[inline(always)]
     pub(crate) fn fast_seq2_mutation_2x2_pinned(
         &mut self,

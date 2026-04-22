@@ -88,11 +88,11 @@ impl TextBuilder {
     }
 
     fn parse_foreign_operand(&self, parts: &[String]) -> AssemblyResult<Operand> {
-        let name = parse_symbol(must_get(parts.get(1), "foreign")?)?;
+        let name = parse_symbol(must_get(parts.get(1), "native")?)?;
         let foreign = *self
             .foreigns
             .get(&name)
-            .ok_or_else(|| AssemblyError::TextParseFailed(format!("unknown foreign ${name}")))?;
+            .ok_or_else(|| AssemblyError::TextParseFailed(format!("unknown native ${name}")))?;
         Ok(Operand::Foreign(foreign))
     }
 

@@ -142,7 +142,7 @@ impl Vm {
             | Value::Module(_)
             | Value::Foreign(_)
             | Value::Effect(_)
-            | Value::Class(_) => Ok(None),
+            | Value::Shape(_) => Ok(None),
         }
     }
 

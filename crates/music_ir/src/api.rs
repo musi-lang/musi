@@ -2,7 +2,7 @@ use music_base::{SourceId, Span, diag::Diag};
 use music_module::ModuleKey;
 use music_names::NameBindingId;
 use music_sema::{
-    ClassSurface, DefinitionKey, EffectRow, ExportedValue, InstanceSurface, SurfaceDim, SurfaceTy,
+    DefinitionKey, EffectRow, ExportedValue, GivenSurface, ShapeSurface, SurfaceDim, SurfaceTy,
     SurfaceTyId, SurfaceTyKind,
 };
 use music_term::{TypeDim, TypeField, TypeModuleRef, TypeTerm, TypeTermKind};
@@ -115,10 +115,6 @@ const SURFACE_TYPE_TERM_PRIMITIVES: &[SurfaceTypeTermPrimitive] = &[
         surface: SurfaceTyKind::CPtr,
         term: TypeTermKind::CPtr,
     },
-    SurfaceTypeTermPrimitive {
-        surface: SurfaceTyKind::Module,
-        term: TypeTermKind::Module,
-    },
 ];
 
 pub type IrDiagList = Vec<Diag>;
@@ -197,11 +193,11 @@ fn lower_surface_named_callable_type_term(types: &[SurfaceTy], ty: &SurfaceTy) -
         SurfaceTyKind::Mut { inner } => TypeTerm::new(TypeTermKind::Mut {
             inner: Box::new(lower_surface_type_term_id(types, *inner)),
         }),
-        SurfaceTyKind::AnyClass { class } => TypeTerm::new(TypeTermKind::AnyClass {
-            class: Box::new(lower_surface_type_term_id(types, *class)),
+        SurfaceTyKind::AnyShape { capability: shape } => TypeTerm::new(TypeTermKind::AnyShape {
+            capability: Box::new(lower_surface_type_term_id(types, *shape)),
         }),
-        SurfaceTyKind::SomeClass { class } => TypeTerm::new(TypeTermKind::SomeClass {
-            class: Box::new(lower_surface_type_term_id(types, *class)),
+        SurfaceTyKind::SomeShape { capability: shape } => TypeTerm::new(TypeTermKind::SomeShape {
+            capability: Box::new(lower_surface_type_term_id(types, *shape)),
         }),
         _ => return None,
     })
@@ -240,24 +236,6 @@ fn lower_surface_range_type_term(types: &[SurfaceTy], ty: &SurfaceTy) -> Option<
         SurfaceTyKind::Range { bound } => TypeTerm::new(TypeTermKind::Range {
             bound: Box::new(lower_surface_type_term_id(types, *bound)),
         }),
-        SurfaceTyKind::ClosedRange { bound } => TypeTerm::new(TypeTermKind::ClosedRange {
-            bound: Box::new(lower_surface_type_term_id(types, *bound)),
-        }),
-        SurfaceTyKind::PartialRangeFrom { bound } => {
-            TypeTerm::new(TypeTermKind::PartialRangeFrom {
-                bound: Box::new(lower_surface_type_term_id(types, *bound)),
-            })
-        }
-        SurfaceTyKind::PartialRangeUpTo { bound } => {
-            TypeTerm::new(TypeTermKind::PartialRangeUpTo {
-                bound: Box::new(lower_surface_type_term_id(types, *bound)),
-            })
-        }
-        SurfaceTyKind::PartialRangeThru { bound } => {
-            TypeTerm::new(TypeTermKind::PartialRangeThru {
-                bound: Box::new(lower_surface_type_term_id(types, *bound)),
-            })
-        }
         _ => return None,
     })
 }
@@ -412,12 +390,58 @@ pub enum IrBinaryOp {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum IrRangeKind {
-    Open,
-    Closed,
-    From,
-    UpTo,
-    Thru,
+pub struct IrRangeKind {
+    pub lower: IrRangeEndpoint,
+    pub upper: IrRangeEndpoint,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IrRangeEndpoint {
+    Missing,
+    Included,
+    Excluded,
+}
+
+impl IrRangeKind {
+    #[must_use]
+    pub const fn bounded(include_lower: bool, include_upper: bool) -> Self {
+        Self {
+            lower: if include_lower {
+                IrRangeEndpoint::Included
+            } else {
+                IrRangeEndpoint::Excluded
+            },
+            upper: if include_upper {
+                IrRangeEndpoint::Included
+            } else {
+                IrRangeEndpoint::Excluded
+            },
+        }
+    }
+
+    #[must_use]
+    pub const fn from(include_lower: bool) -> Self {
+        Self {
+            lower: if include_lower {
+                IrRangeEndpoint::Included
+            } else {
+                IrRangeEndpoint::Excluded
+            },
+            upper: IrRangeEndpoint::Missing,
+        }
+    }
+
+    #[must_use]
+    pub const fn up_to(include_upper: bool) -> Self {
+        Self {
+            lower: IrRangeEndpoint::Missing,
+            upper: if include_upper {
+                IrRangeEndpoint::Included
+            } else {
+                IrRangeEndpoint::Excluded
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -488,7 +512,7 @@ impl IrRecordLayoutField {
 pub struct IrNameRef {
     pub binding: Option<NameBindingId>,
     pub name: Box<str>,
-    pub module_target: Option<ModuleKey>,
+    pub import_record_target: Option<ModuleKey>,
 }
 
 impl IrNameRef {
@@ -500,7 +524,7 @@ impl IrNameRef {
         Self {
             binding: None,
             name: name.into(),
-            module_target: None,
+            import_record_target: None,
         }
     }
 
@@ -517,14 +541,17 @@ impl IrNameRef {
     }
 
     #[must_use]
-    pub fn with_module_target(mut self, module_target: ModuleKey) -> Self {
-        self.module_target = Some(module_target);
+    pub fn with_import_record_target(mut self, import_record_target: ModuleKey) -> Self {
+        self.import_record_target = Some(import_record_target);
         self
     }
 
     #[must_use]
-    pub fn with_module_target_opt(mut self, module_target: Option<ModuleKey>) -> Self {
-        self.module_target = module_target;
+    pub fn with_import_record_target_opt(
+        mut self,
+        import_record_target: Option<ModuleKey>,
+    ) -> Self {
+        self.import_record_target = import_record_target;
         self
     }
 }
@@ -534,7 +561,7 @@ pub enum IrAssignTarget {
     Binding {
         binding: Option<NameBindingId>,
         name: Box<str>,
-        module_target: Option<ModuleKey>,
+        import_record_target: Option<ModuleKey>,
     },
     Index {
         base: Box<IrExpr>,
@@ -623,7 +650,7 @@ pub enum IrExprKind {
     Name {
         binding: Option<NameBindingId>,
         name: Box<str>,
-        module_target: Option<ModuleKey>,
+        import_record_target: Option<ModuleKey>,
     },
     Temp {
         temp: IrTempId,
@@ -719,6 +746,7 @@ pub enum IrExprKind {
     RangeMaterialize {
         range: Box<IrExpr>,
         evidence: Box<IrExpr>,
+        result_ty_name: Box<str>,
     },
     Not {
         expr: Box<IrExpr>,
@@ -753,7 +781,7 @@ pub enum IrExprKind {
         result_ty: Box<str>,
         args: Box<[IrArg]>,
     },
-    CallSeq {
+    CallParts {
         callee: Box<IrExpr>,
         args: Box<[IrSeqPart]>,
     },
@@ -767,14 +795,14 @@ pub enum IrExprKind {
         op_index: u16,
         args: Box<[IrSeqPart]>,
     },
-    HandlerLit {
+    AnswerLit {
         effect_key: DefinitionKey,
         value: Box<IrExpr>,
         ops: Box<[IrHandleOp]>,
     },
     Handle {
         effect_key: DefinitionKey,
-        handler: Box<IrExpr>,
+        answer: Box<IrExpr>,
         body: Box<IrExpr>,
     },
     Resume {
@@ -813,7 +841,7 @@ pub struct IrCallable {
     pub hot: bool,
     pub cold: bool,
     pub effects: EffectRow,
-    pub module_target: Option<ModuleKey>,
+    pub import_record_target: Option<ModuleKey>,
 }
 
 impl IrCallable {
@@ -831,7 +859,7 @@ impl IrCallable {
             hot: false,
             cold: false,
             effects: EffectRow::default(),
-            module_target: None,
+            import_record_target: None,
         }
     }
 
@@ -872,14 +900,17 @@ impl IrCallable {
     }
 
     #[must_use]
-    pub fn with_module_target(mut self, module_target: ModuleKey) -> Self {
-        self.module_target = Some(module_target);
+    pub fn with_import_record_target(mut self, import_record_target: ModuleKey) -> Self {
+        self.import_record_target = Some(import_record_target);
         self
     }
 
     #[must_use]
-    pub fn with_module_target_opt(mut self, module_target: Option<ModuleKey>) -> Self {
-        self.module_target = module_target;
+    pub fn with_import_record_target_opt(
+        mut self,
+        import_record_target: Option<ModuleKey>,
+    ) -> Self {
+        self.import_record_target = import_record_target;
         self
     }
 }
@@ -1066,7 +1097,7 @@ pub struct IrGlobal {
     pub body: IrExpr,
     pub exported: bool,
     pub effects: EffectRow,
-    pub module_target: Option<ModuleKey>,
+    pub import_record_target: Option<ModuleKey>,
 }
 
 impl IrGlobal {
@@ -1081,7 +1112,7 @@ impl IrGlobal {
             body,
             exported: false,
             effects: EffectRow::default(),
-            module_target: None,
+            import_record_target: None,
         }
     }
 
@@ -1110,14 +1141,17 @@ impl IrGlobal {
     }
 
     #[must_use]
-    pub fn with_module_target(mut self, module_target: ModuleKey) -> Self {
-        self.module_target = Some(module_target);
+    pub fn with_import_record_target(mut self, import_record_target: ModuleKey) -> Self {
+        self.import_record_target = Some(import_record_target);
         self
     }
 
     #[must_use]
-    pub fn with_module_target_opt(mut self, module_target: Option<ModuleKey>) -> Self {
-        self.module_target = module_target;
+    pub fn with_import_record_target_opt(
+        mut self,
+        import_record_target: Option<ModuleKey>,
+    ) -> Self {
+        self.import_record_target = import_record_target;
         self
     }
 }
@@ -1184,12 +1218,12 @@ impl IrModuleInitPart {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IrClassDef {
+pub struct IrShapeDef {
     pub key: DefinitionKey,
     pub member_names: IrNameList,
 }
 
-impl IrClassDef {
+impl IrShapeDef {
     #[must_use]
     pub const fn new(key: DefinitionKey, member_names: IrNameList) -> Self {
         Self { key, member_names }
@@ -1197,16 +1231,16 @@ impl IrClassDef {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IrInstanceDef {
-    pub class_key: DefinitionKey,
+pub struct IrGivenDef {
+    pub shape_key: DefinitionKey,
     pub member_names: IrNameList,
 }
 
-impl IrInstanceDef {
+impl IrGivenDef {
     #[must_use]
-    pub const fn new(class_key: DefinitionKey, member_names: IrNameList) -> Self {
+    pub const fn new(shape_key: DefinitionKey, member_names: IrNameList) -> Self {
         Self {
-            class_key,
+            shape_key,
             member_names,
         }
     }
@@ -1246,8 +1280,8 @@ pub struct IrModule {
     data_defs: Box<[IrDataDef]>,
     foreigns: Box<[IrForeignDef]>,
     effects: Box<[IrEffectDef]>,
-    classes: Box<[IrClassDef]>,
-    instances: Box<[IrInstanceDef]>,
+    shapes: Box<[IrShapeDef]>,
+    givens: Box<[IrGivenDef]>,
     meta: Box<[IrMetaRecord]>,
 }
 
@@ -1259,8 +1293,8 @@ type IrModuleCollections = (
     Box<[IrDataDef]>,
     Box<[IrForeignDef]>,
     Box<[IrEffectDef]>,
-    Box<[IrClassDef]>,
-    Box<[IrInstanceDef]>,
+    Box<[IrShapeDef]>,
+    Box<[IrGivenDef]>,
     Box<[IrMetaRecord]>,
 );
 
@@ -1283,8 +1317,8 @@ impl IrModule {
             data_defs: collections.4,
             foreigns: collections.5,
             effects: collections.6,
-            classes: collections.7,
-            instances: collections.8,
+            shapes: collections.7,
+            givens: collections.8,
             meta: collections.9,
         }
     }
@@ -1340,13 +1374,13 @@ impl IrModule {
     }
 
     #[must_use]
-    pub fn classes(&self) -> &[IrClassDef] {
-        &self.classes
+    pub fn shapes(&self) -> &[IrShapeDef] {
+        &self.shapes
     }
 
     #[must_use]
-    pub fn instances(&self) -> &[IrInstanceDef] {
-        &self.instances
+    pub fn givens(&self) -> &[IrGivenDef] {
+        &self.givens
     }
 
     #[must_use]
@@ -1367,13 +1401,13 @@ impl IrModule {
     }
 
     #[must_use]
-    pub fn class(&self, key: &DefinitionKey) -> Option<&IrClassDef> {
-        self.classes.iter().find(|class| &class.key == key)
+    pub fn shape(&self, key: &DefinitionKey) -> Option<&IrShapeDef> {
+        self.shapes.iter().find(|shape| &shape.key == key)
     }
 }
 
-impl From<&ClassSurface> for IrClassDef {
-    fn from(value: &ClassSurface) -> Self {
+impl From<&ShapeSurface> for IrShapeDef {
+    fn from(value: &ShapeSurface) -> Self {
         Self::new(
             value.key.clone(),
             value
@@ -1386,8 +1420,8 @@ impl From<&ClassSurface> for IrClassDef {
     }
 }
 
-impl From<&InstanceSurface> for IrInstanceDef {
-    fn from(value: &InstanceSurface) -> Self {
-        Self::new(value.class_key.clone(), value.member_names.clone())
+impl From<&GivenSurface> for IrGivenDef {
+    fn from(value: &GivenSurface) -> Self {
+        Self::new(value.shape_key.clone(), value.member_names.clone())
     }
 }

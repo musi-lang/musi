@@ -71,11 +71,11 @@ mod success {
         assert_eq!(module_source(test::SPEC), Some(test::MODULE));
         assert_eq!(module_source(syntax::SPEC), Some(syntax::MODULE));
         assert_eq!(module_source("musi:missing"), None);
-        assert!(core::MODULE.contains("export opaque let Rangeable[T] := class"));
+        assert!(core::MODULE.contains("export opaque let Rangeable[T] := shape"));
         assert!(core::MODULE.contains("export opaque let Option [T] := data"));
         assert!(runtime::MODULE.contains("export opaque let Runtime := effect"));
         assert!(runtime::MODULE.contains("let processArgCount () : Int;"));
-        assert!(test::MODULE.contains("export opaque let Sample [T] := class"));
+        assert!(test::MODULE.contains("export opaque let Sample [T] := shape"));
         assert!(test::MODULE.contains("export opaque let SampleList [T] := data"));
         assert!(test::MODULE.contains("export opaque let SampleCase [T] := data"));
     }
@@ -86,7 +86,7 @@ mod success {
             r#"
 let Core := import "musi:core";
 let Intrinsics := import "musi:test";
-export let answer : Int := 1;
+export let result : Int := 1;
 "#,
         );
     }
@@ -97,7 +97,7 @@ export let answer : Int := 1;
             r#"
 let Core := import "musi:core";
 let Syntax := import "musi:syntax";
-export let answer (body : Syntax, result : Type) : Any := Syntax.eval(body, result);
+export let result (body : Syntax, result : Type) : Any := Syntax.eval(body, result);
 "#,
         );
     }
@@ -107,7 +107,7 @@ export let answer (body : Syntax, result : Type) : Any := Syntax.eval(body, resu
         compile_main_entry_with_source(
             r#"
 let Runtime := import "musi:runtime";
-export let answer () : Int := Runtime.timeNowUnixMs();
+export let result () : Int := Runtime.timeNowUnixMs();
 "#,
         );
     }

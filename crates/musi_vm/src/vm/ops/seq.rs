@@ -12,79 +12,82 @@ use crate::value::DataValue;
 const MAX_RANGE_MATERIALIZE_LEN: usize = 1_000_000;
 
 #[derive(Clone, Copy)]
-enum RuntimeRangeKind {
-    Open,
-    Closed,
-    From,
-    UpTo,
-    Thru,
+struct RuntimeRangeKind {
+    include_lower: bool,
+    include_upper: bool,
+}
+
+impl RuntimeRangeKind {
+    const CLOSED: Self = Self {
+        include_lower: true,
+        include_upper: true,
+    };
+    const OPEN: Self = Self {
+        include_lower: true,
+        include_upper: false,
+    };
+    const OPEN_CLOSED: Self = Self {
+        include_lower: false,
+        include_upper: true,
+    };
+    const OPEN_OPEN: Self = Self {
+        include_lower: false,
+        include_upper: false,
+    };
 }
 
 impl Vm {
     pub(crate) fn exec_seq(&mut self, instruction: &Instruction) -> VmResult<StepOutcome> {
         match instruction.opcode {
-            Opcode::SeqNew => {
+            Opcode::NewArr => {
                 let Operand::TypeLen { ty, len } = instruction.operand else {
                     return Err(Self::invalid_operand(instruction));
                 };
                 self.exec_seq_new(ty, len)
             }
-            Opcode::SeqGet => self.exec_seq_get(),
-            Opcode::SeqGetN => {
-                let Operand::I16(len) = instruction.operand else {
-                    return Err(Self::invalid_operand(instruction));
-                };
-                self.exec_seq_get_n(len)
-            }
-            Opcode::SeqSet => self.exec_seq_set(),
-            Opcode::SeqSetN => {
-                let Operand::I16(len) = instruction.operand else {
-                    return Err(Self::invalid_operand(instruction));
-                };
-                self.exec_seq_set_n(len)
-            }
-            Opcode::SeqCat => self.exec_seq_cat(),
-            Opcode::SeqLen => self.exec_seq_len(),
-            Opcode::RangeNew => self.exec_range_new(instruction),
-            Opcode::RangeContains => self.exec_range_contains(),
-            Opcode::RangeMaterialize => self.exec_range_materialize(),
-            Opcode::SeqHas => self.exec_seq_has(),
+            Opcode::LdElem => match instruction.operand {
+                Operand::I16(len) => self.exec_seq_get_n(len),
+                _ => self.exec_seq_get(),
+            },
+            Opcode::StElem => match instruction.operand {
+                Operand::I16(len) => self.exec_seq_set_n(len),
+                _ => self.exec_seq_set(),
+            },
+            Opcode::Call => match instruction.operand {
+                Operand::I16(_) => self.exec_seq_has(),
+                _ => self.exec_seq_cat(),
+            },
+            Opcode::LdLen => self.exec_seq_len(),
             _ => Err(Self::invalid_dispatch(instruction, "sequence")),
         }
     }
 
     pub(crate) fn exec_fast_seq(&mut self, runtime: &RuntimeInstruction) -> VmResult<StepOutcome> {
         match runtime.opcode {
-            Opcode::SeqNew => {
+            Opcode::NewArr => {
                 let RuntimeOperand::TypeLen { ty, len } = runtime.operand else {
                     let instruction = self.current_raw_instruction(runtime.raw_index)?;
                     return Err(Self::invalid_operand(&instruction));
                 };
                 self.exec_seq_new(ty, len)
             }
-            Opcode::SeqGet => self.exec_seq_get(),
-            Opcode::SeqGetN => {
-                let RuntimeOperand::I16(len) = runtime.operand else {
-                    let instruction = self.current_raw_instruction(runtime.raw_index)?;
-                    return Err(Self::invalid_operand(&instruction));
-                };
-                self.exec_seq_get_n(len)
-            }
-            Opcode::SeqSet => self.exec_seq_set(),
-            Opcode::SeqSetN => {
-                let RuntimeOperand::I16(len) = runtime.operand else {
-                    let instruction = self.current_raw_instruction(runtime.raw_index)?;
-                    return Err(Self::invalid_operand(&instruction));
-                };
-                self.exec_seq_set_n(len)
-            }
+            Opcode::LdElem => match runtime.operand {
+                RuntimeOperand::I16(len) => self.exec_seq_get_n(len),
+                _ => self.exec_seq_get(),
+            },
+            Opcode::StElem => match runtime.operand {
+                RuntimeOperand::I16(len) => self.exec_seq_set_n(len),
+                _ => self.exec_seq_set(),
+            },
             _ => {
                 let instruction = self.current_raw_instruction(runtime.raw_index)?;
                 Err(Self::invalid_dispatch(&instruction, "sequence"))
             }
         }
     }
+}
 
+impl Vm {
     fn exec_seq_new(&mut self, ty: TypeId, len: u16) -> VmResult<StepOutcome> {
         let items = self.pop_args(usize::from(len))?;
         let value = self.alloc_sequence_owned(ty, items)?;
@@ -159,7 +162,7 @@ impl Vm {
         Ok(StepOutcome::Continue)
     }
 
-    fn exec_seq_cat(&mut self) -> VmResult<StepOutcome> {
+    pub(crate) fn exec_seq_cat(&mut self) -> VmResult<StepOutcome> {
         let right_value = self.pop_value()?;
         let right_items = self.expect_seq_items(right_value)?;
         let left_value = self.pop_value()?;
@@ -178,54 +181,159 @@ impl Vm {
         self.push_value(Value::Int(len))?;
         Ok(StepOutcome::Continue)
     }
+}
 
-    fn exec_range_new(&mut self, instruction: &Instruction) -> VmResult<StepOutcome> {
-        let Operand::TypeLen { ty, len } = instruction.operand else {
-            return Err(Self::invalid_operand(instruction));
+impl Vm {
+    fn range_construct_intrinsic(
+        &mut self,
+        ty: TypeId,
+        kind: RuntimeRangeKind,
+        args: &[Value],
+    ) -> VmResult<Value> {
+        let [lower, upper] = args else {
+            return Err(VmError::new(VmErrorKind::CallArityMismatch {
+                callee: "range.construct".into(),
+                expected: 2,
+                found: args.len(),
+            }));
         };
-        let kind = Self::decode_range_kind(len)?;
-        let upper = self.pop_value()?;
-        let lower = self.pop_value()?;
-        let fields = match kind {
-            RuntimeRangeKind::Open | RuntimeRangeKind::Closed => vec![lower, upper],
-            RuntimeRangeKind::From => {
-                let evidence = self.pop_value()?;
-                let (_, default_upper) = self.range_bounds_dictionary(evidence)?;
-                vec![self.call_value(default_upper, &[])?, lower]
-            }
-            RuntimeRangeKind::UpTo | RuntimeRangeKind::Thru => {
-                let evidence = self.pop_value()?;
-                let (default_lower, _) = self.range_bounds_dictionary(evidence)?;
-                vec![self.call_value(default_lower, &[])?, upper]
-            }
+        let fields = vec![
+            lower.clone(),
+            upper.clone(),
+            Value::Int(Self::range_flag_value(kind.include_lower)),
+            Value::Int(Self::range_flag_value(kind.include_upper)),
+        ];
+        self.alloc_data(ty, 0, fields)
+    }
+
+    fn range_construct_with_default_bound(
+        &mut self,
+        ty: TypeId,
+        kind: RuntimeRangeKind,
+        lower_from_arg: bool,
+        args: &[Value],
+    ) -> VmResult<Value> {
+        let [evidence, bound] = args else {
+            return Err(VmError::new(VmErrorKind::CallArityMismatch {
+                callee: "range.construct.partial".into(),
+                expected: 2,
+                found: args.len(),
+            }));
         };
-        let value = self.alloc_data(ty, 0, fields)?;
-        self.push_value(value)?;
-        Ok(StepOutcome::Continue)
+        let (default_lower, default_upper) = self.range_bounds_dictionary(evidence.clone())?;
+        let (lower, upper) = if lower_from_arg {
+            (bound.clone(), self.call_value(default_upper, &[])?)
+        } else {
+            (self.call_value(default_lower, &[])?, bound.clone())
+        };
+        let fields = vec![
+            lower,
+            upper,
+            Value::Int(Self::range_flag_value(kind.include_lower)),
+            Value::Int(Self::range_flag_value(kind.include_upper)),
+        ];
+        self.alloc_data(ty, 0, fields)
     }
 
-    fn exec_range_contains(&mut self) -> VmResult<StepOutcome> {
-        let needle = self.pop_value()?;
-        let range = self.pop_value()?;
-        let evidence = self.pop_value()?;
-        let module_slot = self.current_module_slot()?;
-        let contains = self.range_contains_value(range, evidence, &needle)?;
-        let value = self.bool_value(module_slot, contains)?;
-        self.push_value(value)?;
-        Ok(StepOutcome::Continue)
+    pub(super) fn range_construct_open_intrinsic(
+        &mut self,
+        ty: TypeId,
+        args: &[Value],
+    ) -> VmResult<Value> {
+        self.range_construct_intrinsic(ty, RuntimeRangeKind::OPEN, args)
     }
 
-    fn exec_range_materialize(&mut self) -> VmResult<StepOutcome> {
-        let range = self.pop_value()?;
-        let evidence = self.pop_value()?;
-        let ty = self.range_sequence_type(&range)?;
-        let items = self.materialize_range_items(range, evidence)?;
-        let value = self.alloc_sequence(ty, items)?;
-        self.push_value(value)?;
-        Ok(StepOutcome::Continue)
+    pub(super) fn range_construct_closed_intrinsic(
+        &mut self,
+        ty: TypeId,
+        args: &[Value],
+    ) -> VmResult<Value> {
+        self.range_construct_intrinsic(ty, RuntimeRangeKind::CLOSED, args)
     }
 
-    fn exec_seq_has(&mut self) -> VmResult<StepOutcome> {
+    pub(super) fn range_construct_open_closed_intrinsic(
+        &mut self,
+        ty: TypeId,
+        args: &[Value],
+    ) -> VmResult<Value> {
+        self.range_construct_intrinsic(ty, RuntimeRangeKind::OPEN_CLOSED, args)
+    }
+
+    pub(super) fn range_construct_open_open_intrinsic(
+        &mut self,
+        ty: TypeId,
+        args: &[Value],
+    ) -> VmResult<Value> {
+        self.range_construct_intrinsic(ty, RuntimeRangeKind::OPEN_OPEN, args)
+    }
+
+    pub(super) fn range_construct_from_intrinsic(
+        &mut self,
+        ty: TypeId,
+        args: &[Value],
+    ) -> VmResult<Value> {
+        self.range_construct_with_default_bound(ty, RuntimeRangeKind::OPEN, true, args)
+    }
+
+    pub(super) fn range_construct_from_exclusive_intrinsic(
+        &mut self,
+        ty: TypeId,
+        args: &[Value],
+    ) -> VmResult<Value> {
+        self.range_construct_with_default_bound(ty, RuntimeRangeKind::OPEN_OPEN, true, args)
+    }
+
+    pub(super) fn range_construct_up_to_intrinsic(
+        &mut self,
+        ty: TypeId,
+        args: &[Value],
+    ) -> VmResult<Value> {
+        self.range_construct_with_default_bound(ty, RuntimeRangeKind::OPEN, false, args)
+    }
+
+    pub(super) fn range_construct_thru_intrinsic(
+        &mut self,
+        ty: TypeId,
+        args: &[Value],
+    ) -> VmResult<Value> {
+        self.range_construct_with_default_bound(ty, RuntimeRangeKind::CLOSED, false, args)
+    }
+
+    pub(crate) fn range_contains_intrinsic(
+        &mut self,
+        module_slot: usize,
+        args: &[Value],
+    ) -> VmResult<Value> {
+        let [evidence, range, needle] = args else {
+            return Err(VmError::new(VmErrorKind::CallArityMismatch {
+                callee: "range.contains".into(),
+                expected: 3,
+                found: args.len(),
+            }));
+        };
+        let contains = self.range_contains_value(range.clone(), evidence.clone(), needle)?;
+        self.bool_value(module_slot, contains)
+    }
+
+    pub(crate) fn range_materialize_intrinsic(
+        &mut self,
+        ty: TypeId,
+        args: &[Value],
+    ) -> VmResult<Value> {
+        let [evidence, range] = args else {
+            return Err(VmError::new(VmErrorKind::CallArityMismatch {
+                callee: "range.materialize".into(),
+                expected: 2,
+                found: args.len(),
+            }));
+        };
+        let items = self.materialize_range_items(range.clone(), evidence.clone())?;
+        self.alloc_sequence(ty, items)
+    }
+}
+
+impl Vm {
+    pub(crate) fn exec_seq_has(&mut self) -> VmResult<StepOutcome> {
         let needle = self.pop_value()?;
         let seq_value = self.pop_value()?;
         let contains = match seq_value {
@@ -289,19 +397,6 @@ impl Vm {
 }
 
 impl Vm {
-    fn decode_range_kind(flags: u16) -> VmResult<RuntimeRangeKind> {
-        match flags {
-            0 => Ok(RuntimeRangeKind::Open),
-            1 => Ok(RuntimeRangeKind::Closed),
-            2 => Ok(RuntimeRangeKind::From),
-            3 => Ok(RuntimeRangeKind::UpTo),
-            4 => Ok(RuntimeRangeKind::Thru),
-            _ => Err(VmError::new(VmErrorKind::InvalidRangeStep {
-                detail: "unknown range kind".into(),
-            })),
-        }
-    }
-
     fn materialize_range_items(&mut self, range: Value, evidence: Value) -> VmResult<Vec<Value>> {
         let (start, end, kind) = self.range_parts(range)?;
         let (compare, next, prev) = self.range_dictionary(evidence)?;
@@ -309,6 +404,9 @@ impl Vm {
         let is_ascending = direction <= 0;
         let step = if is_ascending { next } else { prev };
         let mut current = start;
+        if !kind.include_lower {
+            current = self.step_range_value(&step, &current, is_ascending, &compare)?;
+        }
         let mut items = Vec::new();
         loop {
             let cmp_to_end = self.compare_range_values(&compare, &current, &end)?;
@@ -318,7 +416,7 @@ impl Vm {
                 cmp_to_end > 0
             };
             let at_end = cmp_to_end == 0;
-            let include_end = matches!(kind, RuntimeRangeKind::Closed | RuntimeRangeKind::Thru);
+            let include_end = kind.include_upper;
             if !(before_end || include_end && at_end) {
                 break;
             }
@@ -350,6 +448,9 @@ impl Vm {
         let is_ascending = direction <= 0;
         let step = if is_ascending { next } else { prev };
         let mut current = start;
+        if !kind.include_lower {
+            current = self.step_range_value(&step, &current, is_ascending, &compare)?;
+        }
         let mut visited = 0usize;
         loop {
             let cmp_to_end = self.compare_range_values(&compare, &current, &end)?;
@@ -359,7 +460,7 @@ impl Vm {
                 cmp_to_end > 0
             };
             let at_end = cmp_to_end == 0;
-            let include_end = matches!(kind, RuntimeRangeKind::Closed | RuntimeRangeKind::Thru);
+            let include_end = kind.include_upper;
             if !(before_end || include_end && at_end) {
                 return Ok(false);
             }
@@ -389,20 +490,29 @@ impl Vm {
                 found: VmValueKind::Data,
             }));
         };
-        let (start, end) = match kind {
-            RuntimeRangeKind::From => (
-                data.fields.get(1).cloned().unwrap_or(Value::Unit),
-                data.fields.first().cloned().unwrap_or(Value::Unit),
-            ),
-            RuntimeRangeKind::Open
-            | RuntimeRangeKind::Closed
-            | RuntimeRangeKind::UpTo
-            | RuntimeRangeKind::Thru => (
-                data.fields.first().cloned().unwrap_or(Value::Unit),
-                data.fields.get(1).cloned().unwrap_or(Value::Unit),
-            ),
+        let start = data.fields.first().cloned().unwrap_or(Value::Unit);
+        let end = data.fields.get(1).cloned().unwrap_or(Value::Unit);
+        let include_lower = data
+            .fields
+            .get(2)
+            .map_or(kind.include_lower, Self::value_flag_is_true);
+        let include_upper = data
+            .fields
+            .get(3)
+            .map_or(kind.include_upper, Self::value_flag_is_true);
+        let kind = RuntimeRangeKind {
+            include_lower,
+            include_upper,
         };
         Ok((start, end, kind))
+    }
+
+    const fn value_flag_is_true(value: &Value) -> bool {
+        matches!(value, Value::Int(n) if *n != 0)
+    }
+
+    const fn range_flag_value(value: bool) -> i64 {
+        if value { 1 } else { 0 }
     }
 
     fn range_dictionary(&self, evidence: Value) -> VmResult<(Value, Value, Value)> {
@@ -435,35 +545,6 @@ impl Vm {
             }));
         }
         Ok(data)
-    }
-
-    fn range_sequence_type(&self, range: &Value) -> VmResult<TypeId> {
-        let Value::Data(data) = range else {
-            return Err(Self::invalid_value_kind(VmValueKind::Data, range));
-        };
-        let range_ty = self.heap.data(*data)?.ty;
-        let range_name = self
-            .loaded_modules
-            .iter()
-            .find_map(|module| {
-                let name = module.program.type_name(range_ty);
-                Self::range_item_name(name).is_some().then_some(name)
-            })
-            .ok_or_else(|| {
-                VmError::new(VmErrorKind::InvalidValueKind {
-                    expected: VmValueKind::Seq,
-                    found: VmValueKind::Unit,
-                })
-            })?;
-        let item_name = Self::range_item_name(range_name).unwrap_or(range_name);
-        let seq_name = format!("[]{item_name}");
-        let module_slot = self.current_module_slot()?;
-        self.named_type_id(module_slot, &seq_name).ok_or_else(|| {
-            VmError::new(VmErrorKind::InvalidValueKind {
-                expected: VmValueKind::Seq,
-                found: VmValueKind::Unit,
-            })
-        })
     }
 
     fn compare_range_values(
@@ -543,28 +624,8 @@ impl Vm {
 
     fn range_type_kind(&self, ty: TypeId) -> Option<RuntimeRangeKind> {
         match self.named_type_tail(ty)? {
-            tail if tail.starts_with("Range[") => Some(RuntimeRangeKind::Open),
-            tail if tail.starts_with("ClosedRange[") => Some(RuntimeRangeKind::Closed),
-            tail if tail.starts_with("PartialRangeFrom[") => Some(RuntimeRangeKind::From),
-            tail if tail.starts_with("PartialRangeUpTo[") => Some(RuntimeRangeKind::UpTo),
-            tail if tail.starts_with("PartialRangeThru[") => Some(RuntimeRangeKind::Thru),
+            tail if tail.starts_with("Range[") => Some(RuntimeRangeKind::OPEN),
             _ => None,
         }
-    }
-
-    fn range_item_name(range_name: &str) -> Option<&str> {
-        [
-            "Range[",
-            "ClosedRange[",
-            "PartialRangeFrom[",
-            "PartialRangeUpTo[",
-            "PartialRangeThru[",
-        ]
-        .into_iter()
-        .find_map(|prefix| {
-            range_name
-                .rsplit_once(prefix)
-                .map(|(_, tail)| tail.strip_suffix(']').unwrap_or(tail))
-        })
     }
 }

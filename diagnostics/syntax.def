@@ -5,15 +5,15 @@ diag InvalidChar 1200
   primary "character `{ch}` not valid here"
 
 diag UnterminatedStringLiteral 1201
-  message "unterminated string literal"
+  message "missing closing `\"` in string literal"
   primary "string starts here"
 
 diag UnterminatedRuneLiteral 1202
-  message "unterminated rune literal"
+  message "missing closing `'` in rune literal"
   primary "rune starts here"
 
 diag EmptyRuneLiteral 1203
-  message "empty rune literal"
+  message "rune literal needs unicode scalar"
   primary "rune literal needs unicode scalar"
 
 diag RuneLiteralTooLong 1204
@@ -21,16 +21,16 @@ diag RuneLiteralTooLong 1204
   primary "rune literal payload too long"
 
 diag UnterminatedBlockComment 1205
-  message "unterminated block comment"
+  message "missing closing `-/` in block comment"
   primary "comment starts here"
 
 diag UnterminatedTemplateLiteral 1206
-  message "unterminated template literal"
+  message "missing closing ``` in template literal"
   primary "template starts here"
 
 diag MissingDigitsAfterBasePrefix 1207
-  message "base `{base}` literal requires digits"
-  primary "missing digits after base prefix"
+  message "missing digits after base `{base}` prefix"
+  primary "base `{base}` prefix needs digits"
 
 diag InvalidDigitForBase 1208
   message "invalid digit `{ch}` in base `{base}` literal"
@@ -41,23 +41,22 @@ diag UnexpectedUnderscoreInNumberLiteral 1209
   primary "underscore cannot appear here"
 
 diag MissingDigitAfterUnderscoreInNumberLiteral 1210
-  message "number literal requires digit after `_`"
+  message "missing digit after `_` in number literal"
   primary "missing digit after `_`"
 
 diag MissingExponentDigits 1211
-  message "exponent requires digits"
-  primary "missing exponent digits"
+  message "missing exponent digits"
+  primary "exponent marker needs digits"
 
 diag MissingEscapeCode 1212
-  message "escape requires code"
+  message "missing escape code"
   primary "missing escape code after `\\`"
 
 diag UnexpectedEscape 1213
-  message "unsupported escape `\\{ch}`"
-  primary "unsupported escape `\\{ch}`"
+  message "unexpected escape `\\{ch}`"
 
 diag MissingHexDigitsInByteEscape 1214
-  message "`\\x` escape requires hex digits"
+  message "missing hex digits in `\\x` escape"
   primary "missing hex digits after `\\x`"
 
 diag InvalidHexDigitInByteEscape 1215
@@ -65,7 +64,7 @@ diag InvalidHexDigitInByteEscape 1215
   primary "hex digit `{ch}` not valid here"
 
 diag MissingHexDigitsInUnicodeEscape 1216
-  message "`\\u` escape requires hex digits"
+  message "missing hex digits in `\\u` escape"
   primary "missing hex digits after `\\u`"
 
 diag InvalidHexDigitInUnicodeEscape 1217
@@ -73,8 +72,8 @@ diag InvalidHexDigitInUnicodeEscape 1217
   primary "hex digit `{ch}` not valid here"
 
 diag ExpectedFourOrSixHexDigitsInUnicodeEscape 1218
-  message "`\\u` escape requires 4 or 6 hex digits"
-  primary "invalid unicode escape length"
+  message "`\\u` escape needs 4 or 6 hex digits"
+  primary "`\\u` escape length must be 4 or 6 hex digits"
 
 diag InvalidUnicodeScalar 1219
   message "invalid unicode scalar `U+{value}`"
@@ -125,7 +124,7 @@ diag SpliceOutsideQuote 1310
   primary "splice appears outside quote"
 
 diag NonAssociativeChain 1311
-  message "comparison chain requires grouping"
+  message "comparison chain needs grouping"
   primary "chain continues here"
   help "parenthesize comparison"
 

@@ -35,14 +35,14 @@ impl Vm {
 
     pub(crate) fn exec_type(&mut self, instruction: &Instruction) -> VmResult<StepOutcome> {
         match instruction.opcode {
-            Opcode::TyId => {
+            Opcode::LdType => {
                 let Operand::Type(ty) = instruction.operand else {
                     return Err(Self::invalid_operand(instruction));
                 };
                 self.push_value(Value::Type(ty))?;
                 Ok(StepOutcome::Continue)
             }
-            Opcode::TyApply => {
+            Opcode::Call => {
                 let Operand::I16(count) = instruction.operand else {
                     return Err(Self::invalid_operand(instruction));
                 };
@@ -67,7 +67,7 @@ impl Vm {
                 self.push_value(applied)?;
                 Ok(StepOutcome::Continue)
             }
-            Opcode::TyChk => {
+            Opcode::IsInst => {
                 let Operand::Type(ty) = instruction.operand else {
                     return Err(Self::invalid_operand(instruction));
                 };
@@ -78,7 +78,7 @@ impl Vm {
                 self.push_value(value)?;
                 Ok(StepOutcome::Continue)
             }
-            Opcode::TyCast => {
+            Opcode::Cast => {
                 let Operand::Type(ty) = instruction.operand else {
                     return Err(Self::invalid_operand(instruction));
                 };

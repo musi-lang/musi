@@ -1,4 +1,6 @@
 use super::super::*;
+use music_base::diag::DiagContext;
+
 use crate::EmitDiagKind;
 
 impl ProcedureEmitter<'_, '_> {
@@ -38,40 +40,35 @@ impl ProcedureEmitter<'_, '_> {
     }
 }
 
-pub(super) fn push_expr_diag(
+pub(super) fn push_expr_diag_with(
     diags: &mut EmitDiagList,
     module_key: &ModuleKey,
     origin: &IrOrigin,
     kind: EmitDiagKind,
-    label: impl Into<String>,
+    context: DiagContext,
 ) {
-    push_span_diag(
+    push_span_diag_with(
         diags,
         module_key,
         origin.source_id,
         origin.span,
         kind,
-        label,
+        context,
     );
 }
 
-pub(super) fn push_span_diag(
+#[allow(clippy::needless_pass_by_value)]
+pub(super) fn push_span_diag_with(
     diags: &mut EmitDiagList,
     _module_key: &ModuleKey,
     source_id: SourceId,
     span: Span,
     kind: EmitDiagKind,
-    label: impl Into<String>,
+    context: DiagContext,
 ) {
-    let label = label.into();
-    let message = if label == kind.message() {
-        kind.message().to_owned()
-    } else {
-        label.clone()
-    };
     diags.push(
-        Diag::error(message)
+        Diag::error(kind.message_with(&context))
             .with_code(kind.code())
-            .with_label(span, source_id, label),
+            .with_label(span, source_id, kind.label_with(&context)),
     );
 }

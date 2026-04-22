@@ -77,6 +77,7 @@ fn compile_surface(
             inject_compiler_prelude: true,
             prelude: Vec::new(),
             import_env,
+            ..ResolveOptions::default()
         },
     );
     let sema = check_module(
@@ -110,6 +111,7 @@ fn lower(src: &str) -> IrModule {
             inject_compiler_prelude: true,
             prelude: Vec::new(),
             import_env: Some(&import_env),
+            ..ResolveOptions::default()
         },
     );
     let sema = check_module(
@@ -171,9 +173,9 @@ fn contains_strcat(expr: &IrExpr) -> bool {
             range,
             evidence,
         } => contains_strcat(value) || contains_strcat(range) || contains_strcat(evidence),
-        IrExprKind::RangeMaterialize { range, evidence } => {
-            contains_strcat(range) || contains_strcat(evidence)
-        }
+        IrExprKind::RangeMaterialize {
+            range, evidence, ..
+        } => contains_strcat(range) || contains_strcat(evidence),
         IrExprKind::Binary { left, right, .. } => contains_strcat(left) || contains_strcat(right),
         IrExprKind::Call { callee, args } => {
             contains_strcat(callee) || args.iter().any(|arg| contains_strcat(&arg.expr))
@@ -243,7 +245,7 @@ fn contains_named_value_ref_children(kind: &IrExprKind, expected: &str) -> bool 
         | IrExprKind::Request { args: items, .. } => {
             contains_named_value_ref_in_exprs(items, expected)
         }
-        IrExprKind::ArrayCat { parts, .. } | IrExprKind::CallSeq { args: parts, .. } => {
+        IrExprKind::ArrayCat { parts, .. } | IrExprKind::CallParts { args: parts, .. } => {
             contains_named_value_ref_in_seq_parts(parts, expected)
         }
         IrExprKind::Record { fields, .. } => fields
@@ -270,14 +272,14 @@ fn contains_named_value_ref_children(kind: &IrExprKind, expected: &str) -> bool 
         IrExprKind::RequestSeq { args, .. } => {
             contains_named_value_ref_in_seq_parts(args, expected)
         }
-        IrExprKind::HandlerLit { value, ops, .. } => {
+        IrExprKind::AnswerLit { value, ops, .. } => {
             contains_named_value_ref(value, expected)
                 || ops
                     .iter()
                     .any(|op| contains_named_value_ref(&op.closure, expected))
         }
-        IrExprKind::Handle { handler, body, .. } => {
-            contains_named_value_ref(handler, expected) || contains_named_value_ref(body, expected)
+        IrExprKind::Handle { answer, body, .. } => {
+            contains_named_value_ref(answer, expected) || contains_named_value_ref(body, expected)
         }
         IrExprKind::Resume { expr } => expr
             .as_deref()
@@ -357,7 +359,9 @@ fn contains_named_value_ref_in_range_kind(kind: &IrExprKind, expected: &str) -> 
                 || contains_named_value_ref(range, expected)
                 || contains_named_value_ref(evidence, expected)
         }
-        IrExprKind::RangeMaterialize { range, evidence } => {
+        IrExprKind::RangeMaterialize {
+            range, evidence, ..
+        } => {
             contains_named_value_ref(range, expected)
                 || contains_named_value_ref(evidence, expected)
         }
@@ -473,10 +477,10 @@ mod success {
           @comptimeSafe
           let readLine () : String;
         };
-        export let Eq[T] := class {
+        export let Eq[T] := shape {
           let (=) (a : T, b : T) : Bool;
         };
-        export instance[T] Eq[T] {
+        export given[T] Eq[T] {
           let (=) (a : T, b : T) : Bool := 0 = 0;
         };
     ",
@@ -489,8 +493,8 @@ mod success {
         assert!(ir.effects()[0].ops[0].param_tys.is_empty());
         assert!(ir.effects()[0].ops[0].is_comptime_safe);
         assert_eq!(ir.effects()[0].ops[0].result_ty.as_ref(), "String");
-        assert_eq!(ir.classes().len(), 1);
-        assert_eq!(ir.instances().len(), 1);
+        assert_eq!(ir.shapes().len(), 1);
+        assert_eq!(ir.givens().len(), 1);
         assert!(ir.static_imports().is_empty());
     }
 
@@ -556,10 +560,10 @@ mod success {
         let ir = lower(
             r#"
         let Maybe := data { | Some(Int) | None };
-        foreign "c" (
+        native "c" (
           let puts (value : CString) : Int;
         );
-        export let answer () : Int := 42;
+        export let result () : Int := 42;
     "#,
         );
 
@@ -590,7 +594,7 @@ mod success {
     fn lowers_fixed_width_foreign_type_names() {
         let ir = lower(
             r#"
-        foreign "c" (
+        native "c" (
           let sample (x : Int32, y : Nat64, z : Float32) : Float64;
         );
     "#,
@@ -650,7 +654,7 @@ mod success {
         export let y := g(...xs);
     "#,
             "y",
-            |kind| matches!(kind, IrExprKind::CallSeq { .. }),
+            |kind| matches!(kind, IrExprKind::CallParts { .. }),
         );
     }
 
@@ -675,7 +679,7 @@ mod success {
           let op (a : Any, b : Any) : Unit;
         };
         let xs : []Any := [1, "x"];
-        export let y := request E.op(...xs);
+        export let y := ask E.op(...xs);
     "#,
             "y",
             |kind| matches!(kind, IrExprKind::RequestSeq { .. }),
@@ -815,20 +819,20 @@ mod success {
     fn capitalized_local_name_stays_value_expr() {
         let ir = lower(
             r"
-        export let answer () : Int := (
+        export let result () : Int := (
           let Result : Int := 41;
           Result + 1
         );
     ",
         );
 
-        let answer = ir
+        let result = ir
             .callables()
             .iter()
-            .find(|callable| callable.name.as_ref() == "answer")
-            .expect("answer callable");
+            .find(|callable| callable.name.as_ref() == "result")
+            .expect("result callable");
         assert!(
-            contains_named_value_ref(&answer.body, "Result"),
+            contains_named_value_ref(&result.body, "Result"),
             "capitalized local binding should lower as a value reference"
         );
     }
@@ -891,7 +895,7 @@ mod success {
     fn lowers_record_case_and_capturing_rec() {
         let ir = lower(
             r"
-        export let answer (n : Int) : Int := (
+        export let result (n : Int) : Int := (
           let base := 1;
           let rec loop (x : Int) : Int := match x (| 0 => base | _ => loop(x - 1));
           let point := { x := 1, y := 2 };
@@ -901,12 +905,12 @@ mod success {
     ",
         );
 
-        let answer = ir
+        let result = ir
             .callables()
             .iter()
-            .find(|callable| callable.name.as_ref() == "answer")
-            .expect("answer callable");
-        assert!(contains_record_pattern(&answer.body));
+            .find(|callable| callable.name.as_ref() == "result")
+            .expect("result callable");
+        assert!(contains_record_pattern(&result.body));
 
         let loop_fn = ir
             .callables()
@@ -917,11 +921,11 @@ mod success {
     }
 
     #[test]
-    fn local_constrained_helper_prebinds_hidden_evidence() {
+    fn local_constrained_helper_prebinds_hidden_constraint_answers() {
         let ir = lower(
             r"
-        let Mark[T] := class { };
-        let markInt := instance Mark[Int] { };
+        let Mark[T] := shape { };
+        let markInt := given Mark[Int] { };
         let requireMark (x : Int) : Int where Int : Mark := x;
         let count (value : Int) : Int where Int : Mark := (
           let helper (y : Int) : Int := requireMark(y);
@@ -932,22 +936,22 @@ mod success {
 
         let helper = callable(&ir, "helper");
         assert!(
-            contains_named_value_ref_with_prefix(&helper.body, "__ev::"),
+            contains_named_value_ref_with_prefix(&helper.body, "__answer::"),
             "helper callable: {helper:?}",
         );
     }
 
     #[test]
-    fn instance_member_helper_captures_provider_evidence() {
+    fn given_member_helper_captures_provider_constraint_answers() {
         let ir = lower(
             r"
-        let Mark[T] := class { };
-        let markInt := instance Mark[Int] { };
+        let Mark[T] := shape { };
+        let markInt := given Mark[Int] { };
         let requireMark (x : Int) : Int where Int : Mark := x;
-        let UsesMark := class {
+        let UsesMark := shape {
           let useMark (x : Int) : Int;
         };
-        instance UsesMark where Int : Mark {
+        given UsesMark where Int : Mark {
           let useMark (x : Int) : Int := (
             let helper (y : Int) : Int where Int : Mark := requireMark(y);
             helper(x)
@@ -958,7 +962,7 @@ mod success {
 
         let helper = callable(&ir, "helper");
         assert!(
-            contains_named_value_ref_with_prefix(&helper.body, "__ev::"),
+            contains_named_value_ref_with_prefix(&helper.body, "__answer::"),
             "helper callable: {helper:?}",
         );
     }

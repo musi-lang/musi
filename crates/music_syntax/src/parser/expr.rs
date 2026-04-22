@@ -3,7 +3,7 @@ use super::*;
 type SyntaxNodeParseResult = ParseResult<SyntaxNodeId>;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum InfixClass {
+enum InfixGroup {
     Comparison,
     Other,
 }
@@ -21,7 +21,7 @@ impl Parser<'_> {
         &mut self,
         min_bp: u8,
         parse_right: fn(&mut Self, u8) -> SyntaxNodeParseResult,
-        binding_power: fn(TokenKind) -> Option<(u8, u8, InfixClass)>,
+        binding_power: fn(TokenKind) -> Option<(u8, u8, InfixGroup)>,
     ) -> SyntaxNodeParseResult {
         let mut left = self.parse_prefix_expr()?;
         loop {
@@ -29,7 +29,7 @@ impl Parser<'_> {
                 left = next_left;
                 continue;
             }
-            let Some((left_bp, right_bp, class)) = binding_power(self.peek_kind()) else {
+            let Some((left_bp, right_bp, group)) = binding_power(self.peek_kind()) else {
                 break;
             };
             if left_bp < min_bp {
@@ -37,7 +37,7 @@ impl Parser<'_> {
             }
             let op = self.advance_element();
             let right = parse_right(self, right_bp)?;
-            if class == InfixClass::Comparison && self.is_comparison_expr(left) {
+            if group == InfixGroup::Comparison && self.is_comparison_expr(left) {
                 self.error(ParseError::new(
                     ParseErrorKind::NonAssociativeChain,
                     self.span(),
@@ -51,7 +51,7 @@ impl Parser<'_> {
                     SyntaxElementId::Node(right),
                 ],
             );
-            if class == InfixClass::Comparison {
+            if group == InfixGroup::Comparison {
                 self.comparison_exprs.push(left);
             }
         }
@@ -65,7 +65,7 @@ impl Parser<'_> {
                 left = next_left;
                 continue;
             }
-            let Some((left_bp, right_bp, class)) =
+            let Some((left_bp, right_bp, group)) =
                 infix_binding_power_without_colon_eq(self.peek_kind())
             else {
                 break;
@@ -75,7 +75,7 @@ impl Parser<'_> {
             }
             let op = self.advance_element();
             let right = self.parse_type_expr(right_bp)?;
-            if class == InfixClass::Comparison && self.is_comparison_expr(left) {
+            if group == InfixGroup::Comparison && self.is_comparison_expr(left) {
                 self.error(ParseError::new(
                     ParseErrorKind::NonAssociativeChain,
                     self.span(),
@@ -89,7 +89,7 @@ impl Parser<'_> {
                     SyntaxElementId::Node(right),
                 ],
             );
-            if class == InfixClass::Comparison {
+            if group == InfixGroup::Comparison {
                 self.comparison_exprs.push(left);
             }
         }
@@ -97,9 +97,17 @@ impl Parser<'_> {
     }
 
     fn parse_prefix_expr(&mut self) -> SyntaxNodeParseResult {
+        if self.at_answer_lit_start() {
+            return self.parse_answer_lit_expr();
+        }
+        if self.at_given_decl_start() {
+            return self.parse_given_expr(Vec::new());
+        }
         if self.at_any(&[
             TokenKind::Minus,
             TokenKind::KwComptime,
+            TokenKind::KwGiven,
+            TokenKind::KwAnswer,
             TokenKind::KwNot,
             TokenKind::KwMut,
             TokenKind::DotDot,
@@ -119,8 +127,8 @@ impl Parser<'_> {
         if self.at_array_type_prefix() {
             return self.parse_array_type_expr();
         }
-        if self.at(TokenKind::KwUsing) {
-            return self.parse_handler_type_expr();
+        if self.at(TokenKind::KwAnswer) {
+            return self.parse_answer_type_expr();
         }
         if self.at(TokenKind::KwMut) {
             let op = self.advance_element();
@@ -154,7 +162,7 @@ impl Parser<'_> {
         if self.at(TokenKind::DotLBracket) {
             return self.parse_index_expr(left).map(Some);
         }
-        if self.at(TokenKind::Dot) {
+        if self.at_any(&[TokenKind::Dot, TokenKind::QuestionDot, TokenKind::BangDot]) {
             return self.parse_field_expr(left).map(Some);
         }
         if self.at(TokenKind::ColonQuestion) {
@@ -174,7 +182,32 @@ impl Parser<'_> {
     }
 
     fn at_partial_range_from_postfix(&self) -> bool {
-        self.at(TokenKind::DotDot) && !Self::starts_expr(self.nth_kind(1))
+        self.at_any(&[TokenKind::DotDot, TokenKind::LtDotDot])
+            && !Self::starts_expr(self.nth_kind(1))
+    }
+
+    fn at_answer_lit_start(&self) -> bool {
+        self.at(TokenKind::KwAnswer)
+            && self.nth_kind(1) == TokenKind::Ident
+            && self.nth_kind(2) == TokenKind::LBrace
+    }
+
+    fn at_given_decl_start(&self) -> bool {
+        if !self.at(TokenKind::KwGiven) {
+            return false;
+        }
+        let mut depth = 0usize;
+        let mut offset = 1usize;
+        loop {
+            match self.nth_kind(offset) {
+                TokenKind::LParen | TokenKind::LBracket => depth += 1,
+                TokenKind::RParen | TokenKind::RBracket => depth = depth.saturating_sub(1),
+                TokenKind::LBrace if depth == 0 => return true,
+                TokenKind::Semicolon | TokenKind::Eof if depth == 0 => return false,
+                _ => {}
+            }
+            offset += 1;
+        }
     }
 
     const fn starts_expr(kind: TokenKind) -> bool {
@@ -199,15 +232,15 @@ impl Parser<'_> {
                 | TokenKind::KwImport
                 | TokenKind::KwData
                 | TokenKind::KwEffect
-                | TokenKind::KwClass
-                | TokenKind::KwInstance
-                | TokenKind::KwRequest
-                | TokenKind::KwUsing
+                | TokenKind::KwShape
+                | TokenKind::KwAsk
                 | TokenKind::KwHandle
-                | TokenKind::KwForeign
+                | TokenKind::KwNative
                 | TokenKind::KwQuote
                 | TokenKind::KwUnsafe
                 | TokenKind::KwComptime
+                | TokenKind::KwGiven
+                | TokenKind::KwAnswer
                 | TokenKind::At
                 | TokenKind::KwExport
                 | TokenKind::KwPartial
@@ -382,18 +415,18 @@ impl Parser<'_> {
             .push_node_from_children(SyntaxNodeKind::ArrayTy, children))
     }
 
-    fn parse_handler_type_expr(&mut self) -> SyntaxNodeParseResult {
-        let using = self.expect_token(TokenKind::KwUsing)?;
-        let effect = self.parse_handler_effect_type_expr()?;
+    fn parse_answer_type_expr(&mut self) -> SyntaxNodeParseResult {
+        let answer = self.expect_token(TokenKind::KwAnswer)?;
+        let effect = self.parse_answer_effect_type_expr()?;
         let open = self.expect_token(TokenKind::LParen)?;
         let input = self.parse_type_expr(ARROW_BP + 1)?;
         let arrow = self.expect_token(TokenKind::MinusGt)?;
         let output = self.parse_type_expr(0)?;
         let close = self.expect_token(TokenKind::RParen)?;
         Ok(self.builder.push_node_from_children(
-            SyntaxNodeKind::HandlerTy,
+            SyntaxNodeKind::AnswerTy,
             vec![
-                using,
+                answer,
                 SyntaxElementId::Node(effect),
                 open,
                 SyntaxElementId::Node(input),
@@ -404,7 +437,7 @@ impl Parser<'_> {
         ))
     }
 
-    fn parse_handler_effect_type_expr(&mut self) -> SyntaxNodeParseResult {
+    fn parse_answer_effect_type_expr(&mut self) -> SyntaxNodeParseResult {
         let mut effect = if self.at_array_type_prefix() {
             self.parse_array_type_expr()?
         } else if self.at(TokenKind::KwMut) {
@@ -424,16 +457,18 @@ impl Parser<'_> {
     }
 }
 
-const fn infix_binding_power(kind: TokenKind) -> Option<(u8, u8, InfixClass)> {
+const fn infix_binding_power(kind: TokenKind) -> Option<(u8, u8, InfixGroup)> {
     match kind {
-        TokenKind::ColonEq => Some((1, ASSIGN_BP, InfixClass::Other)),
-        TokenKind::PipeGt => Some((PIPE_BP, PIPE_BP + 1, InfixClass::Other)),
-        TokenKind::MinusGt | TokenKind::TildeGt => Some((ARROW_BP, ARROW_BP, InfixClass::Other)),
-        TokenKind::KwOr => Some((OR_BP, OR_BP + 1, InfixClass::Other)),
-        TokenKind::KwXor => Some((XOR_BP, XOR_BP + 1, InfixClass::Other)),
-        TokenKind::KwAnd => Some((AND_BP, AND_BP + 1, InfixClass::Other)),
-        TokenKind::DotDot | TokenKind::DotDotLt => {
-            Some((COMPARE_BP, COMPARE_BP + 1, InfixClass::Comparison))
+        TokenKind::ColonEq => Some((1, ASSIGN_BP, InfixGroup::Other)),
+        TokenKind::PipeGt => Some((PIPE_BP, PIPE_BP + 1, InfixGroup::Other)),
+        TokenKind::MinusGt | TokenKind::TildeGt => Some((ARROW_BP, ARROW_BP, InfixGroup::Other)),
+        TokenKind::KwOr | TokenKind::KwCatch | TokenKind::QuestionQuestion => {
+            Some((OR_BP, OR_BP + 1, InfixGroup::Other))
+        }
+        TokenKind::KwXor => Some((XOR_BP, XOR_BP + 1, InfixGroup::Other)),
+        TokenKind::KwAnd => Some((AND_BP, AND_BP + 1, InfixGroup::Other)),
+        TokenKind::DotDot | TokenKind::DotDotLt | TokenKind::LtDotDot | TokenKind::LtDotDotLt => {
+            Some((COMPARE_BP, COMPARE_BP + 1, InfixGroup::Comparison))
         }
         TokenKind::Eq
         | TokenKind::TildeEq
@@ -442,18 +477,17 @@ const fn infix_binding_power(kind: TokenKind) -> Option<(u8, u8, InfixClass)> {
         | TokenKind::Gt
         | TokenKind::LtEq
         | TokenKind::GtEq
-        | TokenKind::KwIn => Some((COMPARE_BP, COMPARE_BP + 1, InfixClass::Comparison)),
-        TokenKind::KwShl | TokenKind::KwShr => Some((SHIFT_BP, SHIFT_BP + 1, InfixClass::Other)),
-        TokenKind::Plus | TokenKind::Minus => Some((ADD_BP, ADD_BP + 1, InfixClass::Other)),
+        | TokenKind::KwIn => Some((COMPARE_BP, COMPARE_BP + 1, InfixGroup::Comparison)),
+        TokenKind::KwShl | TokenKind::KwShr => Some((SHIFT_BP, SHIFT_BP + 1, InfixGroup::Other)),
+        TokenKind::Plus | TokenKind::Minus => Some((ADD_BP, ADD_BP + 1, InfixGroup::Other)),
         TokenKind::Star | TokenKind::Slash | TokenKind::Percent => {
-            Some((MUL_BP, MUL_BP + 1, InfixClass::Other))
+            Some((MUL_BP, MUL_BP + 1, InfixGroup::Other))
         }
-        TokenKind::SymbolicOp => Some((SYMBOLIC_BP, SYMBOLIC_BP + 1, InfixClass::Other)),
         _ => None,
     }
 }
 
-const fn infix_binding_power_without_colon_eq(kind: TokenKind) -> Option<(u8, u8, InfixClass)> {
+const fn infix_binding_power_without_colon_eq(kind: TokenKind) -> Option<(u8, u8, InfixGroup)> {
     if matches!(kind, TokenKind::ColonEq) {
         return None;
     }

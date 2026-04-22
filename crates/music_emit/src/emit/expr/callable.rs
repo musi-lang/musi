@@ -1,5 +1,6 @@
 use super::super::*;
 use crate::EmitDiagKind;
+use music_base::diag::DiagContext;
 
 impl ProcedureEmitter<'_, '_> {
     pub(super) fn compile_intrinsic_call(
@@ -21,23 +22,25 @@ impl ProcedureEmitter<'_, '_> {
             let origin = args
                 .first()
                 .map_or(&fallback_origin, |arg| &arg.expr.origin);
-            super::support::push_expr_diag(
+            super::support::push_expr_diag_with(
                 diags,
                 self.module_key,
                 origin,
                 EmitDiagKind::UnknownTypeNameForOp,
-                format!("unknown type name for intrinsic `{symbol}`"),
+                DiagContext::new()
+                    .with("type", symbol)
+                    .with("operation", "intrinsic"),
             );
             emit_zero(self);
             return;
         };
         self.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::FfiCall,
+            Opcode::CallFfi,
             Operand::Foreign(foreign),
         )));
     }
 
-    fn intern_intrinsic_foreign(
+    pub(super) fn intern_intrinsic_foreign(
         &mut self,
         symbol: &str,
         param_tys: &[Box<str>],
@@ -80,19 +83,19 @@ impl ProcedureEmitter<'_, '_> {
                 },
                 |expr| expr.origin,
             );
-            super::support::push_expr_diag(
+            super::support::push_expr_diag_with(
                 diags,
                 self.module_key,
                 &origin,
                 EmitDiagKind::UnknownDataType,
-                format!("unknown emitted data type `{ty_name}`"),
+                DiagContext::new().with("type", ty_name),
             );
             emit_zero(self);
             return;
         };
 
         self.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::DataNew,
+            Opcode::NewObj,
             Operand::TypeLen {
                 ty,
                 len: field_count,
@@ -108,12 +111,12 @@ impl ProcedureEmitter<'_, '_> {
     ) {
         for arg in args {
             if arg.spread {
-                super::support::push_expr_diag(
+                super::support::push_expr_diag_with(
                     diags,
                     self.module_key,
                     &arg.expr.origin,
                     EmitDiagKind::SpreadCallArgsNotEmitted,
-                    "spread call arguments have no emitted form",
+                    DiagContext::new(),
                 );
             }
             self.compile_expr(&arg.expr, true, diags);
@@ -121,7 +124,7 @@ impl ProcedureEmitter<'_, '_> {
         if let IrExprKind::Name {
             binding,
             name,
-            module_target,
+            import_record_target,
             ..
         } = &callee.kind
         {
@@ -133,7 +136,7 @@ impl ProcedureEmitter<'_, '_> {
                     Operand::Local(slot),
                 )));
                 self.code.push(CodeEntry::Instruction(Instruction::new(
-                    Opcode::CallCls,
+                    Opcode::CallInd,
                     Operand::None,
                 )));
                 return;
@@ -144,12 +147,13 @@ impl ProcedureEmitter<'_, '_> {
                     Operand::Local(slot),
                 )));
                 self.code.push(CodeEntry::Instruction(Instruction::new(
-                    Opcode::CallCls,
+                    Opcode::CallInd,
                     Operand::None,
                 )));
                 return;
             }
-            if let Some(procedure) = self.resolve_procedure(*binding, name, module_target.as_ref())
+            if let Some(procedure) =
+                self.resolve_procedure(*binding, name, import_record_target.as_ref())
             {
                 self.code.push(CodeEntry::Instruction(Instruction::new(
                     Opcode::Call,
@@ -157,9 +161,11 @@ impl ProcedureEmitter<'_, '_> {
                 )));
                 return;
             }
-            if let Some(foreign) = self.resolve_foreign(*binding, name, module_target.as_ref()) {
+            if let Some(foreign) =
+                self.resolve_foreign(*binding, name, import_record_target.as_ref())
+            {
                 self.code.push(CodeEntry::Instruction(Instruction::new(
-                    Opcode::FfiCall,
+                    Opcode::CallFfi,
                     Operand::Foreign(foreign),
                 )));
                 return;
@@ -168,22 +174,50 @@ impl ProcedureEmitter<'_, '_> {
 
         self.compile_expr(callee, true, diags);
         self.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::CallCls,
+            Opcode::CallInd,
             Operand::None,
         )));
     }
 
-    pub(super) fn compile_call_seq(
+    #[allow(dead_code)]
+    pub(super) fn compile_call_parts(
         &mut self,
         callee: &IrExpr,
         args: &[IrSeqPart],
         diags: &mut EmitDiagList,
     ) {
+        if args.iter().all(|arg| matches!(arg, IrSeqPart::Expr(_))) {
+            let args = args
+                .iter()
+                .filter_map(|arg| match arg {
+                    IrSeqPart::Expr(expr) => Some(IrArg::new(false, expr.clone())),
+                    IrSeqPart::Spread(_) => None,
+                })
+                .collect::<Vec<_>>();
+            self.compile_call(callee, &args, diags);
+            return;
+        }
+        if let IrExprKind::Name {
+            binding,
+            name,
+            import_record_target,
+            ..
+        } = &callee.kind
+            && let Some(procedure) =
+                self.resolve_procedure(*binding, name, import_record_target.as_ref())
+            && self.compile_seq_parts_as_stack(args, diags)
+        {
+            self.code.push(CodeEntry::Instruction(Instruction::new(
+                Opcode::Call,
+                Operand::Procedure(procedure),
+            )));
+            return;
+        }
         self.compile_seq_parts_any(args, diags);
         if let IrExprKind::Name {
             binding,
             name,
-            module_target,
+            import_record_target,
             ..
         } = &callee.kind
         {
@@ -195,8 +229,8 @@ impl ProcedureEmitter<'_, '_> {
                     Operand::Local(slot),
                 )));
                 self.code.push(CodeEntry::Instruction(Instruction::new(
-                    Opcode::CallClsSeq,
-                    Operand::None,
+                    Opcode::CallInd,
+                    Operand::I16(0),
                 )));
                 return;
             }
@@ -206,23 +240,33 @@ impl ProcedureEmitter<'_, '_> {
                     Operand::Local(slot),
                 )));
                 self.code.push(CodeEntry::Instruction(Instruction::new(
-                    Opcode::CallClsSeq,
-                    Operand::None,
+                    Opcode::CallInd,
+                    Operand::I16(0),
                 )));
                 return;
             }
-            if let Some(procedure) = self.resolve_procedure(*binding, name, module_target.as_ref())
+            if let Some(procedure) =
+                self.resolve_procedure(*binding, name, import_record_target.as_ref())
             {
                 self.code.push(CodeEntry::Instruction(Instruction::new(
-                    Opcode::CallSeq,
-                    Operand::Procedure(procedure),
+                    Opcode::Call,
+                    Operand::WideProcedureCaptures {
+                        procedure,
+                        captures: 0,
+                    },
                 )));
                 return;
             }
-            if let Some(foreign) = self.resolve_foreign(*binding, name, module_target.as_ref()) {
+            if let Some(foreign) =
+                self.resolve_foreign(*binding, name, import_record_target.as_ref())
+            {
                 self.code.push(CodeEntry::Instruction(Instruction::new(
-                    Opcode::FfiCallSeq,
+                    Opcode::LdFfi,
                     Operand::Foreign(foreign),
+                )));
+                self.code.push(CodeEntry::Instruction(Instruction::new(
+                    Opcode::CallInd,
+                    Operand::I16(0),
                 )));
                 return;
             }
@@ -230,9 +274,38 @@ impl ProcedureEmitter<'_, '_> {
 
         self.compile_expr(callee, true, diags);
         self.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::CallClsSeq,
-            Operand::None,
+            Opcode::CallInd,
+            Operand::I16(0),
         )));
+    }
+
+    fn compile_seq_parts_as_stack(&mut self, args: &[IrSeqPart], diags: &mut EmitDiagList) -> bool {
+        if !args.iter().all(|arg| {
+            matches!(arg, IrSeqPart::Expr(_))
+                || matches!(
+                    arg,
+                    IrSeqPart::Spread(IrExpr {
+                        kind: IrExprKind::Array { .. } | IrExprKind::Tuple { .. },
+                        ..
+                    })
+                )
+        }) {
+            return false;
+        }
+        for arg in args {
+            match arg {
+                IrSeqPart::Expr(expr) => self.compile_expr(expr, true, diags),
+                IrSeqPart::Spread(expr) => match &expr.kind {
+                    IrExprKind::Array { items, .. } | IrExprKind::Tuple { items, .. } => {
+                        for item in items {
+                            self.compile_expr(item, true, diags);
+                        }
+                    }
+                    _ => return false,
+                },
+            }
+        }
+        true
     }
 
     pub(super) fn compile_closure_new(
@@ -247,7 +320,7 @@ impl ProcedureEmitter<'_, '_> {
         let Some(procedure) = self.resolve_procedure(
             callee.binding,
             callee.name.as_ref(),
-            callee.module_target.as_ref(),
+            callee.import_record_target.as_ref(),
         ) else {
             let origin = captures.first().map_or_else(
                 || IrOrigin {
@@ -256,19 +329,19 @@ impl ProcedureEmitter<'_, '_> {
                 },
                 |expr| expr.origin,
             );
-            super::support::push_expr_diag(
+            super::support::push_expr_diag_with(
                 diags,
                 self.module_key,
                 &origin,
                 EmitDiagKind::UnknownClosureTarget,
-                format!("unknown emitted closure target `{}`", callee.name),
+                DiagContext::new().with("target", &callee.name),
             );
             emit_zero(self);
             return;
         };
         let captures = u8::try_from(captures.len()).unwrap_or(u8::MAX);
         self.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::ClsNew,
+            Opcode::NewFn,
             Operand::WideProcedureCaptures {
                 procedure,
                 captures,

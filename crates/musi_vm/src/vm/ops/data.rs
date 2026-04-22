@@ -8,31 +8,35 @@ use super::{
 impl Vm {
     pub(crate) fn exec_data(&mut self, instruction: &Instruction) -> VmResult<StepOutcome> {
         match instruction.opcode {
-            Opcode::DataNew => {
+            Opcode::NewObj => {
                 let Operand::TypeLen { ty, len } = instruction.operand else {
                     return Err(Self::invalid_operand(instruction));
                 };
                 self.exec_data_new(ty, len)
             }
-            Opcode::DataTag => self.exec_data_tag(),
-            Opcode::DataGet => self.exec_data_get(),
-            Opcode::DataSet => self.exec_data_set(),
+            Opcode::LdFld => match instruction.operand {
+                Operand::Type(_) => self.exec_data_tag(),
+                _ => self.exec_data_get(),
+            },
+            Opcode::StFld => self.exec_data_set(),
             _ => Err(Self::invalid_dispatch(instruction, "data")),
         }
     }
 
     pub(crate) fn exec_fast_data(&mut self, runtime: &RuntimeInstruction) -> VmResult<StepOutcome> {
         match runtime.opcode {
-            Opcode::DataNew => {
+            Opcode::NewObj => {
                 let RuntimeOperand::TypeLen { ty, len } = runtime.operand else {
                     let instruction = self.current_raw_instruction(runtime.raw_index)?;
                     return Err(Self::invalid_operand(&instruction));
                 };
                 self.exec_data_new(ty, len)
             }
-            Opcode::DataTag => self.exec_data_tag(),
-            Opcode::DataGet => self.exec_data_get(),
-            Opcode::DataSet => self.exec_data_set(),
+            Opcode::LdFld => match runtime.operand {
+                RuntimeOperand::Type(_) => self.exec_data_tag(),
+                _ => self.exec_data_get(),
+            },
+            Opcode::StFld => self.exec_data_set(),
             _ => {
                 let instruction = self.current_raw_instruction(runtime.raw_index)?;
                 Err(Self::invalid_dispatch(&instruction, "data"))

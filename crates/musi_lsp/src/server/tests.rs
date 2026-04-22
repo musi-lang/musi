@@ -127,7 +127,7 @@ mod success {
         )
         .expect("manifest should be written");
         let path = root.join("index.ms");
-        fs::write(&path, "export let answer : Int := 1;").expect("entry should be written");
+        fs::write(&path, "export let result : Int := 1;").expect("entry should be written");
         let uri = Url::from_file_path(&path).expect("file URI should build");
         let source = "export let describe (target : Ordering) : String := match target(| .Less => \"less\" | .GreaterThanEverything => \"greater\" | _ => \"same\");";
         let mut server = MusiLanguageServer::new(ClientSocket::new_closed());

@@ -35,6 +35,7 @@ pub fn parse_catalog(path: &Path, text: &str) -> DiaggenResult<Catalog> {
             Some("end") => finish_map(&mut current_map, &mut catalog, path, line_no)?,
             Some("message") => set_text_field(&mut current, "message", line, path, line_no)?,
             Some("primary") => set_text_field(&mut current, "primary", line, path, line_no)?,
+            Some("secondary") => set_text_field(&mut current, "secondary", line, path, line_no)?,
             Some("help") => set_text_field(&mut current, "help", line, path, line_no)?,
             Some(other) => {
                 return Err(DiaggenError(format!(
@@ -205,6 +206,7 @@ fn parse_entry_header(words: &[&str], path: &Path, line_no: usize) -> DiaggenRes
         code,
         message: String::new(),
         primary: String::new(),
+        secondary: None,
         help: None,
     })
 }
@@ -226,6 +228,7 @@ fn set_text_field(
     match field {
         "message" => entry.message = value,
         "primary" => entry.primary = value,
+        "secondary" => entry.secondary = Some(value),
         "help" => entry.help = Some(value),
         other => {
             return Err(DiaggenError(format!("text field `{other}` unsupported")));
@@ -286,13 +289,16 @@ fn finish_entry(
     path: &Path,
     line_no: usize,
 ) -> DiaggenResult {
-    if let Some(entry) = current.take() {
-        if entry.message.is_empty() || entry.primary.is_empty() {
+    if let Some(mut entry) = current.take() {
+        if entry.message.is_empty() {
             return Err(DiaggenError(format!(
-                "{}:{line_no}: diagnostic `{}` missing message or primary label",
+                "{}:{line_no}: diagnostic `{}` missing message",
                 path.display(),
                 entry.kind
             )));
+        }
+        if entry.primary.is_empty() {
+            entry.primary.clone_from(&entry.message);
         }
         entries.push(entry);
     }

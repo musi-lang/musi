@@ -6,7 +6,6 @@ diag SeamDecodeFailed 6100
 
 diag InvalidProgramShape 6101
   message "invalid program shape (`{detail}`)"
-  primary "invalid program shape"
 
 diag InvalidTypeTerm 6102
   message "invalid type term `{ty}` (`{detail}`)"
@@ -14,15 +13,12 @@ diag InvalidTypeTerm 6102
 
 diag InvalidSyntaxConstant 6103
   message "invalid syntax constant (`{detail}`)"
-  primary "invalid syntax constant"
 
 diag VmInitializationRequired 6104
   message "VM initialization required"
-  primary "VM initialization required"
 
 diag ModuleInitCycle 6105
   message "module `{spec}` initialization cycle detected"
-  primary "module `{spec}` initialization cycle detected"
 
 diag ExportNotFound 6106
   message "missing export `{export}` in `{module}`"
@@ -33,19 +29,16 @@ diag OpaqueExport 6107
   primary "opaque export `{export}` inaccessible"
 
 diag NonCallableValue 6108
-  message "callable value expected, found `{found}`"
-  primary "callable value expected"
+  message "expected callable value, found `{found}`"
 
 diag MissingEntryProcedure 6109
   message "missing entry procedure in `{module}`"
-  primary "missing entry procedure"
 
 diag StackEmpty 6110
   message "{stack} stack empty"
-  primary "{stack} stack empty"
 
 diag OperandCountMismatch 6111
-  message "operand stack expected `{needed}` values, found `{available}`"
+  message "expected operand stack `{needed}` values, found `{available}`"
   primary "operand stack has `{available}` values"
 
 diag IndexOutOfBounds 6112
@@ -57,11 +50,11 @@ diag InvalidBranchTarget 6113
   primary "invalid branch target `{target}`"
 
 diag InvalidOperandForOpcode 6114
-  message "opcode `{opcode}` rejects operand shape `{found}`"
-  primary "opcode `{opcode}` rejects operand"
+  message "invalid operand shape `{found}` for opcode `{opcode}`"
+  primary "invalid operand shape `{found}`"
 
 diag InvalidValueKind 6115
-  message "value kind expected `{expected}`, found `{found}`"
+  message "invalid value kind `{found}`, expected `{expected}`"
   primary "value kind `{found}` found"
 
 diag InvalidSequenceIndex 6116
@@ -69,20 +62,16 @@ diag InvalidSequenceIndex 6116
   primary "invalid sequence index `{index}`"
 
 diag EmptySequenceIndexList 6117
-  message "sequence index list empty"
-  primary "sequence index list empty"
+  message "sequence index list `[]` empty"
 
 diag InvalidRangeBounds 6118
-  message "range bounds expected integers, found `{start}` and `{end}`"
-  primary "invalid range bounds"
+  message "invalid range bounds `{start}` and `{end}`"
 
 diag InvalidRangeEvidence 6119
-  message "invalid range evidence for value kind `{found}`"
-  primary "invalid range evidence"
+  message "invalid range answer for value kind `{found}`"
 
 diag InvalidRangeStep 6120
   message "invalid range step (`{detail}`)"
-  primary "invalid range step"
 
 diag RangeMaterializeTooLarge 6121
   message "range materialize length `{len}` exceeds limit `{limit}`"
@@ -93,7 +82,7 @@ diag InvalidDataIndex 6122
   primary "invalid data field index `{index}`"
 
 diag InvalidTypeCast 6123
-  message "type cast expected `{expected}`, found `{found}`"
+  message "invalid type cast target `{found}`, expected `{expected}`"
   primary "type cast found `{found}`"
 
 diag ArithmeticFailed 6124
@@ -102,11 +91,9 @@ diag ArithmeticFailed 6124
 
 diag ModuleLoadRejected 6125
   message "module `{spec}` load rejected"
-  primary "module `{spec}` load rejected"
 
 diag ForeignCallRejected 6126
   message "foreign call `{foreign}` rejected"
-  primary "foreign call `{foreign}` rejected"
 
 diag PointerIntrinsicFailed 6127
   message "pointer intrinsic `{intrinsic}` failed (`{detail}`)"
@@ -122,19 +109,17 @@ diag EffectRejected 6129
 
 diag RootModuleRequired 6130
   message "VM root module required"
-  primary "VM root module required"
 
 diag MissingModuleSource 6131
   message "missing VM module source `{spec}`"
-  primary "missing VM module source `{spec}`"
 
 diag CallArityMismatch 6132
-  message "call `{callee}` expected `{expected}` arguments, found `{found}`"
+  message "expected `{expected}` call arguments for `{callee}`, found `{found}`"
   primary "call `{callee}` arity mismatch"
 
 diag HandlerFrameMissing 6133
-  message "missing handler `{handler_id}` frame depth `{frame_depth}`"
-  primary "missing handler `{handler_id}` frame"
+  message "missing answer `{handler_id}` frame depth `{frame_depth}`"
+  primary "missing answer `{handler_id}` frame"
 
 diag MissingMatchingHandlerPop 6134
   message "missing matching `hdl.pop` in `{procedure}`"
@@ -154,7 +139,6 @@ diag StackFrameLimitExceeded 6137
 
 diag InstructionBudgetExhausted 6138
   message "instruction budget `{budget}` exhausted"
-  primary "instruction budget `{budget}` exhausted"
 
 map vm_error_kind crate::VmErrorKind required
   case "SeamDecodeFailed { .. }" SeamDecodeFailed

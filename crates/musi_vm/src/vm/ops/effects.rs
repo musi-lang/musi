@@ -23,19 +23,17 @@ impl Vm {
                 self.push_effect_handler(effect, pop_ip)
             }
             Opcode::HdlPop => self.pop_effect_handler(),
-            Opcode::EffInvk => {
+            Opcode::Raise => {
                 let Operand::Effect { effect, op } = instruction.operand else {
                     return Err(Self::invalid_operand(instruction));
                 };
-                self.invoke_effect_from_stack(effect, op)
+                if op & 0x8000 != 0 {
+                    self.invoke_effect_from_seq(effect, op & 0x7FFF)
+                } else {
+                    self.invoke_effect_from_stack(effect, op)
+                }
             }
-            Opcode::EffInvkSeq => {
-                let Operand::Effect { effect, op } = instruction.operand else {
-                    return Err(Self::invalid_operand(instruction));
-                };
-                self.invoke_effect_from_seq(effect, op)
-            }
-            Opcode::EffResume => self.resume_active_effect(),
+            Opcode::Resume => self.resume_active_effect(),
             _ => Err(Self::invalid_dispatch(instruction, "effect")),
         }
     }
@@ -62,21 +60,18 @@ impl Vm {
                 self.push_effect_handler(effect, pop_ip)
             }
             Opcode::HdlPop => self.pop_effect_handler(),
-            Opcode::EffInvk => {
+            Opcode::Raise => {
                 let RuntimeOperand::Effect { effect, op } = runtime.operand else {
                     let instruction = self.current_raw_instruction(runtime.raw_index)?;
                     return Err(Self::invalid_operand(&instruction));
                 };
-                self.invoke_effect_from_stack(effect, op)
+                if op & 0x8000 != 0 {
+                    self.invoke_effect_from_seq(effect, op & 0x7FFF)
+                } else {
+                    self.invoke_effect_from_stack(effect, op)
+                }
             }
-            Opcode::EffInvkSeq => {
-                let RuntimeOperand::Effect { effect, op } = runtime.operand else {
-                    let instruction = self.current_raw_instruction(runtime.raw_index)?;
-                    return Err(Self::invalid_operand(&instruction));
-                };
-                self.invoke_effect_from_seq(effect, op)
-            }
-            Opcode::EffResume => self.resume_active_effect(),
+            Opcode::Resume => self.resume_active_effect(),
             _ => {
                 let instruction = self.current_raw_instruction(runtime.raw_index)?;
                 Err(Self::invalid_dispatch(&instruction, "effect"))
@@ -146,7 +141,7 @@ impl Vm {
             VmError::new(VmErrorKind::EffectRejected {
                 effect: "<active>".into(),
                 op: None,
-                reason: "resume requires active continuation".into(),
+                reason: "resume needs active continuation".into(),
             })
         })?;
         let result = self.invoke_continuation(continuation, value)?;

@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use music_module::ModuleKey;
+use music_sema::SemaDiagKind;
 use music_session::{Session, SessionOptions};
 
 use musi_project::{Project, ProjectError, ProjectOptions};
@@ -177,7 +178,7 @@ mod success {
     fn semantic_tokens_mark_law_names_as_functions() {
         let temp = TempDir::new();
         write_file(temp.path(), "musi.json", APP_MANIFEST);
-        let source = "let Eq[T] := class { law reflexive(value : T) := eq(value, value); };\n";
+        let source = "let Eq[T] := shape { law reflexive(value : T) := eq(value, value); };\n";
         write_file(temp.path(), "index.ms", source);
 
         let tokens = semantic_tokens_for_project_file_with_overlay(
@@ -193,7 +194,7 @@ mod success {
         assert!(!tokens.iter().any(|token| {
             token.kind == ToolSemanticTokenKind::Variable
                 && token.range.start_line == 1
-                && token.range.start_col == 26
+                && token.range.start_col == 31
         }));
     }
 
@@ -284,7 +285,7 @@ match value (| .Some(inner) => inner | .None => 0);
     fn hover_uses_member_facts_for_record_properties() {
         let temp = TempDir::new();
         write_file(temp.path(), "musi.json", APP_MANIFEST);
-        let source = "let record := { answer := 42 };\nrecord.answer;\n";
+        let source = "let record := { result := 42 };\nrecord.result;\n";
         write_file(temp.path(), "index.ms", source);
 
         let hover =
@@ -293,7 +294,7 @@ match value (| .Some(inner) => inner | .None => 0);
 
         assert_eq!(hover.range.start_line, 2);
         assert_eq!(hover.range.start_col, 8);
-        assert!(hover.contents.starts_with("```musi\n(property) answer : "));
+        assert!(hover.contents.starts_with("```musi\n(property) result : "));
     }
 
     #[test]
@@ -349,8 +350,8 @@ one.inc(2);
         let temp = TempDir::new();
         write_file(temp.path(), "musi.json", APP_MANIFEST);
         let source = "\
-let record := { answer := 42 };
-record.answer;
+let record := { result := 42 };
+record.result;
 let inc (self : Int, by : Int) : Int := self + by;
 let one : Int := 1;
 one.inc(2);
@@ -520,7 +521,7 @@ let pointer := ptr.null[Int]();
         let temp = TempDir::new();
         let source = r#"
 let Intrinsics := import "musi:intrinsics";
-@known(name := "Type")
+@musi.known(name := "Type")
 export let Type := Type;
 "#;
         write_file(
@@ -534,7 +535,7 @@ export let Type := Type;
 
         assert!(
             diagnostics.iter().all(|diag| {
-                !diag.message.contains("`@known` requires `musi:*` module")
+                !diag.message.contains("`@musi.known` needs `musi:*` module")
                     && !diag.message.contains("unresolved import `musi:intrinsics`")
             }),
             "{diagnostics:?}"
@@ -617,7 +618,7 @@ export opaque let Runtime := effect {
   let randomFloat01 () : Float;
 };
 
-export let randomFloat01 () : Float := request Runtime.randomFloat01();
+export let randomFloat01 () : Float := ask Runtime.randomFloat01();
 ";
         write_file(
             temp.path(),
@@ -652,9 +653,9 @@ export let randomFloat01 () : Float := request Runtime.randomFloat01();
         let temp = TempDir::new();
         let source = "\
 let Intrinsics := import \"musi:intrinsics\";
-@known(name := \"Type\")
+@musi.known(name := \"Type\")
 export let Type := Type;
-@known(name := \"Float\")
+@musi.known(name := \"Float\")
 export let Float := Float;
 ";
         write_file(
@@ -688,7 +689,7 @@ export let Float := Float;
         let temp = TempDir::new();
         let source = "\
 let Intrinsics := import \"musi:intrinsics\";
-@known(name := \"Type\")
+@musi.known(name := \"Type\")
 export let Type := Type;
 ";
         write_file(
@@ -851,7 +852,7 @@ mod failure {
             "missing;",
             "resolve",
             "unbound name `missing`",
-            "unbound name `missing`",
+            "name `missing` unresolved in this scope",
             None,
         );
     }
@@ -859,11 +860,11 @@ mod failure {
     #[test]
     fn session_error_report_carries_sema_hint() {
         assert_session_error_report(
-            "let x := 1; request x;",
+            "let x := 1; ask x;",
             "sema",
-            "request target expected effect operation call",
-            "request target must be effect operation call",
-            Some("write `request Effect.op(...)`"),
+            SemaDiagKind::InvalidRequestTarget.message(),
+            SemaDiagKind::InvalidRequestTarget.label(),
+            Some("write `ask Effect.op(...)`"),
         );
     }
 
@@ -921,7 +922,7 @@ mod failure {
         write_file(
             temp.path(),
             "index.ms",
-            "let Missing := import \"missing\";\nexport let answer : Int := 42;\n",
+            "let Missing := import \"missing\";\nexport let result : Int := 42;\n",
         );
 
         let error = load_project_error(temp.path());

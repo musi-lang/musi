@@ -79,26 +79,18 @@ fn canonical_surface_ty_kind(surface: &ModuleSurface, kind: &SurfaceTyKind) -> S
         SurfaceTyKind::Seq { item } => format!("[]{}", canonical_surface_ty(surface, *item)),
         SurfaceTyKind::Array { dims, item } => canonical_surface_array(surface, dims, *item),
         SurfaceTyKind::Range { bound } => canonical_surface_wrapped(surface, "Range", *bound),
-        SurfaceTyKind::ClosedRange { bound } => {
-            canonical_surface_wrapped(surface, "ClosedRange", *bound)
-        }
-        SurfaceTyKind::PartialRangeFrom { bound } => {
-            canonical_surface_wrapped(surface, "PartialRangeFrom", *bound)
-        }
-        SurfaceTyKind::PartialRangeUpTo { bound } => {
-            canonical_surface_wrapped(surface, "PartialRangeUpTo", *bound)
-        }
-        SurfaceTyKind::PartialRangeThru { bound } => {
-            canonical_surface_wrapped(surface, "PartialRangeThru", *bound)
-        }
         SurfaceTyKind::Handler {
             effect,
             input,
             output,
         } => canonical_surface_handler(surface, *effect, *input, *output),
         SurfaceTyKind::Mut { inner } => canonical_surface_prefixed(surface, "mut", *inner),
-        SurfaceTyKind::AnyClass { class } => canonical_surface_prefixed(surface, "any", *class),
-        SurfaceTyKind::SomeClass { class } => canonical_surface_prefixed(surface, "some", *class),
+        SurfaceTyKind::AnyShape { capability } => {
+            canonical_surface_prefixed(surface, "any", *capability)
+        }
+        SurfaceTyKind::SomeShape { capability } => {
+            canonical_surface_prefixed(surface, "some", *capability)
+        }
         SurfaceTyKind::Record { fields } => canonical_surface_record(surface, fields),
         _ => canonical_simple_surface_ty(kind).expect("simple surface type should render"),
     }
@@ -115,7 +107,7 @@ fn canonical_surface_handler(
     output: SurfaceTyId,
 ) -> String {
     format!(
-        "using {} ({} -> {})",
+        "answer {} ({} -> {})",
         canonical_surface_ty(surface, effect),
         canonical_surface_ty(surface, input),
         canonical_surface_ty(surface, output)
@@ -231,10 +223,6 @@ fn canonical_surface_record(surface: &ModuleSurface, fields: &[SurfaceTyField]) 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RangeTyTag {
     Open,
-    Closed,
-    From,
-    UpTo,
-    Thru,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -244,30 +232,12 @@ struct RangeTyForm<Id> {
 }
 
 impl RangeTyTag {
-    const fn to_surface_kind(self, bound: SurfaceTyId) -> SurfaceTyKind {
-        match self {
-            Self::Open => SurfaceTyKind::Range { bound },
-            Self::Closed => SurfaceTyKind::ClosedRange { bound },
-            Self::From => SurfaceTyKind::PartialRangeFrom { bound },
-            Self::UpTo => SurfaceTyKind::PartialRangeUpTo { bound },
-            Self::Thru => SurfaceTyKind::PartialRangeThru { bound },
-        }
+    const fn to_surface_kind(bound: SurfaceTyId) -> SurfaceTyKind {
+        SurfaceTyKind::Range { bound }
     }
 
-    const fn to_hir_kind(self, bound: HirTyId) -> HirTyKind {
-        if matches!(self, Self::Open) {
-            return HirTyKind::Range { bound };
-        }
-        if matches!(self, Self::Closed) {
-            return HirTyKind::ClosedRange { bound };
-        }
-        if matches!(self, Self::From) {
-            return HirTyKind::PartialRangeFrom { bound };
-        }
-        if matches!(self, Self::UpTo) {
-            return HirTyKind::PartialRangeUpTo { bound };
-        }
-        HirTyKind::PartialRangeThru { bound }
+    const fn to_hir_kind(bound: HirTyId) -> HirTyKind {
+        HirTyKind::Range { bound }
     }
 }
 
@@ -275,22 +245,6 @@ const fn hir_range_form(kind: &HirTyKind) -> Option<RangeTyForm<HirTyId>> {
     match kind {
         HirTyKind::Range { bound } => Some(RangeTyForm {
             tag: RangeTyTag::Open,
-            bound: *bound,
-        }),
-        HirTyKind::ClosedRange { bound } => Some(RangeTyForm {
-            tag: RangeTyTag::Closed,
-            bound: *bound,
-        }),
-        HirTyKind::PartialRangeFrom { bound } => Some(RangeTyForm {
-            tag: RangeTyTag::From,
-            bound: *bound,
-        }),
-        HirTyKind::PartialRangeUpTo { bound } => Some(RangeTyForm {
-            tag: RangeTyTag::UpTo,
-            bound: *bound,
-        }),
-        HirTyKind::PartialRangeThru { bound } => Some(RangeTyForm {
-            tag: RangeTyTag::Thru,
             bound: *bound,
         }),
         _ => None,
@@ -301,30 +255,6 @@ const fn surface_range_form(kind: &SurfaceTyKind) -> Option<RangeTyForm<SurfaceT
     if let SurfaceTyKind::Range { bound } = kind {
         return Some(RangeTyForm {
             tag: RangeTyTag::Open,
-            bound: *bound,
-        });
-    }
-    if let SurfaceTyKind::ClosedRange { bound } = kind {
-        return Some(RangeTyForm {
-            tag: RangeTyTag::Closed,
-            bound: *bound,
-        });
-    }
-    if let SurfaceTyKind::PartialRangeFrom { bound } = kind {
-        return Some(RangeTyForm {
-            tag: RangeTyTag::From,
-            bound: *bound,
-        });
-    }
-    if let SurfaceTyKind::PartialRangeUpTo { bound } = kind {
-        return Some(RangeTyForm {
-            tag: RangeTyTag::UpTo,
-            bound: *bound,
-        });
-    }
-    if let SurfaceTyKind::PartialRangeThru { bound } = kind {
-        return Some(RangeTyForm {
-            tag: RangeTyTag::Thru,
             bound: *bound,
         });
     }
@@ -406,11 +336,7 @@ impl<'a> SurfaceTyBuilder<'a> {
                 dims: self.lower_dims(dims.clone()),
                 item: self.lower(*item),
             },
-            HirTyKind::Range { .. }
-            | HirTyKind::ClosedRange { .. }
-            | HirTyKind::PartialRangeFrom { .. }
-            | HirTyKind::PartialRangeUpTo { .. }
-            | HirTyKind::PartialRangeThru { .. } => self.lower_range_kind(kind),
+            HirTyKind::Range { .. } => self.lower_range_kind(kind),
             HirTyKind::Handler {
                 effect,
                 input,
@@ -423,11 +349,11 @@ impl<'a> SurfaceTyBuilder<'a> {
             HirTyKind::Mut { inner } => SurfaceTyKind::Mut {
                 inner: self.lower(*inner),
             },
-            HirTyKind::AnyClass { class } => SurfaceTyKind::AnyClass {
-                class: self.lower(*class),
+            HirTyKind::AnyShape { capability } => SurfaceTyKind::AnyShape {
+                capability: self.lower(*capability),
             },
-            HirTyKind::SomeClass { class } => SurfaceTyKind::SomeClass {
-                class: self.lower(*class),
+            HirTyKind::SomeShape { capability } => SurfaceTyKind::SomeShape {
+                capability: self.lower(*capability),
             },
             HirTyKind::Record { fields } => SurfaceTyKind::Record {
                 fields: self.lower_fields(fields.clone()),
@@ -442,7 +368,7 @@ impl<'a> SurfaceTyBuilder<'a> {
             return simple_surface_ty_kind(kind)
                 .expect("expected primitive type kind after range matches");
         };
-        form.tag.to_surface_kind(self.lower(form.bound))
+        RangeTyTag::to_surface_kind(self.lower(form.bound))
     }
 
     fn lower_ty_ids(&mut self, tys: SliceRange<HirTyId>) -> Box<[SurfaceTyId]> {
@@ -571,11 +497,7 @@ impl<'ctx, 'ctx_state, 'interner, 'env> SurfaceTyImporter<'ctx, 'ctx_state, 'int
                 dims: self.import_dims(dims),
                 item: self.import(*item),
             },
-            SurfaceTyKind::Range { .. }
-            | SurfaceTyKind::ClosedRange { .. }
-            | SurfaceTyKind::PartialRangeFrom { .. }
-            | SurfaceTyKind::PartialRangeUpTo { .. }
-            | SurfaceTyKind::PartialRangeThru { .. } => self.import_range_kind(kind),
+            SurfaceTyKind::Range { .. } => self.import_range_kind(kind),
             SurfaceTyKind::Handler {
                 effect,
                 input,
@@ -588,11 +510,11 @@ impl<'ctx, 'ctx_state, 'interner, 'env> SurfaceTyImporter<'ctx, 'ctx_state, 'int
             SurfaceTyKind::Mut { inner } => HirTyKind::Mut {
                 inner: self.import(*inner),
             },
-            SurfaceTyKind::AnyClass { class } => HirTyKind::AnyClass {
-                class: self.import(*class),
+            SurfaceTyKind::AnyShape { capability } => HirTyKind::AnyShape {
+                capability: self.import(*capability),
             },
-            SurfaceTyKind::SomeClass { class } => HirTyKind::SomeClass {
-                class: self.import(*class),
+            SurfaceTyKind::SomeShape { capability } => HirTyKind::SomeShape {
+                capability: self.import(*capability),
             },
             SurfaceTyKind::Record { fields } => HirTyKind::Record {
                 fields: self.import_fields(fields),
@@ -604,7 +526,7 @@ impl<'ctx, 'ctx_state, 'interner, 'env> SurfaceTyImporter<'ctx, 'ctx_state, 'int
 
     fn import_range_kind(&mut self, kind: &SurfaceTyKind) -> HirTyKind {
         if let Some(form) = surface_range_form(kind) {
-            return form.tag.to_hir_kind(self.import(form.bound));
+            return RangeTyTag::to_hir_kind(self.import(form.bound));
         }
         simple_hir_ty_kind(kind).expect("expected primitive surface type kind after range matches")
     }
@@ -672,7 +594,6 @@ enum SimpleTyKind {
     Rune,
     CString,
     CPtr,
-    Module,
     NatLit(u64),
 }
 
@@ -833,12 +754,6 @@ const SIMPLE_TY_INFOS: &[SimpleTyInfo] = &[
         hir: HirTyKind::CPtr,
         surface: SurfaceTyKind::CPtr,
         display_name: "CPtr",
-    },
-    SimpleTyInfo {
-        simple: SimpleTyKind::Module,
-        hir: HirTyKind::Module,
-        surface: SurfaceTyKind::Module,
-        display_name: "Module",
     },
 ];
 

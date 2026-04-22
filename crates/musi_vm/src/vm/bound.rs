@@ -71,6 +71,7 @@ impl Vm {
     /// # Errors
     ///
     /// Returns [`VmError`] when invocation fails.
+    #[allow(clippy::inline_always)]
     #[inline(always)]
     pub fn call_i64_i64(&mut self, call: BoundI64Call, arg: i64) -> VmResult<i64> {
         match call.kind {
@@ -182,6 +183,7 @@ impl Vm {
     /// # Errors
     ///
     /// Returns [`VmError`] when invocation fails or result is not integer.
+    #[allow(clippy::inline_always)]
     #[inline(always)]
     pub fn call_init0_i64(&mut self, call: BoundInitCall) -> VmResult<i64> {
         self.count_instruction();
@@ -261,6 +263,7 @@ impl BoundSeq2x2PackedArg<'_> {
     /// # Errors
     ///
     /// Returns [`VmError`] when invocation fails.
+    #[allow(clippy::inline_always)]
     #[inline(always)]
     pub fn call_i64(&self, call: BoundSeq2x2Call) -> VmResult<i64> {
         // SAFETY: pointer comes from active VM borrow captured at bind time.

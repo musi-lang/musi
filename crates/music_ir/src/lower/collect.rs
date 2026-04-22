@@ -20,7 +20,7 @@ impl<'a> SyntheticNameSetMut<'a> {
             IrExprKind::Name {
                 binding: None,
                 name,
-                module_target: None,
+                import_record_target: None,
             } => {
                 self.insert(name.clone());
             }
@@ -61,7 +61,9 @@ impl<'a> SyntheticNameSetMut<'a> {
                 self.collect_used(range);
                 self.collect_used(evidence);
             }
-            IrExprKind::RangeMaterialize { range, evidence } => {
+            IrExprKind::RangeMaterialize {
+                range, evidence, ..
+            } => {
                 self.collect_used(range);
                 self.collect_used(evidence);
             }
@@ -85,7 +87,7 @@ impl<'a> SyntheticNameSetMut<'a> {
                 captures: exprs, ..
             } => self.collect_expr_slice(exprs),
             IrExprKind::ArrayCat { parts, .. }
-            | IrExprKind::CallSeq { args: parts, .. }
+            | IrExprKind::CallParts { args: parts, .. }
             | IrExprKind::RequestSeq { args: parts, .. } => self.collect_seq_part_exprs(parts),
             IrExprKind::Record { fields, .. } => self.collect_record_field_exprs(fields),
             IrExprKind::RecordUpdate { base, updates, .. } => {
@@ -112,14 +114,14 @@ impl<'a> SyntheticNameSetMut<'a> {
                     self.collect_used(&arg.expr);
                 }
             }
-            IrExprKind::HandlerLit { value, ops, .. } => {
+            IrExprKind::AnswerLit { value, ops, .. } => {
                 self.collect_used(value);
                 for op in ops {
                     self.collect_used(&op.closure);
                 }
             }
-            IrExprKind::Handle { handler, body, .. } => {
-                self.collect_used(handler);
+            IrExprKind::Handle { answer, body, .. } => {
+                self.collect_used(answer);
                 self.collect_used(body);
             }
             IrExprKind::Resume { expr } => {
@@ -231,7 +233,9 @@ fn collect_used_bindings_nested(expr: &IrExpr, out: BoundNameSetMut<'_>) {
             collect_used_bindings(range, out);
             collect_used_bindings(evidence, out);
         }
-        IrExprKind::RangeMaterialize { range, evidence } => {
+        IrExprKind::RangeMaterialize {
+            range, evidence, ..
+        } => {
             collect_used_bindings(range, out);
             collect_used_bindings(evidence, out);
         }
@@ -255,7 +259,7 @@ fn collect_used_bindings_nested(expr: &IrExpr, out: BoundNameSetMut<'_>) {
             captures: exprs, ..
         } => collect_expr_slice(exprs, out, collect_used_bindings),
         IrExprKind::ArrayCat { parts, .. }
-        | IrExprKind::CallSeq { args: parts, .. }
+        | IrExprKind::CallParts { args: parts, .. }
         | IrExprKind::RequestSeq { args: parts, .. } => {
             collect_seq_part_exprs(parts, out, collect_used_bindings);
         }
@@ -277,14 +281,14 @@ fn collect_used_bindings_nested(expr: &IrExpr, out: BoundNameSetMut<'_>) {
         IrExprKind::IntrinsicCall { args, .. } => {
             collect_call_arg_exprs(args, out, collect_used_bindings);
         }
-        IrExprKind::HandlerLit { value, ops, .. } => {
+        IrExprKind::AnswerLit { value, ops, .. } => {
             collect_used_bindings(value, out);
             for op in ops {
                 collect_used_bindings(&op.closure, out);
             }
         }
-        IrExprKind::Handle { handler, body, .. } => {
-            collect_used_bindings(handler, out);
+        IrExprKind::Handle { answer, body, .. } => {
+            collect_used_bindings(answer, out);
             collect_used_bindings(body, out);
         }
         IrExprKind::Resume { expr } => {
@@ -324,7 +328,9 @@ fn collect_local_decl_bindings_nested(expr: &IrExpr, out: BoundNameSetMut<'_>) {
             collect_local_decl_bindings(range, out);
             collect_local_decl_bindings(evidence, out);
         }
-        IrExprKind::RangeMaterialize { range, evidence } => {
+        IrExprKind::RangeMaterialize {
+            range, evidence, ..
+        } => {
             collect_local_decl_bindings(range, out);
             collect_local_decl_bindings(evidence, out);
         }
@@ -350,7 +356,7 @@ fn collect_local_decl_bindings_nested(expr: &IrExpr, out: BoundNameSetMut<'_>) {
             collect_expr_slice(exprs, out, collect_local_decl_bindings);
         }
         IrExprKind::ArrayCat { parts, .. }
-        | IrExprKind::CallSeq { args: parts, .. }
+        | IrExprKind::CallParts { args: parts, .. }
         | IrExprKind::RequestSeq { args: parts, .. } => {
             collect_seq_part_exprs(parts, out, collect_local_decl_bindings);
         }
@@ -371,14 +377,14 @@ fn collect_local_decl_bindings_nested(expr: &IrExpr, out: BoundNameSetMut<'_>) {
         IrExprKind::IntrinsicCall { args, .. } => {
             collect_call_arg_exprs(args, out, collect_local_decl_bindings);
         }
-        IrExprKind::HandlerLit { value, ops, .. } => {
+        IrExprKind::AnswerLit { value, ops, .. } => {
             collect_local_decl_bindings(value, out);
             for op in ops {
                 collect_local_decl_bindings(&op.closure, out);
             }
         }
-        IrExprKind::Handle { handler, body, .. } => {
-            collect_local_decl_bindings(handler, out);
+        IrExprKind::Handle { answer, body, .. } => {
+            collect_local_decl_bindings(answer, out);
             collect_local_decl_bindings(body, out);
         }
         IrExprKind::Resume { expr } => {

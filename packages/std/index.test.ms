@@ -35,7 +35,7 @@ export let test () :=
       testing.toBe(std.option.unwrapOr[Int](noneInt, 5), 5),
     );
     testing.it(
-      "local alias preserves module target",
+      "local alias preserves import record target",
       testing.toBeTruthy(
         std.bytes.fromArray([3, 4]).equals(std.bytes.fromArray([3, 4]))
       ),

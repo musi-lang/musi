@@ -145,8 +145,8 @@ mod success {
 
         assert_success(&output);
         let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.contains("module @seam.projection"));
-        assert!(stdout.contains("fn @"));
+        assert!(stdout.contains("module seam.projection"));
+        assert!(stdout.contains("fn "));
         assert!(stdout.contains("::main"));
     }
 
@@ -171,8 +171,8 @@ mod success {
 
         assert_success(&output);
         let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.contains("module @seam.projection"));
-        assert!(stdout.contains("fn @"));
+        assert!(stdout.contains("module seam.projection"));
+        assert!(stdout.contains("fn "));
         assert!(stdout.contains("::main"));
     }
 

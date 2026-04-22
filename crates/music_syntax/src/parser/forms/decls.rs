@@ -196,9 +196,9 @@ impl Parser<'_> {
         self.parse_member_body_expr(SyntaxNodeKind::EffectExpr, TokenKind::KwEffect)
     }
 
-    pub(crate) fn parse_class_expr(&mut self) -> ParseResult<SyntaxNodeId> {
-        let class = self.expect_token(TokenKind::KwClass)?;
-        let mut children = vec![class];
+    pub(crate) fn parse_shape_expr(&mut self) -> ParseResult<SyntaxNodeId> {
+        let shape = self.expect_token(TokenKind::KwShape)?;
+        let mut children = vec![shape];
         if self.at(TokenKind::KwWhere) {
             children.push(self.advance_element());
             children.push(SyntaxElementId::Node(self.parse_constraint_list()?));
@@ -206,37 +206,37 @@ impl Parser<'_> {
         self.parse_member_body(&mut children)?;
         Ok(self
             .builder
-            .push_node_from_children(SyntaxNodeKind::ClassExpr, children))
+            .push_node_from_children(SyntaxNodeKind::ShapeExpr, children))
     }
 
-    pub(crate) fn parse_instance_expr(
+    pub(crate) fn parse_given_expr(
         &mut self,
         mut attrs: SyntaxElementList,
     ) -> ParseResult<SyntaxNodeId> {
-        attrs.push(self.expect_token(TokenKind::KwInstance)?);
+        attrs.push(self.expect_token(TokenKind::KwGiven)?);
         self.parse_optional_type_params_clause(&mut attrs)?;
         attrs.push(SyntaxElementId::Node(self.parse_expr(0)?));
         self.parse_optional_constraints_clause(&mut attrs)?;
         self.parse_member_body(&mut attrs)?;
         Ok(self
             .builder
-            .push_node_from_children(SyntaxNodeKind::InstanceExpr, attrs))
+            .push_node_from_children(SyntaxNodeKind::GivenExpr, attrs))
     }
 
-    pub(crate) fn parse_request_expr(&mut self) -> ParseResult<SyntaxNodeId> {
-        let request = self.expect_token(TokenKind::KwRequest)?;
+    pub(crate) fn parse_ask_expr(&mut self) -> ParseResult<SyntaxNodeId> {
+        let ask = self.expect_token(TokenKind::KwAsk)?;
         let expr = self.parse_expr(PREFIX_BP)?;
         Ok(self.builder.push_node_from_children(
-            SyntaxNodeKind::RequestExpr,
-            vec![request, SyntaxElementId::Node(expr)],
+            SyntaxNodeKind::AskExpr,
+            vec![ask, SyntaxElementId::Node(expr)],
         ))
     }
 
-    pub(crate) fn parse_handler_expr(&mut self) -> ParseResult<SyntaxNodeId> {
-        let using = self.expect_token(TokenKind::KwUsing)?;
+    pub(crate) fn parse_answer_lit_expr(&mut self) -> ParseResult<SyntaxNodeId> {
+        let answer = self.expect_token(TokenKind::KwAnswer)?;
         let effect = self.expect_ident_element()?;
         let open = self.expect_token(TokenKind::LBrace)?;
-        let mut children = vec![using, effect, open];
+        let mut children = vec![answer, effect, open];
         while !self.at(TokenKind::RBrace) && !self.at(TokenKind::Eof) {
             children.push(SyntaxElementId::Node(self.parse_handle_clause()?));
             let _ = self.eat(TokenKind::Semicolon);
@@ -244,24 +244,17 @@ impl Parser<'_> {
         children.push(self.expect_token(TokenKind::RBrace)?);
         Ok(self
             .builder
-            .push_node_from_children(SyntaxNodeKind::HandlerExpr, children))
+            .push_node_from_children(SyntaxNodeKind::AnswerLitExpr, children))
     }
 
     pub(crate) fn parse_handle_expr(&mut self) -> ParseResult<SyntaxNodeId> {
         let handle = self.expect_token(TokenKind::KwHandle)?;
         let expr = self.parse_expr(0)?;
         let mut children = vec![handle, SyntaxElementId::Node(expr)];
-        if self.at(TokenKind::KwUsing)
-            && self.nth_kind(1) == TokenKind::Ident
-            && self.nth_kind(2) == TokenKind::LBrace
-        {
-            children.push(SyntaxElementId::Node(self.parse_handler_expr()?));
-        } else {
-            let using_kw = self.expect_token(TokenKind::KwUsing)?;
-            let handler = self.parse_expr(PREFIX_BP)?;
-            children.push(using_kw);
-            children.push(SyntaxElementId::Node(handler));
-        }
+        let answer_kw = self.expect_token(TokenKind::KwAnswer)?;
+        let answer = self.parse_expr(PREFIX_BP)?;
+        children.push(answer_kw);
+        children.push(SyntaxElementId::Node(answer));
         Ok(self
             .builder
             .push_node_from_children(SyntaxNodeKind::HandleExpr, children))
@@ -288,7 +281,7 @@ impl Parser<'_> {
         &mut self,
         mut attrs: SyntaxElementList,
     ) -> ParseResult<SyntaxNodeId> {
-        attrs.push(self.expect_token(TokenKind::KwForeign)?);
+        attrs.push(self.expect_token(TokenKind::KwNative)?);
         if self.at(TokenKind::String) {
             attrs.push(self.advance_element());
         }
@@ -335,6 +328,10 @@ impl Parser<'_> {
         self.parse_optional_typed_expr(&mut children)?;
         self.parse_optional_constraints_clause(&mut children)?;
         self.parse_optional_effects_clause(&mut children)?;
+        if self.at(TokenKind::ColonEq) {
+            children.push(self.advance_element());
+            children.push(SyntaxElementId::Node(self.parse_expr(0)?));
+        }
         Ok(self
             .builder
             .push_node_from_children(SyntaxNodeKind::Member, children))
@@ -343,6 +340,7 @@ impl Parser<'_> {
     pub(crate) fn parse_with_mods_expr(&mut self) -> ParseResult<SyntaxNodeId> {
         let mut children = Vec::new();
         let mut has_export_mod = false;
+        let mut has_native_export_mod = false;
         let mut has_partial_mod = false;
         while self.at(TokenKind::At)
             || self.at(TokenKind::KwExport)
@@ -354,6 +352,9 @@ impl Parser<'_> {
                 children.push(self.advance_element());
                 has_partial_mod = true;
             } else {
+                has_native_export_mod = self.nth_kind(1) == TokenKind::KwNative
+                    || (self.nth_kind(1) == TokenKind::KwOpaque
+                        && self.nth_kind(2) == TokenKind::KwNative);
                 children.push(SyntaxElementId::Node(self.parse_export_mod()?));
                 has_export_mod = true;
             }
@@ -363,9 +364,13 @@ impl Parser<'_> {
         }
         let expr = match self.peek_kind() {
             TokenKind::KwLet => self.parse_let_expr(Vec::new())?,
-            TokenKind::KwForeign => self.parse_foreign_expr(Vec::new())?,
-            TokenKind::KwInstance => self.parse_instance_expr(Vec::new())?,
-            TokenKind::LParen if has_export_mod && self.nth_kind(1) == TokenKind::KwLet => {
+            TokenKind::KwNative => self.parse_foreign_expr(Vec::new())?,
+            TokenKind::KwGiven => self.parse_given_expr(Vec::new())?,
+            TokenKind::LParen
+                if has_export_mod
+                    && has_native_export_mod
+                    && self.nth_kind(1) == TokenKind::KwLet =>
+            {
                 self.parse_foreign_group()?
             }
             _ => self.parse_expr(PREFIX_BP)?,
@@ -381,7 +386,7 @@ impl Parser<'_> {
         if let Some(opaque) = self.eat(TokenKind::KwOpaque) {
             children.push(opaque);
         }
-        if self.at(TokenKind::KwForeign) {
+        if self.at(TokenKind::KwNative) {
             children.push(self.advance_element());
             if self.at(TokenKind::String) {
                 children.push(self.advance_element());

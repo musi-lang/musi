@@ -1,52 +1,48 @@
 use music_seam::{Instruction, Opcode};
 
-use crate::VmValueKind;
-
 use super::{StepOutcome, Value, Vm, VmError, VmErrorKind, VmResult};
 
 impl Vm {
-    fn pop_int_pair(&mut self) -> VmResult<(i64, i64)> {
-        let right_value = self.pop_value()?;
-        let right = match right_value {
-            Value::Int(value) => value,
-            Value::Nat(value) => i64::try_from(value)
-                .map_err(|_| Self::invalid_value_kind(VmValueKind::Int, &right_value))?,
-            _ => {
-                return Err(Self::invalid_value_kind(VmValueKind::Int, &right_value));
-            }
-        };
-        let left_value = self.pop_value()?;
-        let left = match left_value {
-            Value::Int(value) => value,
-            Value::Nat(value) => i64::try_from(value)
-                .map_err(|_| Self::invalid_value_kind(VmValueKind::Int, &left_value))?,
-            _ => {
-                return Err(Self::invalid_value_kind(VmValueKind::Int, &left_value));
-            }
-        };
-        Ok((left, right))
-    }
-
-    pub(crate) fn checked_int_op(
+    fn numeric_op(
         &mut self,
-        op: impl FnOnce(i64, i64) -> Option<i64>,
+        int_op: impl FnOnce(i64, i64) -> Option<i64>,
+        float_op: impl FnOnce(f64, f64) -> f64,
     ) -> VmResult<StepOutcome> {
-        let (left, right) = self.pop_int_pair()?;
-        let result = op(left, right).ok_or_else(|| {
-            VmError::new(VmErrorKind::ArithmeticFailed {
-                detail: "signed integer overflow".into(),
-            })
-        })?;
-        self.push_value(Value::Int(result))?;
-        Ok(StepOutcome::Continue)
-    }
-
-    pub(crate) fn binary_float_op(&mut self, op: impl FnOnce(f64, f64) -> f64) -> VmResult {
         let right_value = self.pop_value()?;
-        let right = Self::expect_float(&right_value)?;
         let left_value = self.pop_value()?;
-        let left = Self::expect_float(&left_value)?;
-        self.push_value(Value::Float(op(left, right)))
+        match (left_value, right_value) {
+            (Value::Int(left), Value::Int(right)) => {
+                let result = int_op(left, right).ok_or_else(|| {
+                    VmError::new(VmErrorKind::ArithmeticFailed {
+                        detail: "signed integer overflow".into(),
+                    })
+                })?;
+                self.push_value(Value::Int(result))?;
+            }
+            (Value::Nat(left), Value::Nat(right)) => {
+                let left = i64::try_from(left).map_err(|_| {
+                    VmError::new(VmErrorKind::ArithmeticFailed {
+                        detail: "natural integer exceeds signed range".into(),
+                    })
+                })?;
+                let right = i64::try_from(right).map_err(|_| {
+                    VmError::new(VmErrorKind::ArithmeticFailed {
+                        detail: "natural integer exceeds signed range".into(),
+                    })
+                })?;
+                let result = int_op(left, right).ok_or_else(|| {
+                    VmError::new(VmErrorKind::ArithmeticFailed {
+                        detail: "signed integer overflow".into(),
+                    })
+                })?;
+                self.push_value(Value::Int(result))?;
+            }
+            (Value::Float(left), Value::Float(right)) => {
+                self.push_value(Value::Float(float_op(left, right)))?;
+            }
+            (left, right) => return Err(Self::invalid_value_kind(left.kind(), &right)),
+        }
+        Ok(StepOutcome::Continue)
     }
 
     pub(crate) fn compare_values(&mut self, op: impl FnOnce(bool) -> bool) -> VmResult {
@@ -89,32 +85,12 @@ impl Vm {
 
     pub(crate) fn exec_scalar(&mut self, instruction: &Instruction) -> VmResult<StepOutcome> {
         match instruction.opcode {
-            Opcode::IAdd => self.checked_int_op(i64::checked_add),
-            Opcode::ISub => self.checked_int_op(i64::checked_sub),
-            Opcode::IMul => self.checked_int_op(i64::checked_mul),
-            Opcode::IDiv => self.checked_int_op(i64::checked_div),
-            Opcode::IRem => self.checked_int_op(i64::checked_rem),
-            Opcode::FAdd => {
-                self.binary_float_op(|left, right| left + right)?;
-                Ok(StepOutcome::Continue)
-            }
-            Opcode::FSub => {
-                self.binary_float_op(|left, right| left - right)?;
-                Ok(StepOutcome::Continue)
-            }
-            Opcode::FMul => {
-                self.binary_float_op(|left, right| left * right)?;
-                Ok(StepOutcome::Continue)
-            }
-            Opcode::FDiv => {
-                self.binary_float_op(|left, right| left / right)?;
-                Ok(StepOutcome::Continue)
-            }
-            Opcode::FRem => {
-                self.binary_float_op(|left, right| left % right)?;
-                Ok(StepOutcome::Continue)
-            }
-            Opcode::StrCat => {
+            Opcode::Add => self.numeric_op(i64::checked_add, |left, right| left + right),
+            Opcode::Sub => self.numeric_op(i64::checked_sub, |left, right| left - right),
+            Opcode::Mul => self.numeric_op(i64::checked_mul, |left, right| left * right),
+            Opcode::DivS => self.numeric_op(i64::checked_div, |left, right| left / right),
+            Opcode::RemS => self.numeric_op(i64::checked_rem, |left, right| left % right),
+            Opcode::Call => {
                 let right_value = self.pop_value()?;
                 let right = self.expect_string_value(right_value)?;
                 let left_value = self.pop_value()?;
@@ -124,15 +100,15 @@ impl Vm {
                 self.push_value(value)?;
                 Ok(StepOutcome::Continue)
             }
-            Opcode::CmpEq => {
+            Opcode::Ceq => {
                 self.compare_values(|equal| equal)?;
                 Ok(StepOutcome::Continue)
             }
-            Opcode::CmpNe => {
+            Opcode::Cne => {
                 self.compare_values(|equal| !equal)?;
                 Ok(StepOutcome::Continue)
             }
-            Opcode::CmpLt => {
+            Opcode::CltS => {
                 self.compare_ord(
                     |left, right| left < right,
                     |left, right| left < right,
@@ -141,7 +117,7 @@ impl Vm {
                 )?;
                 Ok(StepOutcome::Continue)
             }
-            Opcode::CmpGt => {
+            Opcode::CgtS => {
                 self.compare_ord(
                     |left, right| left > right,
                     |left, right| left > right,
@@ -150,7 +126,7 @@ impl Vm {
                 )?;
                 Ok(StepOutcome::Continue)
             }
-            Opcode::CmpLe => {
+            Opcode::CleS => {
                 self.compare_ord(
                     |left, right| left <= right,
                     |left, right| left <= right,
@@ -159,7 +135,7 @@ impl Vm {
                 )?;
                 Ok(StepOutcome::Continue)
             }
-            Opcode::CmpGe => {
+            Opcode::CgeS => {
                 self.compare_ord(
                     |left, right| left >= right,
                     |left, right| left >= right,

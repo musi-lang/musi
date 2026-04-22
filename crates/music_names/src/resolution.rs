@@ -36,12 +36,14 @@ impl NameSite {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NameBindingKind {
     Prelude,
+    Import,
     Let,
     AttachedMethod,
     Param,
     PiBinder,
     TypeParam,
     PatternBind,
+    Pin,
     HandleClauseResult,
     HandleClauseParam,
 }

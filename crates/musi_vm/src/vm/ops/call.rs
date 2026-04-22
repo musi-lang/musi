@@ -10,13 +10,21 @@ use super::{StepOutcome, Value, Vm, VmError, VmErrorKind, VmResult};
 impl Vm {
     pub(crate) fn exec_call(&mut self, instruction: &Instruction) -> VmResult<StepOutcome> {
         match instruction.opcode {
-            Opcode::Call => self.exec_procedure_call(instruction),
-            Opcode::CallSeq => self.exec_seq_procedure_call(instruction),
-            Opcode::CallCls => self.exec_closure_call(),
-            Opcode::CallClsSeq => self.exec_seq_closure_call(),
-            Opcode::CallTail => self.exec_tail_call(instruction),
+            Opcode::Call => match instruction.operand {
+                Operand::WideProcedureCaptures {
+                    procedure,
+                    captures: 0,
+                } => self.exec_seq_procedure_call_for(procedure),
+                Operand::None => self.exec_seq_cat(),
+                _ => self.exec_procedure_call(instruction),
+            },
+            Opcode::CallInd => match instruction.operand {
+                Operand::I16(_) => self.exec_seq_closure_call(),
+                _ => self.exec_closure_call(),
+            },
+            Opcode::TailCall => self.exec_tail_call(instruction),
             Opcode::Ret => self.return_from_frame(),
-            Opcode::ClsNew => self.exec_closure_new(instruction),
+            Opcode::NewFn => self.exec_closure_new(instruction),
             _ => Err(Self::invalid_dispatch(instruction, "call")),
         }
     }
@@ -26,7 +34,7 @@ impl Vm {
         runtime: &RuntimeInstruction,
     ) -> VmResult<StepOutcome> {
         match runtime.opcode {
-            Opcode::CallSeq => {
+            Opcode::Call => {
                 let RuntimeOperand::Procedure(procedure) = runtime.operand else {
                     let instruction = self.current_raw_instruction(runtime.raw_index)?;
                     return Err(Self::invalid_operand(&instruction));
@@ -36,9 +44,11 @@ impl Vm {
                 self.push_frame(module_slot, procedure, args)?;
                 Ok(StepOutcome::Continue)
             }
-            Opcode::CallCls => self.exec_closure_call(),
-            Opcode::CallClsSeq => self.exec_seq_closure_call(),
-            Opcode::ClsNew => {
+            Opcode::CallInd => match runtime.operand {
+                RuntimeOperand::I16(_) => self.exec_seq_closure_call(),
+                _ => self.exec_closure_call(),
+            },
+            Opcode::NewFn => {
                 let RuntimeOperand::WideProcedureCaptures {
                     procedure,
                     captures,
@@ -98,16 +108,28 @@ impl Vm {
             .is_some_and(|instruction| matches!(instruction.opcode, Opcode::Ret)))
     }
 
-    fn exec_seq_procedure_call(&mut self, instruction: &Instruction) -> VmResult<StepOutcome> {
-        let procedure = Self::procedure_operand(instruction)?;
+    fn exec_seq_procedure_call_for(&mut self, procedure: ProcedureId) -> VmResult<StepOutcome> {
         let module_slot = self.current_module_slot()?;
-        let args = self.pop_seq_args()?;
-        self.push_frame(module_slot, procedure, args)?;
+        if self.frames.last().is_some_and(|frame| {
+            frame
+                .stack
+                .last()
+                .is_some_and(|value| matches!(value, Value::Seq(_)))
+        }) {
+            let args = self.pop_seq_args()?;
+            self.push_frame(module_slot, procedure, args)?;
+        } else {
+            self.push_frame_from_stack(module_slot, procedure)?;
+        }
         Ok(StepOutcome::Continue)
     }
 
     fn exec_closure_call(&mut self) -> VmResult<StepOutcome> {
         let callee = self.pop_value()?;
+        self.exec_closure_call_value(callee)
+    }
+
+    fn exec_closure_call_value(&mut self, callee: Value) -> VmResult<StepOutcome> {
         match callee {
             Value::Closure(closure) => self.push_closure_call_frame(closure)?,
             Value::Foreign(foreign) => {
@@ -121,6 +143,14 @@ impl Vm {
 
     fn exec_seq_closure_call(&mut self) -> VmResult<StepOutcome> {
         let callee = self.pop_value()?;
+        if !self.frames.last().is_some_and(|frame| {
+            frame
+                .stack
+                .last()
+                .is_some_and(|value| matches!(value, Value::Seq(_)))
+        }) {
+            return self.exec_closure_call_value(callee);
+        }
         match callee {
             Value::Closure(closure) => {
                 let args = self.pop_seq_args()?;

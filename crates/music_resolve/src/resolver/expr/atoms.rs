@@ -1,5 +1,6 @@
 use super::*;
 use crate::diag::ResolveDiagKind;
+use music_base::diag::DiagContext;
 
 impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src>
 where
@@ -7,7 +8,14 @@ where
 {
     pub(super) fn lower_sequence_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
-        let exprs: Vec<_> = node.child_nodes().map(|n| self.lower_expr(n)).collect();
+        let exprs: Vec<_> = node
+            .child_nodes()
+            .map(|n| {
+                let expr = self.lower_expr(n);
+                self.inject_anonymous_imports(expr);
+                expr
+            })
+            .collect();
         let exprs = self.store.alloc_expr_list(exprs);
         self.alloc_expr(origin, HirExprKind::Sequence { exprs })
     }
@@ -16,11 +24,43 @@ where
         let origin = self.origin_node(node);
         let exprs = node
             .child_nodes()
-            .map(|child| self.lower_sequence_or_stmt_expr(child))
+            .map(|child| {
+                let expr = self.lower_sequence_or_stmt_expr(child);
+                self.inject_anonymous_imports(expr);
+                expr
+            })
             .collect::<Vec<_>>();
         let exprs = self.store.alloc_expr_list(exprs);
         let body = self.alloc_expr(origin, HirExprKind::Sequence { exprs });
         self.alloc_expr(origin, HirExprKind::Unsafe { body })
+    }
+
+    pub(super) fn lower_pin_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
+        let origin = self.origin_node(node);
+        let mut child_nodes = node.child_nodes();
+        let Some(value_node) = child_nodes.next() else {
+            return self.error_expr(origin);
+        };
+        let Some(body_node) = child_nodes.next() else {
+            return self.error_expr(origin);
+        };
+        let Some(name_tok) = node
+            .child_tokens()
+            .find(|tok| tok.kind() == TokenKind::Ident)
+        else {
+            return self.error_expr(origin);
+        };
+        let Some(name) = self.intern_ident_token(name_tok) else {
+            return self.error_expr(origin);
+        };
+
+        let value = self.lower_expr(value_node);
+        self.push_scope();
+        let _binding = self.insert_binding(name, NameBindingKind::Pin);
+        let body = self.lower_expr(body_node);
+        self.pop_scope();
+
+        self.alloc_expr(origin, HirExprKind::Pin { value, name, body })
     }
 
     pub(super) fn lower_name_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
@@ -29,15 +69,12 @@ where
             .child_tokens()
             .find(|t| Self::is_name_token_kind(t.kind()))
         else {
-            self.diags.push(
-                Diag::error(ResolveDiagKind::ExpectedName.message())
-                    .with_code(ResolveDiagKind::ExpectedName.code())
-                    .with_label(
-                        node.span(),
-                        self.source_id,
-                        ResolveDiagKind::ExpectedName.label(),
-                    ),
-            );
+            self.diags.push(resolve_diag(
+                self.source_id,
+                node.span(),
+                ResolveDiagKind::ExpectedName,
+                DiagContext::new(),
+            ));
             return self.error_expr(origin);
         };
         let Some(ident) = self.intern_ident_token(tok) else {

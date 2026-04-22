@@ -21,11 +21,11 @@ impl HirExportMod {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct HirForeignMod {
+pub struct HirNativeMod {
     pub abi: Option<Symbol>,
 }
 
-impl HirForeignMod {
+impl HirNativeMod {
     #[must_use]
     pub const fn new(abi: Option<Symbol>) -> Self {
         Self { abi }
@@ -36,7 +36,7 @@ impl HirForeignMod {
 pub struct HirMods {
     pub attrs: SliceRange<HirAttr>,
     pub export: Option<HirExportMod>,
-    pub foreign: Option<HirForeignMod>,
+    pub native: Option<HirNativeMod>,
     pub partial: bool,
 }
 
@@ -45,13 +45,13 @@ impl HirMods {
     pub const fn new(
         attrs: SliceRange<HirAttr>,
         export: Option<HirExportMod>,
-        foreign: Option<HirForeignMod>,
+        native: Option<HirNativeMod>,
         partial: bool,
     ) -> Self {
         Self {
             attrs,
             export,
-            foreign,
+            native,
             partial,
         }
     }
@@ -59,7 +59,7 @@ impl HirMods {
     pub const EMPTY: Self = Self {
         attrs: SliceRange::EMPTY,
         export: None,
-        foreign: None,
+        native: None,
         partial: false,
     };
 
@@ -76,8 +76,8 @@ impl HirMods {
     }
 
     #[must_use]
-    pub const fn with_foreign(mut self, foreign: HirForeignMod) -> Self {
-        self.foreign = Some(foreign);
+    pub const fn with_native(mut self, native: HirNativeMod) -> Self {
+        self.native = Some(native);
         self
     }
 
@@ -89,7 +89,7 @@ impl HirMods {
 
     #[must_use]
     pub const fn is_empty(&self) -> bool {
-        self.attrs.is_empty() && self.export.is_none() && self.foreign.is_none() && !self.partial
+        self.attrs.is_empty() && self.export.is_none() && self.native.is_none() && !self.partial
     }
 }
 
@@ -155,7 +155,7 @@ pub enum HirExprKind {
         dims: SliceRange<HirDim>,
         item: HirExprId,
     },
-    HandlerTy {
+    AnswerTy {
         effect: HirExprId,
         input: HirExprId,
         output: HirExprId,
@@ -194,7 +194,7 @@ pub enum HirExprKind {
     },
     Field {
         base: HirExprId,
-        access: HirAccessKind,
+        access: HirAccessChainMode,
         name: Ident,
     },
     RecordUpdate {
@@ -252,14 +252,14 @@ pub enum HirExprKind {
     Effect {
         members: MemberDefRange,
     },
-    Class {
+    Shape {
         constraints: ConstraintRange,
         members: MemberDefRange,
     },
-    Instance {
+    Given {
         type_params: SliceRange<HirBinder>,
         constraints: ConstraintRange,
-        class: HirExprId,
+        capability: HirExprId,
         members: MemberDefRange,
     },
     Request {
@@ -268,7 +268,12 @@ pub enum HirExprKind {
     Unsafe {
         body: HirExprId,
     },
-    HandlerLit {
+    Pin {
+        value: HirExprId,
+        name: Ident,
+        body: HirExprId,
+    },
+    AnswerLit {
         effect: Ident,
         clauses: SliceRange<HirHandleClause>,
     },
@@ -289,10 +294,10 @@ pub enum HirExprKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HirAccessKind {
-    Direct,
+pub enum HirAccessChainMode {
+    Normal,
     Optional,
-    Unwrap,
+    Fallible,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -307,9 +312,8 @@ pub enum HirPrefixOp {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HirPartialRangeKind {
-    From,
-    UpTo,
-    Thru,
+    From { include_lower: bool },
+    UpTo { include_upper: bool },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -327,8 +331,10 @@ pub enum HirBinaryOp {
     Gt,
     Le,
     Ge,
-    ClosedRange,
-    OpenRange,
+    Range {
+        include_lower: bool,
+        include_upper: bool,
+    },
     In,
     Shl,
     Shr,

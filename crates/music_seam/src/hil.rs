@@ -1,14 +1,18 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt::{self, Display, Formatter, Result as FmtResult, Write as _};
+use std::iter::{Enumerate, Peekable};
+use std::str::Lines;
 
 use music_base::diag::{CatalogDiagnostic, DiagContext};
 
-use crate::{SeamDiagKind, diag::hil_verify_error_kind};
+use crate::{AssemblyError, SeamDiagKind, diag::hil_verify_error_kind};
 
 type HilName = Box<str>;
 type HilTypeMap = BTreeMap<HilValueId, HilType>;
 type HilBlockSet = BTreeSet<HilName>;
+type HilLineCursor<'a> = Peekable<Enumerate<Lines<'a>>>;
+type HilLineCursorRef<'cursor, 'text> = &'cursor mut HilLineCursor<'text>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct HilValueId(pub u32);
@@ -36,18 +40,18 @@ impl Display for HilType {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum HilCapability {
+pub enum HilShape {
     Effect,
-    Ffi,
+    Native,
     Syntax,
     Comptime,
 }
 
-impl Display for HilCapability {
+impl Display for HilShape {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::Effect => f.write_str("effect"),
-            Self::Ffi => f.write_str("ffi"),
+            Self::Native => f.write_str("native"),
             Self::Syntax => f.write_str("syntax"),
             Self::Comptime => f.write_str("comptime"),
         }
@@ -105,7 +109,7 @@ pub struct HilFunction {
     pub name: HilName,
     pub params: Box<[HilParam]>,
     pub result_ty: Option<HilType>,
-    pub capabilities: Box<[HilCapability]>,
+    pub capabilities: Box<[HilShape]>,
     pub blocks: Box<[HilBlock]>,
 }
 
@@ -127,7 +131,7 @@ impl HilFunction {
     }
 
     #[must_use]
-    pub fn with_capabilities(mut self, capabilities: impl Into<Box<[HilCapability]>>) -> Self {
+    pub fn with_capabilities(mut self, capabilities: impl Into<Box<[HilShape]>>) -> Self {
         self.capabilities = capabilities.into();
         self
     }
@@ -244,7 +248,7 @@ pub enum HilInstruction {
         callee: HilName,
         args: Box<[HilValueId]>,
     },
-    DataNew {
+    NewObj {
         out: HilValueId,
         ty: HilType,
         variant: HilName,
@@ -313,8 +317,8 @@ pub enum HilVerifyError {
         expected: HilType,
     },
     ReturnValueUnexpected,
-    CapabilityRequired {
-        capability: HilCapability,
+    ShapeRequired {
+        capability: HilShape,
     },
 }
 
@@ -350,9 +354,7 @@ impl HilVerifyError {
                 .with("expected", expected)
                 .with("found", found),
             Self::ReturnValueMissing { expected } => DiagContext::new().with("expected", expected),
-            Self::CapabilityRequired { capability } => {
-                DiagContext::new().with("capability", capability)
-            }
+            Self::ShapeRequired { capability } => DiagContext::new().with("shape", capability),
             Self::ReturnValueUnexpected => DiagContext::new(),
         }
     }
@@ -371,7 +373,7 @@ pub type HilVerifyResult<T = ()> = Result<T, HilVerifyError>;
 #[must_use]
 pub fn format_hil(module: &HilModule) -> String {
     let mut out = String::new();
-    writeln!(&mut out, "module @{} {{", module.name).expect("write to string");
+    writeln!(&mut out, "module {} {{", module.name).expect("write to string");
     for function in &module.functions {
         format_function(&mut out, function);
     }
@@ -379,8 +381,385 @@ pub fn format_hil(module: &HilModule) -> String {
     out
 }
 
+/// Parses public HIL text format produced by [`format_hil`].
+///
+/// # Errors
+///
+/// Returns [`AssemblyError::TextParseFailed`] when syntax is invalid.
+pub fn parse_hil(text: &str) -> Result<HilModule, AssemblyError> {
+    let mut lines = text.lines().enumerate().peekable();
+    let (module_name, mut functions) = parse_module_header(&mut lines)?;
+    while let Some((_, raw)) = lines.peek() {
+        let line = raw.trim();
+        if line.is_empty() {
+            let _ = lines.next();
+            continue;
+        }
+        if line == "}" {
+            let _ = lines.next();
+            break;
+        }
+        functions.push(parse_function(&mut lines)?);
+    }
+    Ok(HilModule::new(module_name, functions.into_boxed_slice()))
+}
+
+fn parse_module_header(
+    lines: HilLineCursorRef<'_, '_>,
+) -> Result<(Box<str>, Vec<HilFunction>), AssemblyError> {
+    while let Some((_, raw)) = lines.peek() {
+        if raw.trim().is_empty() {
+            let _ = lines.next();
+            continue;
+        }
+        break;
+    }
+    let Some((line_no, raw)) = lines.next() else {
+        return Err(AssemblyError::TextParseFailed("empty HIL text".into()));
+    };
+    let line = raw.trim();
+    let Some(rest) = line.strip_prefix("module ") else {
+        return Err(AssemblyError::TextParseFailed(format!(
+            "line {}: module header expected",
+            line_no + 1
+        )));
+    };
+    let Some(name) = rest.strip_suffix(" {") else {
+        return Err(AssemblyError::TextParseFailed(format!(
+            "line {}: malformed module header",
+            line_no + 1
+        )));
+    };
+    Ok((name.trim().into(), Vec::new()))
+}
+
+fn parse_function(lines: HilLineCursorRef<'_, '_>) -> Result<HilFunction, AssemblyError> {
+    let (header_line_no, header) = lines
+        .next()
+        .ok_or_else(|| AssemblyError::TextParseFailed("function header expected".into()))?;
+    let header = header.trim();
+    let Some(head) = header
+        .strip_prefix("fn ")
+        .or_else(|| header.strip_prefix("  fn "))
+    else {
+        return Err(AssemblyError::TextParseFailed(format!(
+            "line {}: function header expected",
+            header_line_no + 1
+        )));
+    };
+    let Some((name_part, after_name)) = head.split_once('(') else {
+        return Err(AssemblyError::TextParseFailed(format!(
+            "line {}: malformed function header",
+            header_line_no + 1
+        )));
+    };
+    let name = name_part.trim().to_owned();
+    let Some((params_text, mut tail)) = after_name.split_once(')') else {
+        return Err(AssemblyError::TextParseFailed(format!(
+            "line {}: malformed parameter list",
+            header_line_no + 1
+        )));
+    };
+    let params = parse_params(params_text.trim())?;
+    let mut result_ty = None::<HilType>;
+    let mut capabilities = Vec::<HilShape>::new();
+    tail = tail.trim();
+    if let Some(after_arrow) = tail.strip_prefix("-> ") {
+        let split_at = after_arrow
+            .find(" capabilities [")
+            .or_else(|| after_arrow.find(" {"));
+        let idx = split_at.ok_or_else(|| {
+            AssemblyError::TextParseFailed(format!(
+                "line {}: malformed function result type",
+                header_line_no + 1
+            ))
+        })?;
+        let (result_text, remaining_tail) = after_arrow.split_at(idx);
+        result_ty = Some(HilType::new(result_text.trim()));
+        tail = remaining_tail.trim();
+    }
+    if let Some(after_capabilities) = tail.strip_prefix("capabilities [") {
+        let Some((caps_text, after_caps)) = after_capabilities.split_once(']') else {
+            return Err(AssemblyError::TextParseFailed(format!(
+                "line {}: malformed capability list",
+                header_line_no + 1
+            )));
+        };
+        capabilities = parse_capabilities(caps_text.trim())?;
+        tail = after_caps.trim();
+    }
+    if tail != "{" {
+        return Err(AssemblyError::TextParseFailed(format!(
+            "line {}: function body opener expected",
+            header_line_no + 1
+        )));
+    }
+
+    let mut blocks = Vec::<HilBlock>::new();
+    while let Some((_, raw)) = lines.peek() {
+        let line = raw.trim();
+        if line.is_empty() {
+            let _ = lines.next();
+            continue;
+        }
+        if line == "}" {
+            let _ = lines.next();
+            break;
+        }
+        blocks.push(parse_block(lines)?);
+    }
+    Ok(HilFunction::new(name, params, result_ty, blocks).with_capabilities(capabilities))
+}
+
+fn parse_block(lines: &mut HilLineCursor<'_>) -> Result<HilBlock, AssemblyError> {
+    let (line_no, block_header_raw) = lines
+        .next()
+        .ok_or_else(|| AssemblyError::TextParseFailed("block header expected".into()))?;
+    let block_header = block_header_raw.trim();
+    let block_name = if let Some(name) = block_header
+        .strip_prefix("block ")
+        .and_then(|v| v.strip_suffix(':'))
+    {
+        name.trim().to_owned()
+    } else {
+        return Err(AssemblyError::TextParseFailed(format!(
+            "line {}: block header expected",
+            line_no + 1
+        )));
+    };
+    let mut instructions = Vec::<HilInstruction>::new();
+    let terminator: HilTerminator;
+    loop {
+        let (line_no, raw) = lines
+            .next()
+            .ok_or_else(|| AssemblyError::TextParseFailed("block terminator expected".into()))?;
+        let line = raw.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if let Some(term) = parse_terminator(line)? {
+            terminator = term;
+            break;
+        }
+        let instr = parse_instruction(line).map_err(|msg| {
+            AssemblyError::TextParseFailed(format!("line {}: {msg}", line_no + 1))
+        })?;
+        instructions.push(instr);
+    }
+    Ok(HilBlock::new(block_name, instructions, terminator))
+}
+
+fn parse_params(text: &str) -> Result<Vec<HilParam>, AssemblyError> {
+    if text.is_empty() {
+        return Ok(Vec::new());
+    }
+    text.split(',')
+        .map(|part| {
+            let part = part.trim();
+            let Some((left, ty_text)) = part.split_once(':') else {
+                return Err(AssemblyError::TextParseFailed(
+                    "parameter type separator `:` missing".into(),
+                ));
+            };
+            let mut left_parts = left.split_whitespace();
+            let id_text = left_parts.next().ok_or_else(|| {
+                AssemblyError::TextParseFailed("parameter value id missing".into())
+            })?;
+            let name_text = left_parts
+                .next()
+                .ok_or_else(|| AssemblyError::TextParseFailed("parameter name missing".into()))?;
+            Ok(HilParam::new(
+                name_text,
+                parse_value_id(id_text)?,
+                HilType::new(ty_text.trim()),
+            ))
+        })
+        .collect()
+}
+
+fn parse_capabilities(text: &str) -> Result<Vec<HilShape>, AssemblyError> {
+    if text.is_empty() {
+        return Ok(Vec::new());
+    }
+    text.split(',')
+        .map(|name| match name.trim() {
+            "effect" => Ok(HilShape::Effect),
+            "native" => Ok(HilShape::Native),
+            "syntax" => Ok(HilShape::Syntax),
+            "comptime" => Ok(HilShape::Comptime),
+            other => Err(AssemblyError::TextParseFailed(format!(
+                "unknown shape `{other}`"
+            ))),
+        })
+        .collect()
+}
+
+fn parse_instruction(line: &str) -> Result<HilInstruction, &'static str> {
+    if let Some(rest) = line.strip_prefix("call ")
+        && let Some((callee, args)) = parse_named_call(rest)
+    {
+        return Ok(HilInstruction::Call {
+            out: None,
+            result_ty: None,
+            callee: callee.into(),
+            args: parse_value_id_list(args).map_err(|_| "call args malformed")?,
+        });
+    }
+    if let Some(rest) = line.strip_prefix("native.call ")
+        && let Some((foreign, args)) = parse_named_call(rest)
+    {
+        return Ok(HilInstruction::ForeignCall {
+            out: None,
+            result_ty: None,
+            foreign: foreign.into(),
+            args: parse_value_id_list(args).map_err(|_| "native.call args malformed")?,
+        });
+    }
+    let Some((lhs, rhs)) = line.split_once(" = ") else {
+        return Err("instruction assignment `=` missing");
+    };
+    let Some((out_text, ty_text)) = lhs.split_once(':') else {
+        return Err("instruction lhs type annotation `:` missing");
+    };
+    let out = parse_value_id(out_text.trim()).map_err(|_| "output value id malformed")?;
+    let ty = HilType::new(ty_text.trim());
+    if let Some(value_text) = rhs.strip_prefix("const.int ") {
+        let value = value_text
+            .trim()
+            .parse::<i64>()
+            .map_err(|_| "const.int value malformed")?;
+        return Ok(HilInstruction::ConstInt { out, ty, value });
+    }
+    if let Some(rest) = rhs.strip_prefix("call ")
+        && let Some((callee, args)) = parse_named_call(rest)
+    {
+        return Ok(HilInstruction::Call {
+            out: Some(out),
+            result_ty: Some(ty),
+            callee: callee.into(),
+            args: parse_value_id_list(args).map_err(|_| "call args malformed")?,
+        });
+    }
+    if let Some(rest) = rhs.strip_prefix("native.call ")
+        && let Some((foreign, args)) = parse_named_call(rest)
+    {
+        return Ok(HilInstruction::ForeignCall {
+            out: Some(out),
+            result_ty: Some(ty),
+            foreign: foreign.into(),
+            args: parse_value_id_list(args).map_err(|_| "native.call args malformed")?,
+        });
+    }
+    if let Some(rest) = rhs.strip_prefix("effect.call ")
+        && let Some((head, args)) = parse_named_call(rest)
+        && let Some((effect, op)) = head.split_once('.')
+    {
+        return Ok(HilInstruction::EffectCall {
+            out,
+            result_ty: ty,
+            effect: effect.into(),
+            op: op.into(),
+            args: parse_value_id_list(args).map_err(|_| "effect.call args malformed")?,
+        });
+    }
+    if let Some(rest) = rhs.strip_prefix("data.new .")
+        && let Some((variant, args)) = parse_named_call(rest)
+    {
+        return Ok(HilInstruction::NewObj {
+            out,
+            ty,
+            variant: variant.into(),
+            fields: parse_value_id_list(args).map_err(|_| "data.new args malformed")?,
+        });
+    }
+    for (op_text, op) in [
+        ("int.add", HilBinaryOp::IntAdd),
+        ("int.sub", HilBinaryOp::IntSub),
+        ("int.mul", HilBinaryOp::IntMul),
+        ("int.eq", HilBinaryOp::IntEq),
+    ] {
+        if let Some(rest) = rhs.strip_prefix(op_text)
+            && let Some(rest) = rest.strip_prefix(' ')
+            && let Some((left_text, right_text)) = rest.split_once(',')
+        {
+            return Ok(HilInstruction::Binary {
+                out,
+                op,
+                ty,
+                left: parse_value_id(left_text.trim())
+                    .map_err(|_| "binary left operand malformed")?,
+                right: parse_value_id(right_text.trim())
+                    .map_err(|_| "binary right operand malformed")?,
+            });
+        }
+    }
+    Err("unknown instruction")
+}
+
+fn parse_terminator(line: &str) -> Result<Option<HilTerminator>, AssemblyError> {
+    if line == "return" {
+        return Ok(Some(HilTerminator::Return(None)));
+    }
+    if let Some(value_text) = line.strip_prefix("return ") {
+        return Ok(Some(HilTerminator::Return(Some(parse_value_id(
+            value_text.trim(),
+        )?))));
+    }
+    if let Some(target) = line.strip_prefix("branch ") {
+        return Ok(Some(HilTerminator::Branch {
+            target: target.trim().into(),
+        }));
+    }
+    if let Some(rest) = line.strip_prefix("branch.if ")
+        && let Some((cond_text, tail)) = rest.split_once(',')
+        && let Some((then_text, else_text)) = tail.split_once(',')
+    {
+        return Ok(Some(HilTerminator::CondBranch {
+            condition: parse_value_id(cond_text.trim())?,
+            then_target: then_text.trim().into(),
+            else_target: else_text.trim().into(),
+        }));
+    }
+    if let Some(rest) = line.strip_prefix("tail.call ")
+        && let Some((callee, args)) = parse_named_call(rest)
+    {
+        return Ok(Some(HilTerminator::TailCall {
+            callee: callee.into(),
+            args: parse_value_id_list(args)?,
+        }));
+    }
+    Ok(None)
+}
+
+fn parse_named_call(text: &str) -> Option<(&str, &str)> {
+    let (name, rest) = text.split_once('(')?;
+    let args = rest.strip_suffix(')')?;
+    Some((name.trim(), args.trim()))
+}
+
+fn parse_value_id_list(text: &str) -> Result<Box<[HilValueId]>, AssemblyError> {
+    if text.is_empty() {
+        return Ok(Box::new([]));
+    }
+    text.split(',')
+        .map(|part| parse_value_id(part.trim()))
+        .collect::<Result<Vec<_>, _>>()
+        .map(Vec::into_boxed_slice)
+}
+
+fn parse_value_id(text: &str) -> Result<HilValueId, AssemblyError> {
+    let number = text
+        .strip_prefix('%')
+        .ok_or_else(|| {
+            AssemblyError::TextParseFailed(format!("value id `%n` expected, found `{text}`"))
+        })?
+        .parse::<u32>()
+        .map_err(|_| AssemblyError::TextParseFailed(format!("invalid value id `{text}`")))?;
+    Ok(HilValueId(number))
+}
+
 fn format_function(out: &mut String, function: &HilFunction) {
-    write!(out, "  fn @{}(", function.name).expect("write to string");
+    write!(out, "  fn {}(", function.name).expect("write to string");
     for (index, param) in function.params.iter().enumerate() {
         if index != 0 {
             out.push_str(", ");
@@ -392,18 +771,18 @@ fn format_function(out: &mut String, function: &HilFunction) {
         write!(out, " -> {result_ty}").expect("write to string");
     }
     if !function.capabilities.is_empty() {
-        out.push_str(" capabilities(");
+        out.push_str(" capabilities [");
         for (index, capability) in function.capabilities.iter().enumerate() {
             if index != 0 {
                 out.push_str(", ");
             }
             write!(out, "{capability}").expect("write to string");
         }
-        out.push(')');
+        out.push(']');
     }
     out.push_str(" {\n");
     for block in &function.blocks {
-        writeln!(out, "  {}:", block.name).expect("write to string");
+        writeln!(out, "    block {}:", block.name).expect("write to string");
         for instruction in &block.instructions {
             format_instruction(out, instruction);
         }
@@ -415,7 +794,7 @@ fn format_function(out: &mut String, function: &HilFunction) {
 fn format_instruction(out: &mut String, instruction: &HilInstruction) {
     match instruction {
         HilInstruction::ConstInt { out: id, ty, value } => {
-            writeln!(out, "    {id}: {ty} = const.int {value}").expect("write to string");
+            writeln!(out, "      {id}: {ty} = const.int {value}").expect("write to string");
         }
         HilInstruction::Binary {
             out: id,
@@ -424,7 +803,7 @@ fn format_instruction(out: &mut String, instruction: &HilInstruction) {
             left,
             right,
         } => {
-            writeln!(out, "    {id}: {ty} = {op} {left}, {right}").expect("write to string");
+            writeln!(out, "      {id}: {ty} = {op} {left}, {right}").expect("write to string");
         }
         HilInstruction::Call {
             out: Some(id),
@@ -432,22 +811,22 @@ fn format_instruction(out: &mut String, instruction: &HilInstruction) {
             callee,
             args,
         } => {
-            write!(out, "    {id}: {ty} = call @{callee}(").expect("write to string");
+            write!(out, "      {id}: {ty} = call {callee}(").expect("write to string");
             format_value_list(out, args);
             out.push_str(")\n");
         }
         HilInstruction::Call { callee, args, .. } => {
-            write!(out, "    call @{callee}(").expect("write to string");
+            write!(out, "      call {callee}(").expect("write to string");
             format_value_list(out, args);
             out.push_str(")\n");
         }
-        HilInstruction::DataNew {
+        HilInstruction::NewObj {
             out: id,
             ty,
             variant,
             fields,
         } => {
-            write!(out, "    {id}: {ty} = data.new .{variant}(").expect("write to string");
+            write!(out, "      {id}: {ty} = data.new .{variant}(").expect("write to string");
             format_value_list(out, fields);
             out.push_str(")\n");
         }
@@ -458,7 +837,7 @@ fn format_instruction(out: &mut String, instruction: &HilInstruction) {
             op,
             args,
         } => {
-            write!(out, "    {id}: {result_ty} = effect.call @{effect}.{op}(")
+            write!(out, "      {id}: {result_ty} = effect.call {effect}.{op}(")
                 .expect("write to string");
             format_value_list(out, args);
             out.push_str(")\n");
@@ -469,12 +848,12 @@ fn format_instruction(out: &mut String, instruction: &HilInstruction) {
             foreign,
             args,
         } => {
-            write!(out, "    {id}: {ty} = ffi.call @{foreign}(").expect("write to string");
+            write!(out, "      {id}: {ty} = native.call {foreign}(").expect("write to string");
             format_value_list(out, args);
             out.push_str(")\n");
         }
         HilInstruction::ForeignCall { foreign, args, .. } => {
-            write!(out, "    ffi.call @{foreign}(").expect("write to string");
+            write!(out, "      native.call {foreign}(").expect("write to string");
             format_value_list(out, args);
             out.push_str(")\n");
         }
@@ -484,11 +863,11 @@ fn format_instruction(out: &mut String, instruction: &HilInstruction) {
 fn format_terminator(out: &mut String, terminator: &HilTerminator) {
     match terminator {
         HilTerminator::Return(Some(id)) => {
-            writeln!(out, "    return {id}").expect("write to string");
+            writeln!(out, "      return {id}").expect("write to string");
         }
-        HilTerminator::Return(None) => out.push_str("    return\n"),
+        HilTerminator::Return(None) => out.push_str("      return\n"),
         HilTerminator::Branch { target } => {
-            writeln!(out, "    branch {target}").expect("write to string");
+            writeln!(out, "      branch {target}").expect("write to string");
         }
         HilTerminator::CondBranch {
             condition,
@@ -497,12 +876,12 @@ fn format_terminator(out: &mut String, terminator: &HilTerminator) {
         } => {
             writeln!(
                 out,
-                "    branch.if {condition}, {then_target}, {else_target}"
+                "      branch.if {condition}, {then_target}, {else_target}"
             )
             .expect("write to string");
         }
         HilTerminator::TailCall { callee, args } => {
-            write!(out, "    tail.call @{callee}(").expect("write to string");
+            write!(out, "      tail.call {callee}(").expect("write to string");
             format_value_list(out, args);
             out.push_str(")\n");
         }
@@ -520,7 +899,7 @@ fn format_value_list(out: &mut String, values: &[HilValueId]) {
 
 fn verify_instruction(
     instruction: &HilInstruction,
-    capabilities: &[HilCapability],
+    capabilities: &[HilShape],
     type_map: &mut HilTypeMap,
 ) -> HilVerifyResult {
     match instruction {
@@ -545,7 +924,7 @@ fn verify_instruction(
             expect_defined_many(type_map, args)?;
             define_optional_value(type_map, *out, result_ty.clone())
         }
-        HilInstruction::DataNew {
+        HilInstruction::NewObj {
             out, ty, fields, ..
         } => {
             expect_defined_many(type_map, fields)?;
@@ -557,7 +936,7 @@ fn verify_instruction(
             args,
             ..
         } => {
-            require_capability(capabilities, HilCapability::Effect)?;
+            require_capability(capabilities, HilShape::Effect)?;
             expect_defined_many(type_map, args)?;
             define_value(type_map, *out, result_ty.clone())
         }
@@ -567,7 +946,7 @@ fn verify_instruction(
             args,
             ..
         } => {
-            require_capability(capabilities, HilCapability::Ffi)?;
+            require_capability(capabilities, HilShape::Native)?;
             expect_defined_many(type_map, args)?;
             define_optional_value(type_map, *out, result_ty.clone())
         }
@@ -660,11 +1039,11 @@ fn type_of(type_map: &HilTypeMap, id: HilValueId) -> Result<HilType, HilVerifyEr
         .ok_or(HilVerifyError::UndefinedValue { value: id })
 }
 
-fn require_capability(capabilities: &[HilCapability], required: HilCapability) -> HilVerifyResult {
+fn require_capability(capabilities: &[HilShape], required: HilShape) -> HilVerifyResult {
     if capabilities.contains(&required) {
         Ok(())
     } else {
-        Err(HilVerifyError::CapabilityRequired {
+        Err(HilVerifyError::ShapeRequired {
             capability: required,
         })
     }

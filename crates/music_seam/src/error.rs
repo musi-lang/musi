@@ -9,7 +9,7 @@ use crate::{ArtifactError, SeamDiagKind, diag::assembly_error_kind};
 pub enum AssemblyError {
     ArtifactValidationFailed(ArtifactError),
     InvalidBinaryHeader,
-    UnsupportedBinaryVersion(u16),
+    UnsupportedBinaryVersion(u32),
     UnknownSectionTag(u8),
     BinaryPayloadTruncated,
     UnknownOpcode(u16),

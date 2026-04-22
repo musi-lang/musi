@@ -1,38 +1,38 @@
 @link(symbol := "sys.target.os")
-foreign "musi" let targetOsIntrinsic () : String;
+native "musi" let targetOsIntrinsic () : String;
 
 @link(symbol := "sys.target.arch")
-foreign "musi" let targetArchIntrinsic () : String;
+native "musi" let targetArchIntrinsic () : String;
 
 @link(symbol := "sys.target.arch_family")
-foreign "musi" let targetArchFamilyIntrinsic () : String;
+native "musi" let targetArchFamilyIntrinsic () : String;
 
 @link(symbol := "sys.target.family")
-foreign "musi" let targetFamilyIntrinsic () : String;
+native "musi" let targetFamilyIntrinsic () : String;
 
 @link(symbol := "sys.target.pointer_width")
-foreign "musi" let targetPointerWidthIntrinsic () : Int;
+native "musi" let targetPointerWidthIntrinsic () : Int;
 
 @link(symbol := "sys.target.endian")
-foreign "musi" let targetEndianIntrinsic () : String;
+native "musi" let targetEndianIntrinsic () : String;
 
 @link(symbol := "sys.jit.supported")
-foreign "musi" let jitSupportedIntrinsic () : Int;
+native "musi" let jitSupportedIntrinsic () : Int;
 
 @link(symbol := "sys.jit.backend")
-foreign "musi" let jitBackendIntrinsic () : String;
+native "musi" let jitBackendIntrinsic () : String;
 
 @link(symbol := "sys.jit.isa")
-foreign "musi" let jitIsaIntrinsic () : String;
+native "musi" let jitIsaIntrinsic () : String;
 
 @link(symbol := "sys.matches.os")
-foreign "musi" let matchesOsIntrinsic (value : String) : Bool;
+native "musi" let matchesOsIntrinsic (value : String) : Bool;
 
 @link(symbol := "sys.matches.arch")
-foreign "musi" let matchesArchIntrinsic (value : String) : Bool;
+native "musi" let matchesArchIntrinsic (value : String) : Bool;
 
 @link(symbol := "sys.matches.family")
-foreign "musi" let matchesFamilyIntrinsic (value : String) : Bool;
+native "musi" let matchesFamilyIntrinsic (value : String) : Bool;
 
 --- Raw target operating system name.
 export let os : String := unsafe {

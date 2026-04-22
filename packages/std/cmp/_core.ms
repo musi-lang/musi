@@ -6,7 +6,7 @@ export opaque let Ordering := data {
 };
 
 --- Equality contract.
-export let Eq [T] := class {
+export let Eq [T] := shape {
   let eq (left : T, right : T) : Bool;
   law reflexive(value : T) := eq(value, value);
   law symmetric(left : T, right : T) := eq(left, right) = eq(right, left);
@@ -40,7 +40,7 @@ export let isGreater (target : Ordering) : Bool :=
     | _ => 0 = 1);
 
 --- Ordering contract.
-export let Ord[T] := class {
+export let Ord[T] := shape {
   let compare (left : T, right : T) : Ordering;
   law reflexive (value : T) := isEqual(compare(value, value));
   law lessGreaterDual(left : T, right : T) :=
@@ -55,7 +55,7 @@ export let eq[T](left : T, right : T) : Bool := left = right;
 --- Generic inequality with built-in equality semantics.
 export let notEq[T](left : T, right : T) : Bool := left /= right;
 
-foreign "musi" let compareFloatTotalIntrinsic (left : Float, right : Float) : Int;
+native "musi" let compareFloatTotalIntrinsic (left : Float, right : Float) : Int;
 
 --- Internal implementation for `compareInt`.
 export let compareInt (left : Int, right : Int) : Ordering :=
@@ -105,39 +105,46 @@ export let clampInt (
   upperBound : Int,
 ) : Int := maxInt(lowerBound, minInt(value, upperBound));
 
---- Integer equality instance.
-export let intEq := instance Eq[Int] {
+--- Integer equality given.
+export let intEq :=
+  given Eq[Int] {
   let eq (left : Int, right : Int) : Bool := left = right;
 };
 
---- Float equality instance.
-export let floatEq := instance Eq[Float] {
+--- Float equality given.
+export let floatEq :=
+  given Eq[Float] {
   let eq (left : Float, right : Float) : Bool := left = right;
 };
 
---- String equality instance.
-export let stringEq := instance Eq[String] {
+--- String equality given.
+export let stringEq :=
+  given Eq[String] {
   let eq (left : String, right : String) : Bool := left = right;
 };
 
---- Boolean equality instance.
-export let boolEq := instance Eq[Bool] {
+--- Boolean equality given.
+export let boolEq :=
+  given Eq[Bool] {
   let eq (left : Bool, right : Bool) : Bool := left = right;
 };
 
---- Integer ordering instance.
-export let intOrd := instance Ord[Int] {
+--- Integer ordering given.
+export let intOrd :=
+  given Ord[Int] {
   let compare (left : Int, right : Int) : Ordering := compareInt(left, right);
 };
 
---- Float ordering instance.
-export let floatOrd := instance Ord[Float] {
+--- Float ordering given.
+export let floatOrd :=
+  given Ord[Float] {
   let compare (left : Float, right : Float) : Ordering :=
     compareFloat(left, right);
 };
 
---- String ordering instance.
-export let stringOrd := instance Ord[String] {
+--- String ordering given.
+export let stringOrd :=
+  given Ord[String] {
   let compare (left : String, right : String) : Ordering :=
     compareString(left, right);
 };

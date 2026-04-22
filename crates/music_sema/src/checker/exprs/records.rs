@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use music_arena::SliceRange;
+use music_base::diag::DiagContext;
 use music_hir::{HirExprId, HirOrigin, HirRecordItem, HirTyField, HirTyId, HirTyKind};
 use music_names::Symbol;
 
@@ -172,11 +173,10 @@ impl CheckPass<'_, '_, '_> {
             return;
         }
         let field_name = self.resolve_symbol(name).to_owned();
-        self.diag_message(
+        self.diag_with(
             record_item.name.expect("record name checked").span,
             DiagKind::UnknownField,
-            format!("unknown field `{field_name}`"),
-            format!("unknown field `{field_name}`"),
+            DiagContext::new().with("field", field_name),
         );
     }
 
@@ -191,7 +191,11 @@ impl CheckPass<'_, '_, '_> {
         let key: Box<str> = self.resolve_symbol(name).into();
         if !seen_explicit.insert(key.clone()) {
             let span = self.expr(value).origin.span;
-            self.diag(span, DiagKind::DuplicateRecordField, "");
+            self.diag_with(
+                span,
+                DiagKind::DuplicateRecordField,
+                DiagContext::new().with("field", key.as_ref()),
+            );
         }
         let _ = fields.insert(key, HirTyField::new(name, ty));
     }
@@ -213,11 +217,10 @@ impl CheckPass<'_, '_, '_> {
 
     fn diag_missing_record_field(&mut self, field_name: &str) {
         let span = self.expr(self.root_expr_id()).origin.span;
-        self.diag_message(
+        self.diag_with(
             span,
             DiagKind::MissingRecordField,
-            format!("missing field `{field_name}`"),
-            format!("field `{field_name}` required here"),
+            DiagContext::new().with("field", field_name),
         );
     }
 
@@ -278,7 +281,12 @@ impl CheckPass<'_, '_, '_> {
         let mut effects = base_facts.effects.clone();
         let base_ty = peel_mut_ty(self, base_facts.ty);
         let mut fields = self.record_like_fields(base_ty).unwrap_or_else(|| {
-            self.diag(origin.span, DiagKind::InvalidRecordUpdateTarget, "");
+            let target = self.render_ty(base_ty);
+            self.diag_with(
+                origin.span,
+                DiagKind::InvalidRecordUpdateTarget,
+                DiagContext::new().with("target", target),
+            );
             BTreeMap::new()
         });
         for record_item in self.record_items(items) {
@@ -336,33 +344,6 @@ impl CheckPass<'_, '_, '_> {
                 }
                 Some(self.alloc_ty(HirTyKind::Range { bound }))
             }
-            HirTyKind::ClosedRange { bound } => {
-                if let Some(found) = fields.get("lowerBound").copied() {
-                    self.type_mismatch(origin, bound, found);
-                }
-                if let Some(found) = fields.get("upperBound").copied() {
-                    self.type_mismatch(origin, bound, found);
-                }
-                Some(self.alloc_ty(HirTyKind::ClosedRange { bound }))
-            }
-            HirTyKind::PartialRangeFrom { bound } => {
-                if let Some(found) = fields.get("lowerBound").copied() {
-                    self.type_mismatch(origin, bound, found);
-                }
-                Some(self.alloc_ty(HirTyKind::PartialRangeFrom { bound }))
-            }
-            HirTyKind::PartialRangeUpTo { bound } => {
-                if let Some(found) = fields.get("upperBound").copied() {
-                    self.type_mismatch(origin, bound, found);
-                }
-                Some(self.alloc_ty(HirTyKind::PartialRangeUpTo { bound }))
-            }
-            HirTyKind::PartialRangeThru { bound } => {
-                if let Some(found) = fields.get("upperBound").copied() {
-                    self.type_mismatch(origin, bound, found);
-                }
-                Some(self.alloc_ty(HirTyKind::PartialRangeThru { bound }))
-            }
             HirTyKind::Named { .. } if self.record_like_fields(base_ty).is_some() => Some(base_ty),
             _ => None,
         })
@@ -387,18 +368,12 @@ impl CheckPass<'_, '_, '_> {
                     .map(|field| (self.resolve_symbol(field.name).into(), field.ty))
                     .collect(),
             ),
-            HirTyKind::Range { bound } | HirTyKind::ClosedRange { bound } => {
-                Some(BTreeMap::from([
-                    ("lowerBound".into(), bound),
-                    ("upperBound".into(), bound),
-                ]))
-            }
-            HirTyKind::PartialRangeFrom { bound } => {
-                Some(BTreeMap::from([("lowerBound".into(), bound)]))
-            }
-            HirTyKind::PartialRangeUpTo { bound } | HirTyKind::PartialRangeThru { bound } => {
-                Some(BTreeMap::from([("upperBound".into(), bound)]))
-            }
+            HirTyKind::Range { bound } => Some(BTreeMap::from([
+                ("lowerBound".into(), bound),
+                ("upperBound".into(), bound),
+                ("includeLower".into(), self.builtins().bool_),
+                ("includeUpper".into(), self.builtins().bool_),
+            ])),
             HirTyKind::Named { name, args } => self.data_record_fields(name, args),
             _ => None,
         }

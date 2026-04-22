@@ -2,19 +2,15 @@ catalog project musi_project ProjectDiagKind crates/musi_project/src/diag_catalo
 
 diag MissingManifest 5000
   message "missing manifest `{path}`"
-  primary "missing manifest `{path}`"
 
 diag MissingManifestAncestor 5001
   message "missing manifest ancestor from `{path}`"
-  primary "missing manifest ancestor from `{path}`"
 
 diag MissingPackageRoot 5002
   message "missing package root `{path}`"
-  primary "missing package root `{path}`"
 
 diag MissingModule 5003
   message "missing module path `{path}`"
-  primary "missing module path `{path}`"
 
 diag InvalidManifestJson 5004
   message "invalid manifest `{path}` JSON (`{source}`)"
@@ -30,7 +26,6 @@ diag ManifestValidationFailed 5006
 
 diag DuplicateWorkspaceMember 5007
   message "duplicate workspace member `{member}`"
-  primary "duplicate workspace member `{member}`"
 
 diag DuplicatePackageName 5008
   message "duplicate package `{name}` in project graph"
@@ -38,39 +33,30 @@ diag DuplicatePackageName 5008
 
 diag MissingPackageVersion 5009
   message "missing version for package `{name}`"
-  primary "missing version for package `{name}`"
 
 diag NoRootPackage 5010
-  message "missing root package entry"
-  primary "missing root package entry"
+  message "missing root package entry `root`"
 
 diag MissingPackageEntryModule 5011
   message "missing entry module for package `{package}`"
-  primary "missing entry module for package `{package}`"
 
 diag UnknownTask 5012
-  message "missing task `{name}`"
-  primary "missing task `{name}`"
+  message "unknown task `{name}`"
 
 diag TaskDependencyCycle 5013
   message "task dependency cycle reaches `{name}`"
-  primary "task dependency cycle reaches `{name}`"
 
 diag PackageDependencyCycle 5014
   message "package dependency cycle reaches `{name}`"
-  primary "package dependency cycle reaches `{name}`"
 
 diag UnresolvedImport 5015
   message "unresolved import specifier `{spec}`"
-  primary "unresolved import specifier `{spec}`"
 
 diag MissingRegistryRoot 5016
-  message "registry root required for `{name}`"
-  primary "registry root required for `{name}`"
+  message "missing registry root for `{name}`"
 
 diag MissingGlobalCacheRoot 5017
-  message "global cache directory unavailable"
-  primary "global cache directory unavailable"
+  message "missing global cache directory"
 
 diag RegistryVersionNotFound 5018
   message "missing registry version for `{name}` matching `{requirement}`"
@@ -81,20 +67,16 @@ diag InvalidVersionRequirement 5019
   primary "invalid semver requirement `{requirement}`"
 
 diag MissingFrozenLockfile 5020
-  message "frozen lockfile `{path}` required"
-  primary "frozen lockfile `{path}` required"
+  message "missing frozen lockfile `{path}`"
 
 diag FrozenLockfileOutOfDate 5021
   message "frozen lockfile `{path}` out of date"
-  primary "frozen lockfile `{path}` out of date"
 
 diag UnknownPackage 5022
   message "unknown package `{name}`"
-  primary "unknown package `{name}`"
 
 diag PackageGraphEntryMissing 5023
   message "missing package graph entry `{name}`"
-  primary "missing package graph entry `{name}`"
 
 diag InvalidGitDependency 5024
   message "invalid git dependency `{requirement}` for `{name}`"

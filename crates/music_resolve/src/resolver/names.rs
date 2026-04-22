@@ -1,5 +1,6 @@
 use super::*;
 use crate::diag::ResolveDiagKind;
+use music_base::diag::DiagContext;
 
 impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src>
 where
@@ -40,6 +41,28 @@ where
         })
     }
 
+    pub(super) fn insert_import_binding(
+        &mut self,
+        name: Symbol,
+        span: Span,
+        from: ModuleKey,
+    ) -> NameBindingId {
+        let binding = self.names.alloc_binding(NameBinding {
+            name,
+            site: NameSite::new(self.source_id, span),
+            kind: NameBindingKind::Import,
+        });
+        if let Some(scope) = self.scopes.last_mut() {
+            let _prev = scope.names.insert(name, binding);
+        }
+        self.import_bindings.push(ResolvedImportBinding {
+            binding,
+            from,
+            name,
+        });
+        binding
+    }
+
     pub(super) fn lookup(&self, sym: Symbol) -> Option<NameBindingId> {
         for scope in self.scopes.iter().rev() {
             if let Some(id) = scope.names.get(&sym).copied() {
@@ -53,11 +76,12 @@ where
         let site = NameSite::new(self.source_id, ident.span);
         let Some(binding) = self.lookup(ident.name) else {
             let name = self.interner.resolve(ident.name);
-            self.diags.push(
-                Diag::error(format!("unbound name `{name}`"))
-                    .with_code(ResolveDiagKind::UnboundName.code())
-                    .with_label(ident.span, self.source_id, format!("unbound name `{name}`")),
-            );
+            self.diags.push(resolve_diag(
+                self.source_id,
+                ident.span,
+                ResolveDiagKind::UnboundName,
+                DiagContext::new().with("name", name),
+            ));
             return;
         };
         self.names.record_ref(site, binding);

@@ -20,13 +20,13 @@ impl Runtime {
     /// Returns [`crate::RuntimeError`] if syntax value is invalid, compilation fails, or runtime execution fails.
     pub fn eval_expr_syntax(&mut self, syntax: &Value, result_ty: &str) -> RuntimeResult<Value> {
         let body = self.syntax_term(syntax)?;
-        let source = format!("export let answer () : {result_ty} := {};", body.text());
+        let source = format!("export let result () : {result_ty} := {};", body.text());
         let program = self.compile_synthetic_program("main", &source)?;
         let loader = SessionLoader::new(Arc::clone(&self.store));
         let host = self.host.clone();
         let mut vm = Vm::new(program, loader, host, self.options.vm.clone());
         vm.initialize()?;
-        Ok(vm.call_export("answer", &[])?)
+        Ok(vm.call_export("result", &[])?)
     }
 
     /// Compiles one module-syntax string under one explicit runtime spec and returns its module handle.
@@ -131,7 +131,7 @@ fn eval_syntax_value(
     body: &str,
     result_ty: &str,
 ) -> VmResult<Value> {
-    let source = format!("export let answer () : {result_ty} := {body};");
+    let source = format!("export let result () : {result_ty} := {body};");
     let program = compile_synthetic_program_from_store(store, "main", &source)
         .map_err(|error| vm_runtime_error(&error))?;
     let Some(host) = nested_host.upgrade() else {
@@ -144,7 +144,7 @@ fn eval_syntax_value(
     let loader = SessionLoader::new(Arc::clone(store));
     let mut vm = Vm::new(program, loader, host, vm_options.clone());
     vm.initialize()?;
-    vm.call_export("answer", &[])
+    vm.call_export("result", &[])
 }
 
 fn invalid_syntax_effect(effect: &EffectCall, reason: &'static str) -> VmError {

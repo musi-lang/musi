@@ -450,6 +450,7 @@ mod success {
                 inject_compiler_prelude: true,
                 prelude: Vec::new(),
                 import_env: Some(&env),
+                ..ResolveOptions::default()
             },
         );
 
@@ -498,6 +499,7 @@ mod success {
                 inject_compiler_prelude: true,
                 prelude: Vec::new(),
                 import_env: Some(&env),
+                ..ResolveOptions::default()
             },
         );
 
@@ -531,6 +533,7 @@ mod success {
                 inject_compiler_prelude: true,
                 prelude: Vec::new(),
                 import_env: Some(&env),
+                ..ResolveOptions::default()
             },
         );
 
@@ -562,6 +565,7 @@ mod success {
                 inject_compiler_prelude: true,
                 prelude: Vec::new(),
                 import_env: Some(&env),
+                ..ResolveOptions::default()
             },
         );
 
@@ -571,16 +575,16 @@ mod success {
             .iter()
             .find(|diag| resolve_diag_kind(diag) == Some(ResolveDiagKind::InvalidImportSpec))
             .expect("expected invalid import specifier diagnostic");
-        assert_eq!(diag.message(), "string literal import specifier expected");
+        assert_eq!(diag.message(), ResolveDiagKind::InvalidImportSpec.message());
         assert_eq!(
             diag.labels()[0].message(),
-            "import specifier must be string literal"
+            ResolveDiagKind::InvalidImportSpec.label()
         );
     }
 
     #[test]
-    fn handle_clause_params_resolve_in_body() {
-        let src = "handle x using h { op(a, b) => a; };";
+    fn handle_answer_name_resolves() {
+        let src = "let h := answer x; handle x answer h;";
         let source_id = SourceId::from_raw(13);
         let module_key = ModuleKey::new("main");
         let parsed = parse(Lexer::new(src).lex());
@@ -595,11 +599,11 @@ mod success {
             ResolveOptions::default(),
         );
 
-        let site = find_nth_name_site(source_id, parsed.tree(), "a", 0).expect("use site");
+        let site = find_nth_name_site(source_id, parsed.tree(), "h", 0).expect("use site");
         let binding = resolved.names.refs.get(&site).copied().expect("binding");
         assert_eq!(
             resolved.names.bindings.get(binding).kind,
-            NameBindingKind::HandleClauseParam
+            NameBindingKind::Let
         );
     }
 
@@ -607,7 +611,7 @@ mod success {
     fn resolved_module_keeps_module_key_and_export_summary() {
         let src = r"
         export let x := 1;
-        export instance Eq[Int] { };
+        export let eq := 2;
     ";
         let source_id = SourceId::from_raw(14);
         let module_key = ModuleKey::new("main");
@@ -625,7 +629,7 @@ mod success {
 
         assert_eq!(resolved.module_key.as_str(), "main");
         assert!(resolved.export_summary.exports().any(|name| name == "x"));
-        assert_eq!(resolved.export_summary.exported_instance_count(), 1);
+        assert!(resolved.export_summary.exports().any(|name| name == "eq"));
     }
 }
 
@@ -653,6 +657,7 @@ mod failure {
                 inject_compiler_prelude: true,
                 prelude: Vec::new(),
                 import_env: Some(&env),
+                ..ResolveOptions::default()
             },
         );
 
@@ -693,6 +698,7 @@ mod failure {
                 inject_compiler_prelude: true,
                 prelude: Vec::new(),
                 import_env: Some(&env),
+                ..ResolveOptions::default()
             },
         );
 
@@ -702,10 +708,10 @@ mod failure {
             .iter()
             .find(|diag| resolve_diag_kind(diag) == Some(ResolveDiagKind::InvalidImportSpec))
             .expect("expected invalid import specifier diag");
-        assert_eq!(diag.message(), "string literal import specifier expected");
+        assert_eq!(diag.message(), ResolveDiagKind::InvalidImportSpec.message());
         assert_eq!(
             diag.labels()[0].message(),
-            "string literal import specifier expected here"
+            ResolveDiagKind::InvalidImportSpec.label()
         );
         assert_eq!(diag.hint(), None);
     }

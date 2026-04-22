@@ -74,7 +74,7 @@ fn run_git(root: &Path, args: &[&str]) {
 fn assert_manifest_validation_error(manifest: &str, load_note: &str, message: &str) {
     let temp = TempDir::new();
     write_file(temp.path(), "musi.json", manifest);
-    write_file(temp.path(), "index.ms", r"export let answer : Int := 42;");
+    write_file(temp.path(), "index.ms", r"export let result : Int := 42;");
 
     let error = Project::load(temp.path(), ProjectOptions::default()).expect_err(load_note);
 
@@ -87,7 +87,7 @@ fn write_option_prelude_entry(root: &Path) {
         root,
         "index.ms",
         r"
-export let answer () : Option[Int] := someOf[Int](1);
+export let result () : Option[Int] := someOf[Int](1);
 ",
     );
 }
@@ -207,7 +207,7 @@ mod success {
         write_file(
             temp.path(),
             "index.ms",
-            r#"import "util"; export let answer : Int := 42;"#,
+            r#"import "util"; export let result : Int := 42;"#,
         );
         write_file(
             temp.path(),
@@ -229,7 +229,7 @@ mod success {
 
         assert!(output.artifact.validate().is_ok());
         assert!(output.text.contains("@util@0.1.0/index.ms::base"));
-        assert!(output.text.contains("@app@1.0.0/index.ms::answer"));
+        assert!(output.text.contains("@app@1.0.0/index.ms::result"));
         assert!(project.package("util").is_some());
         assert_eq!(project.workspace().members.len(), 1);
     }
@@ -245,7 +245,7 @@ mod success {
   "version": "1.0.0"
 }"#,
         );
-        write_file(temp.path(), "index.ms", "export let answer : Int := 42;");
+        write_file(temp.path(), "index.ms", "export let result : Int := 42;");
         write_file(
             temp.path(),
             "src/main.ms",
@@ -284,7 +284,7 @@ mod success {
         write_file(
             temp.path(),
             "index.ms",
-            r#"import "ext"; export let answer : Int := 42;"#,
+            r#"import "ext"; export let result : Int := 42;"#,
         );
         write_file(
             &registry_root,
@@ -298,7 +298,7 @@ mod success {
         write_file(
             &registry_root,
             "ext/1.2.0/index.ms",
-            r"export let ext_answer : Int := 7;",
+            r"export let ext_result : Int := 7;",
         );
 
         let project = Project::load(
@@ -415,7 +415,7 @@ mod success {
   "exports": "./index.ms"
 }"#,
         );
-        write_file(&git_root, "index.ms", r"export let ext_answer : Int := 7;");
+        write_file(&git_root, "index.ms", r"export let ext_result : Int := 7;");
         run_git(&git_root, &["init", "--initial-branch=main"]);
         run_git(&git_root, &["add", "."]);
         run_git(
@@ -551,7 +551,7 @@ mod success {
   }
 }"#,
         );
-        write_file(temp.path(), "index.ms", r"export let answer : Int := 42;");
+        write_file(temp.path(), "index.ms", r"export let result : Int := 42;");
 
         let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
         let plan = project.task_plan("test").expect("task plan should resolve");
@@ -579,7 +579,7 @@ mod success {
         write_file(
             temp.path(),
             "index.ms",
-            r#"import "alias"; export let answer : Int := 42;"#,
+            r#"import "alias"; export let result : Int := 42;"#,
         );
         write_file(
             temp.path(),
@@ -617,7 +617,7 @@ mod success {
   "workspace": ["packages/std"]
 }"#,
         );
-        write_file(temp.path(), "index.ms", r"export let answer : Int := 42;");
+        write_file(temp.path(), "index.ms", r"export let result : Int := 42;");
         write_file(
             temp.path(),
             "packages/std/musi.json",
@@ -677,7 +677,7 @@ export let test () : Unit := 0;
             temp.path(),
             "index.ms",
             r"
-foreign let musi_true () : Bool;
+native let musi_true () : Bool;
 
 export let Console := effect {
   let readLine () : String;
@@ -781,7 +781,7 @@ export let test () := 0;
             "index.ms",
             r#"
 let Hub := import "hub";
-export let answer () : Bool := Hub.Dep.equals([1, 2], [1, 2]);
+export let result () : Bool := Hub.Dep.equals([1, 2], [1, 2]);
 "#,
         );
         write_file(
@@ -832,7 +832,7 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
     }
 
     #[test]
-    fn std_root_exports_keep_static_module_targets() {
+    fn std_root_exports_keep_static_import_record_targets() {
         let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
             .canonicalize()
@@ -858,15 +858,15 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
             .expect("option export should exist");
 
         assert_eq!(
-            bytes.module_target.as_ref(),
+            bytes.import_record_target.as_ref(),
             Some(&ModuleKey::new("@@std@0.1.0/bytes/index.ms"))
         );
         assert_eq!(
-            math.module_target.as_ref(),
+            math.import_record_target.as_ref(),
             Some(&ModuleKey::new("@@std@0.1.0/math/index.ms"))
         );
         assert_eq!(
-            option.module_target.as_ref(),
+            option.import_record_target.as_ref(),
             Some(&ModuleKey::new("@@std@0.1.0/option/index.ms"))
         );
     }
@@ -894,7 +894,7 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
     }
 
     #[test]
-    fn std_root_member_alias_keeps_module_target() {
+    fn std_root_member_alias_keeps_import_record_target() {
         let temp = TempDir::new();
         write_file(
             temp.path(),
@@ -954,7 +954,7 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
             .expect("bytes export should exist");
 
         assert_eq!(
-            bytes.module_target.as_ref(),
+            bytes.import_record_target.as_ref(),
             Some(&ModuleKey::new("@@std@0.1.0/bytes/index.ms"))
         );
     }
@@ -1099,7 +1099,7 @@ mod failure {
   "lock": { "frozen": true }
 }"#,
         );
-        write_file(temp.path(), "index.ms", r"export let answer : Int := 42;");
+        write_file(temp.path(), "index.ms", r"export let result : Int := 42;");
 
         let error =
             Project::load(temp.path(), ProjectOptions::default()).expect_err("load should fail");
@@ -1275,7 +1275,7 @@ mod failure {
         write_file(
             temp.path(),
             "index.ms",
-            "let Missing := import \"missing\";\nexport let answer : Int := 42;\n",
+            "let Missing := import \"missing\";\nexport let result : Int := 42;\n",
         );
 
         let error =
@@ -1308,7 +1308,7 @@ mod failure {
   "version": "1.0.0"
 }"#,
         );
-        write_file(temp.path(), "index.ms", "export let answer : Int := 42;\n");
+        write_file(temp.path(), "index.ms", "export let result : Int := 42;\n");
 
         let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
         let error = project

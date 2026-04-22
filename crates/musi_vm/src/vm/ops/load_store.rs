@@ -61,7 +61,7 @@ impl Vm {
                 *global = value;
                 Ok(StepOutcome::Continue)
             }
-            Opcode::LdConst => {
+            Opcode::LdC => {
                 let Operand::Constant(constant) = instruction.operand else {
                     return Err(Self::invalid_operand(instruction));
                 };
@@ -78,7 +78,7 @@ impl Vm {
                 self.push_value(value)?;
                 Ok(StepOutcome::Continue)
             }
-            Opcode::LdSmi => {
+            Opcode::LdCI4 => {
                 let Operand::I16(value) = instruction.operand else {
                     return Err(Self::invalid_operand(instruction));
                 };

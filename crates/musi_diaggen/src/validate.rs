@@ -46,7 +46,7 @@ fn validate_catalog_shape(catalog: &Catalog) -> DiaggenResult {
         && (catalog.crate_name.is_none() || catalog.enum_name.is_none() || catalog.output.is_none())
     {
         return Err(DiaggenError(format!(
-            "catalog `{}` generated output requires crate, enum, and output path",
+            "catalog `{}` generated output needs crate, enum, and output path",
             catalog.owner
         )));
     }
@@ -101,12 +101,52 @@ fn validate_maps(catalog: &Catalog, kinds: &BTreeSet<&str>) -> DiaggenResult {
 }
 
 fn validate_entry(catalog: &Catalog, entry: &Entry) -> DiaggenResult {
+    validate_kind_message_category(catalog, entry)?;
     validate_text(catalog, entry, "message", &entry.message)?;
     validate_text(catalog, entry, "primary", &entry.primary)?;
+    if let Some(secondary) = &entry.secondary {
+        validate_text(catalog, entry, "secondary", secondary)?;
+    }
     if let Some(help) = &entry.help {
         validate_text(catalog, entry, "help", help)?;
     }
     Ok(())
+}
+
+fn validate_kind_message_category(catalog: &Catalog, entry: &Entry) -> DiaggenResult {
+    let Some(category) = expected_message_category(&entry.kind) else {
+        return Ok(());
+    };
+    let first = first_message_word(&entry.message);
+    if first == category {
+        return Ok(());
+    }
+    Err(DiaggenError(format!(
+        "{}.{} message must start with `{category}` to match diagnostic kind",
+        catalog.owner, entry.kind
+    )))
+}
+
+fn expected_message_category(kind: &str) -> Option<&'static str> {
+    [
+        ("Missing", "missing"),
+        ("Unknown", "unknown"),
+        ("Invalid", "invalid"),
+        ("Unsupported", "unsupported"),
+        ("Duplicate", "duplicate"),
+        ("Unexpected", "unexpected"),
+        ("Unnecessary", "unnecessary"),
+    ]
+    .into_iter()
+    .find_map(|(prefix, category)| kind.starts_with(prefix).then_some(category))
+}
+
+fn first_message_word(message: &str) -> &str {
+    message
+        .split_whitespace()
+        .next()
+        .unwrap_or_default()
+        .trim_matches(|ch: char| !ch.is_ascii_alphabetic())
 }
 
 fn validate_text(catalog: &Catalog, entry: &Entry, field: &str, text: &str) -> DiaggenResult {
@@ -177,7 +217,7 @@ fn is_bare_vague_text(text: &str) -> bool {
             | "unknown effect"
             | "unknown effect operation"
             | "invalid target"
-            | "invalid request target"
+            | "invalid ask target"
             | "arity mismatch"
             | "call arity mismatch"
             | "type mismatch"

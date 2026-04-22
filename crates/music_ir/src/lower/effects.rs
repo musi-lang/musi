@@ -4,7 +4,7 @@ pub(super) fn lower_request_expr(ctx: &mut LowerCtx<'_>, expr: HirExprId) -> Low
     call::lower_request_expr(ctx, expr)
 }
 
-pub(super) fn lower_handler_literal_expr(
+pub(super) fn lower_answer_literal_expr(
     ctx: &mut LowerCtx<'_>,
     expr_id: HirExprId,
     effect_name: Ident,
@@ -12,8 +12,8 @@ pub(super) fn lower_handler_literal_expr(
 ) -> IrExprKind {
     let sema = ctx.sema;
     let interner = ctx.interner;
-    let handler_name = interner.resolve(effect_name.name);
-    let Some(effect) = sema.effect_def(handler_name) else {
+    let answer_name = interner.resolve(effect_name.name);
+    let Some(effect) = sema.effect_def(answer_name) else {
         invalid_lowering_path("handle with unknown effect");
     };
     let origin = sema.module().store.exprs.get(expr_id).origin;
@@ -34,10 +34,10 @@ pub(super) fn lower_handler_literal_expr(
         invalid_lowering_path("handle without value clause");
     };
 
-    let value_closure = lower_handler_clause_closure(
+    let value_closure = lower_answer_clause_closure(
         ctx,
         origin,
-        "hdl.value",
+        "answer.value",
         &[value_clause.op],
         value_clause.body,
     );
@@ -48,10 +48,10 @@ pub(super) fn lower_handler_literal_expr(
         let Some(op_index) = effect.op_index(op_name).map(usize::from) else {
             invalid_lowering_path("handle clause with unknown effect op");
         };
-        let closure = lower_handler_clause_closure(
+        let closure = lower_answer_clause_closure(
             ctx,
             origin,
-            &format!("hdl.op.{op_name}"),
+            &format!("answer.op.{op_name}"),
             sema.module().store.idents.get(clause.params),
             clause.body,
         );
@@ -66,7 +66,7 @@ pub(super) fn lower_handler_literal_expr(
         invalid_lowering_path("handle missing op clause");
     }
 
-    IrExprKind::HandlerLit {
+    IrExprKind::AnswerLit {
         effect_key: effect.key().clone(),
         value: Box::new(value_closure),
         ops: ops_by_index
@@ -81,41 +81,41 @@ pub(super) fn lower_handle_expr(
     ctx: &mut LowerCtx<'_>,
     expr_id: HirExprId,
     expr: HirExprId,
-    handler: HirExprId,
+    answer: HirExprId,
 ) -> IrExprKind {
-    let handler_expr = lower_expr(ctx, handler);
-    let effect_key = if let IrExprKind::HandlerLit { effect_key, .. } = &handler_expr.kind {
+    let answer_expr = lower_expr(ctx, answer);
+    let effect_key = if let IrExprKind::AnswerLit { effect_key, .. } = &answer_expr.kind {
         effect_key.clone()
     } else {
-        lower_handler_effect_key(ctx, handler)
+        lower_answer_effect_key(ctx, answer)
     };
     let _ = expr_id;
     IrExprKind::Handle {
         effect_key,
-        handler: Box::new(handler_expr),
+        answer: Box::new(answer_expr),
         body: Box::new(lower_expr(ctx, expr)),
     }
 }
 
-fn lower_handler_effect_key(ctx: &LowerCtx<'_>, handler: HirExprId) -> DefinitionKey {
+fn lower_answer_effect_key(ctx: &LowerCtx<'_>, answer: HirExprId) -> DefinitionKey {
     let sema = ctx.sema;
-    let handler_ty = sema
-        .try_expr_ty(handler)
-        .unwrap_or_else(|| invalid_lowering_path("handler type missing"));
-    let effect_name = match sema.ty(handler_ty).kind {
+    let answer_ty = sema
+        .try_expr_ty(answer)
+        .unwrap_or_else(|| invalid_lowering_path("answer type missing"));
+    let effect_name = match sema.ty(answer_ty).kind {
         HirTyKind::Handler { effect, .. } => match sema.ty(effect).kind {
             HirTyKind::Named { name, .. } => Box::<str>::from(ctx.interner.resolve(name)),
-            _ => invalid_lowering_path("handler effect type missing"),
+            _ => invalid_lowering_path("answer effect type missing"),
         },
-        _ => invalid_lowering_path("invalid handler type"),
+        _ => invalid_lowering_path("invalid answer type"),
     };
     sema.effect_def(&effect_name).map_or_else(
-        || invalid_lowering_path("handler effect missing"),
+        || invalid_lowering_path("answer effect missing"),
         |effect| effect.key().clone(),
     )
 }
 
-fn lower_handler_clause_closure(
+fn lower_answer_clause_closure(
     ctx: &mut LowerCtx<'_>,
     origin: IrOrigin,
     prefix: &str,
@@ -136,7 +136,7 @@ fn lower_handler_clause_closure(
             params: super::lower_named_params(ctx, params),
             binding: None,
             name: None,
-            callable_module_target: ctx.sema.expr_module_target(body).cloned(),
+            callable_import_record_target: ctx.sema.expr_import_record_target(body).cloned(),
             rewrite_recursive_self: false,
         },
     )

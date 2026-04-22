@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ops::{Deref, DerefMut};
 
 use music_arena::{Idx, SliceRange};
-use music_base::diag::Diag;
+use music_base::diag::{Diag, DiagContext};
 use music_base::{SourceId, Span};
 use music_hir::{
     HirArg, HirArrayItem, HirAttr, HirAttrArg, HirBinder, HirConstraint, HirDim, HirEffectItem,
@@ -15,15 +15,15 @@ use music_module::ModuleKey;
 use music_names::{
     Ident, Interner, KnownSymbols, NameBindingId, NameBindingKind, NameSite, Symbol,
 };
-use music_resolve::ResolvedModule;
+use music_resolve::{ResolvedImportBindingList, ResolvedModule};
 
 use super::DiagKind;
 use super::schemes::BindingScheme;
 use super::surface::build_module_surface;
 use crate::api::{
-    ClassFacts, ComptimeValue, ConstraintEvidence, ConstraintKey, DefinitionKey, ExprFacts,
-    ExprMemberFact, ForeignLinkInfo, InstanceFacts, PatFacts, SemaDataDef, SemaDataVariantDef,
-    SemaDiagList, SemaEffectDef, SemaEffectOpDef, SemaEnv, SemaModule, SemaOptions, TargetInfo,
+    ComptimeValue, ConstraintAnswer, ConstraintKey, DefinitionKey, ExprFacts, ExprMemberFact,
+    ForeignLinkInfo, GivenFacts, PatFacts, SemaDataDef, SemaDataVariantDef, SemaDiagList,
+    SemaEffectDef, SemaEffectOpDef, SemaEnv, SemaModule, SemaOptions, ShapeFacts, TargetInfo,
 };
 use crate::effects::EffectRow;
 
@@ -36,34 +36,34 @@ type BindingEffectsMap = HashMap<NameBindingId, EffectRow>;
 type BindingSchemeMap = HashMap<NameBindingId, BindingScheme>;
 type TypeParamKindScope = HashMap<Symbol, HirTyId>;
 type TypeParamKindScopeList = Vec<TypeParamKindScope>;
-type BindingEvidenceKeyMap = HashMap<NameBindingId, Box<[ConstraintKey]>>;
-type BindingModuleTargetMap = HashMap<NameBindingId, ModuleKey>;
+type BindingConstraintKeyMap = HashMap<NameBindingId, Box<[ConstraintKey]>>;
+type BindingImportRecordTargetMap = HashMap<NameBindingId, ModuleKey>;
 type BindingConstIntMap = HashMap<NameBindingId, i64>;
 type BindingComptimeValueMap = HashMap<NameBindingId, ComptimeValue>;
-type SealedClassSet = HashSet<DefinitionKey>;
+type SealedShapeSet = HashSet<DefinitionKey>;
 type GatedBindingSet = HashSet<NameBindingId>;
 type ForeignLinkMap = HashMap<NameBindingId, ForeignLinkInfo>;
 type UnsafeBindingSet = HashSet<NameBindingId>;
 type AttachedMethodMap = HashMap<Symbol, Vec<NameBindingId>>;
 type EffectDefMap = HashMap<Box<str>, EffectDef>;
 type DataDefMap = HashMap<Box<str>, DataDef>;
-type ClassIndexMap = HashMap<Symbol, HirExprId>;
-type ClassFactsByNameMap = HashMap<Symbol, ClassFacts>;
-type ClassFactsMap = HashMap<HirExprId, ClassFacts>;
-type InstanceFactsMap = HashMap<HirExprId, InstanceFacts>;
+type ShapeIndexMap = HashMap<Symbol, HirExprId>;
+type ShapeFactsByNameMap = HashMap<Symbol, ShapeFacts>;
+type ShapeFactsMap = HashMap<HirExprId, ShapeFacts>;
+type GivenFactsMap = HashMap<HirExprId, GivenFacts>;
 type ExprFactsList = Vec<ExprFacts>;
 type PatFactsList = Vec<PatFacts>;
 type ExprCallableEffectsMap = HashMap<HirExprId, EffectRow>;
-type ExprModuleTargetMap = HashMap<HirExprId, ModuleKey>;
+type ExprImportRecordTargetMap = HashMap<HirExprId, ModuleKey>;
 type TypeTestTargetMap = HashMap<HirExprId, HirTyId>;
-type ExprEvidenceMap = HashMap<HirExprId, Box<[ConstraintEvidence]>>;
+type ExprConstraintAnswerMap = HashMap<HirExprId, Box<[ConstraintAnswer]>>;
 type ExprDotCallableBindingMap = HashMap<HirExprId, NameBindingId>;
 type ExprMemberFactMap = HashMap<HirExprId, ExprMemberFact>;
 type ExprComptimeValueMap = HashMap<HirExprId, ComptimeValue>;
 type ResumeCtxList = Vec<ResumeCtx>;
 type ExpectedTyList = Vec<HirTyId>;
-type EvidenceScope = HashMap<ConstraintKey, ConstraintEvidence>;
-type EvidenceScopeList = Vec<EvidenceScope>;
+type ConstraintAnswerScope = HashMap<ConstraintKey, ConstraintAnswer>;
+type ConstraintAnswerScopeList = Vec<ConstraintAnswerScope>;
 type StaticImportList = Vec<ModuleKey>;
 type ExprIdList = Vec<HirExprId>;
 type ArgList = Vec<HirArg>;
@@ -96,7 +96,6 @@ pub struct Builtins {
     pub error: HirTyId,
     pub unknown: HirTyId,
     pub type_: HirTyId,
-    pub module: HirTyId,
     pub syntax: HirTyId,
     pub any: HirTyId,
     pub empty: HirTyId,
@@ -127,7 +126,6 @@ impl Builtins {
             error: alloc_builtin(resolved, HirTyKind::Error),
             unknown: alloc_builtin(resolved, HirTyKind::Unknown),
             type_: alloc_builtin(resolved, HirTyKind::Type),
-            module: alloc_builtin(resolved, HirTyKind::Module),
             syntax: alloc_builtin(resolved, HirTyKind::Syntax),
             any: alloc_builtin(resolved, HirTyKind::Any),
             empty: alloc_builtin(resolved, HirTyKind::Empty),
@@ -228,11 +226,11 @@ pub struct TypingState {
     binding_effects: BindingEffectsMap,
     binding_schemes: BindingSchemeMap,
     type_param_kind_scopes: TypeParamKindScopeList,
-    binding_evidence_keys: BindingEvidenceKeyMap,
-    binding_module_targets: BindingModuleTargetMap,
+    binding_constraint_keys: BindingConstraintKeyMap,
+    binding_import_record_targets: BindingImportRecordTargetMap,
     binding_const_ints: BindingConstIntMap,
     binding_comptime_values: BindingComptimeValueMap,
-    sealed_classes: SealedClassSet,
+    sealed_shapes: SealedShapeSet,
     gated_bindings: GatedBindingSet,
     foreign_links: ForeignLinkMap,
     unsafe_bindings: UnsafeBindingSet,
@@ -251,10 +249,10 @@ impl TypingState {
 pub struct DeclState {
     effect_defs: EffectDefMap,
     data_defs: DataDefMap,
-    class_index: ClassIndexMap,
-    class_facts_by_name: ClassFactsByNameMap,
-    class_facts: ClassFactsMap,
-    instance_facts: InstanceFactsMap,
+    shape_index: ShapeIndexMap,
+    shape_facts_by_name: ShapeFactsByNameMap,
+    shape_facts: ShapeFactsMap,
+    given_facts: GivenFactsMap,
 }
 
 impl DeclState {
@@ -269,9 +267,9 @@ pub struct FactState {
     expr_facts: ExprFactsList,
     pat_facts: PatFactsList,
     expr_callable_effects: ExprCallableEffectsMap,
-    expr_module_targets: ExprModuleTargetMap,
+    expr_import_record_targets: ExprImportRecordTargetMap,
     type_test_targets: TypeTestTargetMap,
-    expr_evidence: ExprEvidenceMap,
+    expr_constraint_answers: ExprConstraintAnswerMap,
     expr_dot_callable_bindings: ExprDotCallableBindingMap,
     expr_member_facts: ExprMemberFactMap,
     expr_comptime_values: ExprComptimeValueMap,
@@ -285,9 +283,9 @@ impl FactState {
             expr_facts,
             pat_facts,
             expr_callable_effects: HashMap::new(),
-            expr_module_targets: HashMap::new(),
+            expr_import_record_targets: HashMap::new(),
             type_test_targets: HashMap::new(),
-            expr_evidence: HashMap::new(),
+            expr_constraint_answers: HashMap::new(),
             expr_dot_callable_bindings: HashMap::new(),
             expr_member_facts: HashMap::new(),
             expr_comptime_values: HashMap::new(),
@@ -331,7 +329,7 @@ pub struct CheckPass<'ctx, 'interner, 'env> {
     collect: CollectPass<'ctx, 'interner, 'env>,
     resume: &'ctx mut ResumeState,
     expected: ExpectedTyList,
-    evidence_scopes: EvidenceScopeList,
+    answer_scopes: ConstraintAnswerScopeList,
     module_stmt_depth: u32,
     unsafe_depth: u32,
 }
@@ -455,16 +453,16 @@ pub fn finish_module(
             foreign_links: typing.foreign_links.clone(),
             binding_types: typing.binding_types().clone(),
             binding_schemes: typing.binding_schemes().clone(),
-            binding_evidence_keys: typing.binding_evidence_keys().clone(),
-            binding_module_targets: typing.binding_module_targets().clone(),
+            binding_constraint_keys: typing.binding_constraint_keys().clone(),
+            binding_import_record_targets: typing.binding_import_record_targets().clone(),
             binding_comptime_values: typing.binding_comptime_values().clone(),
         },
         facts: crate::SemaFactsBuild {
             expr_facts: facts.expr_facts,
             pat_facts: facts.pat_facts,
-            expr_module_targets: facts.expr_module_targets,
+            expr_import_record_targets: facts.expr_import_record_targets,
             type_test_targets: facts.type_test_targets,
-            expr_evidence: facts.expr_evidence,
+            expr_constraint_answers: facts.expr_constraint_answers,
             expr_dot_callable_bindings: facts.expr_dot_callable_bindings,
             expr_member_facts: facts.expr_member_facts,
             expr_comptime_values: facts.expr_comptime_values,
@@ -472,8 +470,8 @@ pub fn finish_module(
         decls: crate::SemaDeclsBuild {
             effect_defs: decls.effect_defs,
             data_defs: decls.data_defs,
-            class_facts: decls.class_facts,
-            instance_facts: decls.instance_facts,
+            shape_facts: decls.shape_facts,
+            given_facts: decls.given_facts,
         },
         surface,
         diags: facts.diags,
@@ -527,6 +525,10 @@ impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
             .iter()
             .map(|import| import.to.clone())
             .collect()
+    }
+
+    pub fn import_bindings(&self) -> ResolvedImportBindingList {
+        self.module.resolved.import_bindings.clone()
     }
 
     pub fn prelude_bindings(&self) -> Box<[(NameBindingId, Symbol)]> {
@@ -852,12 +854,12 @@ impl PassBase<'_, '_, '_> {
         *slot = facts;
     }
 
-    pub fn expr_module_target(&self, id: HirExprId) -> Option<&ModuleKey> {
-        self.facts.expr_module_targets.get(&id)
+    pub fn expr_import_record_target(&self, id: HirExprId) -> Option<&ModuleKey> {
+        self.facts.expr_import_record_targets.get(&id)
     }
 
-    pub fn set_expr_module_target(&mut self, id: HirExprId, target: ModuleKey) {
-        let _prev = self.facts.expr_module_targets.insert(id, target);
+    pub fn set_expr_import_record_target(&mut self, id: HirExprId, target: ModuleKey) {
+        let _prev = self.facts.expr_import_record_targets.insert(id, target);
     }
 
     pub fn expr_callable_effects(&self, id: HirExprId) -> Option<EffectRow> {
@@ -872,12 +874,15 @@ impl PassBase<'_, '_, '_> {
         let _prev = self.facts.type_test_targets.insert(id, target);
     }
 
-    pub fn set_expr_evidence(
+    pub fn set_expr_constraint_answers(
         &mut self,
         id: HirExprId,
-        evidence: impl Into<Box<[ConstraintEvidence]>>,
+        answers: impl Into<Box<[ConstraintAnswer]>>,
     ) {
-        let _prev = self.facts.expr_evidence.insert(id, evidence.into());
+        let _prev = self
+            .facts
+            .expr_constraint_answers
+            .insert(id, answers.into());
     }
 
     pub fn set_expr_dot_callable_binding(&mut self, id: HirExprId, binding: NameBindingId) {
@@ -1008,16 +1013,16 @@ impl PassBase<'_, '_, '_> {
         let _prev = self.typing.binding_schemes.insert(id, scheme);
     }
 
-    pub fn set_binding_evidence_keys(
+    pub fn set_binding_constraint_keys(
         &mut self,
         id: NameBindingId,
         keys: impl Into<Box<[ConstraintKey]>>,
     ) {
-        let _prev = self.typing.binding_evidence_keys.insert(id, keys.into());
+        let _prev = self.typing.binding_constraint_keys.insert(id, keys.into());
     }
 
-    pub fn binding_module_target(&self, id: NameBindingId) -> Option<&ModuleKey> {
-        self.typing.binding_module_targets.get(&id)
+    pub fn binding_import_record_target(&self, id: NameBindingId) -> Option<&ModuleKey> {
+        self.typing.binding_import_record_targets.get(&id)
     }
 
     pub fn binding_comptime_value(&self, id: NameBindingId) -> Option<&ComptimeValue> {
@@ -1041,16 +1046,16 @@ impl PassBase<'_, '_, '_> {
         }
     }
 
-    pub fn insert_binding_module_target(&mut self, id: NameBindingId, target: ModuleKey) {
-        let _prev = self.typing.binding_module_targets.insert(id, target);
+    pub fn insert_binding_import_record_target(&mut self, id: NameBindingId, target: ModuleKey) {
+        let _prev = self.typing.binding_import_record_targets.insert(id, target);
     }
 
-    pub fn mark_sealed_class(&mut self, key: DefinitionKey) {
-        let _ = self.typing.sealed_classes.insert(key);
+    pub fn mark_sealed_shape(&mut self, key: DefinitionKey) {
+        let _ = self.typing.sealed_shapes.insert(key);
     }
 
-    pub fn is_sealed_class(&self, key: &DefinitionKey) -> bool {
-        self.typing.sealed_classes.contains(key)
+    pub fn is_sealed_shape(&self, key: &DefinitionKey) -> bool {
+        self.typing.sealed_shapes.contains(key)
     }
 
     pub fn mark_gated_binding(&mut self, id: NameBindingId) {
@@ -1164,36 +1169,36 @@ impl PassBase<'_, '_, '_> {
 }
 
 impl PassBase<'_, '_, '_> {
-    pub fn class_id(&self, symbol: Symbol) -> Option<HirExprId> {
-        self.decls.class_index.get(&symbol).copied()
+    pub fn shape_id(&self, symbol: Symbol) -> Option<HirExprId> {
+        self.decls.shape_index.get(&symbol).copied()
     }
 
-    pub fn insert_class_id(&mut self, symbol: Symbol, id: HirExprId) {
-        let _prev = self.decls.class_index.insert(symbol, id);
+    pub fn insert_shape_id(&mut self, symbol: Symbol, id: HirExprId) {
+        let _prev = self.decls.shape_index.insert(symbol, id);
     }
 
-    pub fn insert_class_facts(&mut self, id: HirExprId, facts: ClassFacts) {
-        let _prev = self.decls.class_facts.insert(id, facts);
+    pub fn insert_shape_facts(&mut self, id: HirExprId, facts: ShapeFacts) {
+        let _prev = self.decls.shape_facts.insert(id, facts);
     }
 
-    pub fn insert_class_facts_by_name(&mut self, name: Symbol, facts: ClassFacts) {
-        let _prev = self.decls.class_facts_by_name.insert(name, facts);
+    pub fn insert_shape_facts_by_name(&mut self, name: Symbol, facts: ShapeFacts) {
+        let _prev = self.decls.shape_facts_by_name.insert(name, facts);
     }
 
-    pub fn class_facts(&self, id: HirExprId) -> Option<&ClassFacts> {
-        self.decls.class_facts.get(&id)
+    pub fn shape_facts(&self, id: HirExprId) -> Option<&ShapeFacts> {
+        self.decls.shape_facts.get(&id)
     }
 
-    pub fn class_facts_by_name(&self, name: Symbol) -> Option<&ClassFacts> {
-        self.decls.class_facts_by_name.get(&name)
+    pub fn shape_facts_by_name(&self, name: Symbol) -> Option<&ShapeFacts> {
+        self.decls.shape_facts_by_name.get(&name)
     }
 
-    pub fn insert_instance_facts(&mut self, id: HirExprId, facts: InstanceFacts) {
-        let _prev = self.decls.instance_facts.insert(id, facts);
+    pub fn insert_given_facts(&mut self, id: HirExprId, facts: GivenFacts) {
+        let _prev = self.decls.given_facts.insert(id, facts);
     }
 
-    pub const fn instance_facts(&self) -> &HashMap<HirExprId, InstanceFacts> {
-        &self.decls.instance_facts
+    pub const fn given_facts(&self) -> &HashMap<HirExprId, GivenFacts> {
+        &self.decls.given_facts
     }
 }
 
@@ -1228,19 +1233,12 @@ impl PassBase<'_, '_, '_> {
         diag
     }
 
-    pub fn diag_message_builder(
-        &self,
-        span: Span,
-        kind: DiagKind,
-        message: impl Into<String>,
-        label: impl Into<String>,
-    ) -> Diag {
-        let mut diag =
-            Diag::error(message)
-                .with_code(kind.code())
-                .with_label(span, self.source_id(), label);
+    pub fn diag_with_builder(&self, span: Span, kind: DiagKind, context: &DiagContext) -> Diag {
+        let mut diag = Diag::error(kind.message_with(context))
+            .with_code(kind.code())
+            .with_label(span, self.source_id(), kind.label_with(context));
         if let Some(hint) = kind.hint() {
-            diag = diag.with_hint(hint);
+            diag = diag.with_hint(context.render(hint));
         }
         diag
     }
@@ -1253,36 +1251,24 @@ impl PassBase<'_, '_, '_> {
         self.push_diag(self.diag_builder(span, kind, label));
     }
 
-    pub fn diag_message(
-        &mut self,
-        span: Span,
-        kind: DiagKind,
-        message: impl Into<String>,
-        label: impl Into<String>,
-    ) {
-        self.push_diag(self.diag_message_builder(span, kind, message, label));
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn diag_with(&mut self, span: Span, kind: DiagKind, context: DiagContext) {
+        self.push_diag(self.diag_with_builder(span, kind, &context));
     }
 
-    pub fn diag_named(&mut self, span: Span, kind: DiagKind, message: impl Into<String>) {
-        let message = message.into();
-        self.push_diag(self.diag_message_builder(span, kind, message.clone(), message));
-    }
-
-    pub fn diag_message_with_previous(
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn diag_with_previous(
         &mut self,
         span: Span,
         previous_span: Span,
         kind: DiagKind,
-        message: impl Into<String>,
-        previous_label: impl Into<String>,
+        context: DiagContext,
     ) {
-        let message = message.into();
-        self.push_diag(
-            Diag::error(message.clone())
-                .with_code(kind.code())
-                .with_label(span, self.source_id(), message)
-                .with_label(previous_span, self.source_id(), previous_label),
-        );
+        let mut diag = self.diag_with_builder(span, kind, &context);
+        if let Some(previous) = kind.secondary_with(&context) {
+            diag = diag.with_label(previous_span, self.source_id(), previous);
+        }
+        self.push_diag(diag);
     }
 
     pub fn fresh_open_row_name(&mut self, base: &str) -> Box<str> {
@@ -1307,12 +1293,12 @@ impl TypingState {
         &self.binding_schemes
     }
 
-    pub const fn binding_evidence_keys(&self) -> &HashMap<NameBindingId, Box<[ConstraintKey]>> {
-        &self.binding_evidence_keys
+    pub const fn binding_constraint_keys(&self) -> &HashMap<NameBindingId, Box<[ConstraintKey]>> {
+        &self.binding_constraint_keys
     }
 
-    pub const fn binding_module_targets(&self) -> &HashMap<NameBindingId, ModuleKey> {
-        &self.binding_module_targets
+    pub const fn binding_import_record_targets(&self) -> &HashMap<NameBindingId, ModuleKey> {
+        &self.binding_import_record_targets
     }
 
     pub const fn binding_const_ints(&self) -> &HashMap<NameBindingId, i64> {
@@ -1337,12 +1323,12 @@ impl DeclState {
         self.data_defs.get(name)
     }
 
-    pub const fn class_facts_by_name(&self) -> &HashMap<Symbol, ClassFacts> {
-        &self.class_facts_by_name
+    pub const fn shape_facts_by_name(&self) -> &HashMap<Symbol, ShapeFacts> {
+        &self.shape_facts_by_name
     }
 
-    pub const fn instance_facts(&self) -> &HashMap<HirExprId, InstanceFacts> {
-        &self.instance_facts
+    pub const fn given_facts(&self) -> &HashMap<HirExprId, GivenFacts> {
+        &self.given_facts
     }
 }
 
@@ -1375,7 +1361,7 @@ impl<'ctx, 'interner, 'env> CheckPass<'ctx, 'interner, 'env> {
             collect,
             resume,
             expected: Vec::new(),
-            evidence_scopes: Vec::new(),
+            answer_scopes: Vec::new(),
             module_stmt_depth: 0,
             unsafe_depth: 0,
         }
@@ -1405,29 +1391,29 @@ impl<'ctx, 'interner, 'env> CheckPass<'ctx, 'interner, 'env> {
         self.unsafe_depth > 0
     }
 
-    pub fn push_evidence_scope(&mut self, scope: EvidenceScope) {
-        self.evidence_scopes.push(scope);
+    pub fn push_answer_scope(&mut self, scope: ConstraintAnswerScope) {
+        self.answer_scopes.push(scope);
     }
 
-    pub fn pop_evidence_scope(&mut self) -> Option<EvidenceScope> {
-        self.evidence_scopes.pop()
+    pub fn pop_answer_scope(&mut self) -> Option<ConstraintAnswerScope> {
+        self.answer_scopes.pop()
     }
 
-    pub fn resolve_in_scope_evidence(&self, key: &ConstraintKey) -> Option<ConstraintEvidence> {
-        self.evidence_scopes
+    pub fn resolve_in_scope_answer(&self, key: &ConstraintKey) -> Option<ConstraintAnswer> {
+        self.answer_scopes
             .iter()
             .rev()
             .find_map(|scope| scope.get(key).cloned())
     }
 
-    pub fn evidence_entries_in_scope(&self) -> Vec<(ConstraintKey, ConstraintEvidence)> {
-        self.evidence_scopes
+    pub fn answer_entries_in_scope(&self) -> Vec<(ConstraintKey, ConstraintAnswer)> {
+        self.answer_scopes
             .iter()
             .rev()
             .flat_map(|scope| {
                 scope
                     .iter()
-                    .map(|(key, evidence)| (key.clone(), evidence.clone()))
+                    .map(|(key, answer)| (key.clone(), answer.clone()))
             })
             .collect()
     }

@@ -191,7 +191,7 @@ pub(super) fn render_ty_name(sema: &SemaModule, ty: HirTyId, interner: &Interner
             input,
             output,
         } => format!(
-            "using {} ({} -> {})",
+            "answer {} ({} -> {})",
             render_ty_name(sema, *effect, interner),
             render_ty_name(sema, *input, interner),
             render_ty_name(sema, *output, interner)
@@ -200,11 +200,11 @@ pub(super) fn render_ty_name(sema: &SemaModule, ty: HirTyId, interner: &Interner
         HirTyKind::Mut { inner } => {
             format!("mut {}", render_ty_name(sema, *inner, interner)).into()
         }
-        HirTyKind::AnyClass { class } => {
-            format!("any {}", render_ty_name(sema, *class, interner)).into()
+        HirTyKind::AnyShape { capability } => {
+            format!("any {}", render_ty_name(sema, *capability, interner)).into()
         }
-        HirTyKind::SomeClass { class } => {
-            format!("some {}", render_ty_name(sema, *class, interner)).into()
+        HirTyKind::SomeShape { capability } => {
+            format!("some {}", render_ty_name(sema, *capability, interner)).into()
         }
         HirTyKind::Record { fields } => render_record_ty_name(sema, fields, interner),
         _ => invalid_lowering_path("invalid type name kind"),
@@ -240,24 +240,6 @@ fn render_range_ty_name(
         HirTyKind::Range { bound } => {
             format!("Range[{}]", render_ty_name(sema, *bound, interner)).into()
         }
-        HirTyKind::ClosedRange { bound } => {
-            format!("ClosedRange[{}]", render_ty_name(sema, *bound, interner)).into()
-        }
-        HirTyKind::PartialRangeFrom { bound } => format!(
-            "PartialRangeFrom[{}]",
-            render_ty_name(sema, *bound, interner)
-        )
-        .into(),
-        HirTyKind::PartialRangeUpTo { bound } => format!(
-            "PartialRangeUpTo[{}]",
-            render_ty_name(sema, *bound, interner)
-        )
-        .into(),
-        HirTyKind::PartialRangeThru { bound } => format!(
-            "PartialRangeThru[{}]",
-            render_ty_name(sema, *bound, interner)
-        )
-        .into(),
         _ => return None,
     })
 }

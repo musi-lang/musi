@@ -7,7 +7,7 @@ use super::compile::SessionLoader;
 use crate::error::{RuntimeError, RuntimeErrorKind, RuntimeResult};
 
 impl Runtime {
-    /// Loads one root module into one fresh VM instance and initializes it.
+    /// Loads one root module into one fresh VM runtime and initializes it.
     ///
     /// # Errors
     ///

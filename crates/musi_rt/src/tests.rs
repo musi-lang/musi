@@ -95,11 +95,11 @@ mod success {
     fn loads_root_and_calls_export() {
         let mut runtime = Runtime::new(NativeHost::new(), RuntimeOptions::default());
         runtime
-            .register_module_text("main", "export let answer () : Int := 42;")
+            .register_module_text("main", "export let result () : Int := 42;")
             .unwrap();
         runtime.load_root("main").unwrap();
 
-        let value = runtime.call_export("answer", &[]).unwrap();
+        let value = runtime.call_export("result", &[]).unwrap();
         assert_eq!(value, Value::Int(42));
     }
 
@@ -112,13 +112,13 @@ mod success {
         runtime
             .register_module_text(
                 "dep",
-                "export let answer () : Int := 42; export let base : Int := 41;",
+                "export let result () : Int := 42; export let base : Int := 41;",
             )
             .unwrap();
         runtime.load_root("main").unwrap();
 
         let module = runtime.load_module("dep").unwrap();
-        let value = runtime.call_module_export(&module, "answer", &[]).unwrap();
+        let value = runtime.call_module_export(&module, "result", &[]).unwrap();
 
         assert_eq!(value, Value::Int(42));
     }
@@ -208,9 +208,9 @@ mod success {
             .unwrap();
         runtime.load_root("main").unwrap();
 
-        let syntax = module_syntax(&mut runtime, "export let answer () : Int := 42;");
+        let syntax = module_syntax(&mut runtime, "export let result () : Int := 42;");
         let module = runtime.load_module_syntax("generated", &syntax).unwrap();
-        let value = runtime.call_module_export(&module, "answer", &[]).unwrap();
+        let value = runtime.call_module_export(&module, "result", &[]).unwrap();
 
         assert_eq!(value, Value::Int(42));
     }
@@ -227,16 +227,16 @@ mod success {
             .register_module_text(
                 "main",
                 r#"
-            foreign "c" (
+            native "c" (
               let puts (value : Int) : Int;
             );
-            export let answer () : Int := unsafe { puts(42); };
+            export let result () : Int := unsafe { puts(42); };
         "#,
             )
             .unwrap();
         runtime.load_root("main").unwrap();
 
-        let value = runtime.call_export("answer", &[]).unwrap();
+        let value = runtime.call_export("result", &[]).unwrap();
         assert_eq!(value, Value::Int(7));
     }
 
@@ -261,13 +261,13 @@ mod success {
                 "main",
                 r#"
             let Console := effect { let readLine (prompt : String) : Int; };
-            export let answer () : Int := request Console.readLine(">");
+            export let result () : Int := ask Console.readLine(">");
         "#,
             )
             .unwrap();
         runtime.load_root("main").unwrap();
 
-        let value = runtime.call_export("answer", &[]).unwrap();
+        let value = runtime.call_export("result", &[]).unwrap();
         assert_eq!(value, Value::Int(42));
     }
 
@@ -281,16 +281,16 @@ mod success {
             .register_module_text(
                 "main",
                 r#"
-            foreign "c" (
+            native "c" (
               let puts (value : Int) : Int;
             );
-            export let answer () : Int := unsafe { puts(1); };
+            export let result () : Int := unsafe { puts(1); };
         "#,
             )
             .unwrap();
         runtime.load_root("main").unwrap();
 
-        let err = runtime.call_export("answer", &[]).unwrap_err();
+        let err = runtime.call_export("result", &[]).unwrap_err();
         assert!(matches!(
             err.kind(),
             RuntimeErrorKind::VmExecutionFailed(VmError { .. })
@@ -674,7 +674,7 @@ mod failure {
         runtime
         .register_module_text(
             "dep",
-            "export opaque let Hidden := data { | Hidden(Int) }; export let answer () : Int := 42;",
+            "export opaque let Hidden := data { | Hidden(Int) }; export let result () : Int := 42;",
         )
         .unwrap();
         runtime.load_root("main").unwrap();

@@ -8,7 +8,7 @@ use crate::ModuleSpecifier;
 use crate::string_lit::{decode_string_lit, decode_template_lit};
 
 type ExportNameList = Vec<Box<str>>;
-type ExportedInstanceSiteList = Vec<ExportedInstanceSite>;
+type ExportedGivenSiteList = Vec<ExportedGivenSite>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ImportSiteKind {
@@ -36,12 +36,12 @@ impl ImportSite {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ExportedInstanceSite {
+pub struct ExportedGivenSite {
     pub source_id: SourceId,
     pub span: Span,
 }
 
-impl ExportedInstanceSite {
+impl ExportedGivenSite {
     #[must_use]
     pub const fn new(source_id: SourceId, span: Span) -> Self {
         Self { source_id, span }
@@ -52,7 +52,7 @@ impl ExportedInstanceSite {
 pub struct ModuleExportSummary {
     exports: ExportNameList,
     opaque: ExportNameList,
-    exported_instances: ExportedInstanceSiteList,
+    exported_givens: ExportedGivenSiteList,
 }
 
 impl ModuleExportSummary {
@@ -65,13 +65,13 @@ impl ModuleExportSummary {
         self.exports.iter().map(Box::as_ref)
     }
 
-    pub fn exported_instances(&self) -> impl Iterator<Item = ExportedInstanceSite> + '_ {
-        self.exported_instances.iter().copied()
+    pub fn exported_givens(&self) -> impl Iterator<Item = ExportedGivenSite> + '_ {
+        self.exported_givens.iter().copied()
     }
 
     #[must_use]
-    pub const fn exported_instance_count(&self) -> usize {
-        self.exported_instances.len()
+    pub const fn exported_given_count(&self) -> usize {
+        self.exported_givens.len()
     }
 
     #[must_use]
@@ -101,9 +101,7 @@ pub fn collect_import_sites(source_id: SourceId, tree: &SyntaxTree) -> Vec<Impor
         if node.kind() != SyntaxNodeKind::ImportExpr {
             return;
         }
-        let span = node.span();
-        let kind = classify_import_expr(node);
-        out.push(ImportSite::new(source_id, span, kind));
+        collect_import_expr_sites(source_id, node, &mut out);
     });
     out
 }
@@ -148,23 +146,54 @@ pub fn collect_export_summary(source_id: SourceId, tree: &SyntaxTree) -> ModuleE
             return;
         }
 
+        if let Some(sequence) = node
+            .child_nodes()
+            .find(|child| child.kind() == SyntaxNodeKind::SequenceExpr)
+        {
+            collect_exported_sequence(sequence, &mut summary, is_opaque);
+            return;
+        }
+
         if node
             .child_nodes()
-            .any(|child| child.kind() == SyntaxNodeKind::InstanceExpr)
+            .any(|child| child.kind() == SyntaxNodeKind::GivenExpr)
         {
             summary
-                .exported_instances
-                .push(ExportedInstanceSite::new(source_id, node.span()));
+                .exported_givens
+                .push(ExportedGivenSite::new(source_id, node.span()));
         }
     });
     summary
 }
 
-fn classify_import_expr(node: SyntaxNode<'_, '_>) -> ImportSiteKind {
-    let mut children = node.child_nodes();
-    let Some(expr) = children.next() else {
-        return ImportSiteKind::NonLiteral;
+fn collect_import_expr_sites(
+    source_id: SourceId,
+    node: SyntaxNode<'_, '_>,
+    out: &mut Vec<ImportSite>,
+) {
+    let Some(expr) = node.child_nodes().next() else {
+        out.push(ImportSite::new(
+            source_id,
+            node.span(),
+            ImportSiteKind::NonLiteral,
+        ));
+        return;
     };
+    if matches!(
+        expr.kind(),
+        SyntaxNodeKind::SequenceExpr | SyntaxNodeKind::TupleExpr
+    ) {
+        for child in expr.child_nodes().filter(|child| child.kind().is_expr()) {
+            let kind = classify_import_arg(child);
+            out.push(ImportSite::new(source_id, child.span(), kind));
+        }
+        return;
+    }
+    let kind = classify_import_arg(expr);
+    out.push(ImportSite::new(source_id, node.span(), kind));
+}
+
+fn classify_import_arg(expr: SyntaxNode<'_, '_>) -> ImportSiteKind {
     match expr.kind() {
         SyntaxNodeKind::LiteralExpr => {
             let Some(tok) = expr.child_tokens().next() else {
@@ -220,6 +249,26 @@ fn walk_nodes<'tree, 'src>(
     for child in node.children() {
         if let Some(node) = child.into_node() {
             walk_nodes(node, f);
+        }
+    }
+}
+
+fn collect_exported_sequence(
+    sequence: SyntaxNode<'_, '_>,
+    out: &mut ModuleExportSummary,
+    is_opaque: bool,
+) {
+    for let_expr in sequence
+        .child_nodes()
+        .filter(|node| node.kind() == SyntaxNodeKind::LetExpr)
+    {
+        let Some(pat) = let_expr.child_nodes().find(|node| node.kind().is_pat()) else {
+            continue;
+        };
+        for token in pattern_binder_tokens(pat) {
+            if let Some(name) = canonical_token_text(token) {
+                out.push_export(name, is_opaque);
+            }
         }
     }
 }

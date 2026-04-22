@@ -15,10 +15,24 @@ mod success {
 catalog demo crate DemoKind crates/demo/src/diag_catalog_gen.rs
 diag Known 1000
   message "known"
-  primary "known"
 map demo_error_kind crate::DemoError required
   case "Known { .. }" Known
 end
+"#,
+        )
+        .unwrap();
+
+        validate_catalogs(&[catalog]).unwrap();
+    }
+
+    #[test]
+    fn accepts_missing_primary_label() {
+        let catalog = parse_catalog(
+            Path::new("test.def"),
+            r#"
+catalog demo crate DemoKind crates/demo/src/diag_catalog_gen.rs
+diag Known 1000
+  message "known"
 "#,
         )
         .unwrap();
@@ -38,7 +52,6 @@ mod failure {
 catalog demo crate DemoKind crates/demo/src/diag_catalog_gen.rs
 diag Known 1000
   message "known"
-  primary "known"
 map demo_error_kind crate::DemoError required
   case "Known { .. }" Missing
 end
@@ -59,7 +72,6 @@ end
 catalog demo crate DemoKind crates/demo/src/diag_catalog_gen.rs
 diag Known 1000
   message "known"
-  primary "known"
 map demo_error_kind crate::DemoError required
   case "Known { .. }" Known
   case "Known { .. }" Known
@@ -107,6 +119,27 @@ diag Bad 1000
         let error = validate_catalogs(&[catalog]).unwrap_err();
 
         assert!(error.0.contains("lacks concrete subject"));
+    }
+
+    #[test]
+    fn rejects_kind_message_category_mismatch() {
+        let catalog = parse_catalog(
+            Path::new("test.def"),
+            r#"
+catalog demo crate DemoKind crates/demo/src/diag_catalog_gen.rs
+diag MissingPackageName 1000
+  message "package name absent for `{path}`"
+"#,
+        )
+        .unwrap();
+
+        let error = validate_catalogs(&[catalog]).unwrap_err();
+
+        assert!(
+            error
+                .0
+                .contains("message must start with `missing` to match diagnostic kind")
+        );
     }
 
     #[test]

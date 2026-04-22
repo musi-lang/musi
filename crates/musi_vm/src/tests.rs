@@ -160,18 +160,18 @@ fn compile_runaway_program() -> Program {
             "main",
             r"
             let rec loop (x : Int) : Int := loop(x + 1);
-            export let answer () : Int := loop(0);
+            export let result () : Int := loop(0);
             ",
         )],
         "main",
     )
 }
 
-fn call_answer_error(source: &str, options: VmOptions, reason: &str) -> VmError {
+fn call_result_error(source: &str, options: VmOptions, reason: &str) -> VmError {
     let program = compile_program(&[("main", source)], "main");
     let mut vm = Vm::with_rejecting_host(program, options);
     vm.initialize().expect("vm init should succeed");
-    vm.call_export("answer", &[]).expect_err(reason)
+    vm.call_export("result", &[]).expect_err(reason)
 }
 
 fn alloc_named_type(artifact: &mut Artifact, full_name: &str) -> TypeId {
@@ -228,7 +228,7 @@ mod success {
         let program = compile_program(
             &[(
                 "main",
-                "export let answer () : Int := 42; export let base : Int := 1;",
+                "export let result () : Int := 42; export let base : Int := 1;",
             )],
             "main",
         );
@@ -238,18 +238,18 @@ mod success {
             program
                 .exports()
                 .iter()
-                .any(|export| export.name.as_ref() == "answer")
+                .any(|export| export.name.as_ref() == "result")
         );
     }
 
     #[test]
     fn initializes_and_calls_export() {
-        let program = compile_program(&[("main", "export let answer () : Int := 40 + 2;")], "main");
+        let program = compile_program(&[("main", "export let result () : Int := 40 + 2;")], "main");
 
         let mut vm = Vm::with_rejecting_host(program, VmOptions);
         vm.initialize().expect("vm init should succeed");
         let value = vm
-            .call_export("answer", &[])
+            .call_export("result", &[])
             .expect("export call should succeed");
 
         assert_eq!(value, Value::Int(42));
@@ -263,7 +263,7 @@ mod success {
                 r"
             let base : Int := 41;
             let offset : Int := 1;
-            export let answer () : Int := base + offset;
+            export let result () : Int := base + offset;
         ",
             )],
             "main",
@@ -274,7 +274,7 @@ mod success {
         assert_eq!(vm.executed_instructions(), 0);
 
         let value = vm
-            .call_export("answer", &[])
+            .call_export("result", &[])
             .expect("export call should succeed");
         assert_eq!(value, Value::Int(42));
     }
@@ -282,13 +282,13 @@ mod success {
     #[test]
     fn garbage_collection_preserves_returned_external_values() {
         let program = compile_program(
-            &[("main", "export let answer () : [2]Int := [1, 2];")],
+            &[("main", "export let result () : [2]Int := [1, 2];")],
             "main",
         );
         let mut vm = Vm::with_rejecting_host(program, VmOptions);
         vm.initialize().expect("vm init should succeed");
         let value = vm
-            .call_export("answer", &[])
+            .call_export("result", &[])
             .expect("array return should succeed");
         let before = vm.heap_allocated_bytes();
         let stats = vm.collect_garbage();
@@ -307,7 +307,7 @@ mod success {
             &[(
                 "main",
                 r"
-            export let answer () : Int := (
+            export let result () : Int := (
               let values : [2]Int := [1, 2];
               values.[0] + 41
             );
@@ -318,7 +318,7 @@ mod success {
         let mut vm = Vm::with_rejecting_host(program, VmOptions);
         vm.initialize().expect("vm init should succeed");
         let value = vm
-            .call_export("answer", &[])
+            .call_export("result", &[])
             .expect("export call should succeed");
         let before = vm.heap_allocated_bytes();
         let stats = vm.collect_garbage();
@@ -411,7 +411,7 @@ mod success {
     #[test]
     fn isolate_heap_rejects_cross_isolate_values() {
         let program = compile_program(
-            &[("main", "export let answer () : [2]Int := [1, 2];")],
+            &[("main", "export let result () : [2]Int := [1, 2];")],
             "main",
         );
         let mut left = Vm::with_rejecting_host(program.clone(), VmOptions);
@@ -420,7 +420,7 @@ mod success {
         right.initialize().expect("right vm init should succeed");
 
         let value = left
-            .call_export("answer", &[])
+            .call_export("result", &[])
             .expect("left value should allocate");
         assert_ne!(left.isolate_id(), right.isolate_id());
 
@@ -436,19 +436,19 @@ mod success {
 
     #[test]
     fn isolates_run_on_separate_threads() {
-        let program = compile_program(&[("main", "export let answer () : Int := 42;")], "main");
+        let program = compile_program(&[("main", "export let result () : Int := 42;")], "main");
         let left_program = program.clone();
         let right_program = program;
 
         let left = spawn(move || {
             let mut vm = Vm::with_rejecting_host(left_program, VmOptions);
             vm.initialize().expect("left vm init should succeed");
-            (vm.isolate_id(), vm.call_export("answer", &[]))
+            (vm.isolate_id(), vm.call_export("result", &[]))
         });
         let right = spawn(move || {
             let mut vm = Vm::with_rejecting_host(right_program, VmOptions);
             vm.initialize().expect("right vm init should succeed");
-            (vm.isolate_id(), vm.call_export("answer", &[]))
+            (vm.isolate_id(), vm.call_export("result", &[]))
         });
 
         let (left_id, left_value) = left.join().expect("left thread should join");
@@ -471,7 +471,7 @@ mod success {
                 "main",
                 r"
             let apply (f : Int -> Int, x : Int) : Int := f(x);
-            export let answer (n : Int) : Int := (
+            export let result (n : Int) : Int := (
               let base : Int := 1;
               let rec loop (x : Int) : Int := match x (| 0 => base | _ => loop(x - 1));
               let add_base (y : Int) : Int := y + 41;
@@ -484,7 +484,7 @@ mod success {
         let mut vm = Vm::with_rejecting_host(program, VmOptions);
         vm.initialize().expect("vm init should succeed");
         let value = vm
-            .call_export("answer", &[Value::Int(3)])
+            .call_export("result", &[Value::Int(3)])
             .expect("recursive closure call should succeed");
 
         assert_eq!(value, Value::Int(42));
@@ -496,7 +496,7 @@ mod success {
             &[(
                 "main",
                 r"
-            export let answer (grid : mut [2][2]Int) : Int := (
+            export let result (grid : mut [2][2]Int) : Int := (
               grid.[0, 1] := 42;
               grid.[1, 0] := grid.[0, 1] + 1;
               grid.[0, 1] + grid.[1, 0]
@@ -505,26 +505,26 @@ mod success {
             )],
             "main",
         );
-        let answer = program
+        let result = program
             .loaded_procedure(ProcedureId::from_raw(0))
-            .expect("answer should load");
+            .expect("result should load");
         assert!(matches!(
-            answer.runtime_kernel(),
+            result.runtime_kernel(),
             Some(RuntimeKernel::Seq2Mutation2x2 { .. } | RuntimeKernel::Seq2Mutation(_))
         ));
-        assert!(answer.runtime_instructions.iter().any(|instruction| {
+        assert!(result.runtime_instructions.iter().any(|instruction| {
             matches!(
                 instruction.fused,
                 Some(RuntimeFusedOp::LocalSeq2ConstSet { .. })
             )
         }));
-        assert!(answer.runtime_instructions.iter().any(|instruction| {
+        assert!(result.runtime_instructions.iter().any(|instruction| {
             matches!(
                 instruction.fused,
                 Some(RuntimeFusedOp::LocalSeq2GetAddSet { .. })
             )
         }));
-        assert!(answer.runtime_instructions.iter().any(|instruction| {
+        assert!(result.runtime_instructions.iter().any(|instruction| {
             matches!(
                 instruction.fused,
                 Some(RuntimeFusedOp::LocalSeq2GetAdd { .. })
@@ -544,7 +544,7 @@ mod success {
             .alloc_sequence(ty, [first, second])
             .expect("grid should allocate");
         let value = vm
-            .call_export("answer", &[grid])
+            .call_export("result", &[grid])
             .expect("sequence mutation should run");
         assert_eq!(value, Value::Int(85));
 
@@ -555,7 +555,7 @@ mod success {
             .alloc_sequence(ty, [shared.clone(), shared])
             .expect("aliased grid should allocate");
         let value = vm
-            .call_export("answer", &[aliased])
+            .call_export("result", &[aliased])
             .expect("aliased sequence mutation should run");
         assert_eq!(value, Value::Int(85));
     }
@@ -570,7 +570,7 @@ mod success {
               | Some(Int)
               | None
             };
-            export let answer (n : Int) : Int := (
+            export let result (n : Int) : Int := (
               let selected : MaybeInt := .Some(n);
               match selected (
               | .Some(value) => value + 1
@@ -581,20 +581,20 @@ mod success {
             )],
             "main",
         );
-        let answer = program
+        let result = program
             .loaded_procedure(ProcedureId::from_raw(0))
-            .expect("answer should load");
+            .expect("result should load");
         assert!(matches!(
-            answer.runtime_kernel(),
+            result.runtime_kernel(),
             Some(RuntimeKernel::DataConstructMatchAdd { .. })
         ));
-        assert!(answer.runtime_instructions.iter().any(|instruction| {
+        assert!(result.runtime_instructions.iter().any(|instruction| {
             matches!(
                 instruction.fused,
-                Some(RuntimeFusedOp::LocalDataNew1Init { .. })
+                Some(RuntimeFusedOp::LocalNewObj1Init { .. })
             )
         }));
-        assert!(answer.runtime_instructions.iter().any(|instruction| {
+        assert!(result.runtime_instructions.iter().any(|instruction| {
             matches!(
                 instruction.fused,
                 Some(RuntimeFusedOp::LocalCopyAddSmi { .. })
@@ -604,13 +604,13 @@ mod success {
         let mut vm = Vm::with_rejecting_host(program, VmOptions);
         vm.initialize().expect("vm init should succeed");
         let value = vm
-            .call_export("answer", &[Value::Int(41)])
+            .call_export("result", &[Value::Int(41)])
             .expect("data match should run");
         assert_eq!(value, Value::Int(42));
 
         let bound = vm
-            .bind_export_i64_i64("answer")
-            .expect("answer should bind");
+            .bind_export_i64_i64("result")
+            .expect("result should bind");
         let value = vm
             .call_i64_i64(bound, 41)
             .expect("typed data match should run");
@@ -628,7 +628,7 @@ mod success {
               | 0 => acc
               | _ => sum(n - 1, acc + n)
             );
-            export let answer (n : Int) : Int := sum(n, 0);
+            export let result (n : Int) : Int := sum(n, 0);
         ",
             )],
             "main",
@@ -640,18 +640,18 @@ mod success {
             sum.runtime_kernel(),
             Some(RuntimeKernel::IntTailAccumulator { .. })
         ));
-        let answer = program
+        let result = program
             .loaded_procedure(ProcedureId::from_raw(1))
-            .expect("answer should load");
+            .expect("result should load");
         assert!(matches!(
-            answer.runtime_kernel(),
+            result.runtime_kernel(),
             Some(RuntimeKernel::DirectIntWrapperCall { .. })
         ));
         let mut vm = Vm::with_rejecting_host(program, VmOptions);
         vm.initialize().expect("vm init should succeed");
         let before = vm.executed_instructions();
         let value = vm
-            .call_export("answer", &[Value::Int(200)])
+            .call_export("result", &[Value::Int(200)])
             .expect("sum should run");
         let executed = vm.executed_instructions() - before;
         assert_eq!(value, Value::Int(20_100));
@@ -661,8 +661,8 @@ mod success {
         );
 
         let bound = vm
-            .bind_export_i64_i64("answer")
-            .expect("answer should bind");
+            .bind_export_i64_i64("result")
+            .expect("result should bind");
         let value = vm.call_i64_i64(bound, 200).expect("typed sum should run");
         assert_eq!(value, 20_100);
     }
@@ -673,7 +673,7 @@ mod success {
             &[(
                 "main",
                 r"
-            export let answer (grid : mut [2][2]Int) : Int := (
+            export let result (grid : mut [2][2]Int) : Int := (
               grid.[0, 1] := 42;
               grid.[1, 0] := grid.[0, 1] + 1;
               grid.[0, 1] + grid.[1, 0]
@@ -685,8 +685,8 @@ mod success {
         let mut vm = Vm::with_rejecting_host(program, VmOptions);
         vm.initialize().expect("vm init should succeed");
         let bound = vm
-            .bind_export_seq2x2_i64("answer")
-            .expect("answer should bind");
+            .bind_export_seq2x2_i64("result")
+            .expect("result should bind");
         let ty = TypeId::from_raw(0);
         let first = vm
             .alloc_sequence(ty, [Value::Int(1), Value::Int(2)])
@@ -698,7 +698,7 @@ mod success {
             .alloc_sequence(ty, [first, second])
             .expect("grid should allocate");
         let dynamic = vm
-            .call_export("answer", from_ref(&grid))
+            .call_export("result", from_ref(&grid))
             .expect("dynamic sequence call should run");
         let Value::Seq(grid_ref) = grid else {
             panic!("grid should be sequence")
@@ -719,7 +719,7 @@ mod success {
             &[(
                 "main",
                 r"
-            export let answer (grid : mut [2][2]Int) : Int := (
+            export let result (grid : mut [2][2]Int) : Int := (
               grid.[0, 1] := 42;
               grid.[1, 0] := grid.[0, 1] + 1;
               grid.[0, 1] + grid.[1, 0]
@@ -761,7 +761,7 @@ mod success {
             &[(
                 "main",
                 r"
-            export let answer (grid : mut [2][2]Int) : Int := (
+            export let result (grid : mut [2][2]Int) : Int := (
               grid.[0, 1] := 42;
               grid.[1, 0] := grid.[0, 1] + 1;
               grid.[0, 1] + grid.[1, 0]
@@ -786,8 +786,8 @@ mod success {
             panic!("grid should be sequence")
         };
         let bound = vm
-            .bind_export_seq2x2_i64("answer")
-            .expect("answer should bind");
+            .bind_export_seq2x2_i64("result")
+            .expect("result should bind");
         let arg = vm
             .bind_seq2x2_packed_int_arg(grid_ref)
             .expect("packed grid should bind");
@@ -802,7 +802,7 @@ mod success {
             &[(
                 "main",
                 r"
-            export let answer (grid : mut [2][2]Int) : Int := (
+            export let result (grid : mut [2][2]Int) : Int := (
               grid.[0, 1] := 42;
               grid.[1, 0] := grid.[0, 1] + 1;
               grid.[0, 1] + grid.[1, 0]
@@ -828,8 +828,8 @@ mod success {
         };
         {
             let bound = vm
-                .bind_export_seq2x2_i64("answer")
-                .expect("answer should bind");
+                .bind_export_seq2x2_i64("result")
+                .expect("result should bind");
             let arg = vm
                 .bind_seq2x2_packed_int_arg(grid_ref)
                 .expect("packed grid should bind");
@@ -852,7 +852,7 @@ mod success {
             &[(
                 "main",
                 r"
-            export let answer () : Int := (
+            export let result () : Int := (
               let point := { x := 1, y := 2 };
               let updated := { ...point, x := 40 };
               updated.x + point.y
@@ -864,7 +864,7 @@ mod success {
         let mut vm = Vm::with_rejecting_host(program, VmOptions);
         vm.initialize().expect("vm init should succeed");
         let value = vm
-            .call_export("answer", &[])
+            .call_export("result", &[])
             .expect("record call should succeed");
 
         assert_eq!(value, Value::Int(42));
@@ -945,7 +945,7 @@ mod success {
         let dep = compile_program(
             &[(
                 "dep",
-                "export let answer () : Int := 42; export let base : Int := 41;",
+                "export let result () : Int := 42; export let base : Int := 41;",
             )],
             "dep",
         );
@@ -965,7 +965,7 @@ mod success {
             Value::Int(41)
         );
         assert_eq!(
-            vm.call_module_export(&module, "answer", &[])
+            vm.call_module_export(&module, "result", &[])
                 .expect("module callable export should succeed"),
             Value::Int(42)
         );
@@ -988,11 +988,12 @@ mod success {
                 "main",
                 r"
             let Console := effect { let readLine () : Int; };
-            export let answer () : Int :=
-              handle request Console.readLine() using Console {
-                value => value + 1;
-                readLine(k) => resume 41;
-              };
+            let consoleAnswer := answer Console {
+              value => value + 1;
+              readLine(k) => resume 41;
+            };
+            export let result () : Int :=
+              handle ask Console.readLine() answer consoleAnswer;
         ",
             )],
             "main",
@@ -1000,7 +1001,7 @@ mod success {
         let mut vm = Vm::with_rejecting_host(program, VmOptions);
         vm.initialize().expect("vm init should succeed");
         let value = vm
-            .call_export("answer", &[])
+            .call_export("result", &[])
             .expect("handled effect should succeed");
 
         assert_eq!(value, Value::Int(42));
@@ -1013,11 +1014,12 @@ mod success {
                 "main",
                 r"
             let Console := effect { let readLine () : Int; };
-            export let answer () : Int :=
-              handle request Console.readLine() using Console {
-                value => value + 1;
-                readLine(k) => resume 41;
-              };
+            let consoleAnswer := answer Console {
+              value => value + 1;
+              readLine(k) => resume 41;
+            };
+            export let result () : Int :=
+              handle ask Console.readLine() answer consoleAnswer;
         ",
             )],
             "main",
@@ -1025,17 +1027,17 @@ mod success {
 
         let mut vm = Vm::with_rejecting_host(program, VmOptions);
         vm.initialize().expect("vm init should succeed");
-        let answer = vm
-            .lookup_export("answer")
-            .expect("answer export should resolve");
+        let result = vm
+            .lookup_export("result")
+            .expect("result export should resolve");
         let before = vm.executed_instructions();
         let value = vm
-            .call_value(answer, &[])
+            .call_value(result, &[])
             .expect("handled effect should run");
         let executed = vm.executed_instructions() - before;
 
         assert_eq!(value, Value::Int(42));
-        assert_eq!(executed, 1);
+        assert_eq!(executed, 12);
     }
 
     #[test]
@@ -1044,16 +1046,18 @@ mod success {
             &[(
                 "main",
                 r#"
+            import "musi:core";
             let Core := import "musi:core";
             let Bool := Core.Bool;
             let Int := Core.Int;
             let Rangeable := Core.Rangeable;
+            let RangeBounds := Core.RangeBounds;
             let Console := effect { let readLine () : Int; };
-            let ConsoleHandler := using Console {
+            let ConsoleAnswer := answer Console {
               value => value + 1;
               readLine(k) => resume 41;
             };
-            export let handled () : Int := handle request Console.readLine() using ConsoleHandler;
+            export let handled () : Int := handle ask Console.readLine() answer ConsoleAnswer;
             export let contains () : Bool := (
               let span := 1 ..< 4;
               2 in span
@@ -1094,11 +1098,12 @@ mod success {
             &[(
                 "main",
                 r#"
+            import "musi:core";
             let Core := import "musi:core";
             let Bool := Core.Bool;
             let Int := Core.Int;
             let Rangeable := Core.Rangeable;
-            export let answer () : Bool := 0 in (0 ..< 1000);
+            export let result () : Bool := 0 in (0 ..< 1000);
         "#,
             )],
             "main",
@@ -1108,7 +1113,7 @@ mod success {
         vm.initialize().expect("vm init should succeed");
         let before = vm.heap_allocated_bytes();
         let value = vm
-            .call_export("answer", &[])
+            .call_export("result", &[])
             .expect("range membership call should succeed");
         let after = vm.heap_allocated_bytes();
 
@@ -1120,17 +1125,77 @@ mod success {
     }
 
     #[test]
+    fn range_endpoint_inclusivity_matches_mathematical_forms() {
+        let program = compile_program(
+            &[(
+                "main",
+                r#"
+            import "musi:core";
+            let Core := import "musi:core";
+            let Bool := Core.Bool;
+            let Int := Core.Int;
+            let Rangeable := Core.Rangeable;
+            let RangeBounds := Core.RangeBounds;
+            export let closedLower () : Bool := 1 in (1 .. 3);
+            export let closedUpper () : Bool := 3 in (1 .. 3);
+            export let halfOpenUpper () : Bool := 3 in (1 ..< 3);
+            export let openClosedLower () : Bool := 1 in (1 <.. 3);
+            export let openClosedUpper () : Bool := 3 in (1 <.. 3);
+            export let openOpenLower () : Bool := 1 in (1 <..< 3);
+            export let openOpenUpper () : Bool := 3 in (1 <..< 3);
+            export let materializedOpenClosed () : Int := (
+              let span := 1 <.. 4;
+              let xs := [...span];
+              xs.[0]
+            );
+        "#,
+            )],
+            "main",
+        );
+
+        let mut vm = Vm::with_rejecting_host(program, VmOptions);
+        vm.initialize().expect("vm init should succeed");
+        for name in ["closedLower", "closedUpper", "openClosedUpper"] {
+            let value = vm
+                .call_export(name, &[])
+                .expect("range call should succeed");
+            assert_eq!(
+                render_value_view(vm.inspect(&value)).as_deref(),
+                Some(".True")
+            );
+        }
+        for name in [
+            "halfOpenUpper",
+            "openClosedLower",
+            "openOpenLower",
+            "openOpenUpper",
+        ] {
+            let value = vm
+                .call_export(name, &[])
+                .expect("range call should succeed");
+            assert_eq!(
+                render_value_view(vm.inspect(&value)).as_deref(),
+                Some(".False")
+            );
+        }
+        let value = vm
+            .call_export("materializedOpenClosed", &[])
+            .expect("range materialization should succeed");
+        assert_eq!(value, Value::Int(2));
+    }
+
+    #[test]
     fn exposes_typed_foreign_and_effect_signatures_to_host() {
         let program = compile_program(
             &[(
                 "main",
                 r#"
-            foreign "c" (
+            native "c" (
               let puts (value : Int) : Int;
             );
             let Console := effect { @comptimeSafe let readLine (prompt : String) : Int; };
             export let call_puts () : Int := unsafe { puts(1); };
-            export let call_readLine () : Int := request Console.readLine(">");
+            export let call_readLine () : Int := ask Console.readLine(">");
         "#,
             )],
             "main",
@@ -1170,7 +1235,7 @@ mod success {
 
     #[test]
     fn inspects_cptr_values() {
-        let program = compile_program(&[("main", "export let answer () : Int := 0;")], "main");
+        let program = compile_program(&[("main", "export let result () : Int := 0;")], "main");
         let vm = Vm::with_rejecting_host(program, VmOptions);
         let value = Value::c_ptr(0xDEAD_BEEF);
 
@@ -1196,7 +1261,7 @@ mod success {
                 "main",
                 r"
             let Maybe := data { | Some(Int) | None };
-            export let answer () : Int := 0;
+            export let result () : Int := 0;
         ",
             )],
             "main",
@@ -1332,7 +1397,7 @@ mod failure {
         let mut vm = Vm::with_rejecting_host(program, VmOptions.with_instruction_budget(64));
         vm.initialize().expect("vm init should succeed");
         let error = vm
-            .call_export("answer", &[])
+            .call_export("result", &[])
             .expect_err("runaway execution should exhaust instruction budget");
 
         assert!(matches!(
@@ -1348,7 +1413,7 @@ mod failure {
         let mut vm = Vm::with_rejecting_host(program, VmOptions.with_stack_frame_limit(8));
         vm.initialize().expect("vm init should succeed");
         let error = vm
-            .call_export("answer", &[])
+            .call_export("result", &[])
             .expect_err("runaway recursion should exceed stack frame limit");
 
         assert!(matches!(
@@ -1362,8 +1427,8 @@ mod failure {
 
     #[test]
     fn heap_object_limit_rejects_large_runtime_object() {
-        let error = call_answer_error(
-            r#"export let answer () : String := "abcdef";"#,
+        let error = call_result_error(
+            r#"export let result () : String := "abcdef";"#,
             VmOptions.with_max_object_bytes(8),
             "large string should exceed object limit",
         );
@@ -1376,8 +1441,8 @@ mod failure {
 
     #[test]
     fn heap_limit_rejects_live_graph_after_collection() {
-        let error = call_answer_error(
-            "export let answer () : [2]Int := [1, 2];",
+        let error = call_result_error(
+            "export let result () : [2]Int := [1, 2];",
             VmOptions.with_heap_limit_bytes(16),
             "live array should exceed heap limit",
         );
@@ -1394,7 +1459,7 @@ mod failure {
         let dep = compile_program(
             &[(
                 "dep",
-                "export opaque let Hidden := data { | Hidden(Int) }; export let answer () : Int := 42;",
+                "export opaque let Hidden := data { | Hidden(Int) }; export let result () : Int := 42;",
             )],
             "dep",
         );
@@ -1441,7 +1506,7 @@ mod failure {
             0,
             Box::new([
                 CodeEntry::Instruction(Instruction::new(Opcode::LdStr, Operand::String(spec))),
-                CodeEntry::Instruction(Instruction::new(Opcode::ModLoad, Operand::None)),
+                CodeEntry::Instruction(Instruction::new(Opcode::MdlLoad, Operand::None)),
                 CodeEntry::Instruction(Instruction::new(Opcode::Ret, Operand::None)),
             ]),
         ));

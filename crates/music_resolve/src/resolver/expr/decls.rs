@@ -9,7 +9,27 @@ where
 {
     pub(super) fn lower_import_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
-        let arg = self.lower_opt_expr(origin, node.child_nodes().next());
+        let Some(arg_node) = node.child_nodes().next() else {
+            let arg = self.error_expr(origin);
+            return self.alloc_expr(origin, HirExprKind::Import { arg });
+        };
+        if matches!(
+            arg_node.kind(),
+            SyntaxNodeKind::SequenceExpr | SyntaxNodeKind::TupleExpr
+        ) {
+            let imports = arg_node
+                .child_nodes()
+                .filter(|child| child.kind().is_expr())
+                .map(|child| {
+                    let child_origin = self.origin_node(child);
+                    let arg = self.lower_expr(child);
+                    self.alloc_expr(child_origin, HirExprKind::Import { arg })
+                })
+                .collect::<Vec<_>>();
+            let items = self.store.alloc_expr_list(imports);
+            return self.alloc_expr(origin, HirExprKind::Tuple { items });
+        }
+        let arg = self.lower_expr(arg_node);
         self.alloc_expr(origin, HirExprKind::Import { arg })
     }
 
@@ -31,13 +51,11 @@ where
             .and_then(SyntaxToken::text)
             .and_then(|raw| decode_string_lit(raw).ok())
             .map(|abi| self.interner.intern(abi.as_str()));
-        let foreign_mod = HirForeignMod::new(abi);
+        let foreign_mod = HirNativeMod::new(abi);
 
         let inherited_attrs = outer_mods.attrs.clone();
         let merged_attrs = self.merge_attrs(inherited_attrs, outer_attrs);
-        let base_mods = outer_mods
-            .with_foreign(foreign_mod)
-            .with_attrs(merged_attrs);
+        let base_mods = outer_mods.with_native(foreign_mod).with_attrs(merged_attrs);
 
         let decls_node = node.child_nodes().find(|n| {
             matches!(
@@ -102,9 +120,11 @@ where
             .child_nodes()
             .filter(|child| is_expr_or_ty(child.kind()));
         let sig = self.lower_optional_expr_clause(node, TokenKind::Colon, &mut exprs);
+        let value = self
+            .lower_optional_expr_clause(node, TokenKind::ColonEq, &mut exprs)
+            .unwrap_or_else(|| self.error_expr(origin));
         self.pop_scope();
 
-        let value = self.error_expr(origin);
         let expr_id = self.alloc_expr(
             origin,
             HirExprKind::Let {
@@ -250,7 +270,7 @@ where
         self.alloc_expr(origin, HirExprKind::Effect { members })
     }
 
-    pub(super) fn lower_class_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
+    pub(super) fn lower_shape_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         self.push_scope();
         let constraints = self.lower_constraints_clause(node);
@@ -258,20 +278,20 @@ where
         self.pop_scope();
         self.alloc_expr(
             origin,
-            HirExprKind::Class {
+            HirExprKind::Shape {
                 constraints,
                 members,
             },
         )
     }
 
-    pub(super) fn lower_instance_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
+    pub(super) fn lower_given_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         self.push_scope();
 
         let type_params = self.lower_type_params_clause(node);
         let constraints = self.lower_constraints_clause(node);
-        let class = match node.child_nodes().find(|n| is_expr_or_ty(n.kind())) {
+        let shape = match node.child_nodes().find(|n| is_expr_or_ty(n.kind())) {
             Some(expr) => self.lower_expr(expr),
             None => self.error_expr(origin),
         };
@@ -280,10 +300,10 @@ where
         self.pop_scope();
         self.alloc_expr(
             origin,
-            HirExprKind::Instance {
+            HirExprKind::Given {
                 type_params,
                 constraints,
-                class,
+                capability: shape,
                 members,
             },
         )

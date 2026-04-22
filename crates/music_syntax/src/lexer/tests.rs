@@ -64,9 +64,33 @@ mod success {
         assert_eq!(any_kw.tokens()[0].kind, TokenKind::KwAny);
         assert_eq!(any_kw.tokens()[1].kind, TokenKind::Eof);
 
+        let pin_kw = lex("pin");
+        assert_eq!(pin_kw.tokens()[0].kind, TokenKind::KwPin);
+        assert_eq!(pin_kw.tokens()[1].kind, TokenKind::Eof);
+
+        let shape_kw = lex("shape");
+        assert_eq!(shape_kw.tokens()[0].kind, TokenKind::KwShape);
+        assert_eq!(shape_kw.tokens()[1].kind, TokenKind::Eof);
+
         let some_kw = lex("some");
         assert_eq!(some_kw.tokens()[0].kind, TokenKind::KwSome);
         assert_eq!(some_kw.tokens()[1].kind, TokenKind::Eof);
+
+        let answer_kw = lex("answer");
+        assert_eq!(answer_kw.tokens()[0].kind, TokenKind::KwAnswer);
+        assert_eq!(answer_kw.tokens()[1].kind, TokenKind::Eof);
+
+        let catch_kw = lex("catch");
+        assert_eq!(catch_kw.tokens()[0].kind, TokenKind::KwCatch);
+        assert_eq!(catch_kw.tokens()[1].kind, TokenKind::Eof);
+
+        let given_kw = lex("given");
+        assert_eq!(given_kw.tokens()[0].kind, TokenKind::KwGiven);
+        assert_eq!(given_kw.tokens()[1].kind, TokenKind::Eof);
+
+        let of_ident = lex("of");
+        assert_eq!(of_ident.tokens()[0].kind, TokenKind::Ident);
+        assert_eq!(of_ident.tokens()[1].kind, TokenKind::Eof);
     }
 
     #[test]
@@ -218,7 +242,7 @@ mod success {
     fn lex_reserved_compound_tokens() {
         let cases = [
             (
-                ":?> := = :? ... .[ -> ~> => /= <= >= <: |>",
+                ":?> := = :? ... .[ ?. !. ?? -> ~> => /= <= >= <: <.. <..< .. ..< |>",
                 vec![
                     TokenKind::ColonQuestionGt,
                     TokenKind::ColonEq,
@@ -226,6 +250,9 @@ mod success {
                     TokenKind::ColonQuestion,
                     TokenKind::DotDotDot,
                     TokenKind::DotLBracket,
+                    TokenKind::QuestionDot,
+                    TokenKind::BangDot,
+                    TokenKind::QuestionQuestion,
                     TokenKind::MinusGt,
                     TokenKind::TildeGt,
                     TokenKind::EqGt,
@@ -233,6 +260,10 @@ mod success {
                     TokenKind::LtEq,
                     TokenKind::GtEq,
                     TokenKind::LtColon,
+                    TokenKind::LtDotDot,
+                    TokenKind::LtDotDotLt,
+                    TokenKind::DotDot,
+                    TokenKind::DotDotLt,
                     TokenKind::PipeGt,
                     TokenKind::Eof,
                 ],
@@ -289,8 +320,37 @@ mod success {
                 .any(|e| e.kind == LexErrorKind::InvalidChar { ch: '!' })
         );
 
-        let compounds = lex("a?.b a!.b");
-        assert!(!compounds.errors().is_empty());
+        assert_token_kinds(
+            "a?.b a!.b a ?? b",
+            &[
+                TokenKind::Ident,
+                TokenKind::QuestionDot,
+                TokenKind::Ident,
+                TokenKind::Ident,
+                TokenKind::BangDot,
+                TokenKind::Ident,
+                TokenKind::Ident,
+                TokenKind::QuestionQuestion,
+                TokenKind::Ident,
+                TokenKind::Eof,
+            ],
+        );
+    }
+
+    #[test]
+    fn old_surface_words_lex_as_identifiers() {
+        assert_token_kinds(
+            "class instance via using with provide",
+            &[
+                TokenKind::Ident,
+                TokenKind::Ident,
+                TokenKind::Ident,
+                TokenKind::Ident,
+                TokenKind::Ident,
+                TokenKind::Ident,
+                TokenKind::Eof,
+            ],
+        );
     }
 }
 

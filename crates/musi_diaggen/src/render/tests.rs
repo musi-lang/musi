@@ -47,7 +47,6 @@ fn parse_demo_catalog() -> Catalog {
 catalog demo crate DemoKind crates/demo/src/diag_catalog_gen.rs
 diag Known 1000
   message "known"
-  primary "known"
 map demo_error_kind crate::DemoError option
   case "Known { .. }" Known
   case "Foreign(_)" none
@@ -64,7 +63,6 @@ fn parse_required_demo_catalog() -> Catalog {
 catalog demo crate DemoKind crates/demo/src/diag_catalog_gen.rs
 diag Known 1000
   message "known"
-  primary "known"
 map demo_error_kind crate::DemoError required
   case "Known { .. }" Known
 end

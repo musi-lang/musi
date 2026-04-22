@@ -30,7 +30,7 @@ struct ExecutableLawCase {
 }
 
 #[derive(Debug, Clone)]
-struct ClassDecl {
+struct ShapeDecl {
     expr_id: HirExprId,
     name: String,
     type_params: Box<[Symbol]>,
@@ -44,13 +44,13 @@ struct ExportedEffectDecl {
 }
 
 #[derive(Debug, Clone)]
-struct InstanceDecl {
+struct GivenDecl {
     expr_id: HirExprId,
     member_defs: Box<[HirMemberDef]>,
 }
 
 #[derive(Debug, Clone)]
-struct InstanceMemberBinding {
+struct GivenMemberBinding {
     name: String,
     source: String,
 }
@@ -66,12 +66,12 @@ struct SampleCaseBuild<'a> {
     prefix: &'a str,
     param_names: &'a [String],
     sample_sets: &'a [Vec<SampleCase>],
-    member_bindings: &'a [InstanceMemberBinding],
+    member_bindings: &'a [GivenMemberBinding],
     body: &'a str,
 }
 
 impl Session {
-    /// Synthesizes runnable runtime test modules for every registered module that exports class or
+    /// Synthesizes runnable runtime test modules for every registered module that exports shape or
     /// effect laws.
     ///
     /// # Errors
@@ -164,12 +164,12 @@ fn executable_law_cases(
     source: &str,
 ) -> Result<ExecutableLawCaseList, SessionError> {
     let mut cases = ExecutableLawCaseList::new();
-    let classes = class_decls(module_key, sema, source)?;
+    let shapes = shape_decls(module_key, sema, source)?;
     let exported_effects = exported_effect_decls(module_key, sema, source)?;
-    let instances = instance_decls(sema);
+    let givens = given_decls(sema);
 
     extend_effect_law_cases(&mut cases, module_key, sema, source, &exported_effects)?;
-    extend_class_law_cases(&mut cases, module_key, sema, source, &classes, &instances)?;
+    extend_shape_law_cases(&mut cases, module_key, sema, source, &shapes, &givens)?;
 
     cases.sort_by(|left, right| left.name.cmp(&right.name));
     Ok(cases)
@@ -217,54 +217,54 @@ fn extend_effect_law_cases(
     Ok(())
 }
 
-fn extend_class_law_cases(
+fn extend_shape_law_cases(
     cases: ExecutableLawCaseListMut<'_>,
     module_key: &ModuleKey,
     sema: &SemaModule,
     source: &str,
-    classes: &[ClassDecl],
-    instances: &[InstanceDecl],
+    shapes: &[ShapeDecl],
+    givens: &[GivenDecl],
 ) -> Result<(), SessionError> {
-    for class in classes {
-        let class_facts = sema
-            .class_facts(class.expr_id)
-            .expect("class facts missing for class-law declaration");
-        let class_instances = instances.iter().filter(|instance| {
-            sema.instance_facts(instance.expr_id)
-                .is_some_and(|facts| facts.class_key == class_facts.key)
+    for shape in shapes {
+        let shape_facts = sema
+            .shape_facts(shape.expr_id)
+            .expect("shape facts missing for shape-law declaration");
+        let shape_givens = givens.iter().filter(|given| {
+            sema.given_facts(given.expr_id)
+                .is_some_and(|facts| facts.shape_key == shape_facts.key)
         });
-        for instance in class_instances {
-            let instance_facts = sema
-                .instance_facts(instance.expr_id)
-                .expect("instance facts missing for class-law instance");
-            if !instance_facts.type_params.is_empty() {
+        for given in shape_givens {
+            let given_facts = sema
+                .given_facts(given.expr_id)
+                .expect("given facts missing for shape-law given");
+            if !given_facts.type_params.is_empty() {
                 return Err(law_suite_error(
                     module_key,
                     format!(
-                        "instance `{}` remains polymorphic",
-                        render_instance_head(&class.name, &instance_facts.class_args, sema)
+                        "given `{}` remains polymorphic",
+                        render_given_head(&shape.name, &given_facts.shape_args, sema)
                     ),
                 ));
             }
-            let subst = class_type_subst(class, instance_facts.class_args.as_ref());
-            let member_bindings = instance
+            let subst = shape_type_subst(shape, given_facts.shape_args.as_ref());
+            let member_bindings = given
                 .member_defs
                 .iter()
                 .filter(|member| member.kind == HirMemberKind::Let)
                 .map(|member| {
-                    Ok::<InstanceMemberBinding, SessionError>(InstanceMemberBinding {
+                    Ok::<GivenMemberBinding, SessionError>(GivenMemberBinding {
                         name: snippet_for_span(module_key, source, member.name.span)?,
                         source: snippet_for_span(module_key, source, member.origin.span)?,
                     })
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            for (law, law_facts) in class.laws.iter().zip(class_facts.laws.iter()) {
+            for (law, law_facts) in shape.laws.iter().zip(shape_facts.laws.iter()) {
                 let body = member_body_text(module_key, sema, source, law)?;
                 let sample_sets = law_facts
                     .params
                     .iter()
                     .map(|param| {
-                        let ty = substitute_class_ty(sema, param.ty, &subst);
+                        let ty = substitute_shape_ty(sema, param.ty, &subst);
                         sample_cases_for_hir_ty(module_key, sema, ty)
                     })
                     .collect::<Result<Vec<_>, _>>()?;
@@ -278,7 +278,7 @@ fn extend_class_law_cases(
                     .collect::<Result<Vec<_>, _>>()?;
                 let prefix = format!(
                     "{}.{}",
-                    render_instance_head(&class.name, &instance_facts.class_args, sema),
+                    render_given_head(&shape.name, &given_facts.shape_args, sema),
                     snippet_for_span(module_key, source, law.name.span)?
                 );
                 push_sampled_cases(
@@ -302,16 +302,16 @@ impl Session {
     }
 }
 
-fn class_decls(
+fn shape_decls(
     module_key: &ModuleKey,
     sema: &SemaModule,
     source: &str,
-) -> Result<Vec<ClassDecl>, SessionError> {
+) -> Result<Vec<ShapeDecl>, SessionError> {
     Ok(top_level_let_bindings(module_key, sema, source, false)?
         .into_iter()
         .filter_map(|(_expr_id, name, type_params, value)| {
             match &sema.module().store.exprs.get(value).kind {
-                HirExprKind::Class { members, .. } => sema.class_facts(value).map(|_| ClassDecl {
+                HirExprKind::Shape { members, .. } => sema.shape_facts(value).map(|_| ShapeDecl {
                     expr_id: value,
                     name,
                     type_params,
@@ -360,7 +360,7 @@ fn exported_effect_decls(
         .collect::<Vec<_>>())
 }
 
-fn instance_decls(sema: &SemaModule) -> Vec<InstanceDecl> {
+fn given_decls(sema: &SemaModule) -> Vec<GivenDecl> {
     let store = &sema.module().store;
     top_level_expr_ids(sema)
         .into_iter()
@@ -368,13 +368,13 @@ fn instance_decls(sema: &SemaModule) -> Vec<InstanceDecl> {
             let expr = store.exprs.get(expr_id);
             let (instance_expr_id, members) = match &expr.kind {
                 HirExprKind::Let { value, .. } => match &store.exprs.get(*value).kind {
-                    HirExprKind::Instance { members, .. } => (*value, members.clone()),
+                    HirExprKind::Given { members, .. } => (*value, members.clone()),
                     _ => return None,
                 },
-                HirExprKind::Instance { members, .. } => (expr_id, members.clone()),
+                HirExprKind::Given { members, .. } => (expr_id, members.clone()),
                 _ => return None,
             };
-            Some(InstanceDecl {
+            Some(GivenDecl {
                 expr_id: instance_expr_id,
                 member_defs: store.members.get(members).to_vec().into_boxed_slice(),
             })
@@ -436,16 +436,16 @@ fn top_level_expr_ids(sema: &SemaModule) -> TopLevelExprIdList {
     }
 }
 
-fn class_type_subst(class: &ClassDecl, class_args: &[HirTyId]) -> HashMap<Symbol, HirTyId> {
-    class
+fn shape_type_subst(shape: &ShapeDecl, shape_args: &[HirTyId]) -> HashMap<Symbol, HirTyId> {
+    shape
         .type_params
         .iter()
         .copied()
-        .zip(class_args.iter().copied())
+        .zip(shape_args.iter().copied())
         .collect()
 }
 
-fn substitute_class_ty(
+fn substitute_shape_ty(
     sema: &SemaModule,
     ty: HirTyId,
     subst: &HashMap<Symbol, HirTyId>,
@@ -587,7 +587,7 @@ fn push_sampled_cases(
     prefix: &str,
     param_names: &[String],
     sample_sets: &[Vec<SampleCase>],
-    member_bindings: &[InstanceMemberBinding],
+    member_bindings: &[GivenMemberBinding],
     body: &str,
 ) {
     let mut current = Vec::<SampleCase>::new();
@@ -754,17 +754,17 @@ fn render_law_suite_module_source(
     out
 }
 
-fn render_instance_head(class_name: &str, class_args: &[HirTyId], sema: &SemaModule) -> String {
-    if class_args.is_empty() {
-        return class_name.to_owned();
+fn render_given_head(shape_name: &str, shape_args: &[HirTyId], sema: &SemaModule) -> String {
+    if shape_args.is_empty() {
+        return shape_name.to_owned();
     }
-    let args = class_args
+    let args = shape_args
         .iter()
         .copied()
         .map(|ty| render_ty_id(sema, ty))
         .collect::<Vec<_>>()
         .join(", ");
-    format!("{class_name}[{args}]")
+    format!("{shape_name}[{args}]")
 }
 
 fn render_ty_id(sema: &SemaModule, ty: HirTyId) -> String {

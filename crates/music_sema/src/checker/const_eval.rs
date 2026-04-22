@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use music_base::parse_i64_literal;
+use music_base::{diag::DiagContext, parse_i64_literal};
 use music_hir::{
     HirBinaryOp, HirExprId, HirExprKind, HirLitKind, HirPatId, HirPatKind, HirPrefixOp,
     HirQuoteKind, HirSpliceKind,
@@ -32,10 +32,11 @@ pub(super) fn data_variant_tag(
     match ConstIntEvaluator::new(ctx).eval(expr) {
         Ok(ComptimeValue::Int(value)) => value,
         Ok(_) => {
-            ctx.diag(
+            let discriminant = ctx.expr_subject(expr);
+            ctx.diag_with(
                 ctx.expr(expr).origin.span,
                 DiagKind::InvalidDataVariantDiscriminant,
-                "",
+                DiagContext::new().with("discriminant", discriminant),
             );
             implicit
         }
@@ -44,7 +45,15 @@ pub(super) fn data_variant_tag(
                 ConstEvalError::Invalid => DiagKind::InvalidDataVariantDiscriminant,
                 ConstEvalError::Cycle => DiagKind::CyclicDataVariantDiscriminant,
             };
-            ctx.diag(ctx.expr(expr).origin.span, kind, "");
+            if matches!(kind, DiagKind::InvalidDataVariantDiscriminant) {
+                ctx.diag_with(
+                    ctx.expr(expr).origin.span,
+                    kind,
+                    DiagContext::new().with("discriminant", ctx.expr_subject(expr)),
+                );
+            } else {
+                ctx.diag(ctx.expr(expr).origin.span, kind, "");
+            }
             implicit
         }
     }
@@ -218,10 +227,10 @@ impl<'ctx, 'a, 'b, 'c> ConstIntEvaluator<'ctx, 'a, 'b, 'c> {
             | ComptimeValue::Closure(_)
             | ComptimeValue::Continuation(_)
             | ComptimeValue::Type(_)
-            | ComptimeValue::Module(_)
+            | ComptimeValue::ImportRecord(_)
             | ComptimeValue::Foreign(_)
             | ComptimeValue::Effect(_)
-            | ComptimeValue::Class(_) => Err(ConstEvalError::Invalid),
+            | ComptimeValue::Shape(_) => Err(ConstEvalError::Invalid),
         }
     }
 

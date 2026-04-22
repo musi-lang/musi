@@ -379,7 +379,7 @@ export let test () :=
             "musi.json",
             "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"fmt\": { \"useTabs\": true, \"indentWidth\": 8 }\n}\n",
         );
-        write_file(temp.path(), "index.ms", "export let answer : Int := 1;");
+        write_file(temp.path(), "index.ms", "export let result : Int := 1;");
 
         let manifest_tabs = run_musi_with_input(
             &["fmt", "--ext", "ms", "-"],
@@ -420,7 +420,7 @@ export let test () :=
             "musi.json",
             "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"fmt\": { \"profile\": \"expanded\", \"matchArmIndent\": \"pipeAligned\" }\n}\n",
         );
-        write_file(temp.path(), "index.ms", "export let answer : Int := 1;");
+        write_file(temp.path(), "index.ms", "export let result : Int := 1;");
         let source = "export let describe (target : Ordering) : String := match target(| .Less => \"less\" | .GreaterThanEverything => \"greater\" | _ => \"same\");";
 
         let output = run_musi_with_input(&["fmt", "--ext", "ms", "-"], temp.path(), source);
@@ -440,7 +440,7 @@ export let test () :=
             "musi.json",
             "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"fmt\": { \"profile\": \"expanded\" }\n}\n",
         );
-        write_file(temp.path(), "index.ms", "export let answer : Int := 1;");
+        write_file(temp.path(), "index.ms", "export let result : Int := 1;");
         let source = "export let describe (target : Ordering) : String := match target(| .Less => \"less\" | .GreaterThanEverything => \"greater\" | _ => \"same\");";
 
         let output = run_musi_with_input(
@@ -944,7 +944,7 @@ mod failure {
         write_file(
             temp.path(),
             "index.ms",
-            "let Missing := import \"missing\";\nexport let answer : Int := 42;\n",
+            "let Missing := import \"missing\";\nexport let result : Int := 42;\n",
         );
 
         let output = run_musi(&["check", "--diagnostics-format", "json"], temp.path());

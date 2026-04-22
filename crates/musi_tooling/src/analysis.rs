@@ -43,12 +43,11 @@ pub enum ToolSymbolKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ToolMemberClass {
+pub enum ToolMemberShape {
     Function,
     Procedure,
     Property,
     Type,
-    Namespace,
 }
 
 impl ToolSymbolKind {
@@ -372,39 +371,37 @@ fn member_hover_contents(session: &Session, sema: &SemaModule, fact: &ExprMember
 
 fn member_symbol_kind(sema: &SemaModule, fact: &ExprMemberFact) -> ToolSymbolKind {
     match member_class(sema, fact) {
-        ToolMemberClass::Function => ToolSymbolKind::Function,
-        ToolMemberClass::Procedure => ToolSymbolKind::Procedure,
-        ToolMemberClass::Property => ToolSymbolKind::Property,
-        ToolMemberClass::Type => ToolSymbolKind::Type,
-        ToolMemberClass::Namespace => ToolSymbolKind::Namespace,
+        ToolMemberShape::Function => ToolSymbolKind::Function,
+        ToolMemberShape::Procedure => ToolSymbolKind::Procedure,
+        ToolMemberShape::Property => ToolSymbolKind::Property,
+        ToolMemberShape::Type => ToolSymbolKind::Type,
     }
 }
 
-pub fn member_class(sema: &SemaModule, fact: &ExprMemberFact) -> ToolMemberClass {
+pub fn member_class(sema: &SemaModule, fact: &ExprMemberFact) -> ToolMemberShape {
     match fact.kind {
-        ExprMemberKind::RecordField => ToolMemberClass::Property,
+        ExprMemberKind::RecordField => ToolMemberShape::Property,
         ExprMemberKind::DotCallable
         | ExprMemberKind::AttachedMethod
         | ExprMemberKind::AttachedMethodNamespace => {
             if is_callable_ty(sema, fact.ty) {
-                ToolMemberClass::Procedure
+                ToolMemberShape::Procedure
             } else {
-                ToolMemberClass::Property
+                ToolMemberShape::Property
             }
         }
-        ExprMemberKind::EffectOperation | ExprMemberKind::ClassMember => ToolMemberClass::Procedure,
-        ExprMemberKind::ModuleExport | ExprMemberKind::FfiPointerExport => {
+        ExprMemberKind::EffectOperation | ExprMemberKind::ShapeMember => ToolMemberShape::Procedure,
+        ExprMemberKind::ImportRecordExport | ExprMemberKind::FfiPointerExport => {
             exported_member_class(sema, fact.ty)
         }
     }
 }
 
-fn exported_member_class(sema: &SemaModule, ty: HirTyId) -> ToolMemberClass {
+fn exported_member_class(sema: &SemaModule, ty: HirTyId) -> ToolMemberShape {
     match sema.ty(ty).kind {
-        HirTyKind::Arrow { .. } | HirTyKind::Pi { .. } => ToolMemberClass::Function,
-        HirTyKind::Module => ToolMemberClass::Namespace,
-        HirTyKind::Type => ToolMemberClass::Type,
-        _ => ToolMemberClass::Property,
+        HirTyKind::Arrow { .. } | HirTyKind::Pi { .. } => ToolMemberShape::Function,
+        HirTyKind::Type => ToolMemberShape::Type,
+        _ => ToolMemberShape::Property,
     }
 }
 
@@ -717,7 +714,9 @@ fn binding_symbol_kind(
         | NameBindingKind::HandleClauseResult => ToolSymbolKind::Parameter,
         NameBindingKind::PiBinder | NameBindingKind::TypeParam => ToolSymbolKind::TypeParameter,
         NameBindingKind::Prelude
+        | NameBindingKind::Import
         | NameBindingKind::Let
+        | NameBindingKind::Pin
         | NameBindingKind::AttachedMethod
         | NameBindingKind::PatternBind => sema
             .and_then(|module| {
@@ -727,30 +726,9 @@ fn binding_symbol_kind(
             })
             .map_or(ToolSymbolKind::Variable, |ty| match ty {
                 HirTyKind::Arrow { .. } | HirTyKind::Pi { .. } => ToolSymbolKind::Function,
-                HirTyKind::Module => {
-                    if binding.kind == NameBindingKind::Let {
-                        ToolSymbolKind::Alias
-                    } else {
-                        ToolSymbolKind::Namespace
-                    }
-                }
                 HirTyKind::Type => ToolSymbolKind::Type,
                 _ => ToolSymbolKind::Variable,
             }),
-    }
-}
-
-const fn _binding_kind_label(kind: NameBindingKind) -> &'static str {
-    match kind {
-        NameBindingKind::Prelude => "prelude",
-        NameBindingKind::Let => "let",
-        NameBindingKind::AttachedMethod => "attached method",
-        NameBindingKind::Param => "parameter",
-        NameBindingKind::PiBinder => "pi binder",
-        NameBindingKind::TypeParam => "type parameter",
-        NameBindingKind::PatternBind => "pattern binding",
-        NameBindingKind::HandleClauseResult => "handler result",
-        NameBindingKind::HandleClauseParam => "handler parameter",
     }
 }
 
@@ -806,54 +784,20 @@ fn render_hir_ty(sema: &SemaModule, session: &Session, ty: HirTyId) -> String {
         HirTyKind::Array { dims, item } => render_array_hir_ty(sema, session, dims, *item),
         HirTyKind::Seq { item } => format!("[]{}", render_hir_ty(sema, session, *item)),
         HirTyKind::Range { bound } => render_applied_hir_ty("Range", sema, session, *bound),
-        HirTyKind::ClosedRange { bound } => {
-            render_applied_hir_ty("ClosedRange", sema, session, *bound)
-        }
-        HirTyKind::PartialRangeFrom { bound } => {
-            render_applied_hir_ty("PartialRangeFrom", sema, session, *bound)
-        }
-        HirTyKind::PartialRangeUpTo { bound } => {
-            render_applied_hir_ty("PartialRangeUpTo", sema, session, *bound)
-        }
-        HirTyKind::PartialRangeThru { bound } => {
-            render_applied_hir_ty("PartialRangeThru", sema, session, *bound)
-        }
         HirTyKind::Handler {
             effect,
             input,
             output,
         } => render_handler_hir_ty(sema, session, *effect, *input, *output),
         HirTyKind::Mut { inner } => render_prefixed_hir_ty("mut", sema, session, *inner),
-        HirTyKind::AnyClass { class } => render_prefixed_hir_ty("any", sema, session, *class),
-        HirTyKind::SomeClass { class } => render_prefixed_hir_ty("some", sema, session, *class),
+        HirTyKind::AnyShape { capability } => {
+            render_prefixed_hir_ty("any", sema, session, *capability)
+        }
+        HirTyKind::SomeShape { capability } => {
+            render_prefixed_hir_ty("some", sema, session, *capability)
+        }
         HirTyKind::Record { fields } => render_record_hir_ty(sema, session, fields),
-        HirTyKind::Error
-        | HirTyKind::Unknown
-        | HirTyKind::Type
-        | HirTyKind::Syntax
-        | HirTyKind::Any
-        | HirTyKind::Empty
-        | HirTyKind::Unit
-        | HirTyKind::Bool
-        | HirTyKind::Nat
-        | HirTyKind::Int
-        | HirTyKind::Int8
-        | HirTyKind::Int16
-        | HirTyKind::Int32
-        | HirTyKind::Int64
-        | HirTyKind::Nat8
-        | HirTyKind::Nat16
-        | HirTyKind::Nat32
-        | HirTyKind::Nat64
-        | HirTyKind::Float
-        | HirTyKind::Float32
-        | HirTyKind::Float64
-        | HirTyKind::String
-        | HirTyKind::Rune
-        | HirTyKind::CString
-        | HirTyKind::CPtr
-        | HirTyKind::Module
-        | HirTyKind::NatLit(_) => render_atomic_hir_ty(kind).unwrap_or_default(),
+        _ => render_atomic_hir_ty(kind).unwrap_or_default(),
     }
 }
 
@@ -916,7 +860,7 @@ fn render_handler_hir_ty(
     output: HirTyId,
 ) -> String {
     format!(
-        "using {} ({} -> {})",
+        "answer {} ({} -> {})",
         render_hir_ty(sema, session, effect),
         render_hir_ty(sema, session, input),
         render_hir_ty(sema, session, output)

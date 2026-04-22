@@ -7,8 +7,8 @@ use music_module::ModuleKey;
 use music_names::Symbol;
 
 use crate::api::{
-    ConstraintEvidence, ConstraintFacts, ConstraintKey, ConstraintKind, ConstraintSurface,
-    DefinitionKey, ExportedValue, InstanceFacts, InstanceSurface, ModuleSurface, SurfaceEffectRow,
+    ConstraintAnswer, ConstraintFacts, ConstraintKey, ConstraintKind, ConstraintSurface,
+    DefinitionKey, ExportedValue, GivenFacts, GivenSurface, ModuleSurface, SurfaceEffectRow,
     SurfaceTyId,
 };
 use crate::effects::{EffectKey, EffectRow};
@@ -18,12 +18,12 @@ use super::{CheckPass, DiagKind, PassBase};
 
 type TypeSubstMap = HashMap<Symbol, HirTyId>;
 
-struct SurfaceInstanceEvidenceScan<'a> {
+struct SurfaceGivenEvidenceScan<'a> {
     origin: HirOrigin,
-    class_key: &'a DefinitionKey,
-    class_args: &'a [HirTyId],
+    shape_key: &'a DefinitionKey,
+    shape_args: &'a [HirTyId],
     stack: &'a mut Vec<String>,
-    matches: &'a mut Vec<ConstraintEvidence>,
+    matches: &'a mut Vec<ConstraintAnswer>,
     module_key: &'a ModuleKey,
     surface: &'a ModuleSurface,
 }
@@ -44,7 +44,7 @@ pub struct ConstraintObligation {
     pub kind: ConstraintKind,
     pub subject: HirTyId,
     pub value: HirTyId,
-    pub class_key: Option<DefinitionKey>,
+    pub shape_key: Option<DefinitionKey>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57,7 +57,7 @@ pub struct InstantiatedBinding {
 impl ConstraintObligation {
     #[must_use]
     pub fn key(&self) -> ConstraintKey {
-        ConstraintKey::new(self.kind, self.subject, self.value, self.class_key.clone())
+        ConstraintKey::new(self.kind, self.subject, self.value, self.shape_key.clone())
     }
 }
 
@@ -100,20 +100,20 @@ impl PassBase<'_, '_, '_> {
         }
     }
 
-    pub fn instance_facts_from_surface(
+    pub fn given_facts_from_surface(
         &mut self,
         surface: &ModuleSurface,
-        instance: &InstanceSurface,
-    ) -> InstanceFacts {
+        given: &GivenSurface,
+    ) -> GivenFacts {
         let ctx = self;
-        let class_name =
-            ctx.class_name_from_surface(surface, instance.class_args.as_ref(), &instance.class_key);
-        InstanceFacts::new(
+        let shape_name =
+            ctx.shape_name_from_surface(surface, given.shape_args.as_ref(), &given.shape_key);
+        GivenFacts::new(
             HirOrigin::dummy(),
-            instance.class_key.clone(),
-            class_name,
-            instance
-                .class_args
+            given.shape_key.clone(),
+            shape_name,
+            given
+                .shape_args
                 .iter()
                 .copied()
                 .map(|ty| import_surface_ty(ctx, surface, ty))
@@ -122,7 +122,7 @@ impl PassBase<'_, '_, '_> {
             Vec::<Symbol>::new().into_boxed_slice(),
         )
         .with_type_params(
-            instance
+            given
                 .type_params
                 .iter()
                 .map(|name| ctx.intern(name))
@@ -130,7 +130,7 @@ impl PassBase<'_, '_, '_> {
                 .into_boxed_slice(),
         )
         .with_type_param_kinds(
-            instance
+            given
                 .type_param_kinds
                 .iter()
                 .copied()
@@ -139,7 +139,7 @@ impl PassBase<'_, '_, '_> {
                 .into_boxed_slice(),
         )
         .with_constraints(
-            instance
+            given
                 .constraints
                 .iter()
                 .map(|constraint| ctx.import_constraint_surface(surface, constraint))
@@ -234,33 +234,33 @@ impl CheckPass<'_, '_, '_> {
         self.instantiate_binding_with_subst(scheme, &TypeSubstMap::new())
     }
 
-    pub fn resolve_obligations_to_evidence(
+    pub fn resolve_obligations_to_answers(
         &mut self,
         origin: HirOrigin,
         obligations: &[ConstraintObligation],
-    ) -> Option<Box<[ConstraintEvidence]>> {
+    ) -> Option<Box<[ConstraintAnswer]>> {
         let mut stack = Vec::<String>::new();
-        let mut evidence = Vec::new();
+        let mut answers = Vec::new();
         for obligation in obligations {
             if !matches!(obligation.kind, ConstraintKind::Implements) {
                 let _ = self.solve_obligation(origin, obligation, &mut stack);
                 continue;
             }
-            evidence.push(self.resolve_obligation_evidence(origin, obligation, &mut stack)?);
+            answers.push(self.resolve_obligation_answer(origin, obligation, &mut stack)?);
         }
-        Some(evidence.into_boxed_slice())
+        Some(answers.into_boxed_slice())
     }
 
-    pub fn evidence_scope_for_constraints(
+    pub fn answer_scope_for_constraints(
         &mut self,
         constraints: &[ConstraintFacts],
-    ) -> HashMap<ConstraintKey, ConstraintEvidence> {
+    ) -> HashMap<ConstraintKey, ConstraintAnswer> {
         constraints
             .iter()
             .filter_map(|constraint| {
                 self.constraint_key_for_facts(constraint).map(|key| {
-                    let evidence = ConstraintEvidence::Param { key: key.clone() };
-                    (key, evidence)
+                    let answer = ConstraintAnswer::Param { key: key.clone() };
+                    (key, answer)
                 })
             })
             .collect()
@@ -300,7 +300,7 @@ impl CheckPass<'_, '_, '_> {
                 .copied()
                 .unwrap_or_else(|| ctx.named_type_for_symbol(constraint.name)),
             value: ctx.substitute_ty(constraint.value, subst),
-            class_key: constraint.class_key.clone(),
+            shape_key: constraint.shape_key.clone(),
         }
     }
 
@@ -313,7 +313,7 @@ impl CheckPass<'_, '_, '_> {
                 constraint.kind,
                 self.named_type_for_symbol(constraint.name),
                 constraint.value,
-                constraint.class_key.clone(),
+                constraint.shape_key.clone(),
             )
         })
     }
@@ -352,26 +352,16 @@ impl PassBase<'_, '_, '_> {
             HirTyKind::Range { bound } => {
                 self.substitute_item_ty(bound, subst, |bound| HirTyKind::Range { bound })
             }
-            HirTyKind::ClosedRange { bound } => {
-                self.substitute_item_ty(bound, subst, |bound| HirTyKind::ClosedRange { bound })
-            }
-            HirTyKind::PartialRangeFrom { bound } => {
-                self.substitute_item_ty(bound, subst, |bound| HirTyKind::PartialRangeFrom { bound })
-            }
-            HirTyKind::PartialRangeUpTo { bound } => {
-                self.substitute_item_ty(bound, subst, |bound| HirTyKind::PartialRangeUpTo { bound })
-            }
-            HirTyKind::PartialRangeThru { bound } => {
-                self.substitute_item_ty(bound, subst, |bound| HirTyKind::PartialRangeThru { bound })
-            }
             HirTyKind::Handler {
                 effect,
                 input,
                 output,
             } => self.substitute_handler_ty(effect, input, output, subst),
             HirTyKind::Mut { inner } => self.substitute_mut_ty(inner, subst),
-            HirTyKind::AnyClass { class } => self.substitute_class_ty(class, subst, true),
-            HirTyKind::SomeClass { class } => self.substitute_class_ty(class, subst, false),
+            HirTyKind::AnyShape { capability } => self.substitute_shape_ty(capability, subst, true),
+            HirTyKind::SomeShape { capability } => {
+                self.substitute_shape_ty(capability, subst, false)
+            }
             HirTyKind::Record { fields } => self.substitute_record_ty(fields, subst),
             _ => ty,
         }
@@ -488,17 +478,17 @@ impl PassBase<'_, '_, '_> {
         self.alloc_ty(HirTyKind::Mut { inner })
     }
 
-    fn substitute_class_ty(
+    fn substitute_shape_ty(
         &mut self,
-        class: HirTyId,
+        shape: HirTyId,
         subst: &TypeSubstMap,
         is_any: bool,
     ) -> HirTyId {
-        let class = self.substitute_ty(class, subst);
+        let shape = self.substitute_ty(shape, subst);
         if is_any {
-            self.alloc_ty(HirTyKind::AnyClass { class })
+            self.alloc_ty(HirTyKind::AnyShape { capability: shape })
         } else {
-            self.alloc_ty(HirTyKind::SomeClass { class })
+            self.alloc_ty(HirTyKind::SomeShape { capability: shape })
         }
     }
 
@@ -579,8 +569,8 @@ impl PassBase<'_, '_, '_> {
             constraint.kind,
             import_surface_ty(ctx, surface, constraint.value),
         );
-        if let Some(class_key) = constraint.class_key.clone() {
-            lowered.with_class_key(class_key)
+        if let Some(shape_key) = constraint.shape_key.clone() {
+            lowered.with_shape_key(shape_key)
         } else {
             lowered
         }
@@ -646,21 +636,19 @@ impl CheckPass<'_, '_, '_> {
         }
     }
 
-    fn resolve_obligation_evidence(
+    fn resolve_obligation_answer(
         &mut self,
         origin: HirOrigin,
         obligation: &ConstraintObligation,
         stack: &mut Vec<String>,
-    ) -> Option<ConstraintEvidence> {
+    ) -> Option<ConstraintAnswer> {
         match obligation.kind {
             ConstraintKind::Subtype | ConstraintKind::TypeEq => self
                 .solve_obligation(origin, obligation, stack)
-                .then_some(ConstraintEvidence::Param {
+                .then_some(ConstraintAnswer::Param {
                     key: obligation.key(),
                 }),
-            ConstraintKind::Implements => {
-                self.resolve_implements_evidence(origin, obligation, stack)
-            }
+            ConstraintKind::Implements => self.resolve_implements_answer(origin, obligation, stack),
         }
     }
 
@@ -670,52 +658,52 @@ impl CheckPass<'_, '_, '_> {
         obligation: &ConstraintObligation,
         stack: &mut Vec<String>,
     ) -> bool {
-        let Some((class_key, class_args)) = self.obligation_class_target(obligation) else {
+        let Some((shape_key, shape_args)) = self.obligation_shape_target(obligation) else {
             self.diag(origin.span, DiagKind::UnsatisfiedConstraint, "");
             return false;
         };
-        let frame = self.constraint_stack_frame(&class_key, &class_args);
+        let frame = self.constraint_stack_frame(&shape_key, &shape_args);
         if stack.contains(&frame) {
             return true;
         }
         stack.push(frame);
-        let matches = self.count_matching_instances(origin, &class_key, &class_args, stack);
+        let matches = self.count_matching_givens(origin, &shape_key, &shape_args, stack);
         let _ = stack.pop();
         self.finish_instance_match_count(origin, matches)
     }
 
-    fn count_matching_instances(
+    fn count_matching_givens(
         &mut self,
         origin: HirOrigin,
-        class_key: &DefinitionKey,
-        class_args: &[HirTyId],
+        shape_key: &DefinitionKey,
+        shape_args: &[HirTyId],
         stack: &mut Vec<String>,
     ) -> usize {
-        let mut matches = self.count_local_instance_matches(origin, class_key, class_args, stack);
-        matches += self.count_imported_instance_matches(origin, class_key, class_args, stack);
+        let mut matches = self.count_local_given_matches(origin, shape_key, shape_args, stack);
+        matches += self.count_imported_given_matches(origin, shape_key, shape_args, stack);
         matches
     }
 
-    fn count_local_instance_matches(
+    fn count_local_given_matches(
         &mut self,
         origin: HirOrigin,
-        class_key: &DefinitionKey,
-        class_args: &[HirTyId],
+        shape_key: &DefinitionKey,
+        shape_args: &[HirTyId],
         stack: &mut Vec<String>,
     ) -> usize {
-        let local_instances = self.instance_facts().values().cloned().collect::<Vec<_>>();
-        local_instances
+        let local_givens = self.given_facts().values().cloned().collect::<Vec<_>>();
+        local_givens
             .iter()
-            .filter(|instance| instance.class_key == *class_key)
-            .filter(|instance| self.instance_matches(origin, instance, class_args, stack))
+            .filter(|given| given.shape_key == *shape_key)
+            .filter(|given| self.given_matches(origin, given, shape_args, stack))
             .count()
     }
 
-    fn count_imported_instance_matches(
+    fn count_imported_given_matches(
         &mut self,
         origin: HirOrigin,
-        class_key: &DefinitionKey,
-        class_args: &[HirTyId],
+        shape_key: &DefinitionKey,
+        shape_args: &[HirTyId],
         stack: &mut Vec<String>,
     ) -> usize {
         let Some(env) = self.sema_env() else {
@@ -731,27 +719,27 @@ impl CheckPass<'_, '_, '_> {
             {
                 pending.extend(surface.static_imports().iter().cloned());
                 matches += self
-                    .count_surface_instance_matches(origin, class_key, class_args, stack, &surface);
+                    .count_surface_given_matches(origin, shape_key, shape_args, stack, &surface);
             }
         }
         matches
     }
 
-    fn count_surface_instance_matches(
+    fn count_surface_given_matches(
         &mut self,
         origin: HirOrigin,
-        class_key: &DefinitionKey,
-        class_args: &[HirTyId],
+        shape_key: &DefinitionKey,
+        shape_args: &[HirTyId],
         stack: &mut Vec<String>,
         surface: &ModuleSurface,
     ) -> usize {
         surface
-            .exported_instances()
+            .exported_givens()
             .iter()
-            .filter(|instance| instance.class_key == *class_key)
-            .filter(|instance| {
-                let imported = self.instance_facts_from_surface(surface, instance);
-                self.instance_matches(origin, &imported, class_args, stack)
+            .filter(|given| given.shape_key == *shape_key)
+            .filter(|given| {
+                let imported = self.given_facts_from_surface(surface, given);
+                self.given_matches(origin, &imported, shape_args, stack)
             })
             .count()
     }
@@ -762,57 +750,50 @@ impl CheckPass<'_, '_, '_> {
             return false;
         }
         if matches > 1 {
-            self.diag(origin.span, DiagKind::AmbiguousInstanceMatch, "");
+            self.diag(origin.span, DiagKind::AmbiguousGivenMatch, "");
             return false;
         }
         true
     }
 
-    fn resolve_implements_evidence(
+    fn resolve_implements_answer(
         &mut self,
         origin: HirOrigin,
         obligation: &ConstraintObligation,
         stack: &mut Vec<String>,
-    ) -> Option<ConstraintEvidence> {
+    ) -> Option<ConstraintAnswer> {
         let key = obligation.key();
-        if let Some(evidence) = self.resolve_available_evidence(&key) {
-            return Some(evidence);
+        if let Some(answer) = self.resolve_available_answer(&key) {
+            return Some(answer);
         }
-        let Some((class_key, class_args)) = self.obligation_class_target(obligation) else {
+        let Some((shape_key, shape_args)) = self.obligation_shape_target(obligation) else {
             self.diag(origin.span, DiagKind::UnsatisfiedConstraint, "");
             return None;
         };
-        let frame = self.constraint_stack_frame(&class_key, &class_args);
+        let frame = self.constraint_stack_frame(&shape_key, &shape_args);
         if stack.contains(&frame) {
             self.diag(origin.span, DiagKind::UnsatisfiedConstraint, "");
             return None;
         }
         stack.push(frame);
-        let mut matches =
-            self.collect_local_instance_evidence(origin, &class_key, &class_args, stack);
-        self.collect_imported_instance_evidence(
-            origin,
-            &class_key,
-            &class_args,
-            stack,
-            &mut matches,
-        );
+        let mut matches = self.collect_local_given_answers(origin, &shape_key, &shape_args, stack);
+        self.collect_imported_given_answers(origin, &shape_key, &shape_args, stack, &mut matches);
         let _ = stack.pop();
-        self.finish_instance_evidence(origin, matches)
+        self.finish_given_answers(origin, matches)
     }
 }
 
 impl CheckPass<'_, '_, '_> {
-    fn resolve_available_evidence(&self, key: &ConstraintKey) -> Option<ConstraintEvidence> {
-        self.resolve_in_scope_evidence(key)
-            .or_else(|| self.resolve_equivalent_in_scope_evidence(key))
+    fn resolve_available_answer(&self, key: &ConstraintKey) -> Option<ConstraintAnswer> {
+        self.resolve_in_scope_answer(key)
+            .or_else(|| self.resolve_equivalent_in_scope_answer(key))
     }
 
-    fn constraint_stack_frame(&self, class_key: &DefinitionKey, class_args: &[HirTyId]) -> String {
+    fn constraint_stack_frame(&self, shape_key: &DefinitionKey, shape_args: &[HirTyId]) -> String {
         format!(
             "{}:{}",
-            class_key.name,
-            class_args
+            shape_key.name,
+            shape_args
                 .iter()
                 .copied()
                 .map(|arg| self.render_ty(arg))
@@ -821,36 +802,36 @@ impl CheckPass<'_, '_, '_> {
         )
     }
 
-    fn collect_local_instance_evidence(
+    fn collect_local_given_answers(
         &mut self,
         origin: HirOrigin,
-        class_key: &DefinitionKey,
-        class_args: &[HirTyId],
+        shape_key: &DefinitionKey,
+        shape_args: &[HirTyId],
         stack: &mut Vec<String>,
-    ) -> Vec<ConstraintEvidence> {
-        let local_instances = self.instance_facts().values().cloned().collect::<Vec<_>>();
-        local_instances
+    ) -> Vec<ConstraintAnswer> {
+        let local_givens = self.given_facts().values().cloned().collect::<Vec<_>>();
+        local_givens
             .iter()
-            .filter(|instance| instance.class_key == *class_key)
-            .filter_map(|instance| {
-                self.instance_provider_evidence(
+            .filter(|given| given.shape_key == *shape_key)
+            .filter_map(|given| {
+                self.given_provider_answer(
                     origin,
-                    instance,
+                    given,
                     self.module_key().clone(),
-                    class_args,
+                    shape_args,
                     stack,
                 )
             })
             .collect()
     }
 
-    fn collect_imported_instance_evidence(
+    fn collect_imported_given_answers(
         &mut self,
         origin: HirOrigin,
-        class_key: &DefinitionKey,
-        class_args: &[HirTyId],
+        shape_key: &DefinitionKey,
+        shape_args: &[HirTyId],
         stack: &mut Vec<String>,
-        matches: &mut Vec<ConstraintEvidence>,
+        matches: &mut Vec<ConstraintAnswer>,
     ) {
         let Some(env) = self.sema_env() else {
             return;
@@ -865,10 +846,10 @@ impl CheckPass<'_, '_, '_> {
                 continue;
             };
             pending.extend(surface.static_imports().iter().cloned());
-            self.collect_surface_instance_evidence(SurfaceInstanceEvidenceScan {
+            self.collect_surface_given_answers(SurfaceGivenEvidenceScan {
                 origin,
-                class_key,
-                class_args,
+                shape_key,
+                shape_args,
                 stack,
                 matches,
                 module_key: &module_key,
@@ -877,38 +858,34 @@ impl CheckPass<'_, '_, '_> {
         }
     }
 
-    fn collect_surface_instance_evidence(&mut self, scan: SurfaceInstanceEvidenceScan<'_>) {
-        let SurfaceInstanceEvidenceScan {
+    fn collect_surface_given_answers(&mut self, scan: SurfaceGivenEvidenceScan<'_>) {
+        let SurfaceGivenEvidenceScan {
             origin,
-            class_key,
-            class_args,
+            shape_key,
+            shape_args,
             stack,
             matches,
             module_key,
             surface,
         } = scan;
-        for instance in surface.exported_instances() {
-            if instance.class_key != *class_key {
+        for given in surface.exported_givens() {
+            if given.shape_key != *shape_key {
                 continue;
             }
-            let imported = self.instance_facts_from_surface(surface, instance);
-            if let Some(evidence) = self.instance_provider_evidence(
-                origin,
-                &imported,
-                module_key.clone(),
-                class_args,
-                stack,
-            ) {
-                matches.push(evidence);
+            let imported = self.given_facts_from_surface(surface, given);
+            if let Some(answer) =
+                self.given_provider_answer(origin, &imported, module_key.clone(), shape_args, stack)
+            {
+                matches.push(answer);
             }
         }
     }
 
-    fn finish_instance_evidence(
+    fn finish_given_answers(
         &mut self,
         origin: HirOrigin,
-        mut matches: Vec<ConstraintEvidence>,
-    ) -> Option<ConstraintEvidence> {
+        mut matches: Vec<ConstraintAnswer>,
+    ) -> Option<ConstraintAnswer> {
         match matches.len() {
             0 => {
                 self.diag(origin.span, DiagKind::UnsatisfiedConstraint, "");
@@ -916,28 +893,25 @@ impl CheckPass<'_, '_, '_> {
             }
             1 => matches.pop(),
             _ => {
-                self.diag(origin.span, DiagKind::AmbiguousInstanceMatch, "");
+                self.diag(origin.span, DiagKind::AmbiguousGivenMatch, "");
                 None
             }
         }
     }
 
-    fn resolve_equivalent_in_scope_evidence(
-        &self,
-        key: &ConstraintKey,
-    ) -> Option<ConstraintEvidence> {
-        self.evidence_entries_in_scope()
+    fn resolve_equivalent_in_scope_answer(&self, key: &ConstraintKey) -> Option<ConstraintAnswer> {
+        self.answer_entries_in_scope()
             .into_iter()
-            .find_map(|(candidate, evidence)| {
+            .find_map(|(candidate, answer)| {
                 (candidate.kind == key.kind
-                    && candidate.class_key == key.class_key
+                    && candidate.shape_key == key.shape_key
                     && self.ty_matches(candidate.subject, key.subject)
                     && self.ty_matches(candidate.value, key.value))
-                .then_some(evidence)
+                .then_some(answer)
             })
     }
 
-    fn obligation_class_target(
+    fn obligation_shape_target(
         &self,
         obligation: &ConstraintObligation,
     ) -> Option<(DefinitionKey, Box<[HirTyId]>)> {
@@ -945,36 +919,35 @@ impl CheckPass<'_, '_, '_> {
         let HirTyKind::Named { name, args } = ctx.ty(obligation.value).kind else {
             return None;
         };
-        let class_key = obligation.class_key.clone().unwrap_or_else(|| {
-            ctx.class_facts_by_name(name).map_or_else(
+        let shape_key = obligation.shape_key.clone().unwrap_or_else(|| {
+            ctx.shape_facts_by_name(name).map_or_else(
                 || surface_key(ctx.module_key(), ctx.interner(), name),
                 |facts| facts.key.clone(),
             )
         });
-        let class_args = if ctx.ty_ids(args).is_empty() {
+        let shape_args = if ctx.ty_ids(args).is_empty() {
             vec![obligation.subject]
         } else {
             ctx.ty_ids(args)
         };
-        Some((class_key, class_args.into_boxed_slice()))
+        Some((shape_key, shape_args.into_boxed_slice()))
     }
 }
 
 impl CheckPass<'_, '_, '_> {
-    fn instance_matches(
+    fn given_matches(
         &mut self,
         origin: HirOrigin,
-        instance: &InstanceFacts,
-        class_args: &[HirTyId],
+        given: &GivenFacts,
+        shape_args: &[HirTyId],
         stack: &mut Vec<String>,
     ) -> bool {
         let ctx = self;
-        let Some(subst) =
-            ctx.unify_instance_args(&instance.type_params, &instance.class_args, class_args)
+        let Some(subst) = ctx.unify_given_args(&given.type_params, &given.shape_args, shape_args)
         else {
             return false;
         };
-        let obligations = instance
+        let obligations = given
             .constraints
             .iter()
             .map(|constraint| ctx.instantiate_obligation(constraint, &subst))
@@ -984,17 +957,16 @@ impl CheckPass<'_, '_, '_> {
             .all(|obligation| ctx.solve_obligation(origin, obligation, stack))
     }
 
-    fn instance_provider_evidence(
+    fn given_provider_answer(
         &mut self,
         origin: HirOrigin,
-        instance: &InstanceFacts,
+        given: &GivenFacts,
         module: ModuleKey,
-        class_args: &[HirTyId],
+        shape_args: &[HirTyId],
         stack: &mut Vec<String>,
-    ) -> Option<ConstraintEvidence> {
-        let subst =
-            self.unify_instance_args(&instance.type_params, &instance.class_args, class_args)?;
-        let obligations = instance
+    ) -> Option<ConstraintAnswer> {
+        let subst = self.unify_given_args(&given.type_params, &given.shape_args, shape_args)?;
+        let obligations = given
             .constraints
             .iter()
             .map(|constraint| self.instantiate_obligation(constraint, &subst))
@@ -1002,17 +974,17 @@ impl CheckPass<'_, '_, '_> {
         let args = obligations
             .iter()
             .filter(|obligation| matches!(obligation.kind, ConstraintKind::Implements))
-            .map(|obligation| self.resolve_obligation_evidence(origin, obligation, stack))
+            .map(|obligation| self.resolve_obligation_answer(origin, obligation, stack))
             .collect::<Option<Vec<_>>>()?
             .into_boxed_slice();
-        Some(ConstraintEvidence::Provider {
+        Some(ConstraintAnswer::Provider {
             module,
-            name: self.instance_provider_name(instance),
+            name: self.given_provider_name(given),
             args,
         })
     }
 
-    fn unify_instance_args(
+    fn unify_given_args(
         &mut self,
         type_params: &[Symbol],
         pattern_args: &[HirTyId],
@@ -1072,11 +1044,11 @@ impl CheckPass<'_, '_, '_> {
                 self.unify_array_ty(type_params, dims, item, actual, subst)
             }
             HirTyKind::Mut { inner } => self.unify_mut_ty(type_params, inner, actual, subst),
-            HirTyKind::AnyClass { class } => {
-                self.unify_any_class_ty(type_params, class, actual, subst)
+            HirTyKind::AnyShape { capability } => {
+                self.unify_any_shape_ty(type_params, capability, actual, subst)
             }
-            HirTyKind::SomeClass { class } => {
-                self.unify_some_class_ty(type_params, class, actual, subst)
+            HirTyKind::SomeShape { capability } => {
+                self.unify_some_shape_ty(type_params, capability, actual, subst)
             }
             HirTyKind::Record { fields } => {
                 self.unify_record_ty(type_params, actual, subst, fields)
@@ -1155,36 +1127,36 @@ impl CheckPass<'_, '_, '_> {
         self.unify_ty(type_params, inner, actual_inner, subst)
     }
 
-    fn unify_any_class_ty(
+    fn unify_any_shape_ty(
         &mut self,
         type_params: &[Symbol],
-        class: HirTyId,
+        shape: HirTyId,
         actual: HirTyId,
         subst: &mut TypeSubstMap,
     ) -> bool {
-        let HirTyKind::AnyClass {
-            class: actual_class,
+        let HirTyKind::AnyShape {
+            capability: actual_capability,
         } = self.ty(actual).kind
         else {
             return false;
         };
-        self.unify_ty(type_params, class, actual_class, subst)
+        self.unify_ty(type_params, shape, actual_capability, subst)
     }
 
-    fn unify_some_class_ty(
+    fn unify_some_shape_ty(
         &mut self,
         type_params: &[Symbol],
-        class: HirTyId,
+        shape: HirTyId,
         actual: HirTyId,
         subst: &mut TypeSubstMap,
     ) -> bool {
-        let HirTyKind::SomeClass {
-            class: actual_class,
+        let HirTyKind::SomeShape {
+            capability: actual_capability,
         } = self.ty(actual).kind
         else {
             return false;
         };
-        self.unify_ty(type_params, class, actual_class, subst)
+        self.unify_ty(type_params, shape, actual_capability, subst)
     }
 
     fn unify_type_param(&self, name: Symbol, actual: HirTyId, subst: &mut TypeSubstMap) -> bool {
@@ -1325,27 +1297,27 @@ impl CheckPass<'_, '_, '_> {
 }
 
 impl PassBase<'_, '_, '_> {
-    fn class_name_from_surface(
+    fn shape_name_from_surface(
         &mut self,
         surface: &ModuleSurface,
-        class_args: &[SurfaceTyId],
-        class_key: &DefinitionKey,
+        shape_args: &[SurfaceTyId],
+        shape_key: &DefinitionKey,
     ) -> Symbol {
         let ctx = self;
-        for class in surface.exported_classes() {
-            if &class.key == class_key {
-                return ctx.intern(&class.key.name);
+        for shape in surface.exported_shapes() {
+            if &shape.key == shape_key {
+                return ctx.intern(&shape.key.name);
             }
         }
-        let _ = class_args;
-        ctx.intern(&class_key.name)
+        let _ = shape_args;
+        ctx.intern(&shape_key.name)
     }
 }
 
 impl CheckPass<'_, '_, '_> {
-    fn instance_provider_name(&self, instance: &InstanceFacts) -> Box<str> {
-        let args = instance
-            .class_args
+    fn given_provider_name(&self, given: &GivenFacts) -> Box<str> {
+        let args = given
+            .shape_args
             .iter()
             .copied()
             .map(|arg| self.render_ty(arg))
@@ -1353,8 +1325,8 @@ impl CheckPass<'_, '_, '_> {
             .join(",");
         format!(
             "__dict__::{}::{}[{args}]",
-            instance.class_key.module.as_str(),
-            instance.class_key.name
+            given.shape_key.module.as_str(),
+            given.shape_key.name
         )
         .into_boxed_str()
     }

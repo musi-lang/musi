@@ -4,7 +4,7 @@ use crate::descriptor::{
     ConstantDescriptor, ConstantValue, EffectDescriptor, EffectOpDescriptor, ForeignDescriptor,
     GlobalDescriptor, MetaDescriptor, ProcedureDescriptor, TypeDescriptor,
 };
-use crate::{Artifact, CodeEntry, Instruction, Label, Opcode, Operand};
+use crate::{Artifact, CodeEntry, Instruction, Label, Opcode, Operand, SeamDiagKind};
 use crate::{decode_binary, encode_binary, format_text, parse_text};
 use music_term::SyntaxShape;
 
@@ -27,14 +27,11 @@ fn sample_artifact() -> Artifact {
             1,
             Box::new([
                 CodeEntry::Label(Label { id: 0 }),
-                CodeEntry::Instruction(Instruction::new(
-                    Opcode::LdConst,
-                    Operand::Constant(constant),
-                )),
+                CodeEntry::Instruction(Instruction::new(Opcode::LdC, Operand::Constant(constant))),
                 CodeEntry::Instruction(Instruction::new(Opcode::StLoc, Operand::Local(0))),
                 CodeEntry::Instruction(Instruction::new(Opcode::LdLoc, Operand::Local(0))),
                 CodeEntry::Instruction(Instruction::new(
-                    Opcode::SeqNew,
+                    Opcode::NewArr,
                     Operand::TypeLen { ty: int_ty, len: 2 },
                 )),
                 CodeEntry::Instruction(Instruction::new(Opcode::Ret, Operand::None)),
@@ -202,14 +199,14 @@ mod success {
                         Operand::Global(global),
                     )),
                     CodeEntry::Instruction(Instruction::new(
-                        Opcode::SeqNew,
+                        Opcode::NewArr,
                         Operand::TypeLen { ty: int_ty, len: 2 },
                     )),
-                    CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(0))),
-                    CodeEntry::Instruction(Instruction::new(Opcode::SeqGet, Operand::None)),
-                    CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(0))),
-                    CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(1))),
-                    CodeEntry::Instruction(Instruction::new(Opcode::SeqSet, Operand::None)),
+                    CodeEntry::Instruction(Instruction::new(Opcode::LdCI4, Operand::I16(0))),
+                    CodeEntry::Instruction(Instruction::new(Opcode::LdElem, Operand::None)),
+                    CodeEntry::Instruction(Instruction::new(Opcode::LdCI4, Operand::I16(0))),
+                    CodeEntry::Instruction(Instruction::new(Opcode::LdCI4, Operand::I16(1))),
+                    CodeEntry::Instruction(Instruction::new(Opcode::StElem, Operand::None)),
                     CodeEntry::Instruction(Instruction::new(Opcode::Ret, Operand::None)),
                 ]),
             )
@@ -249,16 +246,16 @@ mod success {
                 0,
                 Box::new([
                     CodeEntry::Label(Label { id: 0 }),
-                    CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(1))),
-                    CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(2))),
+                    CodeEntry::Instruction(Instruction::new(Opcode::LdCI4, Operand::I16(1))),
+                    CodeEntry::Instruction(Instruction::new(Opcode::LdCI4, Operand::I16(2))),
                     CodeEntry::Instruction(Instruction::new(
-                        Opcode::ClsNew,
+                        Opcode::NewFn,
                         Operand::WideProcedureCaptures {
                             procedure: closure_procedure,
                             captures: 2,
                         },
                     )),
-                    CodeEntry::Instruction(Instruction::new(Opcode::CallCls, Operand::None)),
+                    CodeEntry::Instruction(Instruction::new(Opcode::CallInd, Operand::None)),
                     CodeEntry::Instruction(Instruction::new(Opcode::Ret, Operand::None)),
                 ]),
             )
@@ -327,18 +324,18 @@ mod success {
                 0,
                 Box::new([
                     CodeEntry::Label(Label { id: 0 }),
-                    CodeEntry::Instruction(Instruction::new(Opcode::SeqCat, Operand::None)),
+                    CodeEntry::Instruction(Instruction::new(Opcode::CallInd, Operand::None)),
                     CodeEntry::Instruction(Instruction::new(
-                        Opcode::CallSeq,
+                        Opcode::Call,
                         Operand::Procedure(callee),
                     )),
-                    CodeEntry::Instruction(Instruction::new(Opcode::CallClsSeq, Operand::None)),
+                    CodeEntry::Instruction(Instruction::new(Opcode::CallInd, Operand::None)),
                     CodeEntry::Instruction(Instruction::new(
-                        Opcode::FfiCallSeq,
+                        Opcode::CallFfi,
                         Operand::Foreign(foreign),
                     )),
                     CodeEntry::Instruction(Instruction::new(
-                        Opcode::EffInvkSeq,
+                        Opcode::Raise,
                         Operand::Effect { effect, op: 0 },
                     )),
                     CodeEntry::Instruction(Instruction::new(Opcode::Ret, Operand::None)),
@@ -365,6 +362,6 @@ mod failure {
     fn rejects_invalid_binary_magic() {
         let err = decode_binary(b"not-seam").expect_err("invalid magic should reject");
 
-        assert_eq!(err.to_string(), "invalid binary header");
+        assert_eq!(err.to_string(), SeamDiagKind::InvalidBinaryHeader.message());
     }
 }

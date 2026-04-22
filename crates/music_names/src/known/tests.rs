@@ -37,7 +37,7 @@ mod success {
         let mut interner = Interner::new();
         let known = KnownSymbols::new(&mut interner);
         let prelude = known.compiler_prelude();
-        assert_eq!(prelude.len(), 33);
+        assert_eq!(prelude.len(), 34);
         assert!(prelude.contains(&known.type_));
         assert!(prelude.contains(&known.array));
         assert!(prelude.contains(&known.nat));
@@ -54,6 +54,7 @@ mod success {
         assert!(prelude.contains(&known.float64));
         assert!(prelude.contains(&known.rune));
         assert!(prelude.contains(&known.range));
+        assert!(prelude.contains(&known.pin));
         assert!(prelude.contains(&known.closed_range));
         assert!(prelude.contains(&known.partial_range_from));
         assert!(prelude.contains(&known.partial_range_up_to));

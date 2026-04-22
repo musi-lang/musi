@@ -46,7 +46,7 @@ mod failure {
         let diag = ParseError::new(ParseErrorKind::NonAssociativeChain, Span::new(6, 7))
             .to_diag(source_id(text), text);
 
-        assert_eq!(diag.message(), "comparison chain requires grouping");
+        assert_eq!(diag.message(), "comparison chain needs grouping");
         assert_eq!(diag.hint(), Some("parenthesize comparison"));
     }
 

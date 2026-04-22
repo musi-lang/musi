@@ -45,7 +45,7 @@ pub enum VmValueKind {
     Module,
     Foreign,
     Effect,
-    Class,
+    Shape,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

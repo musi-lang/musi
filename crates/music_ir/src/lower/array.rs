@@ -102,25 +102,31 @@ fn append_array_spread_parts(
             parts.push(IrSeqPart::Spread(temp_expr.clone()));
             Ok(true)
         }
-        HirTyKind::Range { .. } => {
-            let evidence = sema
-                .expr_evidence(spread_expr)
+        HirTyKind::Range { bound } => {
+            let result_ty_name = range_sequence_type_name(sema, *bound, ctx.interner);
+            let constraint_answer = sema
+                .expr_constraint_answers(spread_expr)
                 .and_then(|items| items.first())
-                .map(|item| super::lower_evidence_expr(ctx, origin, item));
-            let Some(evidence) = evidence else {
+                .map(|item| super::lower_constraint_answer_expr(ctx, origin, item));
+            let Some(constraint_answer) = constraint_answer else {
                 return Err("range spread evidence missing".into());
             };
             parts.push(IrSeqPart::Spread(IrExpr::new(
                 origin,
                 IrExprKind::RangeMaterialize {
                     range: Box::new(temp_expr.clone()),
-                    evidence: Box::new(evidence),
+                    evidence: Box::new(constraint_answer),
+                    result_ty_name,
                 },
             )));
             Ok(true)
         }
         _ => Err("array spread source is not tuple/array".into()),
     }
+}
+
+fn range_sequence_type_name(sema: &SemaModule, item: HirTyId, interner: &Interner) -> Box<str> {
+    format!("[]{}", render_ty_name(sema, item, interner)).into()
 }
 
 fn append_array_dim_spread_parts(
@@ -136,7 +142,7 @@ fn append_array_dim_spread_parts(
         return Ok(true);
     }
     if dims_vec.len() != 1 {
-        return Err("array spread requires 1D array".into());
+        return Err("array spread needs 1D array".into());
     }
     match dims_vec[0] {
         HirDim::Int(len) => {

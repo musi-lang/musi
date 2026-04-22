@@ -213,7 +213,7 @@ fn extract_wrapper_value(
             return Err(native_arg_invalid(
                 foreign,
                 index,
-                "transparent wrapper extraction requires transparent ABI type".into(),
+                "transparent wrapper extraction needs transparent ABI type".into(),
             ));
         }
     };

@@ -9,6 +9,7 @@ use std::fs;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command as ProcessCommand, ExitCode};
+use std::slice::from_ref;
 use std::thread;
 use std::time::{Duration, SystemTime};
 
@@ -295,10 +296,10 @@ fn test_project(target: Option<&Path>, workspace: u8) -> MusiResult {
     let anchor = project_anchor(target)?;
     let project = load_project_ancestor(anchor, ProjectOptions::default())?;
     let tests = resolve_test_targets(&project, target, workspace)?;
-    let mut runtime = project_runtime_with_output(&project, RuntimeOutputMode::Capture);
-    register_synthetic_test_modules(&project, &tests, &mut runtime)?;
     let mut reports = Vec::new();
     for test in &tests {
+        let mut runtime = project_runtime_with_output(&project, RuntimeOutputMode::Capture);
+        register_synthetic_test_modules(&project, from_ref(test), &mut runtime)?;
         let report = runtime.run_test_export(test.module_key.as_str(), &test.export_name)?;
         let label = test_target_label(&project, test);
         reports.push(TestModuleReport { label, report });

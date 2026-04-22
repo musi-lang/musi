@@ -46,8 +46,18 @@ fn assert_format_preserves_tokens(source: &str) {
     assert_formatted_text_is_stable(&result.text);
 }
 
-fn assert_format_is_stable(source: &str) {
-    let result = format_source(source, &options()).unwrap();
+fn assert_file_format_is_stable(path: &Path, source: &str) {
+    let lexed = Lexer::new(source).lex();
+    let parsed = parse(lexed.clone());
+    assert!(
+        lexed.errors().is_empty() && parsed.errors().is_empty(),
+        "{}: lex={:?} parse={:?}",
+        path.display(),
+        lexed.errors(),
+        parsed.errors()
+    );
+    let result = format_source(source, &options())
+        .unwrap_or_else(|err| panic!("{}: {err:?}", path.display()));
     assert_formatted_text_is_stable(&result.text);
 }
 
@@ -361,13 +371,13 @@ mod success {
 
     #[test]
     fn keeps_fitting_instance_members_inline_and_spaced() {
-        let source = "export instance Rangeable[Int]{ let next (value : Int) : Option[Int] := someOf[Int](value + 1); };";
+        let source = "export let intRangeable := given Rangeable[Int] { let next (value : Int) : Option[Int] := someOf[Int](value + 1); };";
 
         let result = format_source(source, &options()).unwrap();
 
         assert_eq!(
             result.text,
-            "export instance Rangeable[Int] {\n  let next (value : Int) : Option[Int] := someOf[Int](value + 1);\n};\n"
+            "export let intRangeable :=\n  given Rangeable[Int] {\n  let next (value : Int) : Option[Int] := someOf[Int](value + 1);\n};\n"
         );
     }
 
@@ -692,13 +702,13 @@ mod success {
     fn trailing_commas_apply_to_effect_sets() {
         let mut options = options();
         options.trailing_commas = TrailingCommas::MultiLine;
-        let source = "let f () : Int using { Console, Runtime } := 1;";
+        let source = "let f () : Int require { Console, Runtime } := 1;";
 
         let result = format_source(source, &options).unwrap();
 
         assert_eq!(
             result.text,
-            "let f () : Int using {\n  Console,\n  Runtime,\n} := 1;\n"
+            "let f () : Int require {\n  Console,\n  Runtime,\n} := 1;\n"
         );
         let second = format_source(&result.text, &options).unwrap();
         assert_eq!(second.text, result.text);
@@ -726,8 +736,8 @@ mod success {
     }
 
     #[test]
-    fn keeps_attribute_attached_on_own_line_before_foreign() {
-        let source = "@link(symbol := \"data.tag\")\nforeign \"musi\" let levelTagIntrinsic (level : Level) : Int;";
+    fn keeps_attribute_attached_on_own_line_before_native() {
+        let source = "@link(symbol := \"data.tag\")\nnative \"musi\" let levelTagIntrinsic (level : Level) : Int;";
 
         let mut options = options();
         options.trailing_commas = TrailingCommas::Never;
@@ -736,7 +746,7 @@ mod success {
 
         assert_eq!(
             result.text,
-            "@link(symbol := \"data.tag\")\nforeign \"musi\" let levelTagIntrinsic (level : Level) : Int;\n"
+            "@link(symbol := \"data.tag\")\nnative \"musi\" let levelTagIntrinsic (level : Level) : Int;\n"
         );
         let second = format_source(&result.text, &options).unwrap();
         assert_eq!(second.text, result.text);
@@ -744,7 +754,7 @@ mod success {
 
     #[test]
     fn formats_multiple_attributes_as_attached_lines() {
-        let source = "@when(os := \"linux\") @link(name := \"c\") foreign \"c\" let puts (msg : CString) : Int;";
+        let source = "@target(os := \"linux\") @link(name := \"c\") native \"c\" let puts (msg : CString) : Int;";
 
         let mut options = options();
         options.trailing_commas = TrailingCommas::Never;
@@ -753,7 +763,7 @@ mod success {
 
         assert_eq!(
             result.text,
-            "@when(os := \"linux\")\n@link(name := \"c\")\nforeign \"c\" let puts (msg : CString) : Int;\n"
+            "@target(os := \"linux\")\n@link(name := \"c\")\nnative \"c\" let puts (msg : CString) : Int;\n"
         );
     }
 
@@ -1173,7 +1183,7 @@ export let test () :=
             "export let command (value : String) : Command := .Command(value := value);",
             "export let values : []Int := [1, 2, 3];",
             "export let cast [T] (raw : CPtr) : Ptr[T] := .Ptr(raw := raw);",
-            "export foreign \"musi\" (\nlet offset[T] (pointer : Ptr[T], count : Int) : Ptr[T];\nlet read[T] (pointer : Ptr[T]) : T;\n);",
+            "export native \"musi\" (\nlet offset[T] (pointer : Ptr[T], count : Int) : Ptr[T];\nlet read[T] (pointer : Ptr[T]) : T;\n);",
             "--- Documented value.\nexport let x : Int := 1;",
             "let x := 1; -- trailing\nlet y := /- inline -/ 2;",
         ];
@@ -1195,7 +1205,7 @@ export let test () :=
 
         for path in files {
             let source = fs::read_to_string(&path).unwrap();
-            assert_format_is_stable(&source);
+            assert_file_format_is_stable(&path, &source);
         }
     }
 

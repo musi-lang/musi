@@ -695,9 +695,9 @@ fn is_let_line(line: &str) -> bool {
         || trimmed.starts_with("let(")
         || trimmed.starts_with("export let ")
         || trimmed.starts_with("export let(")
-        || trimmed.starts_with("foreign let ")
-        || trimmed.starts_with("foreign let(")
-        || trimmed.starts_with("export foreign ")
+        || trimmed.starts_with("native let ")
+        || trimmed.starts_with("native let(")
+        || trimmed.starts_with("export native ")
 }
 
 fn newline_count(text: &str) -> usize {

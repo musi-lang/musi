@@ -21,7 +21,7 @@ export let test () :=
       testing.toBeTruthy(ffi.ptr.isNull[Int](samePointer)),
     );
     testing.it(
-      "'ptr.offset' works as first-class field",
+      "'ptr.offset' works as stored field value",
       testing.toBeTruthy(ffi.ptr.isNull[Int](aliasedPointer)),
     );
     testing.endDescribe()

@@ -128,11 +128,7 @@ pub fn rhs_block_header_len(lexed: &LexedSource, start_index: usize) -> Option<u
     let first = lexed.tokens().get(start_index)?;
     if !matches!(
         first.kind,
-        TokenKind::KwClass
-            | TokenKind::KwData
-            | TokenKind::KwEffect
-            | TokenKind::KwInstance
-            | TokenKind::KwUnsafe
+        TokenKind::KwData | TokenKind::KwEffect | TokenKind::KwShape | TokenKind::KwUnsafe
     ) {
         return None;
     }

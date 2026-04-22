@@ -1,9 +1,9 @@
 use music_base::{SourceId, Span};
 use music_module::ModuleKey;
 use music_sema::{
-    ComptimeClassValue, ComptimeClosureValue, ComptimeDataValue, ComptimeEffectValue,
-    ComptimeForeignValue, ComptimeModuleValue, ComptimeSeqValue, ComptimeTypeValue, ComptimeValue,
-    DefinitionKey,
+    ComptimeClosureValue, ComptimeDataValue, ComptimeEffectValue, ComptimeForeignValue,
+    ComptimeImportRecordValue, ComptimeSeqValue, ComptimeShapeValue, ComptimeTypeValue,
+    ComptimeValue, DefinitionKey,
 };
 use music_term::{TypeModuleRef, TypeTerm, TypeTermKind};
 
@@ -29,13 +29,13 @@ pub(super) fn lower_comptime_value(ctx: &mut LowerCtx<'_>, value: &ComptimeValue
         ComptimeValue::Data(value) => lower_comptime_data(ctx, value),
         ComptimeValue::Closure(value) => lower_comptime_closure(ctx, value),
         ComptimeValue::Type(value) => lower_comptime_type(value),
-        ComptimeValue::Module(value) => lower_comptime_module(value),
+        ComptimeValue::ImportRecord(value) => lower_comptime_import_record(value),
         ComptimeValue::Foreign(value) => lower_comptime_foreign(value),
         ComptimeValue::Continuation(_) => {
             invalid_lowering_path("escaping compile-time continuation")
         }
         ComptimeValue::Effect(value) => lower_comptime_effect(ctx, value),
-        ComptimeValue::Class(value) => lower_comptime_class(ctx, value),
+        ComptimeValue::Shape(value) => lower_comptime_shape(ctx, value),
     }
 }
 
@@ -79,7 +79,7 @@ fn lower_comptime_data(ctx: &mut LowerCtx<'_>, value: &ComptimeDataValue) -> IrE
 
 fn lower_comptime_closure(ctx: &mut LowerCtx<'_>, value: &ComptimeClosureValue) -> IrExprKind {
     IrExprKind::ClosureNew {
-        callee: IrNameRef::new(value.name.clone()).with_module_target(value.module.clone()),
+        callee: IrNameRef::new(value.name.clone()).with_import_record_target(value.module.clone()),
         captures: value
             .captures
             .iter()
@@ -95,7 +95,7 @@ fn lower_comptime_type(value: &ComptimeTypeValue) -> IrExprKind {
     }
 }
 
-fn lower_comptime_module(value: &ComptimeModuleValue) -> IrExprKind {
+fn lower_comptime_import_record(value: &ComptimeImportRecordValue) -> IrExprKind {
     IrExprKind::ModuleLoad {
         spec: Box::new(IrExpr::new(
             dummy_origin(),
@@ -112,7 +112,7 @@ fn lower_comptime_foreign(value: &ComptimeForeignValue) -> IrExprKind {
         IrExprKind::Name {
             binding: None,
             name: value.name.clone(),
-            module_target: Some(value.module.clone()),
+            import_record_target: Some(value.module.clone()),
         },
     );
     if value.type_args.is_empty() {
@@ -134,13 +134,13 @@ fn lower_comptime_effect(ctx: &LowerCtx<'_>, value: &ComptimeEffectValue) -> IrE
     lower_comptime_module_export(ctx, &value.module, &value.name)
 }
 
-fn lower_comptime_class(ctx: &LowerCtx<'_>, value: &ComptimeClassValue) -> IrExprKind {
+fn lower_comptime_shape(ctx: &LowerCtx<'_>, value: &ComptimeShapeValue) -> IrExprKind {
     lower_comptime_module_export(ctx, &value.module, &value.name)
 }
 
 fn lower_comptime_module_export(ctx: &LowerCtx<'_>, module: &ModuleKey, name: &str) -> IrExprKind {
     if module == &ctx.module_key {
-        invalid_lowering_path("compile-time nominal capability needs module export boundary");
+        invalid_lowering_path("compile-time nominal shape needs module export boundary");
     }
     IrExprKind::ModuleGet {
         base: Box::new(IrExpr::new(

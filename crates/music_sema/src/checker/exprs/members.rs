@@ -1,13 +1,14 @@
 use std::collections::{BTreeSet, HashMap};
 
-use music_hir::{HirAccessKind, HirExprId, HirExprKind, HirOrigin, HirTyId, HirTyKind};
+use music_base::diag::DiagContext;
+use music_hir::{HirAccessChainMode, HirExprId, HirExprKind, HirOrigin, HirTyId, HirTyKind};
 use music_module::ModuleKey;
 use music_names::{Ident, NameBindingId, Symbol};
 
 use crate::BindingScheme;
 use crate::api::{ExprFacts, ExprMemberFact, ExprMemberKind, ModuleSurface};
 
-use super::super::decls::module_export_for_expr;
+use super::super::decls::{import_record_export_for_expr, import_record_target_for_expr};
 use super::super::{CheckPass, DiagKind};
 use super::peel_mut_ty;
 
@@ -22,7 +23,7 @@ impl CheckPass<'_, '_, '_> {
         expr_id: HirExprId,
         origin: HirOrigin,
         base: HirExprId,
-        access: HirAccessKind,
+        access: HirAccessChainMode,
         name: Ident,
     ) -> ExprFacts {
         let base_facts = super::check_expr(self, base);
@@ -48,14 +49,16 @@ impl CheckPass<'_, '_, '_> {
             }
         }
 
-        if let Some(ty) = self.check_class_member_field(expr_id, origin, base, name) {
+        if let Some(ty) = self.check_shape_member_field(expr_id, origin, base, name) {
             return ExprFacts::new(ty, effects);
         }
 
         let base_is_mut = self.is_mut_ty(base_facts.ty);
         let base_ty = peel_mut_ty(self, base_facts.ty);
         let field_name = self.resolve_symbol(name.name).to_owned();
-        let ty = if let Some(field_ty) = self.record_like_field_ty(base_ty, &field_name) {
+        let ty = if import_record_target_for_expr(self, base).is_some() {
+            self.check_import_record_field_expr(expr_id, origin, base, name)
+        } else if let Some(field_ty) = self.record_like_field_ty(base_ty, &field_name) {
             self.set_expr_member_fact(
                 expr_id,
                 ExprMemberFact::new(ExprMemberKind::RecordField, name.name, field_ty),
@@ -74,18 +77,18 @@ impl CheckPass<'_, '_, '_> {
         ExprFacts::new(ty, effects)
     }
 
-    fn check_class_member_field(
+    fn check_shape_member_field(
         &mut self,
         expr_id: HirExprId,
         origin: HirOrigin,
         base: HirExprId,
         name: Ident,
     ) -> Option<HirTyId> {
-        let HirExprKind::Name { name: class_name } = self.expr(base).kind else {
+        let HirExprKind::Name { name: shape_name } = self.expr(base).kind else {
             return None;
         };
-        let class = self.class_facts_by_name(class_name.name)?.clone();
-        let (member_index, member) = class
+        let shape = self.shape_facts_by_name(shape_name.name)?.clone();
+        let (member_index, member) = shape
             .members
             .iter()
             .enumerate()
@@ -95,7 +98,7 @@ impl CheckPass<'_, '_, '_> {
             .params
             .iter()
             .copied()
-            .map(|ty| self.erase_class_type_params(ty, &class.type_params))
+            .map(|ty| self.erase_shape_type_params(ty, &shape.type_params))
             .collect::<Vec<_>>();
         let params = self.alloc_ty_list(params);
         let ty = self.alloc_ty(HirTyKind::Arrow {
@@ -105,14 +108,14 @@ impl CheckPass<'_, '_, '_> {
         });
         self.set_expr_member_fact(
             expr_id,
-            ExprMemberFact::new(ExprMemberKind::ClassMember, name.name, ty)
+            ExprMemberFact::new(ExprMemberKind::ShapeMember, name.name, ty)
                 .with_index(member_index),
         );
         let _ = origin;
         Some(ty)
     }
 
-    fn erase_class_type_params(&self, ty: HirTyId, type_params: &[Symbol]) -> HirTyId {
+    fn erase_shape_type_params(&self, ty: HirTyId, type_params: &[Symbol]) -> HirTyId {
         match self.ty(ty).kind {
             HirTyKind::Named { name, args }
                 if type_params.contains(&name) && self.ty_ids(args).is_empty() =>
@@ -129,13 +132,10 @@ impl CheckPass<'_, '_, '_> {
         origin: HirOrigin,
         base_expr: HirExprId,
         base: (HirTyId, bool),
-        access: HirAccessKind,
+        access: HirAccessChainMode,
         name: Ident,
     ) -> HirTyId {
         let (base_ty, base_is_mut) = base;
-        if self.ty(base_ty).kind == HirTyKind::Module {
-            return self.check_module_field_expr(expr_id, origin, base_expr, name);
-        }
         if let Some(field_ty) = self.check_type_or_callable_field(
             expr_id,
             origin,
@@ -149,33 +149,33 @@ impl CheckPass<'_, '_, '_> {
         self.diag_invalid_non_record_field(origin, base_ty, access, name)
     }
 
-    fn check_module_field_expr(
+    fn check_import_record_field_expr(
         &mut self,
         expr_id: HirExprId,
         origin: HirOrigin,
         base_expr: HirExprId,
         name: Ident,
     ) -> HirTyId {
-        let Some((surface, export)) = module_export_for_expr(self, base_expr, name) else {
+        let Some((surface, export)) = import_record_export_for_expr(self, base_expr, name) else {
             return self.builtins().any;
         };
-        let module_target = export.module_target.clone();
-        if let Some(target) = module_target.clone() {
-            self.set_expr_module_target(expr_id, target);
+        let import_record_target = export.import_record_target.clone();
+        if let Some(target) = import_record_target.clone() {
+            self.set_expr_import_record_target(expr_id, target);
         }
         let scheme = self.scheme_from_export(&surface, &export);
-        self.resolve_module_export_evidence(expr_id, origin, &scheme);
+        self.resolve_import_record_export_answers(expr_id, origin, &scheme);
         self.set_expr_callable_effects(expr_id, scheme.effects.clone());
         let value_ty = self.scheme_value_ty(&scheme);
-        let mut fact = ExprMemberFact::new(ExprMemberKind::ModuleExport, name.name, value_ty);
-        if let Some(target) = module_target {
-            fact = fact.with_module_target(target);
+        let mut fact = ExprMemberFact::new(ExprMemberKind::ImportRecordExport, name.name, value_ty);
+        if let Some(target) = import_record_target {
+            fact = fact.with_import_record_target(target);
         }
         self.set_expr_member_fact(expr_id, fact);
         value_ty
     }
 
-    fn resolve_module_export_evidence(
+    fn resolve_import_record_export_answers(
         &mut self,
         expr_id: HirExprId,
         origin: HirOrigin,
@@ -185,11 +185,11 @@ impl CheckPass<'_, '_, '_> {
             return;
         }
         let instantiated = self.instantiate_monomorphic_scheme(scheme);
-        if let Some(evidence) =
-            self.resolve_obligations_to_evidence(origin, &instantiated.obligations)
-            && !evidence.is_empty()
+        if let Some(answers) =
+            self.resolve_obligations_to_answers(origin, &instantiated.obligations)
+            && !answers.is_empty()
         {
-            self.set_expr_evidence(expr_id, evidence);
+            self.set_expr_constraint_answers(expr_id, answers);
         }
     }
 
@@ -219,32 +219,40 @@ impl CheckPass<'_, '_, '_> {
         &mut self,
         origin: HirOrigin,
         base_ty: HirTyId,
-        access: HirAccessKind,
+        access: HirAccessChainMode,
         name: Ident,
     ) -> HirTyId {
         if matches!(self.ty(base_ty).kind, HirTyKind::Record { .. })
             || self.range_item_type(base_ty).is_some()
         {
             let field_name = self.resolve_symbol(name.name).to_owned();
-            self.diag_message(
+            self.diag_with(
                 origin.span,
                 DiagKind::UnknownField,
-                format!("unknown field `{field_name}`"),
-                format!("unknown field `{field_name}`"),
+                DiagContext::new().with("field", field_name),
             );
             return self.builtins().unknown;
         }
-        self.diag_invalid_field_target(origin, access);
+        self.diag_invalid_field_target(origin, access, base_ty);
         self.builtins().unknown
     }
 
-    fn diag_invalid_field_target(&mut self, origin: HirOrigin, access: HirAccessKind) {
-        let message = if matches!(access, HirAccessKind::Direct) {
-            "field access target must be record, module, or dot-callable target"
+    fn diag_invalid_field_target(
+        &mut self,
+        origin: HirOrigin,
+        access: HirAccessChainMode,
+        base_ty: HirTyId,
+    ) {
+        let target = if matches!(access, HirAccessChainMode::Normal) {
+            self.render_ty(base_ty)
         } else {
-            "optional field access target must be optional record-like value"
+            format!("optional {}", self.render_ty(base_ty))
         };
-        self.diag(origin.span, DiagKind::InvalidFieldTarget, message);
+        self.diag_with(
+            origin.span,
+            DiagKind::InvalidFieldTarget,
+            DiagContext::new().with("target", target),
+        );
     }
 
     fn check_attached_method_namespace(
@@ -274,9 +282,9 @@ impl CheckPass<'_, '_, '_> {
                 scheme.ty,
             )
             .with_binding(binding);
-            if let Some(target) = self.binding_module_target(binding).cloned() {
-                self.set_expr_module_target(expr_id, target.clone());
-                fact = fact.with_module_target(target);
+            if let Some(target) = self.binding_import_record_target(binding).cloned() {
+                self.set_expr_import_record_target(expr_id, target.clone());
+                fact = fact.with_import_record_target(target);
             }
             self.set_expr_member_fact(expr_id, fact);
             return Some(scheme.ty);
@@ -290,13 +298,13 @@ impl CheckPass<'_, '_, '_> {
         let imported = imported.into_iter().next()?;
         let ImportedAttachedMethod { module, scheme } = imported;
         self.set_expr_callable_effects(expr_id, scheme.effects.clone());
-        self.set_expr_module_target(expr_id, module.clone());
+        self.set_expr_import_record_target(expr_id, module.clone());
         let fact = ExprMemberFact::new(
             ExprMemberKind::AttachedMethodNamespace,
             method_name,
             scheme.ty,
         )
-        .with_module_target(module);
+        .with_import_record_target(module);
         self.set_expr_member_fact(expr_id, fact);
         Some(scheme.ty)
     }
@@ -318,7 +326,7 @@ impl CheckPass<'_, '_, '_> {
         if self.resolve_symbol(pointer_name.name) != "ptr" {
             return None;
         }
-        let (surface, _) = module_export_for_expr(self, module_expr, pointer_name)?;
+        let (surface, _) = import_record_export_for_expr(self, module_expr, pointer_name)?;
         let module_key = surface.module_key().as_str();
         if module_key != "@std/ffi" && !module_key.ends_with("ffi/index.ms") {
             return None;
@@ -387,11 +395,11 @@ impl CheckPass<'_, '_, '_> {
         let scheme = self.binding_scheme(binding).cloned()?;
         if scheme.type_params.is_empty() {
             let instantiated = self.instantiate_monomorphic_scheme(&scheme);
-            if let Some(evidence) =
-                self.resolve_obligations_to_evidence(origin, &instantiated.obligations)
-                && !evidence.is_empty()
+            if let Some(answers) =
+                self.resolve_obligations_to_answers(origin, &instantiated.obligations)
+                && !answers.is_empty()
             {
-                self.set_expr_evidence(expr_id, evidence);
+                self.set_expr_constraint_answers(expr_id, answers);
             }
         }
         self.set_expr_callable_effects(expr_id, scheme.effects.clone());
@@ -405,9 +413,9 @@ impl CheckPass<'_, '_, '_> {
         };
         let mut fact =
             ExprMemberFact::new(member_kind, method_name, value_ty).with_binding(binding);
-        if let Some(target) = self.binding_module_target(binding).cloned() {
-            self.set_expr_module_target(expr_id, target.clone());
-            fact = fact.with_module_target(target);
+        if let Some(target) = self.binding_import_record_target(binding).cloned() {
+            self.set_expr_import_record_target(expr_id, target.clone());
+            fact = fact.with_import_record_target(target);
         }
         self.set_expr_member_fact(expr_id, fact);
         Some(value_ty)
@@ -432,22 +440,22 @@ impl CheckPass<'_, '_, '_> {
         let ImportedAttachedMethod { module, scheme } = imported.into_iter().next()?;
         if scheme.type_params.is_empty() {
             let instantiated = self.instantiate_monomorphic_scheme(&scheme);
-            if let Some(evidence) =
-                self.resolve_obligations_to_evidence(origin, &instantiated.obligations)
-                && !evidence.is_empty()
+            if let Some(answers) =
+                self.resolve_obligations_to_answers(origin, &instantiated.obligations)
+                && !answers.is_empty()
             {
-                self.set_expr_evidence(expr_id, evidence);
+                self.set_expr_constraint_answers(expr_id, answers);
             }
         }
         self.set_expr_callable_effects(expr_id, scheme.effects.clone());
         let value_ty = self
             .strip_dot_callable_param(scheme.ty)
             .unwrap_or(scheme.ty);
-        self.set_expr_module_target(expr_id, module.clone());
+        self.set_expr_import_record_target(expr_id, module.clone());
         self.set_expr_member_fact(
             expr_id,
             ExprMemberFact::new(ExprMemberKind::AttachedMethod, method_name, value_ty)
-                .with_module_target(module),
+                .with_import_record_target(module),
         );
         Some(value_ty)
     }

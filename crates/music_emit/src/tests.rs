@@ -61,7 +61,11 @@ fn emitted_opcodes(emitted: &EmittedModule) -> Vec<Opcode> {
 
 fn assert_module_opcodes(src: &str, expected: &[Opcode]) {
     let emitted = emit_module(src).expect("emit should succeed");
-    assert!(emitted.artifact.validate().is_ok());
+    assert!(
+        emitted.artifact.validate().is_ok(),
+        "{:?}",
+        emitted.artifact.validate()
+    );
     let opcodes = emitted_opcodes(&emitted);
     for opcode in expected {
         assert!(opcodes.contains(opcode));
@@ -76,10 +80,10 @@ mod success {
         let ir = lower_ir(
             r#"
         let Option := data { | Some(Int) | None };
-        foreign "c" (
+        native "c" (
           let puts (value : CString) : Int;
         );
-        export let answer : Int := 42;
+        export let result : Int := 42;
         export let forty_two () : Int := 42;
     "#,
             "main",
@@ -103,14 +107,18 @@ mod success {
         let main = lower_ir(
             r#"
         import "dep";
-        export let answer : Int := 42;
+        export let result : Int := 42;
     "#,
             "main",
         );
 
         let program = lower_ir_program(&[dep, main], &ModuleKey::new("main"), EmitOptions)
             .expect("program emit should succeed");
-        assert!(program.artifact.validate().is_ok());
+        assert!(
+            program.artifact.validate().is_ok(),
+            "{:?}",
+            program.artifact.validate()
+        );
         assert_eq!(program.modules.len(), 2);
     }
 
@@ -118,8 +126,8 @@ mod success {
     fn emits_module_entry_for_top_level_expression_statement() {
         let emitted = emit_module(
             r"
-        let answer () : Int := 42;
-        answer();
+        let result () : Int := 42;
+        result();
     ",
         )
         .expect("emit should succeed");
@@ -142,7 +150,7 @@ mod success {
         export let pair := (1, 2);
         export let items := [1, 2, 3];
         export let pi : Float := 3.5;
-        export let answer () : Int := id[Int](42);
+        export let result () : Int := id[Int](42);
     ",
             "main",
         );
@@ -163,7 +171,7 @@ mod success {
         assert_module_opcodes(
             r"
         export let base : Int := 41;
-        export let answer (x : Int) : Int := (
+        export let result (x : Int) : Int := (
           let items := mut [1, 2, 3];
           items.[0] := base;
           match x (| 0 => items.[0] | value => value + base);
@@ -172,8 +180,8 @@ mod success {
             &[
                 Opcode::LdGlob,
                 Opcode::StGlob,
-                Opcode::SeqGet,
-                Opcode::SeqSet,
+                Opcode::LdElem,
+                Opcode::StElem,
                 Opcode::BrFalse,
             ],
         );
@@ -188,20 +196,20 @@ mod success {
           grid.[0, 1]
         );
     ",
-            &[Opcode::SeqGetN, Opcode::SeqSetN],
+            &[Opcode::LdElem, Opcode::StElem],
         );
     }
 
     #[test]
-    fn emits_dynamic_module_export_lookup() {
+    fn emits_dynamic_module_load() {
         assert_module_opcodes(
             r"
         export let read (name : String) : Any := (
           let loaded := import name;
-          loaded.answer
+          loaded
         );
     ",
-            &[Opcode::ModLoad, Opcode::ModGet],
+            &[Opcode::MdlLoad],
         );
     }
 
@@ -209,7 +217,7 @@ mod success {
     fn emits_case_tuple_and_array_patterns() {
         let emitted = emit_module(
             r"
-        export let answer () : Int := (
+        export let result () : Int := (
           let pair := (1, 2);
           let items := [3, 4];
           let p : Int := match pair (| (1, b) => b | _ => 0);
@@ -221,8 +229,8 @@ mod success {
         .expect("emit should succeed");
         assert!(emitted.artifact.validate().is_ok());
         let opcodes = emitted_opcodes(&emitted);
-        assert!(opcodes.contains(&Opcode::SeqGet));
-        assert!(opcodes.contains(&Opcode::SeqLen));
+        assert!(opcodes.contains(&Opcode::LdElem));
+        assert!(opcodes.contains(&Opcode::LdLen));
         assert!(opcodes.contains(&Opcode::BrFalse));
     }
 
@@ -265,7 +273,7 @@ mod success {
                 .flat_map(|(_, procedure)| procedure.code.iter())
                 .any(|entry| matches!(
                     entry,
-                    CodeEntry::Instruction(instruction) if instruction.opcode == Opcode::TyId
+                    CodeEntry::Instruction(instruction) if instruction.opcode == Opcode::LdType
                 ))
         );
     }
@@ -274,7 +282,7 @@ mod success {
     fn emits_records_with_projection_and_update() {
         let emitted = emit_module(
             r"
-        export let answer () : Int := (
+        export let result () : Int := (
           let r := { y := 2, x := 1 };
           let a : Int := r.x;
           let s := { ...r, x := 3 };
@@ -285,18 +293,18 @@ mod success {
         .expect("emit should succeed");
         assert!(emitted.artifact.validate().is_ok());
         let opcodes = emitted_opcodes(&emitted);
-        assert!(opcodes.contains(&Opcode::DataNew));
-        assert!(opcodes.contains(&Opcode::DataGet));
+        assert!(opcodes.contains(&Opcode::NewObj));
+        assert!(opcodes.contains(&Opcode::LdFld));
     }
 
     #[test]
     fn emits_foreign_calls() {
         let emitted = emit_module(
             r#"
-        foreign "c" (
+        native "c" (
           let puts (value : Int) : Int;
         );
-        export let answer () : Int := unsafe { puts(1); };
+        export let result () : Int := unsafe { puts(1); };
     "#,
         )
         .expect("emit should succeed");
@@ -304,7 +312,7 @@ mod success {
         assert!(
             emitted_opcodes(&emitted)
                 .into_iter()
-                .any(|opcode| opcode == Opcode::FfiCall)
+                .any(|opcode| opcode == Opcode::CallFfi)
         );
     }
 
@@ -314,7 +322,7 @@ mod success {
             r"
         let apply (f : Int -> Int, x : Int) : Int := f(x);
 
-        export let answer (x : Int) : Int := (
+        export let result (x : Int) : Int := (
           let base : Int := 41;
           let add_base (y : Int) : Int := y + base;
           apply(add_base, x);
@@ -333,10 +341,10 @@ mod success {
                 let CodeEntry::Instruction(instruction) = entry else {
                     continue;
                 };
-                if instruction.opcode == Opcode::CallCls {
+                if instruction.opcode == Opcode::CallInd {
                     has_indirect_call = true;
                 }
-                if instruction.opcode == Opcode::ClsNew {
+                if instruction.opcode == Opcode::NewFn {
                     if let music_seam::Operand::WideProcedureCaptures { captures, .. } =
                         &instruction.operand
                     {
@@ -356,7 +364,7 @@ mod success {
     fn emits_local_recursive_callable_lets() {
         let ir = lower_ir(
             r"
-        export let answer (n : Int) : Int := (
+        export let result (n : Int) : Int := (
           let rec loop (x : Int) : Int := match x (| 0 => 0 | _ => loop(x - 1));
           loop(n)
         );
@@ -385,15 +393,15 @@ mod success {
         .expect("emit should succeed");
         assert!(emitted.artifact.validate().is_ok());
         let opcodes = emitted_opcodes(&emitted);
-        assert!(opcodes.contains(&Opcode::TyChk));
-        assert!(opcodes.contains(&Opcode::TyCast));
+        assert!(opcodes.contains(&Opcode::IsInst));
+        assert!(opcodes.contains(&Opcode::Cast));
     }
 
     #[test]
     fn emits_type_values_record_patterns_and_capturing_recursion() {
         let emitted = emit_module(
             r"
-        export let answer (n : Int) : Int := (
+        export let result (n : Int) : Int := (
           let base := 1;
           let rec loop (x : Int) : Int := match x (| 0 => base | _ => loop(x - 1));
           let point := { x := 1, y := 2 };
@@ -405,8 +413,8 @@ mod success {
         .expect("emit should succeed");
         assert!(emitted.artifact.validate().is_ok());
         let opcodes = emitted_opcodes(&emitted);
-        assert!(opcodes.contains(&Opcode::DataGet));
-        assert!(opcodes.contains(&Opcode::CallCls));
+        assert!(opcodes.contains(&Opcode::LdFld));
+        assert!(opcodes.contains(&Opcode::CallInd));
 
         assert!(
             emitted.artifact.procedures.iter().any(|(_, procedure)| {
@@ -414,7 +422,7 @@ mod success {
                     matches!(
                         entry,
                         CodeEntry::Instruction(music_seam::Instruction {
-                            opcode: Opcode::ClsNew,
+                            opcode: Opcode::NewFn,
                             operand: music_seam::Operand::WideProcedureCaptures { captures, .. },
                         }) if *captures > 0
                     )

@@ -59,146 +59,146 @@ export opaque let Runtime := effect {
   let utf8IsValid (source : String) : Int;
 };
 
-export let envGet (name : String) : String := request Runtime.envGet(name);
+export let envGet (name : String) : String := ask Runtime.envGet(name);
 
-export let envHas (name : String) : Int := request Runtime.envHas(name);
+export let envHas (name : String) : Int := ask Runtime.envHas(name);
 
 export let envSet (name : String, value : String) : Int :=
-  request Runtime.envSet(name, value);
+  ask Runtime.envSet(name, value);
 
-export let envRemove (name : String) : Int := request Runtime.envRemove(name);
+export let envRemove (name : String) : Int := ask Runtime.envRemove(name);
 
-export let processArgCount () : Int := request Runtime.processArgCount();
+export let processArgCount () : Int := ask Runtime.processArgCount();
 
 export let processArgAt (index : Int) : String :=
-  request Runtime.processArgAt(index);
+  ask Runtime.processArgAt(index);
 
-export let processCwd () : String := request Runtime.processCwd();
+export let processCwd () : String := ask Runtime.processCwd();
 
 export let processRun (command : String) : Int :=
-  request Runtime.processRun(command);
+  ask Runtime.processRun(command);
 
-export let processExit (code : Int) : Unit := request Runtime.processExit(code);
+export let processExit (code : Int) : Unit := ask Runtime.processExit(code);
 
-export let timeNowUnixMs () : Int := request Runtime.timeNowUnixMs();
+export let timeNowUnixMs () : Int := ask Runtime.timeNowUnixMs();
 
-export let timeMonotonicMs () : Int := request Runtime.timeMonotonicMs();
+export let timeMonotonicMs () : Int := ask Runtime.timeMonotonicMs();
 
-export let timeSleepMs (ms : Int) : Unit := request Runtime.timeSleepMs(ms);
+export let timeSleepMs (ms : Int) : Unit := ask Runtime.timeSleepMs(ms);
 
-export let randomInt () : Int := request Runtime.randomInt();
+export let randomInt () : Int := ask Runtime.randomInt();
 
 export let randomIntInRange (lowerBound : Int, upperBound : Int) : Int
   :=
-  request Runtime.randomIntInRange(lowerBound, upperBound);
+  ask Runtime.randomIntInRange(lowerBound, upperBound);
 
-export let randomBool () : Int := request Runtime.randomBool();
+export let randomBool () : Int := ask Runtime.randomBool();
 
-export let randomFloat01 () : Float := request Runtime.randomFloat01();
+export let randomFloat01 () : Float := ask Runtime.randomFloat01();
 
 export let logInfo (message : String) : Unit :=
-  request Runtime.logInfo(message);
+  ask Runtime.logInfo(message);
 
 export let logWrite (level : Int, message : String) : Unit :=
-  request Runtime.logWrite(level, message);
+  ask Runtime.logWrite(level, message);
 
-export let ioPrint (text : String) : Unit := request Runtime.ioPrint(text);
+export let ioPrint (text : String) : Unit := ask Runtime.ioPrint(text);
 
 export let ioPrintLine (text : String) : Unit :=
-  request Runtime.ioPrintLine(text);
+  ask Runtime.ioPrintLine(text);
 
 export let ioPrintError (text : String) : Unit :=
-  request Runtime.ioPrintError(text);
+  ask Runtime.ioPrintError(text);
 
 export let ioPrintErrorLine (text : String) : Unit :=
-  request Runtime.ioPrintErrorLine(text);
+  ask Runtime.ioPrintErrorLine(text);
 
-export let ioReadLine () : String := request Runtime.ioReadLine();
+export let ioReadLine () : String := ask Runtime.ioReadLine();
 
 export let fsReadText (path : String) : String :=
-  request Runtime.fsReadText(path);
+  ask Runtime.fsReadText(path);
 
 export let fsWriteText (path : String, text : String) : Unit :=
-  request Runtime.fsWriteText (path, text);
+  ask Runtime.fsWriteText (path, text);
 
-export let fsExists (path : String) : Int := request Runtime.fsExists(path);
+export let fsExists (path : String) : Int := ask Runtime.fsExists(path);
 
 export let fsAppendText (path : String, text : String) : Int :=
-  request Runtime.fsAppendText(path, text);
+  ask Runtime.fsAppendText(path, text);
 
-export let fsRemove (path : String) : Int := request Runtime.fsRemove(path);
+export let fsRemove (path : String) : Int := ask Runtime.fsRemove(path);
 
 export let fsCreateDirAll (path : String) : Int :=
-  request Runtime.fsCreateDirAll(path);
+  ask Runtime.fsCreateDirAll(path);
 
 export let textLength (value : String) : Int :=
-  request Runtime.textLength(value);
+  ask Runtime.textLength(value);
 
 export let textTrim (value : String) : String :=
-  request Runtime.textTrim (value);
+  ask Runtime.textTrim (value);
 
 export let textToLowerCase (value : String) : String :=
-  request Runtime.textToLowerCase(value);
+  ask Runtime.textToLowerCase(value);
 
 export let textToUpperCase (value : String) : String :=
-  request Runtime.textToUpperCase(value);
+  ask Runtime.textToUpperCase(value);
 
 export let textContains (value : String, needle : String) : Int :=
-  request Runtime.textContains(value, needle);
+  ask Runtime.textContains(value, needle);
 
 export let textStartsWith (value : String, prefix : String) : Int :=
-  request Runtime.textStartsWith(value, prefix);
+  ask Runtime.textStartsWith(value, prefix);
 
 export let textEndsWith (value : String, suffix : String) : Int :=
-  request Runtime.textEndsWith (value, suffix);
+  ask Runtime.textEndsWith (value, suffix);
 
 export let pathJoin (left : String, right : String) : String :=
-  request Runtime.pathJoin(left, right);
+  ask Runtime.pathJoin(left, right);
 
 export let pathNormalize (value : String) : String :=
-  request Runtime.pathNormalize(value);
+  ask Runtime.pathNormalize(value);
 
 export let pathDirname (value : String) : String :=
-  request Runtime.pathDirname(value);
+  ask Runtime.pathDirname(value);
 
 export let pathBasename (value : String) : String :=
-  request Runtime.pathBasename(value);
+  ask Runtime.pathBasename(value);
 
 export let pathExtname (value : String) : String :=
-  request Runtime.pathExtname(value);
+  ask Runtime.pathExtname(value);
 
 export let pathIsAbsolute (value : String) : Int :=
-  request Runtime.pathIsAbsolute(value);
+  ask Runtime.pathIsAbsolute(value);
 
 export let jsonIsValid (source : String) : Int :=
-  request Runtime.jsonIsValid(source);
+  ask Runtime.jsonIsValid(source);
 
 export let jsonNormalize (source : String) : String :=
-  request Runtime.jsonNormalize(source);
+  ask Runtime.jsonNormalize(source);
 
 export let hexEncode (source : String) : String :=
-  request Runtime.hexEncode(source);
+  ask Runtime.hexEncode(source);
 
 export let hexDecode (source : String) : String :=
-  request Runtime.hexDecode(source);
+  ask Runtime.hexDecode(source);
 
 export let hexIsValid (source : String) : Int :=
-  request Runtime.hexIsValid(source);
+  ask Runtime.hexIsValid(source);
 
 export let base64Encode (source : String) : String :=
-  request Runtime.base64Encode(source);
+  ask Runtime.base64Encode(source);
 
 export let base64Decode (source : String) : String :=
-  request Runtime.base64Decode(source);
+  ask Runtime.base64Decode(source);
 
 export let base64IsValid (source : String) : Int :=
-  request Runtime.base64IsValid(source);
+  ask Runtime.base64IsValid(source);
 
 export let utf8Encode (source : String) : String :=
-  request Runtime.utf8Encode(source);
+  ask Runtime.utf8Encode(source);
 
 export let utf8Decode (source : String) : String :=
-  request Runtime.utf8Decode(source);
+  ask Runtime.utf8Decode(source);
 
 export let utf8IsValid (source : String) : Int :=
-  request Runtime.utf8IsValid(source);
+  ask Runtime.utf8IsValid(source);

@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use super::super::*;
 use crate::EmitDiagKind;
+use music_base::diag::DiagContext;
 
 impl ProcedureEmitter<'_, '_> {
     pub(super) fn compile_record_literal(
@@ -34,25 +35,25 @@ impl ProcedureEmitter<'_, '_> {
         }
 
         let Some(ty) = self.layout.types.get(ty_name).copied() else {
-            super::support::push_expr_diag(
+            super::support::push_expr_diag_with(
                 diags,
                 self.module_key,
                 &missing_origin,
                 EmitDiagKind::UnknownRecordType,
-                format!("unknown emitted record type `{ty_name}`"),
+                DiagContext::new().with("type", ty_name),
             );
             emit_zero(self);
             return;
         };
 
-        for slot in &field_slots {
+        for (index, slot) in field_slots.iter().enumerate() {
             let Some(slot) = slot else {
-                super::support::push_expr_diag(
+                super::support::push_expr_diag_with(
                     diags,
                     self.module_key,
                     &missing_origin,
                     EmitDiagKind::RecordLiteralMissingFieldValue,
-                    "record literal missing field value",
+                    DiagContext::new().with("field", index),
                 );
                 emit_zero(self);
                 continue;
@@ -65,7 +66,7 @@ impl ProcedureEmitter<'_, '_> {
 
         self.compile_i64(0);
         self.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::DataNew,
+            Opcode::NewObj,
             Operand::TypeLen {
                 ty,
                 len: field_count,
@@ -82,7 +83,7 @@ impl ProcedureEmitter<'_, '_> {
         self.compile_expr(base, true, diags);
         self.compile_i64(i64::from(index));
         self.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::DataGet,
+            Opcode::LdFld,
             Operand::None,
         )));
     }
@@ -93,12 +94,12 @@ impl ProcedureEmitter<'_, '_> {
         diags: &mut EmitDiagList,
     ) {
         let Some(ty) = self.layout.types.get(input.ty_name).copied() else {
-            super::support::push_expr_diag(
+            super::support::push_expr_diag_with(
                 diags,
                 self.module_key,
                 &input.base.origin,
                 EmitDiagKind::UnknownRecordType,
-                format!("unknown emitted record type `{}`", input.ty_name),
+                DiagContext::new().with("type", input.ty_name),
             );
             emit_zero(self);
             return;
@@ -142,12 +143,12 @@ impl ProcedureEmitter<'_, '_> {
                 continue;
             }
             let Some(base_index) = base_index_by_name.get(field.name.as_ref()).copied() else {
-                super::support::push_expr_diag(
+                super::support::push_expr_diag_with(
                     diags,
                     self.module_key,
                     &input.base.origin,
                     EmitDiagKind::RecordUpdateMissingFieldValue,
-                    "record update missing field value",
+                    DiagContext::new().with("field", field.name.as_ref()),
                 );
                 emit_zero(self);
                 continue;
@@ -158,14 +159,14 @@ impl ProcedureEmitter<'_, '_> {
             )));
             self.compile_i64(i64::from(base_index));
             self.code.push(CodeEntry::Instruction(Instruction::new(
-                Opcode::DataGet,
+                Opcode::LdFld,
                 Operand::None,
             )));
         }
 
         self.compile_i64(0);
         self.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::DataNew,
+            Opcode::NewObj,
             Operand::TypeLen {
                 ty,
                 len: input.field_count,

@@ -32,7 +32,7 @@ impl Vm {
 
     pub(crate) fn exec_host_edge(&mut self, instruction: &Instruction) -> VmResult<StepOutcome> {
         match instruction.opcode {
-            Opcode::FfiCall => {
+            Opcode::CallFfi => {
                 let Operand::Foreign(foreign) = instruction.operand else {
                     return Err(Self::invalid_operand(instruction));
                 };
@@ -52,20 +52,7 @@ impl Vm {
                 self.push_value(result)?;
                 Ok(StepOutcome::Continue)
             }
-            Opcode::FfiCallSeq => {
-                let Operand::Foreign(foreign) = instruction.operand else {
-                    return Err(Self::invalid_operand(instruction));
-                };
-                let module_slot = self.current_module_slot()?;
-                let args = self.pop_seq_args()?;
-                let call = self.foreign_call(module_slot, foreign);
-                let result = self
-                    .call_musi_intrinsic(module_slot, &call, &args)
-                    .unwrap_or_else(|| self.call_host_foreign(&call, &args))?;
-                self.push_value(result)?;
-                Ok(StepOutcome::Continue)
-            }
-            Opcode::FfiRef => {
+            Opcode::LdFfi => {
                 let Operand::Foreign(foreign) = instruction.operand else {
                     return Err(Self::invalid_operand(instruction));
                 };
@@ -73,7 +60,7 @@ impl Vm {
                 self.push_value(Value::foreign(module_slot, foreign))?;
                 Ok(StepOutcome::Continue)
             }
-            Opcode::ModLoad => {
+            Opcode::MdlLoad => {
                 let spec_value = self.pop_value()?;
                 let spec = self.expect_string_value(spec_value)?;
                 let slot = self.load_dynamic_module(spec.as_ref())?;
@@ -81,7 +68,7 @@ impl Vm {
                 self.push_value(value)?;
                 Ok(StepOutcome::Continue)
             }
-            Opcode::ModGet => {
+            Opcode::MdlGet => {
                 let Operand::String(name) = instruction.operand else {
                     return Err(Self::invalid_operand(instruction));
                 };
@@ -145,9 +132,69 @@ impl Vm {
         if let Some(result) = self.call_sys_intrinsic(module_slot, foreign, args) {
             return Some(result);
         }
-        let result = match foreign.symbol() {
+        self.call_data_intrinsic(foreign, args)
+            .or_else(|| self.call_range_intrinsic(module_slot, foreign, args))
+            .or_else(|| self.call_pointer_intrinsic(module_slot, foreign, args))
+    }
+
+    fn call_data_intrinsic(
+        &self,
+        foreign: &ForeignCall,
+        args: &[Value],
+    ) -> Option<VmResult<Value>> {
+        match foreign.symbol() {
             "data.tag" => self.data_tag(foreign, args),
             "cmp.float.total_compare" => Self::float_total_compare(foreign, args),
+            _ => return None,
+        }
+        .into()
+    }
+
+    fn call_range_intrinsic(
+        &mut self,
+        module_slot: usize,
+        foreign: &ForeignCall,
+        args: &[Value],
+    ) -> Option<VmResult<Value>> {
+        let result = match foreign.symbol() {
+            "range.construct.open" => {
+                self.range_construct_open_intrinsic(foreign.result_ty(), args)
+            }
+            "range.construct.closed" => {
+                self.range_construct_closed_intrinsic(foreign.result_ty(), args)
+            }
+            "range.construct.open_closed" => {
+                self.range_construct_open_closed_intrinsic(foreign.result_ty(), args)
+            }
+            "range.construct.open_open" => {
+                self.range_construct_open_open_intrinsic(foreign.result_ty(), args)
+            }
+            "range.construct.from" => {
+                self.range_construct_from_intrinsic(foreign.result_ty(), args)
+            }
+            "range.construct.from_exclusive" => {
+                self.range_construct_from_exclusive_intrinsic(foreign.result_ty(), args)
+            }
+            "range.construct.up_to" => {
+                self.range_construct_up_to_intrinsic(foreign.result_ty(), args)
+            }
+            "range.construct.thru" => {
+                self.range_construct_thru_intrinsic(foreign.result_ty(), args)
+            }
+            "range.contains" => self.range_contains_intrinsic(module_slot, args),
+            "range.materialize" => self.range_materialize_intrinsic(foreign.result_ty(), args),
+            _ => return None,
+        };
+        Some(result)
+    }
+
+    fn call_pointer_intrinsic(
+        &mut self,
+        module_slot: usize,
+        foreign: &ForeignCall,
+        args: &[Value],
+    ) -> Option<VmResult<Value>> {
+        let result = match foreign.symbol() {
             "ffi.ptr.null" => Ok(Value::CPtr(0)),
             "ffi.ptr.is_null" => self.ptr_is_null(module_slot, foreign, args),
             "ffi.ptr.offset.i8" | "ffi.ptr.offset.u8" => self.ptr_offset(foreign, args, 1),

@@ -44,7 +44,6 @@ pub enum HirTyKind {
     Rune,
     CString,
     CPtr,
-    Module,
     NatLit(u64),
     Named {
         name: Symbol,
@@ -78,18 +77,6 @@ pub enum HirTyKind {
     Range {
         bound: HirTyId,
     },
-    ClosedRange {
-        bound: HirTyId,
-    },
-    PartialRangeFrom {
-        bound: HirTyId,
-    },
-    PartialRangeUpTo {
-        bound: HirTyId,
-    },
-    PartialRangeThru {
-        bound: HirTyId,
-    },
     Handler {
         effect: HirTyId,
         input: HirTyId,
@@ -98,15 +85,48 @@ pub enum HirTyKind {
     Mut {
         inner: HirTyId,
     },
-    AnyClass {
-        class: HirTyId,
+    AnyShape {
+        capability: HirTyId,
     },
-    SomeClass {
-        class: HirTyId,
+    SomeShape {
+        capability: HirTyId,
     },
     Record {
         fields: SliceRange<HirTyField>,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HirTySugarKind {
+    Optional,
+    Fallible,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HirTySugar {
+    pub kind: HirTySugarKind,
+    pub value: HirTyId,
+    pub error: Option<HirTyId>,
+}
+
+impl HirTySugar {
+    #[must_use]
+    pub const fn optional(value: HirTyId) -> Self {
+        Self {
+            kind: HirTySugarKind::Optional,
+            value,
+            error: None,
+        }
+    }
+
+    #[must_use]
+    pub const fn fallible(error: HirTyId, value: HirTyId) -> Self {
+        Self {
+            kind: HirTySugarKind::Fallible,
+            value,
+            error: Some(error),
+        }
+    }
 }
 
 pub struct SimpleHirTyInfo {
@@ -151,7 +171,6 @@ pub const SIMPLE_HIR_TYS: &[SimpleHirTyInfo] = &[
     SimpleHirTyInfo::new(HirTyKind::Rune, "Rune", "Rune"),
     SimpleHirTyInfo::new(HirTyKind::CString, "CString", "CString"),
     SimpleHirTyInfo::new(HirTyKind::CPtr, "CPtr", "CPtr"),
-    SimpleHirTyInfo::new(HirTyKind::Module, "Module", "Module"),
 ];
 
 #[must_use]

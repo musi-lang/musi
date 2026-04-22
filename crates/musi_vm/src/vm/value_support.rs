@@ -46,13 +46,6 @@ impl Vm {
         }
     }
 
-    pub(crate) const fn expect_float(value: &Value) -> VmResult<f64> {
-        match value {
-            Value::Float(value) => Ok(*value),
-            _ => Err(Self::invalid_value_kind(VmValueKind::Float, value)),
-        }
-    }
-
     pub(crate) fn expect_string_value(&self, value: Value) -> VmResult<Box<str>> {
         match value {
             Value::String(text) => Ok(self.heap.string(text)?.into()),

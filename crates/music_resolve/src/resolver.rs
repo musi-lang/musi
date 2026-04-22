@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 
 use music_arena::SliceRange;
-use music_base::diag::Diag;
+use music_base::diag::{CatalogDiagnostic, Diag, DiagContext};
 use music_base::{SourceId, Span};
 use music_hir::{
     HirAttr, HirExpr, HirExprId, HirExprKind, HirMods, HirModule, HirOrigin, HirStore,
@@ -26,6 +26,7 @@ mod stmt;
 mod util;
 
 pub type ResolvedImportList = Vec<ResolvedImport>;
+pub type ResolvedImportBindingList = Vec<ResolvedImportBinding>;
 pub type ResolveDiagList = Vec<Diag>;
 
 #[must_use]
@@ -33,11 +34,24 @@ pub fn resolve_diag_kind(diag: &Diag) -> Option<ResolveDiagKind> {
     ResolveDiagKind::from_diag(diag)
 }
 
+fn resolve_diag(
+    source_id: SourceId,
+    span: Span,
+    kind: ResolveDiagKind,
+    context: DiagContext,
+) -> Diag {
+    let catalog = CatalogDiagnostic::new(kind, context);
+    catalog
+        .to_diag()
+        .with_label(span, source_id, catalog.primary())
+}
+
 #[derive(Default)]
 pub struct ResolveOptions<'env> {
     pub inject_compiler_prelude: bool,
     pub prelude: Vec<Symbol>,
     pub import_env: Option<&'env dyn ImportEnv>,
+    pub import_export_summaries: HashMap<ModuleKey, ModuleExportSummary>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -47,11 +61,19 @@ pub struct ResolvedImport {
     pub to: ModuleKey,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedImportBinding {
+    pub binding: NameBindingId,
+    pub from: ModuleKey,
+    pub name: Symbol,
+}
+
 #[derive(Debug, Clone)]
 pub struct ResolvedModule {
     pub module_key: ModuleKey,
     pub module: HirModule,
     pub imports: ResolvedImportList,
+    pub import_bindings: ResolvedImportBindingList,
     pub export_summary: ModuleExportSummary,
     pub names: NameResolution,
     pub diags: ResolveDiagList,
@@ -74,6 +96,7 @@ pub fn resolve_module(
         module_key: module_key.clone(),
         module,
         imports,
+        import_bindings: resolver.import_bindings,
         export_summary,
         names: resolver.names,
         diags: resolver.diags,
@@ -90,6 +113,9 @@ struct Resolver<'a, 'env, 'tree, 'src> {
     tree: &'tree SyntaxTree,
     interner: &'a mut Interner,
     import_env: Option<&'env dyn ImportEnv>,
+    import_export_summaries: HashMap<ModuleKey, ModuleExportSummary>,
+    import_targets: HashMap<Span, ModuleKey>,
+    import_bindings: ResolvedImportBindingList,
     marker: PhantomData<&'src str>,
 
     store: HirStore,
@@ -142,6 +168,9 @@ where
             tree,
             interner,
             import_env: options.import_env,
+            import_export_summaries: options.import_export_summaries,
+            import_targets: HashMap::new(),
+            import_bindings: Vec::new(),
             marker: PhantomData,
             store,
             names,
@@ -179,12 +208,18 @@ where
         if mods.is_empty() {
             return;
         }
+        if let HirExprKind::Sequence { exprs } = self.store.exprs.get(expr).kind {
+            for child in self.store.expr_ids.get(exprs).to_vec() {
+                self.apply_mods(child, mods.clone());
+            }
+            return;
+        }
         let current = self.store.exprs.get(expr).mods.clone();
         let attrs = self.merge_attrs(current.attrs, mods.attrs);
         let export = current.export.or(mods.export);
-        let foreign = current.foreign.or(mods.foreign);
+        let native = current.native.or(mods.native);
         let partial = current.partial || mods.partial;
-        self.store.exprs.get_mut(expr).mods = HirMods::new(attrs, export, foreign, partial);
+        self.store.exprs.get_mut(expr).mods = HirMods::new(attrs, export, native, partial);
     }
 
     fn lower_opt_expr(
@@ -213,7 +248,7 @@ where
     }
 
     const fn is_ident_token_kind(kind: TokenKind) -> bool {
-        matches!(kind, TokenKind::Ident)
+        matches!(kind, TokenKind::Ident | TokenKind::KwKnown)
     }
 
     const fn is_name_token_kind(kind: TokenKind) -> bool {

@@ -27,6 +27,7 @@ pub struct KnownSymbols {
     pub string_: Symbol,
     pub rune: Symbol,
     pub range: Symbol,
+    pub pin: Symbol,
     pub closed_range: Symbol,
     pub partial_range_from: Symbol,
     pub partial_range_up_to: Symbol,
@@ -83,6 +84,7 @@ impl KnownSymbols {
             string_: interner.intern(BuiltinTypeId::String.name()),
             rune: interner.intern(BuiltinTypeId::Rune.name()),
             range: interner.intern(BuiltinTypeId::Range.name()),
+            pin: interner.intern(BuiltinTypeId::Pin.name()),
             closed_range: interner.intern(BuiltinTypeId::ClosedRange.name()),
             partial_range_from: interner.intern(BuiltinTypeId::PartialRangeFrom.name()),
             partial_range_up_to: interner.intern(BuiltinTypeId::PartialRangeUpTo.name()),
@@ -113,7 +115,7 @@ impl KnownSymbols {
     }
 
     #[must_use]
-    pub const fn compiler_prelude(self) -> [Symbol; 33] {
+    pub const fn compiler_prelude(self) -> [Symbol; 34] {
         [
             self.type_,
             self.array,
@@ -139,6 +141,7 @@ impl KnownSymbols {
             self.string_,
             self.rune,
             self.range,
+            self.pin,
             self.closed_range,
             self.partial_range_from,
             self.partial_range_up_to,

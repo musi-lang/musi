@@ -42,25 +42,25 @@ export let maxInt := core.maxInt;
 --- Clamp an integer into inclusive bounds.
 export let clampInt := core.clampInt;
 
---- Integer equality instance.
+--- Integer equality given.
 export let intEq := core.intEq;
 
---- Float equality instance.
+--- Float equality given.
 export let floatEq := core.floatEq;
 
---- String equality instance.
+--- String equality given.
 export let stringEq := core.stringEq;
 
---- Boolean equality instance.
+--- Boolean equality given.
 export let boolEq := core.boolEq;
 
---- Integer ordering instance.
+--- Integer ordering given.
 export let intOrd := core.intOrd;
 
---- Float ordering instance.
+--- Float ordering given.
 export let floatOrd := core.floatOrd;
 
---- String ordering instance.
+--- String ordering given.
 export let stringOrd := core.stringOrd;
 
 --- Returns true when ordering is less.

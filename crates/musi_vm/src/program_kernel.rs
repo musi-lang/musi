@@ -20,10 +20,10 @@ fn decode_direct_int_wrapper_call(instructions: &[Instruction]) -> Option<Runtim
     let (Opcode::LdLoc, Operand::Local(arg_local)) = (load.opcode, &load.operand) else {
         return None;
     };
-    let (Opcode::LdSmi, Operand::I16(const_arg)) = (constant.opcode, &constant.operand) else {
+    let (Opcode::LdCI4, Operand::I16(const_arg)) = (constant.opcode, &constant.operand) else {
         return None;
     };
-    let (Opcode::Call | Opcode::CallTail, Operand::Procedure(procedure)) =
+    let (Opcode::Call | Opcode::TailCall, Operand::Procedure(procedure)) =
         (call.opcode, &call.operand)
     else {
         return None;
@@ -95,7 +95,7 @@ fn decode_data_construct_match_add_kernel(
     runtime_instructions: &[RuntimeInstruction],
 ) -> Option<RuntimeKernel> {
     let field_local = runtime_instructions.iter().find_map(|instruction| {
-        let Some(RuntimeFusedOp::LocalDataNew1Init { field_local, .. }) = instruction.fused else {
+        let Some(RuntimeFusedOp::LocalNewObj1Init { field_local, .. }) = instruction.fused else {
             return None;
         };
         Some(field_local)
@@ -210,7 +210,7 @@ const fn seq2_mutation_plan(
 fn decode_inline_effect_resume_kernel(instructions: &[Instruction]) -> Option<RuntimeKernel> {
     let mut procedures = instructions.iter().filter_map(|instruction| {
         let (
-            Opcode::ClsNew,
+            Opcode::NewFn,
             Operand::WideProcedureCaptures {
                 procedure,
                 captures: 0,
@@ -228,7 +228,7 @@ fn decode_inline_effect_resume_kernel(instructions: &[Instruction]) -> Option<Ru
         .any(|instruction| instruction.opcode == Opcode::HdlPush);
     let has_effect = instructions
         .iter()
-        .any(|instruction| instruction.opcode == Opcode::EffInvk);
+        .any(|instruction| instruction.opcode == Opcode::Raise);
     let has_pop = instructions
         .iter()
         .any(|instruction| instruction.opcode == Opcode::HdlPop);
@@ -265,7 +265,7 @@ fn decode_int_arg_add_smi_kernel(
         else {
             return None;
         };
-        let (Opcode::LdSmi, Operand::I16(smi)) = (smi_load.opcode, &smi_load.operand) else {
+        let (Opcode::LdCI4, Operand::I16(smi)) = (smi_load.opcode, &smi_load.operand) else {
             return None;
         };
         let (Opcode::StLoc, Operand::Local(smi_local)) = (smi_store.opcode, &smi_store.operand)
@@ -283,7 +283,7 @@ fn decode_int_arg_add_smi_kernel(
         if !matches!(
             (closure_new.opcode, &closure_new.operand),
             (
-                Opcode::ClsNew,
+                Opcode::NewFn,
                 Operand::WideProcedureCaptures { captures: 1, .. }
             )
         ) {
@@ -293,7 +293,7 @@ fn decode_int_arg_add_smi_kernel(
         else {
             return None;
         };
-        if !matches!(call.opcode, Opcode::Call | Opcode::CallTail) || ret.opcode != Opcode::Ret {
+        if !matches!(call.opcode, Opcode::Call | Opcode::TailCall) || ret.opcode != Opcode::Ret {
             return None;
         }
         Some(RuntimeKernel::IntArgAddSmi {
@@ -321,7 +321,7 @@ fn decode_stored_closure_int_arg_add_smi_kernel(
         call,
         ret,
     ] = instruction_window::<13>(0, instructions)?;
-    let (Opcode::LdSmi, Operand::I16(smi)) = (smi_load.opcode, &smi_load.operand) else {
+    let (Opcode::LdCI4, Operand::I16(smi)) = (smi_load.opcode, &smi_load.operand) else {
         return None;
     };
     let (Opcode::StLoc, Operand::Local(smi_local)) = (smi_store.opcode, &smi_store.operand) else {
@@ -338,7 +338,7 @@ fn decode_stored_closure_int_arg_add_smi_kernel(
     if !matches!(
         (closure_new.opcode, &closure_new.operand),
         (
-            Opcode::ClsNew,
+            Opcode::NewFn,
             Operand::WideProcedureCaptures { captures: 1, .. }
         )
     ) {
@@ -359,7 +359,7 @@ fn decode_stored_closure_int_arg_add_smi_kernel(
     let (Opcode::LdLoc, Operand::Local(arg_local)) = (arg_load.opcode, &arg_load.operand) else {
         return None;
     };
-    if !matches!(call.opcode, Opcode::Call | Opcode::CallTail) || ret.opcode != Opcode::Ret {
+    if !matches!(call.opcode, Opcode::Call | Opcode::TailCall) || ret.opcode != Opcode::Ret {
         return None;
     }
     Some(RuntimeKernel::IntArgAddSmi {

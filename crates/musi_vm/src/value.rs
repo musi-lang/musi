@@ -1,4 +1,4 @@
-use music_seam::{ClassId, EffectId, ForeignId, ProcedureId, TypeId};
+use music_seam::{EffectId, ForeignId, ProcedureId, ShapeId, TypeId};
 use music_term::SyntaxTerm;
 use smallvec::SmallVec;
 
@@ -87,7 +87,7 @@ pub enum Value {
     Module(GcRef),
     Foreign(ForeignValue),
     Effect(EffectId),
-    Class(ClassId),
+    Shape(ShapeId),
 }
 
 impl Eq for Value {}
@@ -331,7 +331,7 @@ pub enum ValueView<'a> {
     Module(ModuleView<'a>),
     Foreign(ForeignId),
     Effect(EffectId),
-    Class(ClassId),
+    Shape(ShapeId),
 }
 
 #[must_use]
@@ -358,7 +358,7 @@ pub fn render_value_view(view: ValueView<'_>) -> Option<String> {
         ValueView::Module(module) => Some(format!("<module:{}>", module.spec())),
         ValueView::Foreign(foreign) => Some(format!("<foreign:{}>", foreign.raw())),
         ValueView::Effect(effect) => Some(format!("<effect:{}>", effect.raw())),
-        ValueView::Class(class) => Some(format!("<class:{}>", class.raw())),
+        ValueView::Shape(shape) => Some(format!("<capability:{}>", shape.raw())),
         ValueView::CPtr(addr) => Some(format!("<cptr:0x{addr:x}>")),
     }
 }
@@ -602,7 +602,7 @@ impl Value {
             Self::Module(_) => VmValueKind::Module,
             Self::Foreign(_) => VmValueKind::Foreign,
             Self::Effect(_) => VmValueKind::Effect,
-            Self::Class(_) => VmValueKind::Class,
+            Self::Shape(_) => VmValueKind::Shape,
         }
     }
 
@@ -625,7 +625,7 @@ impl Value {
             | Self::Type(_)
             | Self::Foreign(_)
             | Self::Effect(_)
-            | Self::Class(_) => None,
+            | Self::Shape(_) => None,
         }
     }
 
@@ -648,7 +648,7 @@ impl Value {
             | Self::Type(_)
             | Self::Foreign(_)
             | Self::Effect(_)
-            | Self::Class(_) => None,
+            | Self::Shape(_) => None,
         }
     }
 

@@ -7,6 +7,7 @@ mod attrs;
 mod collect;
 mod const_eval;
 mod decls;
+mod diag_subject;
 mod exprs;
 mod normalize;
 mod pats;
@@ -63,10 +64,32 @@ impl<'interner, 'env> Checker<'interner, 'env> {
             facts,
             resume,
         };
+        this.seed_import_bindings();
         if let Some(prelude) = prelude.as_ref() {
             this.seed_prelude(prelude);
         }
         this
+    }
+
+    fn seed_import_bindings(&mut self) {
+        let Self {
+            module,
+            runtime,
+            typing,
+            decls,
+            facts,
+            resume,
+        } = self;
+        let base = PassBase::new(PassParts {
+            module,
+            runtime,
+            typing,
+            decls,
+            facts,
+        });
+        let collect = CollectPass::new(base);
+        let mut check = CheckPass::new(collect, resume);
+        decls::seed_import_bindings(&mut check);
     }
 
     fn seed_prelude(&mut self, prelude: &ModuleSurface) {

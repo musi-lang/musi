@@ -297,16 +297,16 @@ impl TextBuilder {
         Ok(())
     }
 
-    pub(crate) fn parse_class(&mut self, parts: &[String]) -> AssemblyResult {
+    pub(crate) fn parse_capability(&mut self, parts: &[String]) -> AssemblyResult {
         if parts.len() != 2 {
             return Err(AssemblyError::TextParseFailed(
-                "expected `.class $Name`".into(),
+                "expected `.capability $Name`".into(),
             ));
         }
         let name = parse_symbol(&parts[1])?;
         let name_id = self.intern_string(&name);
-        let id = self.artifact.classes.alloc(ClassDescriptor::new(name_id));
-        let _ = self.classes.insert(name, id);
+        let id = self.artifact.shapes.alloc(ShapeDescriptor::new(name_id));
+        let _ = self.shapes.insert(name, id);
         Ok(())
     }
 
@@ -336,7 +336,7 @@ impl TextBuilder {
     pub(crate) fn parse_foreign(&mut self, parts: &[String]) -> AssemblyResult {
         if parts.len() < 6 {
             return Err(AssemblyError::TextParseFailed(
-                "expected `.foreign $Name [param $Type ...] result $Type abi \"c\" symbol \"puts\" [link \"c\"] [export]`".into(),
+                "expected `.native $Name [param $Type ...] result $Type abi \"c\" symbol \"puts\" [link \"c\"] [export]`".into(),
             ));
         }
         let mut export = false;
@@ -353,7 +353,7 @@ impl TextBuilder {
             || parts.get(base + 4).map(String::as_str) != Some("symbol")
         {
             return Err(AssemblyError::TextParseFailed(
-                "expected `.foreign $Name [param $Type ...] result $Type abi \"c\" symbol \"puts\" [link \"c\"] [export]`".into(),
+                "expected `.native $Name [param $Type ...] result $Type abi \"c\" symbol \"puts\" [link \"c\"] [export]`".into(),
             ));
         }
         let result_ty = parse_symbol(must_get(parts.get(base + 1), "foreign result type")?)?;
@@ -383,7 +383,7 @@ impl TextBuilder {
                 }
                 _ => {
                     return Err(AssemblyError::TextParseFailed(
-                        "expected `.foreign $Name [param $Type ...] result $Type abi \"c\" symbol \"puts\" [link \"c\"] [export]`".into(),
+                        "expected `.native $Name [param $Type ...] result $Type abi \"c\" symbol \"puts\" [link \"c\"] [export]`".into(),
                     ));
                 }
             }
@@ -410,7 +410,7 @@ impl TextBuilder {
     pub(crate) fn parse_export(&mut self, parts: &[String]) -> AssemblyResult {
         if parts.len() < 3 {
             return Err(AssemblyError::TextParseFailed(
-                "expected `.export $Name <procedure|global|foreign|type|effect|class> [opaque]`"
+                "expected `.export $Name <procedure|global|native|type|effect|capability> [opaque]`"
                     .into(),
             ));
         }
@@ -424,9 +424,9 @@ impl TextBuilder {
         let target = match kind {
             "procedure" => ExportTarget::Procedure(self.ensure_procedure_symbol(&name)),
             "global" => ExportTarget::Global(self.ensure_global_symbol(&name)),
-            "foreign" => {
+            "native" => {
                 let foreign = *self.foreigns.get(&name).ok_or_else(|| {
-                    AssemblyError::TextParseFailed(format!("unknown foreign ${name}"))
+                    AssemblyError::TextParseFailed(format!("unknown native ${name}"))
                 })?;
                 ExportTarget::Foreign(foreign)
             }
@@ -442,15 +442,15 @@ impl TextBuilder {
                 })?;
                 ExportTarget::Effect(effect)
             }
-            "class" => {
-                let class = *self.classes.get(&name).ok_or_else(|| {
-                    AssemblyError::TextParseFailed(format!("unknown class ${name}"))
+            "capability" => {
+                let shape = *self.shapes.get(&name).ok_or_else(|| {
+                    AssemblyError::TextParseFailed(format!("unknown shape ${name}"))
                 })?;
-                ExportTarget::Class(class)
+                ExportTarget::Shape(shape)
             }
             _ => {
                 return Err(AssemblyError::TextParseFailed(
-                    "expected `.export $Name <procedure|global|foreign|type|effect|class> [opaque]`"
+                    "expected `.export $Name <procedure|global|native|type|effect|capability> [opaque]`"
                         .into(),
                 ));
             }

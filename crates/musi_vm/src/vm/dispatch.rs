@@ -198,34 +198,24 @@ impl Vm {
             Opcode::StLoc => self.exec_fast_stloc(runtime),
             Opcode::LdGlob => self.exec_fast_ldglob(runtime),
             Opcode::StGlob => self.exec_fast_stglob(runtime),
-            Opcode::LdConst => self.exec_fast_ldconst(runtime),
-            Opcode::LdSmi => self.exec_fast_ldsmi(runtime),
-            Opcode::IAdd => self.exec_fast_int_op(i64::checked_add),
-            Opcode::ISub => self.exec_fast_int_op(i64::checked_sub),
-            Opcode::IMul => self.exec_fast_int_op(i64::checked_mul),
-            Opcode::IDiv => self.exec_fast_int_op(i64::checked_div),
-            Opcode::IRem => self.exec_fast_int_op(i64::checked_rem),
+            Opcode::LdC => self.exec_fast_ldconst(runtime),
+            Opcode::LdCI4 => self.exec_fast_ldsmi(runtime),
+            Opcode::Add => self.exec_fast_int_op(i64::checked_add),
+            Opcode::Sub => self.exec_fast_int_op(i64::checked_sub),
+            Opcode::Mul => self.exec_fast_int_op(i64::checked_mul),
+            Opcode::DivS => self.exec_fast_int_op(i64::checked_div),
+            Opcode::RemS => self.exec_fast_int_op(i64::checked_rem),
             Opcode::Br => self.exec_fast_br(runtime),
             Opcode::BrFalse => self.exec_fast_brfalse(runtime),
-            Opcode::Call => self.exec_fast_call(runtime),
-            Opcode::CallTail => self.exec_fast_tail_call(runtime),
-            Opcode::CallSeq | Opcode::CallCls | Opcode::CallClsSeq | Opcode::ClsNew => {
-                self.exec_fast_call_edge(runtime)
-            }
+            Opcode::Call => self.execute_runtime_call(runtime),
+            Opcode::TailCall => self.exec_fast_tail_call(runtime),
+            Opcode::CallInd | Opcode::NewFn => self.exec_fast_call_edge(runtime),
             Opcode::Ret => self.return_from_frame(),
-            Opcode::SeqNew
-            | Opcode::SeqGet
-            | Opcode::SeqGetN
-            | Opcode::SeqSet
-            | Opcode::SeqSetN => self.exec_fast_seq(runtime),
-            Opcode::DataNew | Opcode::DataTag | Opcode::DataGet | Opcode::DataSet => {
-                self.exec_fast_data(runtime)
+            Opcode::NewArr | Opcode::LdElem | Opcode::StElem => self.exec_fast_seq(runtime),
+            Opcode::NewObj | Opcode::LdFld | Opcode::StFld => self.exec_fast_data(runtime),
+            Opcode::HdlPush | Opcode::HdlPop | Opcode::Raise | Opcode::Resume => {
+                self.exec_fast_effect(runtime)
             }
-            Opcode::HdlPush
-            | Opcode::HdlPop
-            | Opcode::EffInvk
-            | Opcode::EffInvkSeq
-            | Opcode::EffResume => self.exec_fast_effect(runtime),
             _ => {
                 let instruction =
                     if let Some(instruction) = runtime.operand.to_instruction(runtime.opcode) {
@@ -238,67 +228,54 @@ impl Vm {
         }
     }
 
+    fn execute_runtime_call(&mut self, runtime: &RuntimeInstruction) -> VmResult<StepOutcome> {
+        if let RuntimeOperand::Procedure(_) = runtime.operand {
+            self.exec_fast_call(runtime)
+        } else {
+            let instruction = self.current_raw_instruction(runtime.raw_index)?;
+            self.execute_instr(&instruction)
+        }
+    }
+
     pub(crate) fn execute_instr(&mut self, instruction: &Instruction) -> VmResult<StepOutcome> {
         match instruction.opcode {
             Opcode::LdLoc
             | Opcode::StLoc
             | Opcode::LdGlob
             | Opcode::StGlob
-            | Opcode::LdConst
-            | Opcode::LdSmi
+            | Opcode::LdC
+            | Opcode::LdCI4
             | Opcode::LdStr => self.exec_load_store(instruction),
-            Opcode::IAdd
-            | Opcode::ISub
-            | Opcode::IMul
-            | Opcode::IDiv
-            | Opcode::IRem
-            | Opcode::FAdd
-            | Opcode::FSub
-            | Opcode::FMul
-            | Opcode::FDiv
-            | Opcode::FRem
-            | Opcode::StrCat
-            | Opcode::CmpEq
-            | Opcode::CmpNe
-            | Opcode::CmpLt
-            | Opcode::CmpGt
-            | Opcode::CmpLe
-            | Opcode::CmpGe => self.exec_scalar(instruction),
+            Opcode::Add
+            | Opcode::Sub
+            | Opcode::Mul
+            | Opcode::DivS
+            | Opcode::RemS
+            | Opcode::Ceq
+            | Opcode::Cne
+            | Opcode::CltS
+            | Opcode::CgtS
+            | Opcode::CleS
+            | Opcode::CgeS => self.exec_scalar(instruction),
             Opcode::Br | Opcode::BrFalse | Opcode::BrTbl => self.exec_branch(instruction),
-            Opcode::Call
-            | Opcode::CallSeq
-            | Opcode::CallCls
-            | Opcode::CallClsSeq
-            | Opcode::CallTail
-            | Opcode::Ret
-            | Opcode::ClsNew => self.exec_call(instruction),
-            Opcode::SeqNew
-            | Opcode::SeqGet
-            | Opcode::SeqGetN
-            | Opcode::SeqSet
-            | Opcode::SeqSetN
-            | Opcode::SeqCat
-            | Opcode::SeqLen
-            | Opcode::RangeNew
-            | Opcode::RangeContains
-            | Opcode::RangeMaterialize
-            | Opcode::SeqHas => self.exec_seq(instruction),
-            Opcode::DataNew | Opcode::DataTag | Opcode::DataGet | Opcode::DataSet => {
-                self.exec_data(instruction)
-            }
-            Opcode::TyId | Opcode::TyApply | Opcode::TyChk | Opcode::TyCast => {
+            Opcode::Call if matches!(instruction.operand, music_seam::Operand::I16(_)) => {
                 self.exec_type(instruction)
             }
-            Opcode::HdlPush
-            | Opcode::HdlPop
-            | Opcode::EffInvk
-            | Opcode::EffInvkSeq
-            | Opcode::EffResume => self.exec_effect(instruction),
-            Opcode::FfiCall
-            | Opcode::FfiCallSeq
-            | Opcode::FfiRef
-            | Opcode::ModLoad
-            | Opcode::ModGet => self.exec_host_edge(instruction),
+            Opcode::Call | Opcode::CallInd | Opcode::TailCall | Opcode::Ret | Opcode::NewFn => {
+                self.exec_call(instruction)
+            }
+            Opcode::NewArr | Opcode::LdElem | Opcode::StElem | Opcode::LdLen => {
+                self.exec_seq(instruction)
+            }
+            Opcode::NewObj | Opcode::LdFld | Opcode::StFld => self.exec_data(instruction),
+            Opcode::LdType | Opcode::IsInst | Opcode::Cast => self.exec_type(instruction),
+            Opcode::HdlPush | Opcode::HdlPop | Opcode::Raise | Opcode::Resume => {
+                self.exec_effect(instruction)
+            }
+            Opcode::CallFfi | Opcode::LdFfi | Opcode::MdlLoad | Opcode::MdlGet => {
+                self.exec_host_edge(instruction)
+            }
+            _ => Err(Self::invalid_dispatch(instruction, "general")),
         }
     }
 }
@@ -309,9 +286,9 @@ impl Vm {
             RuntimeFusedOp::LocalSmiCompareBranch { .. }
             | RuntimeFusedOp::LocalSmiCompareSelfTailDecAcc { .. }
             | RuntimeFusedOp::SelfTailDecAcc { .. } => self.exec_fused_control(fused),
-            RuntimeFusedOp::LocalDataTagBranchTable { .. }
-            | RuntimeFusedOp::LocalDataGetConstStore { .. }
-            | RuntimeFusedOp::LocalDataNew1Init { .. }
+            RuntimeFusedOp::LocalLdFldBranchTable { .. }
+            | RuntimeFusedOp::LocalLdFldConstStore { .. }
+            | RuntimeFusedOp::LocalNewObj1Init { .. }
             | RuntimeFusedOp::LocalCopyAddSmi { .. } => self.exec_fused_data(fused),
             RuntimeFusedOp::LocalSeq2ConstSet { .. }
             | RuntimeFusedOp::LocalSeq2GetAddSet { .. }
@@ -389,17 +366,17 @@ impl Vm {
 
     fn exec_fused_data(&mut self, fused: RuntimeFusedOp) -> VmResult<StepOutcome> {
         match fused {
-            RuntimeFusedOp::LocalDataTagBranchTable {
+            RuntimeFusedOp::LocalLdFldBranchTable {
                 local,
                 branch_table,
             } => self.exec_local_data_tag_branch_table(local, branch_table),
-            RuntimeFusedOp::LocalDataGetConstStore {
+            RuntimeFusedOp::LocalLdFldConstStore {
                 source,
                 field,
                 dest,
                 fallthrough,
             } => self.exec_local_data_get_const_store(source, field, dest, fallthrough),
-            RuntimeFusedOp::LocalDataNew1Init {
+            RuntimeFusedOp::LocalNewObj1Init {
                 field_local,
                 tag,
                 ty,
@@ -407,7 +384,7 @@ impl Vm {
                 match_local,
                 zero,
                 fallthrough,
-            } => self.exec_local_data_new1_init(DataNewInitPlan {
+            } => self.exec_local_data_new1_init(NewObjInitPlan {
                 field_local,
                 tag,
                 ty,
@@ -542,8 +519,8 @@ impl Vm {
         Ok(())
     }
 
-    fn exec_local_data_new1_init(&mut self, plan: DataNewInitPlan) -> VmResult<StepOutcome> {
-        let DataNewInitPlan {
+    fn exec_local_data_new1_init(&mut self, plan: NewObjInitPlan) -> VmResult<StepOutcome> {
+        let NewObjInitPlan {
             field_local,
             tag,
             ty,
@@ -1082,7 +1059,7 @@ struct SelfTailDecAccPlan {
 }
 
 #[derive(Clone, Copy)]
-struct DataNewInitPlan {
+struct NewObjInitPlan {
     field_local: u16,
     tag: i16,
     ty: TypeId,

@@ -9,7 +9,7 @@ export opaque let Level := data {
 };
 
 @link(symbol := "data.tag")
-foreign "musi" let levelTagIntrinsic (level : Level) : Int;
+native "musi" let levelTagIntrinsic (level : Level) : Int;
 
 --- Debug log level.
 export let debugLevel : Level := .Debug;

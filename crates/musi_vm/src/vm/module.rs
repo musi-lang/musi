@@ -119,7 +119,7 @@ impl Vm {
             ExportTarget::Foreign(foreign) => Ok(Value::foreign(slot, foreign)),
             ExportTarget::Type(ty) => Ok(Value::Type(ty)),
             ExportTarget::Effect(effect) => Ok(Value::Effect(effect)),
-            ExportTarget::Class(class) => Ok(Value::Class(class)),
+            ExportTarget::Shape(shape) => Ok(Value::Shape(shape)),
         }
     }
 

@@ -28,7 +28,7 @@ pub enum SeamDiagKind {
     HilReturnTypeMismatch,
     HilReturnValueMissing,
     HilReturnValueUnexpected,
-    HilCapabilityRequired,
+    HilShapeRequired,
 }
 
 impl SeamDiagKind {

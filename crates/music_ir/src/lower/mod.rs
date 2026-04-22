@@ -13,17 +13,17 @@ use music_hir::{
 use music_module::ModuleKey;
 use music_names::{Ident, Interner, NameBindingId, NameSite, Symbol};
 use music_sema::{
-    ComptimeValue, ConstraintEvidence, ConstraintKey, DefinitionKey, ExportedValue, ExprMemberKind,
+    ComptimeValue, ConstraintAnswer, ConstraintKey, DefinitionKey, ExportedValue, ExprMemberKind,
     SemaDataVariantDef, SemaModule,
 };
 
 use crate::IrDiagKind;
 use crate::api::{
-    IrArg, IrAssignTarget, IrBinaryOp, IrCallable, IrCasePattern, IrCaseRecordField, IrClassDef,
-    IrDataDef, IrDataVariantDef, IrDiagList, IrEffectDef, IrEffectOpDef, IrExpr, IrExprKind,
-    IrForeignDef, IrGlobal, IrHandleOp, IrInstanceDef, IrIntrinsicKind, IrLit,
-    IrMatchArm as IrLoweredMatchArm, IrModule, IrModuleInitPart, IrNameRef, IrOrigin, IrParam,
-    IrRangeKind, IrRecordField, IrRecordLayoutField, IrSeqPart, IrTempId,
+    IrArg, IrAssignTarget, IrBinaryOp, IrCallable, IrCasePattern, IrCaseRecordField, IrDataDef,
+    IrDataVariantDef, IrDiagList, IrEffectDef, IrEffectOpDef, IrExpr, IrExprKind, IrForeignDef,
+    IrGivenDef, IrGlobal, IrHandleOp, IrIntrinsicKind, IrLit, IrMatchArm as IrLoweredMatchArm,
+    IrModule, IrModuleInitPart, IrNameRef, IrOrigin, IrParam, IrRangeKind, IrRecordField,
+    IrRecordLayoutField, IrSeqPart, IrShapeDef, IrTempId,
 };
 
 mod array;
@@ -33,9 +33,9 @@ mod call;
 mod closures;
 mod collect;
 mod comptime;
+mod constraint_answers;
 mod destructure;
 mod effects;
-mod evidence;
 mod foreign;
 mod meta;
 mod pats;
@@ -51,11 +51,12 @@ use closures::{
     lower_named_params,
 };
 use comptime::lower_comptime_value;
-use effects::{lower_handle_expr, lower_handler_literal_expr, lower_request_expr};
-use evidence::{
-    bind_expr_evidence, hidden_evidence_params_for_binding, hidden_evidence_params_for_keys,
-    lower_evidence_expr, pop_evidence_bindings, push_evidence_bindings,
+use constraint_answers::{
+    bind_expr_constraint_answers, hidden_constraint_answer_params_for_binding,
+    hidden_constraint_answer_params_for_keys, lower_constraint_answer_expr,
+    pop_constraint_answer_bindings, push_constraint_answer_bindings,
 };
+use effects::{lower_answer_literal_expr, lower_handle_expr, lower_request_expr};
 use foreign::lower_foreign_let;
 use pats::{collect_pattern_bindings, lower_match_expr};
 use range::{lower_in_expr, lower_partial_range_expr, lower_range_expr};
@@ -88,8 +89,8 @@ type HirParamRange = SliceRange<HirParam>;
 type HirRecordItemRange = SliceRange<HirRecordItem>;
 type BoundNameSet = HashSet<NameBindingId>;
 type LoweredMatchArmList = Box<[IrLoweredMatchArm]>;
-type EvidenceBindingMap = HashMap<ConstraintKey, Box<str>>;
-type EvidenceBindingStack = Vec<EvidenceBindingMap>;
+type ConstraintAnswerBindingMap = HashMap<ConstraintKey, Box<str>>;
+type ConstraintAnswerBindingStack = Vec<ConstraintAnswerBindingMap>;
 
 fn qualified_name(module: &ModuleKey, name: &str) -> Box<str> {
     format!("{}::{name}", module.as_str()).into_boxed_str()
@@ -103,7 +104,7 @@ struct LowerCtx<'a> {
     next_lambda_id: u32,
     next_temp_id: u32,
     extra_callables: Vec<IrCallable>,
-    evidence_bindings: EvidenceBindingStack,
+    constraint_answer_bindings: ConstraintAnswerBindingStack,
     comptime_bindings: HashMap<NameBindingId, ComptimeValue>,
     specialized_callables: HashSet<Box<str>>,
 }
@@ -172,7 +173,7 @@ fn lower_module_impl(sema: &SemaModule, interner: &Interner) -> Result<IrModule,
         next_lambda_id: 0,
         next_temp_id: 0,
         extra_callables: Vec::new(),
-        evidence_bindings: Vec::new(),
+        constraint_answer_bindings: Vec::new(),
         comptime_bindings: HashMap::new(),
         specialized_callables: HashSet::new(),
     };
@@ -203,15 +204,15 @@ fn lower_module_impl(sema: &SemaModule, interner: &Interner) -> Result<IrModule,
             items.foreigns.into_boxed_slice(),
             build_effect_defs(sema, ctx.interner),
             surface
-                .exported_classes()
+                .exported_shapes()
                 .iter()
-                .map(IrClassDef::from)
+                .map(IrShapeDef::from)
                 .collect::<Vec<_>>()
                 .into_boxed_slice(),
             surface
-                .exported_instances()
+                .exported_givens()
                 .iter()
-                .map(IrInstanceDef::from)
+                .map(IrGivenDef::from)
                 .collect::<Vec<_>>()
                 .into_boxed_slice(),
             meta,
@@ -331,11 +332,15 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
                 type_args,
             },
         );
-        return bind_expr_evidence(ctx, expr_id, origin, lowered);
+        return bind_expr_constraint_answers(ctx, expr_id, origin, lowered);
     }
     if let HirExprKind::Unsafe { body } = &expr.kind {
         let lowered = lower_expr_with_origin(ctx, *body, origin);
-        return bind_expr_evidence(ctx, expr_id, origin, lowered);
+        return bind_expr_constraint_answers(ctx, expr_id, origin, lowered);
+    }
+    if let HirExprKind::Pin { value, name, body } = &expr.kind {
+        let lowered = lower_pin_expr(ctx, origin, *value, *name, *body);
+        return bind_expr_constraint_answers(ctx, expr_id, origin, lowered);
     }
     let kind = match &expr.kind {
         HirExprKind::Name { .. }
@@ -359,7 +364,7 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
         | HirExprKind::Variant { .. }
         | HirExprKind::Lambda { .. }
         | HirExprKind::Request { .. }
-        | HirExprKind::HandlerLit { .. }
+        | HirExprKind::AnswerLit { .. }
         | HirExprKind::Handle { .. } => lower_control_expr(ctx, expr_id, origin, &expr.kind),
         HirExprKind::TypeTest { .. }
         | HirExprKind::TypeCast { .. }
@@ -369,7 +374,7 @@ fn lower_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId) -> IrExpr {
         | HirExprKind::Splice { .. } => lower_misc_expr(ctx, expr_id, &expr.kind),
         other => invalid_lowering_path(format!("missing IR lowering for {other:?}")),
     };
-    bind_expr_evidence(ctx, expr_id, origin, IrExpr::new(origin, kind))
+    bind_expr_constraint_answers(ctx, expr_id, origin, IrExpr::new(origin, kind))
 }
 
 fn lower_value_expr(
@@ -440,8 +445,8 @@ fn lower_control_expr(
         HirExprKind::Lambda { params, body, .. } => lower_lambda_expr(ctx, origin, params, *body),
         HirExprKind::Request { expr } => lower_request_expr(ctx, *expr)
             .unwrap_or_else(|description| invalid_lowering_path(description)),
-        HirExprKind::HandlerLit { effect, clauses } => {
-            lower_handler_literal_expr(ctx, expr_id, *effect, clauses.clone())
+        HirExprKind::AnswerLit { effect, clauses } => {
+            lower_answer_literal_expr(ctx, expr_id, *effect, clauses.clone())
         }
         HirExprKind::Handle { expr, handler } => lower_handle_expr(ctx, expr_id, *expr, *handler),
         _ => invalid_lowering_path("control expr dispatcher mismatch"),
@@ -475,7 +480,7 @@ fn lower_misc_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId, kind: &HirExprKin
             expr: expr.map(|expr| lower_boxed_expr(ctx, expr)),
         },
         HirExprKind::Import { arg } => {
-            if sema.expr_module_target(expr_id).is_some() {
+            if sema.expr_import_record_target(expr_id).is_some() {
                 IrExprKind::Unit
             } else {
                 IrExprKind::ModuleLoad {
@@ -502,7 +507,7 @@ fn is_type_value_expr(sema: &SemaModule, expr_id: HirExprId, interner: &Interner
             ) {
                 return true;
             }
-            if sema.expr_module_target(expr_id).is_some() {
+            if sema.expr_import_record_target(expr_id).is_some() {
                 return false;
             }
             let symbol_text = interner.resolve(name.name);
@@ -718,10 +723,16 @@ fn lower_name_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId, ident: Ident) -> 
     {
         return lower_comptime_value(ctx, &value);
     }
+    let binding = use_binding_id(sema, ident);
     IrExprKind::Name {
-        binding: use_binding_id(sema, ident),
+        binding,
         name: ctx.interner.resolve(ident.name).into(),
-        module_target: sema.expr_module_target(expr_id).cloned(),
+        import_record_target: sema
+            .expr_import_record_target(expr_id)
+            .cloned()
+            .or_else(|| {
+                binding.and_then(|binding| sema.binding_import_record_target(binding).cloned())
+            }),
     }
 }
 
@@ -799,14 +810,13 @@ fn record_layout_for_ty(
             items.sort();
             items
         }
-        HirTyKind::Range { .. } | HirTyKind::ClosedRange { .. } => {
-            vec!["lowerBound".into(), "upperBound".into()]
-        }
-        HirTyKind::PartialRangeFrom { .. } => {
-            vec!["__upperBound".into(), "lowerBound".into()]
-        }
-        HirTyKind::PartialRangeUpTo { .. } | HirTyKind::PartialRangeThru { .. } => {
-            vec!["__lowerBound".into(), "upperBound".into()]
+        HirTyKind::Range { .. } => {
+            vec![
+                "includeLower".into(),
+                "includeUpper".into(),
+                "lowerBound".into(),
+                "upperBound".into(),
+            ]
         }
         _ => return None,
     };
@@ -956,6 +966,30 @@ fn lower_let_expr(
     }
 }
 
+fn lower_pin_expr(
+    ctx: &mut LowerCtx<'_>,
+    origin: IrOrigin,
+    value: HirExprId,
+    name: Ident,
+    body: HirExprId,
+) -> IrExpr {
+    let value = IrExpr::new(
+        origin,
+        IrExprKind::Let {
+            binding: decl_binding_id(ctx.sema, name),
+            name: ctx.interner.resolve(name.name).into(),
+            value: Box::new(lower_expr(ctx, value)),
+        },
+    );
+    let body = lower_expr(ctx, body);
+    IrExpr::new(
+        origin,
+        IrExprKind::Sequence {
+            exprs: Box::new([value, body]),
+        },
+    )
+}
+
 const fn fresh_temp(ctx: &mut LowerCtx<'_>) -> IrTempId {
     let raw = ctx.next_temp_id;
     ctx.next_temp_id = ctx.next_temp_id.saturating_add(1);
@@ -1002,11 +1036,13 @@ fn lower_field_expr(
     let interner = ctx.interner;
 
     if let Some(fact) = sema.expr_member_fact(expr_id)
-        && fact.kind == ExprMemberKind::ClassMember
-        && let Some(evidence) = sema.expr_evidence(expr_id).and_then(|items| items.first())
+        && fact.kind == ExprMemberKind::ShapeMember
+        && let Some(evidence) = sema
+            .expr_constraint_answers(expr_id)
+            .and_then(|items| items.first())
     {
         return IrExprKind::RecordGet {
-            base: Box::new(lower_evidence_expr(
+            base: Box::new(lower_constraint_answer_expr(
                 ctx,
                 IrOrigin::new(
                     sema.module().store.exprs.get(expr_id).origin.source_id,
@@ -1015,6 +1051,25 @@ fn lower_field_expr(
                 evidence,
             )),
             index: fact.index.unwrap_or_default(),
+        };
+    }
+
+    let base_binding_target = match sema.module().store.exprs.get(base).kind {
+        HirExprKind::Name { name } => use_binding_id(sema, name)
+            .and_then(|binding| sema.binding_import_record_target(binding))
+            .cloned(),
+        _ => None,
+    };
+    if let Some(import_record_target) = sema
+        .expr_import_record_target(expr_id)
+        .cloned()
+        .or_else(|| sema.expr_import_record_target(base).cloned())
+        .or(base_binding_target)
+    {
+        return IrExprKind::Name {
+            binding: None,
+            name: interner.resolve(symbol).into(),
+            import_record_target: Some(import_record_target),
         };
     }
 
@@ -1036,39 +1091,18 @@ fn lower_field_expr(
         };
     }
 
-    let module_ty = match sema.ty(base_ty).kind {
-        HirTyKind::Mut { inner } => inner,
-        _ => base_ty,
-    };
-    if matches!(sema.ty(module_ty).kind, HirTyKind::Module) {
-        if let Some(module_target) = sema
-            .expr_module_target(expr_id)
-            .cloned()
-            .or_else(|| sema.expr_module_target(base).cloned())
-        {
-            return IrExprKind::Name {
-                binding: None,
-                name: interner.resolve(symbol).into(),
-                module_target: Some(module_target),
-            };
-        }
-        return IrExprKind::ModuleGet {
-            base: Box::new(lower_expr(ctx, base)),
-            name: interner.resolve(symbol).into(),
-        };
-    }
-
     if let Some(closure) = lower_attached_method_field(ctx, expr_id, base) {
         return closure;
     }
 
-    if let Some(module_target) = sema.expr_module_target(expr_id).cloned() {
+    if let Some(import_record_target) = sema.expr_import_record_target(expr_id).cloned() {
         let expr_ty = sema.try_expr_ty(expr_id).unwrap_or_else(|| {
             invalid_lowering_path("expr type missing for dot-callable field ref")
         });
         if matches!(sema.ty(expr_ty).kind, HirTyKind::Arrow { .. }) {
             return IrExprKind::ClosureNew {
-                callee: IrNameRef::new(interner.resolve(symbol)).with_module_target(module_target),
+                callee: IrNameRef::new(interner.resolve(symbol))
+                    .with_import_record_target(import_record_target),
                 captures: vec![lower_expr(ctx, base)].into_boxed_slice(),
             };
         }
@@ -1094,10 +1128,10 @@ fn lower_attached_method_field(
         callee: IrNameRef {
             binding: fact.binding,
             name: ctx.interner.resolve(fact.name).into(),
-            module_target: fact
-                .module_target
+            import_record_target: fact
+                .import_record_target
                 .clone()
-                .or_else(|| ctx.sema.expr_module_target(expr_id).cloned()),
+                .or_else(|| ctx.sema.expr_import_record_target(expr_id).cloned()),
         },
         captures,
     })
@@ -1128,7 +1162,7 @@ fn lower_binary_expr(
     if matches!(op, HirBinaryOp::Assign) {
         return lower_assign_expr(ctx, left, right);
     }
-    if matches!(op, HirBinaryOp::ClosedRange | HirBinaryOp::OpenRange) {
+    if matches!(op, HirBinaryOp::Range { .. }) {
         return lower_range_expr(ctx, expr_id, op, left, right);
     }
     if matches!(op, HirBinaryOp::In) {

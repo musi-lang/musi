@@ -1,5 +1,6 @@
 use super::*;
 use crate::EmitDiagKind;
+use music_base::diag::DiagContext;
 
 mod callable;
 mod control;
@@ -34,12 +35,15 @@ impl ProcedureEmitter<'_, '_> {
             || self.compile_expr_effect_ops(expr, diags)
             || self.compile_expr_type_ops(expr, diags);
         if !matched {
-            support::push_expr_diag(
+            support::push_expr_diag_with(
                 diags,
                 self.module_key,
                 &expr.origin,
                 EmitDiagKind::EmitInvariantViolated,
-                format!("expr `{:?}` has no emitted form", expr.kind),
+                DiagContext::new().with(
+                    "detail",
+                    format!("expr `{:?}` has no emitted form", expr.kind),
+                ),
             );
             return;
         }
@@ -61,10 +65,10 @@ impl ProcedureEmitter<'_, '_> {
             IrExprKind::Name {
                 binding,
                 name,
-                module_target,
+                import_record_target,
                 ..
             } => {
-                self.compile_name(*binding, name, module_target.as_ref(), expr, diags);
+                self.compile_name(*binding, name, import_record_target.as_ref(), expr, diags);
                 true
             }
             IrExprKind::Temp { temp } => {
@@ -153,12 +157,12 @@ impl ProcedureEmitter<'_, '_> {
                 self.compile_variant_new(data_key, *tag_value, *field_count, args, diags);
                 true
             }
-            IrExprKind::HandlerLit {
+            IrExprKind::AnswerLit {
                 effect_key,
                 value,
                 ops,
             } => {
-                self.compile_handler_lit(effect_key, value, ops, &expr.origin, diags);
+                self.compile_answer_lit(effect_key, value, ops, &expr.origin, diags);
                 true
             }
             IrExprKind::Index { base, indices } => {
@@ -173,8 +177,12 @@ impl ProcedureEmitter<'_, '_> {
                 self.compile_range_contains(value, range, evidence, diags);
                 true
             }
-            IrExprKind::RangeMaterialize { range, evidence } => {
-                self.compile_range_materialize(range, evidence, diags);
+            IrExprKind::RangeMaterialize {
+                range,
+                evidence,
+                result_ty_name,
+            } => {
+                self.compile_range_materialize(range, evidence, result_ty_name, diags);
                 true
             }
             _ => self.compile_expr_module_and_type_ops(expr, diags),
@@ -190,7 +198,7 @@ impl ProcedureEmitter<'_, '_> {
             IrExprKind::ModuleLoad { spec } => {
                 self.compile_expr(spec, true, diags);
                 self.code.push(CodeEntry::Instruction(Instruction::new(
-                    Opcode::ModLoad,
+                    Opcode::MdlLoad,
                     Operand::None,
                 )));
                 true
@@ -199,25 +207,25 @@ impl ProcedureEmitter<'_, '_> {
                 self.compile_expr(base, true, diags);
                 let name = self.artifact.intern_string(name);
                 self.code.push(CodeEntry::Instruction(Instruction::new(
-                    Opcode::ModGet,
+                    Opcode::MdlGet,
                     Operand::String(name),
                 )));
                 true
             }
             IrExprKind::TypeValue { ty_name } => {
                 let Some(ty) = self.layout.types.get(ty_name).copied() else {
-                    support::push_expr_diag(
+                    support::push_expr_diag_with(
                         diags,
                         self.module_key,
                         &expr.origin,
                         EmitDiagKind::UnknownTypeValue,
-                        format!("unknown emitted type value `{ty_name}`"),
+                        DiagContext::new().with("type", ty_name),
                     );
                     emit_zero(self);
                     return true;
                 };
                 self.code.push(CodeEntry::Instruction(Instruction::new(
-                    Opcode::TyId,
+                    Opcode::LdType,
                     Operand::Type(ty),
                 )));
                 true
@@ -226,24 +234,24 @@ impl ProcedureEmitter<'_, '_> {
                 self.compile_expr(callee, true, diags);
                 for ty_name in type_args {
                     let Some(ty) = self.layout.types.get(ty_name).copied() else {
-                        support::push_expr_diag(
+                        support::push_expr_diag_with(
                             diags,
                             self.module_key,
                             &expr.origin,
                             EmitDiagKind::UnknownTypeValue,
-                            format!("unknown emitted type value `{ty_name}`"),
+                            DiagContext::new().with("type", ty_name),
                         );
                         emit_zero(self);
                         return true;
                     };
                     self.code.push(CodeEntry::Instruction(Instruction::new(
-                        Opcode::TyId,
+                        Opcode::LdType,
                         Operand::Type(ty),
                     )));
                 }
                 let count = i16::try_from(type_args.len()).unwrap_or(i16::MAX);
                 self.code.push(CodeEntry::Instruction(Instruction::new(
-                    Opcode::TyApply,
+                    Opcode::Call,
                     Operand::I16(count),
                 )));
                 true
@@ -293,7 +301,7 @@ impl ProcedureEmitter<'_, '_> {
                 self.compile_expr(inner, true, diags);
                 emit_zero(self);
                 self.code.push(CodeEntry::Instruction(Instruction::new(
-                    Opcode::CmpEq,
+                    Opcode::Ceq,
                     Operand::None,
                 )));
                 true
@@ -316,8 +324,8 @@ impl ProcedureEmitter<'_, '_> {
                 self.compile_intrinsic_call(symbol, param_tys, result_ty, args, diags);
                 true
             }
-            IrExprKind::CallSeq { callee, args } => {
-                self.compile_call_seq(callee, args, diags);
+            IrExprKind::CallParts { callee, args } => {
+                self.compile_call_parts(callee, args, diags);
                 true
             }
             _ => false,
@@ -344,10 +352,10 @@ impl ProcedureEmitter<'_, '_> {
             }
             IrExprKind::Handle {
                 effect_key,
-                handler,
+                answer,
                 body,
             } => {
-                self.compile_handle(effect_key, handler, body, diags);
+                self.compile_handle(effect_key, answer, body, diags);
                 true
             }
             IrExprKind::Resume { expr } => {
@@ -365,7 +373,7 @@ impl ProcedureEmitter<'_, '_> {
                     &expr.origin,
                     base,
                     ty_name,
-                    Opcode::TyChk,
+                    Opcode::IsInst,
                     ":?",
                     diags,
                 );
@@ -376,7 +384,7 @@ impl ProcedureEmitter<'_, '_> {
                     &expr.origin,
                     base,
                     ty_name,
-                    Opcode::TyCast,
+                    Opcode::Cast,
                     ":?>",
                     diags,
                 );
@@ -397,12 +405,14 @@ impl ProcedureEmitter<'_, '_> {
     ) {
         self.compile_expr(base, true, diags);
         let Some(ty) = self.layout.types.get(ty_name).copied() else {
-            support::push_expr_diag(
+            support::push_expr_diag_with(
                 diags,
                 self.module_key,
                 origin,
                 EmitDiagKind::UnknownTypeNameForOp,
-                format!("unknown type name `{ty_name}` for `{op_text}`"),
+                DiagContext::new()
+                    .with("type", ty_name)
+                    .with("operation", op_text),
             );
             emit_zero(self);
             return;

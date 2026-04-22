@@ -26,8 +26,8 @@ impl TextBuilder {
             ".const" => self.parse_const(&parts),
             ".global" => self.parse_global(&parts),
             ".effect" => self.parse_effect(&parts),
-            ".class" => self.parse_class(&parts),
-            ".foreign" => self.parse_foreign(&parts),
+            ".capability" => self.parse_capability(&parts),
+            ".native" => self.parse_foreign(&parts),
             ".export" => self.parse_export(&parts),
             ".meta" => self.parse_meta(&parts),
             other => Err(AssemblyError::TextParseFailed(format!(

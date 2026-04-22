@@ -145,7 +145,7 @@ where
         let mut nodes = node.child_nodes();
         let base = self.lower_opt_expr(origin, nodes.next());
 
-        let access = HirAccessKind::Direct;
+        let access = HirAccessChainMode::Normal;
 
         let name_tok = node
             .child_tokens()

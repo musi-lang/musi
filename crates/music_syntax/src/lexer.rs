@@ -711,16 +711,15 @@ impl<'src> Lexer<'src> {
             return None;
         }
 
-        if op_end - op_start >= 2 {
-            let text = self.cursor.text().as_bytes();
-            let op_bytes = &text[op_start..op_end];
-            let is_reserved = TOKEN_PATTERNS
-                .iter()
-                .any(|(bytes, _)| bytes.len() >= 2 && *bytes == op_bytes);
-            if is_reserved {
-                self.cursor.reset(checkpoint);
-                return None;
-            }
+        if op_end - op_start != 1 {
+            self.cursor.reset(checkpoint);
+            return None;
+        }
+
+        let op = self.cursor.text().as_bytes()[op_start];
+        if !matches!(op, b'+' | b'-' | b'*' | b'/' | b'%' | b'=' | b'<' | b'>') {
+            self.cursor.reset(checkpoint);
+            return None;
         }
 
         self.cursor.bump_bytes(1);

@@ -6,6 +6,9 @@ export let CString := core.CString;
 --- Raw C pointer ABI value.
 export let CPtr := core.CPtr;
 
+--- Scoped pinned value handle created by `unsafe pin`.
+export let Pin := core.Pin;
+
 --- C char ABI type.
 export let CChar := core.Int8;
 --- C signed char ABI type.
@@ -42,8 +45,8 @@ export opaque let Ptr [T] := data {
   | Ptr(raw : CPtr)
 };
 
-foreign "musi" let ptrNullIntrinsic () : CPtr;
-foreign "musi" let ptrIsNullIntrinsic (raw : CPtr) : Bool;
+native "musi" let ptrNullIntrinsic () : CPtr;
+native "musi" let ptrIsNullIntrinsic (raw : CPtr) : Bool;
 
 --- Cast raw pointer into a typed pointer view.
 export let cast [T] (raw : CPtr) : Ptr[T] := .Ptr(raw := raw);
@@ -65,7 +68,7 @@ export let isNull [T] (pointer : Ptr[T]) : Bool := unsafe {
 };
 
 --- Foreign pointer operations.
-export foreign "musi" (
+export native "musi" (
   let offset [T] (pointer : Ptr[T], count : Int) : Ptr[T];
   let read [T] (pointer : Ptr[T]) : T;
   let write [T] (pointer : Ptr[mut T], value : T) : Unit;

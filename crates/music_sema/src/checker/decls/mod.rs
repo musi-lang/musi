@@ -1,18 +1,19 @@
 mod effects;
+mod givens;
 mod imports;
-mod instances;
 mod lets;
 
 pub(super) use effects::call_effects_for_expr;
 pub(super) use imports::{
-    expr_has_structural_target, module_export_for_expr, module_target_for_expr,
-    seed_prelude_bindings,
+    expr_has_structural_target, import_record_export_for_expr, import_record_target_for_expr,
+    seed_import_bindings, seed_prelude_bindings,
 };
 pub(super) use lets::{LetExprInput, check_let_expr};
 
 use std::collections::{BTreeMap, HashSet};
 
 use music_arena::SliceRange;
+use music_base::diag::DiagContext;
 use music_hir::{
     HirAttr, HirConstraint, HirExprId, HirExprKind, HirFieldDef, HirLitId, HirLitKind,
     HirMemberDef, HirMemberKind, HirOrigin, HirPatKind, HirTyId, HirTyKind, HirVariantDef,
@@ -26,7 +27,7 @@ use super::surface::surface_key;
 use super::variant_payload::{lower_data_variant, variant_payload_style_is_mixed};
 use super::{CheckPass, DiagKind, EffectDef, EffectOpDef, PassBase};
 use crate::api::{
-    ClassFacts, ClassMemberFacts, ExprFacts, ForeignLinkInfo, LawFacts, LawParamFacts, TargetInfo,
+    ExprFacts, ForeignLinkInfo, LawFacts, LawParamFacts, ShapeFacts, ShapeMemberFacts, TargetInfo,
     normalize_arch_text, normalize_target_text,
 };
 use crate::effects::EffectRow;
@@ -63,7 +64,7 @@ pub(super) fn member_signature(
     ctx: &mut PassBase<'_, '_, '_>,
     member: &HirMemberDef,
     bind_name: bool,
-) -> ClassMemberFacts {
+) -> ShapeMemberFacts {
     let builtins = ctx.builtins();
     let params = ctx
         .params(member.params.clone())
@@ -91,7 +92,7 @@ pub(super) fn member_signature(
             ctx.insert_binding_type(binding, ty);
         }
     }
-    ClassMemberFacts::new(member.name.name, params, result)
+    ShapeMemberFacts::new(member.name.name, params, result)
 }
 
 pub(super) fn member_law_facts(ctx: &mut PassBase<'_, '_, '_>, member: &HirMemberDef) -> LawFacts {
@@ -113,13 +114,13 @@ pub(super) fn member_law_facts(ctx: &mut PassBase<'_, '_, '_>, member: &HirMembe
     LawFacts::new(member.name.name, params)
 }
 
-pub(super) fn check_foreign_let(
+pub(super) fn check_native_let(
     ctx: &mut CheckPass<'_, '_, '_>,
     expr_id: HirExprId,
     type_params: Box<[Symbol]>,
     type_param_kinds: Box<[HirTyId]>,
 ) -> Option<HirTyId> {
-    ctx.check_foreign_let(expr_id, type_params, type_param_kinds)
+    ctx.check_native_let(expr_id, type_params, type_param_kinds)
 }
 
 impl CheckPass<'_, '_, '_> {
@@ -144,14 +145,14 @@ impl CheckPass<'_, '_, '_> {
         ExprFacts::new(builtins.type_, EffectRow::empty())
     }
 
-    fn check_class_expr(
+    fn check_shape_expr(
         &mut self,
         expr_id: HirExprId,
         constraints: ConstraintRange,
         members: MemberDefRange,
     ) -> ExprFacts {
         let builtins = self.builtins();
-        if let Some(facts) = self.class_facts(expr_id).cloned() {
+        if let Some(facts) = self.shape_facts(expr_id).cloned() {
             for member in self.members(members) {
                 if member.kind == HirMemberKind::Law
                     && let Some(value) = member.value
@@ -167,7 +168,7 @@ impl CheckPass<'_, '_, '_> {
                 }
             }
             let _ = self.lower_constraints(constraints);
-            self.insert_class_facts(expr_id, facts);
+            self.insert_shape_facts(expr_id, facts);
         } else {
             for member in self.members(members) {
                 let _ = member_signature(self, &member, true);
@@ -176,7 +177,7 @@ impl CheckPass<'_, '_, '_> {
         ExprFacts::new(self.builtins().type_, EffectRow::empty())
     }
 
-    fn check_foreign_let(
+    fn check_native_let(
         &mut self,
         expr_id: HirExprId,
         type_params: Box<[Symbol]>,
@@ -186,7 +187,7 @@ impl CheckPass<'_, '_, '_> {
         let abi: Box<str> = self
             .expr(expr_id)
             .mods
-            .foreign
+            .native
             .as_ref()
             .and_then(|m| m.abi)
             .map_or_else(|| "c".into(), |sym| self.resolve_symbol(sym).into());
@@ -195,18 +196,24 @@ impl CheckPass<'_, '_, '_> {
             let path = super::attrs::attr_path(self, attr);
             match path.as_slice() {
                 ["link"] => self.validate_link_attr(attr, self.expr(expr_id).origin),
-                ["when"] => self.validate_when_attr(attr, self.expr(expr_id).origin),
+                ["target"] => self.validate_when_attr(attr, self.expr(expr_id).origin),
                 _ => {}
             }
         }
         if !self.when_attrs_match(&attrs) {
-            if let Some((binding, _)) = self.foreign_binding_from_let(expr_id) {
+            if let Some((binding, _)) = self.native_binding_from_let(expr_id) {
                 self.mark_gated_binding(binding);
             }
             return None;
         }
-        if let Some((binding, _)) = self.foreign_binding_from_let(expr_id) {
-            self.mark_unsafe_binding(binding);
+        let is_native_declaration = matches!(
+            self.expr(expr_id).kind,
+            HirExprKind::Let { value, .. } if matches!(self.expr(value).kind, HirExprKind::Error)
+        );
+        if let Some((binding, _)) = self.native_binding_from_let(expr_id) {
+            if is_native_declaration {
+                self.mark_unsafe_binding(binding);
+            }
             let link = self.link_info_from_attrs(&attrs);
             if link.name.is_some() || link.symbol.is_some() {
                 self.set_foreign_link(binding, link);
@@ -234,7 +241,7 @@ impl CheckPass<'_, '_, '_> {
             ret: result,
             is_effectful: false,
         });
-        if let Some((binding, _)) = self.foreign_binding_from_let(expr_id) {
+        if let Some((binding, _)) = self.native_binding_from_let(expr_id) {
             let scheme = BindingScheme {
                 type_params,
                 type_param_kinds,
@@ -248,14 +255,14 @@ impl CheckPass<'_, '_, '_> {
             self.insert_binding_type(binding, value_ty);
             self.insert_binding_effects(binding, EffectRow::empty());
             self.insert_binding_scheme(binding, scheme);
-            self.validate_foreign_let(expr_id, abi.as_ref());
+            self.validate_native_let(expr_id, abi.as_ref());
             return Some(value_ty);
         }
-        self.validate_foreign_let(expr_id, abi.as_ref());
+        self.validate_native_let(expr_id, abi.as_ref());
         Some(ty)
     }
 
-    fn foreign_binding_from_let(&self, expr: HirExprId) -> Option<(NameBindingId, Ident)> {
+    fn native_binding_from_let(&self, expr: HirExprId) -> Option<(NameBindingId, Ident)> {
         let HirExprKind::Let { pat, .. } = self.expr(expr).kind else {
             return None;
         };
@@ -270,7 +277,7 @@ impl CheckPass<'_, '_, '_> {
         let target = self.target();
         for attr in attrs {
             let path = super::attrs::attr_path(self, attr);
-            if path.as_slice() != ["when"] {
+            if path.as_slice() != ["target"] {
                 continue;
             }
             if !self.when_attr_matches(target, attr) {
@@ -468,7 +475,11 @@ impl CheckPass<'_, '_, '_> {
         origin: HirOrigin,
     ) {
         if !record_data_variant_tag(seen_tags, tag_value) {
-            self.diag(origin.span, DiagKind::DuplicateDataVariantDiscriminant, "");
+            self.diag_with(
+                origin.span,
+                DiagKind::DuplicateDataVariantDiscriminant,
+                DiagContext::new().with("discriminant", tag_value),
+            );
         }
     }
 
@@ -481,12 +492,11 @@ impl CheckPass<'_, '_, '_> {
         let Some(previous_origin) = seen_variants.insert(tag.into(), origin) else {
             return;
         };
-        self.diag_message_with_previous(
+        self.diag_with_previous(
             origin.span,
             previous_origin.span,
             DiagKind::CollectDuplicateDataVariant,
-            format!("duplicate data variant `{tag}`"),
-            format!("data variant `{tag}` first declared here"),
+            DiagContext::new().with("variant", tag),
         );
     }
 
@@ -585,7 +595,7 @@ impl CheckPass<'_, '_, '_> {
         ExprFacts::new(builtins.type_, EffectRow::empty())
     }
 
-    pub(super) fn check_bound_class(
+    pub(super) fn check_bound_shape(
         &mut self,
         expr_id: HirExprId,
         name: Ident,
@@ -593,10 +603,10 @@ impl CheckPass<'_, '_, '_> {
         constraints: ConstraintRange,
         members: MemberDefRange,
     ) -> ExprFacts {
-        if self.class_id(name.name).is_none() {
-            self.insert_class_id(name.name, expr_id);
+        if self.shape_id(name.name).is_none() {
+            self.insert_shape_id(name.name, expr_id);
             let members_vec = self.members(members.clone());
-            let class_members = members_vec
+            let shape_members = members_vec
                 .iter()
                 .filter(|member| member.kind == HirMemberKind::Let)
                 .map(|member| member_signature(self, member, false))
@@ -610,17 +620,17 @@ impl CheckPass<'_, '_, '_> {
                 .into_boxed_slice();
             let constraints_facts = self.lower_constraints(constraints.clone());
             let type_params = type_params.to_vec().into_boxed_slice();
-            let facts = ClassFacts::new(
+            let facts = ShapeFacts::new(
                 surface_key(self.module_key(), self.interner(), name.name),
                 name.name,
-                class_members,
+                shape_members,
                 laws,
             )
             .with_type_params(type_params)
             .with_constraints(constraints_facts);
-            self.insert_class_facts(expr_id, facts.clone());
-            self.insert_class_facts_by_name(name.name, facts);
+            self.insert_shape_facts(expr_id, facts.clone());
+            self.insert_shape_facts_by_name(name.name, facts);
         }
-        self.check_class_expr(expr_id, constraints, members)
+        self.check_shape_expr(expr_id, constraints, members)
     }
 }

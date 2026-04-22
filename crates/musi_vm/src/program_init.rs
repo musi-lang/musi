@@ -16,10 +16,10 @@ fn decode_value_clause_add(procedure: &LoadedProcedure) -> Option<i16> {
     ) {
         return None;
     }
-    let (Opcode::LdSmi, Operand::I16(value)) = (smi.opcode, &smi.operand) else {
+    let (Opcode::LdCI4, Operand::I16(value)) = (smi.opcode, &smi.operand) else {
         return None;
     };
-    if add.opcode == Opcode::IAdd && ret.opcode == Opcode::Ret {
+    if add.opcode == Opcode::Add && ret.opcode == Opcode::Ret {
         Some(*value)
     } else {
         None
@@ -33,10 +33,10 @@ fn decode_op_clause_resume(procedure: &LoadedProcedure) -> Option<i16> {
     if procedure.params != 1 {
         return None;
     }
-    let (Opcode::LdSmi, Operand::I16(value)) = (smi.opcode, &smi.operand) else {
+    let (Opcode::LdCI4, Operand::I16(value)) = (smi.opcode, &smi.operand) else {
         return None;
     };
-    if resume.opcode == Opcode::EffResume && ret.opcode == Opcode::Ret {
+    if resume.opcode == Opcode::Resume && ret.opcode == Opcode::Ret {
         Some(*value)
     } else {
         None
@@ -123,7 +123,7 @@ fn simple_global_init_assignment(instructions: &[Instruction]) -> Option<(Global
     let [load, store, unit, ret] = instructions else {
         return None;
     };
-    let (Opcode::LdSmi, Operand::I16(value)) = (load.opcode, &load.operand) else {
+    let (Opcode::LdCI4, Operand::I16(value)) = (load.opcode, &load.operand) else {
         return None;
     };
     let (Opcode::StGlob, Operand::Global(global)) = (store.opcode, &store.operand) else {
@@ -131,7 +131,7 @@ fn simple_global_init_assignment(instructions: &[Instruction]) -> Option<(Global
     };
     if matches!(
         (unit.opcode, &unit.operand),
-        (Opcode::LdSmi, Operand::I16(0))
+        (Opcode::LdCI4, Operand::I16(0))
     ) && ret.opcode == Opcode::Ret
     {
         Some((*global, i64::from(*value)))

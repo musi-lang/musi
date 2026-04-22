@@ -68,10 +68,10 @@ const fn is_spacing_keyword(kind: TokenKind) -> bool {
 const fn is_declaration_keyword(kind: TokenKind) -> bool {
     matches!(
         kind,
-        TokenKind::KwClass
+        TokenKind::KwShape
             | TokenKind::KwData
             | TokenKind::KwEffect
-            | TokenKind::KwInstance
+            | TokenKind::KwGiven
             | TokenKind::KwLaw
             | TokenKind::KwLet
     )
@@ -83,9 +83,8 @@ const fn is_control_keyword(kind: TokenKind) -> bool {
         TokenKind::KwHandle
             | TokenKind::KwIf
             | TokenKind::KwMatch
-            | TokenKind::KwRequest
+            | TokenKind::KwAsk
             | TokenKind::KwResume
-            | TokenKind::KwUsing
     )
 }
 
@@ -94,7 +93,7 @@ const fn is_modifier_keyword(kind: TokenKind) -> bool {
         kind,
         TokenKind::KwComptime
             | TokenKind::KwExport
-            | TokenKind::KwForeign
+            | TokenKind::KwNative
             | TokenKind::KwMut
             | TokenKind::KwOpaque
             | TokenKind::KwPartial
@@ -106,13 +105,11 @@ const fn is_modifier_keyword(kind: TokenKind) -> bool {
 const fn is_other_spacing_keyword(kind: TokenKind) -> bool {
     matches!(
         kind,
-        TokenKind::KwAny
+        TokenKind::KwAnswer
+            | TokenKind::KwAny
             | TokenKind::KwAs
-            | TokenKind::KwForall
             | TokenKind::KwImport
-            | TokenKind::KwInfix
-            | TokenKind::KwInfixl
-            | TokenKind::KwInfixr
+            | TokenKind::KwRequire
             | TokenKind::KwQuote
             | TokenKind::KwSome
             | TokenKind::KwWhere

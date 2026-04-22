@@ -45,7 +45,7 @@ impl Vm {
             }
             Value::Foreign(foreign) => ValueView::Foreign(foreign.foreign),
             Value::Effect(effect) => ValueView::Effect(*effect),
-            Value::Class(class) => ValueView::Class(*class),
+            Value::Shape(shape) => ValueView::Shape(*shape),
         }
     }
 }

@@ -37,7 +37,6 @@ pub enum TypeTermKind {
     Rune,
     CString,
     CPtr,
-    Module,
     NatLit(u64),
     Named {
         module: Option<TypeModuleRef>,
@@ -72,18 +71,6 @@ pub enum TypeTermKind {
     Range {
         bound: Box<TypeTerm>,
     },
-    ClosedRange {
-        bound: Box<TypeTerm>,
-    },
-    PartialRangeFrom {
-        bound: Box<TypeTerm>,
-    },
-    PartialRangeUpTo {
-        bound: Box<TypeTerm>,
-    },
-    PartialRangeThru {
-        bound: Box<TypeTerm>,
-    },
     Handler {
         effect: Box<TypeTerm>,
         input: Box<TypeTerm>,
@@ -92,15 +79,48 @@ pub enum TypeTermKind {
     Mut {
         inner: Box<TypeTerm>,
     },
-    AnyClass {
-        class: Box<TypeTerm>,
+    AnyShape {
+        capability: Box<TypeTerm>,
     },
-    SomeClass {
-        class: Box<TypeTerm>,
+    SomeShape {
+        capability: Box<TypeTerm>,
     },
     Record {
         fields: Box<[TypeField]>,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum TypeTermSugarKind {
+    Optional,
+    Fallible,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct TypeTermSugar {
+    pub kind: TypeTermSugarKind,
+    pub value: Box<TypeTerm>,
+    pub error: Option<Box<TypeTerm>>,
+}
+
+impl TypeTermSugar {
+    #[must_use]
+    pub fn optional(value: TypeTerm) -> Self {
+        Self {
+            kind: TypeTermSugarKind::Optional,
+            value: Box::new(value),
+            error: None,
+        }
+    }
+
+    #[must_use]
+    pub fn fallible(error: TypeTerm, value: TypeTerm) -> Self {
+        Self {
+            kind: TypeTermSugarKind::Fallible,
+            value: Box::new(value),
+            error: Some(Box::new(error)),
+        }
+    }
 }
 
 struct SimpleTypeTermInfo {
@@ -235,11 +255,6 @@ const SIMPLE_TYPE_TERMS: &[SimpleTypeTermInfo] = &[
         parse_name: "CPtr",
         display_name: "CPtr",
     },
-    SimpleTypeTermInfo {
-        kind: TypeTermKind::Module,
-        parse_name: "Module",
-        display_name: "Module",
-    },
 ];
 
 fn simple_type_term_info(kind: &TypeTermKind) -> Option<&'static SimpleTypeTermInfo> {
@@ -315,24 +330,14 @@ impl Display for TypeTerm {
             TypeTermKind::Seq { item } => write!(f, "[]{item}"),
             TypeTermKind::Array { dims, item } => fmt_array_type_term(f, dims, item),
             TypeTermKind::Range { bound } => fmt_applied_name(f, "Range", bound),
-            TypeTermKind::ClosedRange { bound } => fmt_applied_name(f, "ClosedRange", bound),
-            TypeTermKind::PartialRangeFrom { bound } => {
-                fmt_applied_name(f, "PartialRangeFrom", bound)
-            }
-            TypeTermKind::PartialRangeUpTo { bound } => {
-                fmt_applied_name(f, "PartialRangeUpTo", bound)
-            }
-            TypeTermKind::PartialRangeThru { bound } => {
-                fmt_applied_name(f, "PartialRangeThru", bound)
-            }
             TypeTermKind::Handler {
                 effect,
                 input,
                 output,
-            } => write!(f, "using {effect} ({input} -> {output})"),
+            } => write!(f, "answer {effect} ({input} -> {output})"),
             TypeTermKind::Mut { inner } => write!(f, "mut {inner}"),
-            TypeTermKind::AnyClass { class } => write!(f, "any {class}"),
-            TypeTermKind::SomeClass { class } => write!(f, "some {class}"),
+            TypeTermKind::AnyShape { capability } => write!(f, "any {capability}"),
+            TypeTermKind::SomeShape { capability } => write!(f, "some {capability}"),
             TypeTermKind::Record { fields } => fmt_record_type_term(f, fields),
             TypeTermKind::Error
             | TypeTermKind::Unknown
@@ -359,7 +364,6 @@ impl Display for TypeTerm {
             | TypeTermKind::Rune
             | TypeTermKind::CString
             | TypeTermKind::CPtr
-            | TypeTermKind::Module
             | TypeTermKind::NatLit(_) => {
                 fmt_atomic_type_term_kind(f, &self.kind).unwrap_or(Err(fmt::Error))
             }
@@ -617,17 +621,17 @@ impl Parser<'_> {
             return Ok(None);
         };
         self.require_ws()?;
-        let class = Box::new(self.parse_prefix()?);
+        let shape = Box::new(self.parse_prefix()?);
         let term_kind = match kind {
-            "any" => TypeTermKind::AnyClass { class },
-            _ => TypeTermKind::SomeClass { class },
+            "any" => TypeTermKind::AnyShape { capability: shape },
+            _ => TypeTermKind::SomeShape { capability: shape },
         };
         Ok(Some(TypeTerm::new(term_kind)))
     }
 
     fn parse_handler_prefix(&mut self) -> TypeTermResult<Option<TypeTerm>> {
         self.skip_ws();
-        if !self.consume("using") {
+        if !self.consume("answer") {
             return Ok(None);
         }
         self.require_ws()?;

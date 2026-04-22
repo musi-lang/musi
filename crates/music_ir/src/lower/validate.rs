@@ -1,4 +1,4 @@
-use music_base::diag::Diag;
+use music_base::diag::{Diag, DiagContext};
 use music_sema::{SemaModule, SurfaceEffectRow, SurfaceTy, SurfaceTyId, SurfaceTyKind};
 
 use crate::{IrDiagKind as DiagKind, api::IrDiagList};
@@ -21,22 +21,22 @@ pub(super) fn validate_surface(sema: &SemaModule, diags: &mut IrDiagList) {
             validate_surface_ty_id(types, op.result, diags);
         }
     }
-    for class in surface.exported_classes() {
-        for constraint in &class.constraints {
+    for shape in surface.exported_shapes() {
+        for constraint in &shape.constraints {
             validate_surface_ty_id(types, constraint.value, diags);
         }
-        for member in &class.members {
+        for member in &shape.members {
             for param in &member.params {
                 validate_surface_ty_id(types, *param, diags);
             }
             validate_surface_ty_id(types, member.result, diags);
         }
     }
-    for instance in surface.exported_instances() {
-        for arg in &instance.class_args {
+    for given in surface.exported_givens() {
+        for arg in &given.shape_args {
             validate_surface_ty_id(types, *arg, diags);
         }
-        for constraint in &instance.constraints {
+        for constraint in &given.constraints {
             validate_surface_ty_id(types, constraint.value, diags);
         }
     }
@@ -53,10 +53,11 @@ fn validate_effect_row(types: &[SurfaceTy], row: &SurfaceEffectRow, diags: &mut 
 fn validate_surface_ty_id(types: &[SurfaceTy], id: SurfaceTyId, diags: &mut IrDiagList) {
     let index = usize::try_from(id.raw()).unwrap_or(usize::MAX);
     let Some(ty) = types.get(index) else {
+        let context = DiagContext::new().with("id", id.raw());
         diags.push(
-            Diag::error(DiagKind::InvalidSurfaceTypeId.message())
+            Diag::error(DiagKind::InvalidSurfaceTypeId.message_with(&context))
                 .with_code(DiagKind::InvalidSurfaceTypeId.code())
-                .with_note(format!("surface type id `{}`", id.raw())),
+                .with_note(DiagKind::InvalidSurfaceTypeId.label_with(&context)),
         );
         return;
     };
@@ -94,11 +95,7 @@ fn validate_surface_ty(types: &[SurfaceTy], ty: &SurfaceTy, diags: &mut IrDiagLi
         SurfaceTyKind::Seq { item } | SurfaceTyKind::Array { item, .. } => {
             validate_surface_ty_id(types, *item, diags);
         }
-        SurfaceTyKind::Range { bound }
-        | SurfaceTyKind::ClosedRange { bound }
-        | SurfaceTyKind::PartialRangeFrom { bound }
-        | SurfaceTyKind::PartialRangeUpTo { bound }
-        | SurfaceTyKind::PartialRangeThru { bound } => validate_surface_ty_id(types, *bound, diags),
+        SurfaceTyKind::Range { bound } => validate_surface_ty_id(types, *bound, diags),
         SurfaceTyKind::Handler {
             effect,
             input,
@@ -109,8 +106,9 @@ fn validate_surface_ty(types: &[SurfaceTy], ty: &SurfaceTy, diags: &mut IrDiagLi
             validate_surface_ty_id(types, *output, diags);
         }
         SurfaceTyKind::Mut { inner } => validate_surface_ty_id(types, *inner, diags),
-        SurfaceTyKind::AnyClass { class } | SurfaceTyKind::SomeClass { class } => {
-            validate_surface_ty_id(types, *class, diags);
+        SurfaceTyKind::AnyShape { capability: shape }
+        | SurfaceTyKind::SomeShape { capability: shape } => {
+            validate_surface_ty_id(types, *shape, diags);
         }
         SurfaceTyKind::Record { fields } => {
             for field in fields {
@@ -142,7 +140,6 @@ fn validate_surface_ty(types: &[SurfaceTy], ty: &SurfaceTy, diags: &mut IrDiagLi
         | SurfaceTyKind::Rune
         | SurfaceTyKind::CString
         | SurfaceTyKind::CPtr
-        | SurfaceTyKind::Module
         | SurfaceTyKind::NatLit(_) => {}
     }
 }

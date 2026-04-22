@@ -89,7 +89,7 @@ fn is_bare_vague_text(text: &str) -> bool {
             | "unknown effect"
             | "unknown effect operation"
             | "invalid target"
-            | "invalid request target"
+            | "invalid ask target"
             | "arity mismatch"
             | "call arity mismatch"
             | "type mismatch"

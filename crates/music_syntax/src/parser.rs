@@ -16,7 +16,6 @@ mod pat;
 mod recover;
 
 const PREFIX_BP: u8 = 24;
-const SYMBOLIC_BP: u8 = 22;
 const MUL_BP: u8 = 20;
 const ADD_BP: u8 = 18;
 const SHIFT_BP: u8 = 16;

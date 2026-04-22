@@ -9,9 +9,9 @@ use music_hir::{HirExprId, HirExprKind, HirPrefixOp};
 use music_module::ModuleKey;
 use music_names::{NameBindingId, NameSite};
 use music_sema::{
-    ComptimeClassValue, ComptimeClosureValue, ComptimeDataValue, ComptimeEffectValue,
-    ComptimeForeignValue, ComptimeModuleValue, ComptimeSeqValue, ComptimeTypeValue, ComptimeValue,
-    SemaModule,
+    ComptimeClosureValue, ComptimeDataValue, ComptimeEffectValue, ComptimeForeignValue,
+    ComptimeImportRecordValue, ComptimeSeqValue, ComptimeShapeValue, ComptimeTypeValue,
+    ComptimeValue, SemaModule,
 };
 use music_term::TypeTerm;
 
@@ -271,9 +271,9 @@ fn value_to_comptime(
             module: root_key.clone(),
             name: root_program(vm)?.effect_source_name(*value).into(),
         })),
-        Value::Class(value) => Ok(ComptimeValue::Class(ComptimeClassValue {
+        Value::Shape(value) => Ok(ComptimeValue::Shape(ComptimeShapeValue {
             module: root_key.clone(),
-            name: root_program(vm)?.class_source_name(*value).into(),
+            name: root_program(vm)?.shape_source_name(*value).into(),
         })),
         Value::Continuation(_) => Err("continuation escape rejected".into()),
     }
@@ -393,7 +393,9 @@ fn module_to_comptime(
     } else {
         ModuleKey::new(module.spec())
     };
-    Ok(ComptimeValue::Module(ComptimeModuleValue { key }))
+    Ok(ComptimeValue::ImportRecord(ComptimeImportRecordValue {
+        key,
+    }))
 }
 
 fn foreign_to_comptime(
