@@ -1,4 +1,4 @@
-let core := import "./_core.ms";
+let core := import "./core.ms";
 
 --- Build an empty sequence.
 export let empty := core.empty;

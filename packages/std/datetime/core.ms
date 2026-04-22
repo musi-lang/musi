@@ -1,4 +1,4 @@
-let runtime := import "musi:runtime";
+let timeHost := import "musi:time";
 
 --- Internal implementation for `millisPerSecond`.
 export let millisPerSecond := comptime 1000;
@@ -50,7 +50,7 @@ export let durationMinutes (target : Duration) : Int :=
 
 --- Unix wall time now.
 export let nowUnix () : UnixTime :=
-  .UnixTime(millis := runtime.timeNowUnixMs());
+  .UnixTime(millis := timeHost.nowUnixMs());
 
 --- Internal implementation for `unixTimeMillis`.
 export let unixTimeMillis (target : UnixTime) : Int :=
@@ -64,7 +64,7 @@ export let unixTimeSeconds (target : UnixTime) : Int :=
 
 --- Monotonic instant now.
 export let monotonic () : Instant :=
-  .Instant(millis := runtime.timeMonotonicMs());
+  .Instant(millis := timeHost.monotonicMs());
 
 --- Internal implementation for `instantMillis`.
 export let instantMillis (target : Instant) : Int :=
@@ -74,4 +74,4 @@ export let instantMillis (target : Instant) : Int :=
 
 --- Sleep for a duration.
 export let sleep (target : Duration) : Unit :=
-  runtime.timeSleepMs(durationMillis(target));
+  timeHost.sleepMs(durationMillis(target));

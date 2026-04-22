@@ -1,4 +1,4 @@
-let core := import "./_core.ms";
+let core := import "./core.ms";
 
 --- Operating system name.
 export let Os := core.Os;

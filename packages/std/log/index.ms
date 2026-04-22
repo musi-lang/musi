@@ -1,4 +1,4 @@
-let runtime := import "musi:runtime";
+let logHost := import "musi:log";
 
 --- Log severity level.
 export opaque let Level := data {
@@ -39,7 +39,7 @@ export let(self : Level).name () : String :=
 
 --- Write a log message.
 export let write (level : Level, message : String) : Unit :=
-  runtime.logWrite(level.value(), message);
+  logHost.write(level.value(), message);
 
 --- Write a debug message.
 export let debug (message : String) : Unit := write(debugLevel, message);

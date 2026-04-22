@@ -166,11 +166,12 @@ let option := std.option;
 let testing := std.testing;
 ```
 
-Foundation and runtime stay separate from stdlib:
+Foundation host modules stay separate from stdlib:
 
 ```musi
 let Core := import "musi:core";
-let Runtime := import "musi:runtime";
+let Io := import "musi:io";
+let Fs := import "musi:fs";
 ```
 
 Reach for `@std` first in ordinary application code. Reach for `musi:*` only when you are working at language, runtime, or integration boundaries.

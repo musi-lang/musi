@@ -304,6 +304,68 @@ export let test () :=
     }
 
     #[test]
+    fn check_does_not_create_package_target_dir() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"entry\": \"index.ms\"\n}\n",
+        );
+        write_file(temp.path(), "index.ms", "let value := 1;\n");
+
+        let output = run_musi(&["check"], temp.path());
+
+        assert_success(&output);
+        assert!(!temp.path().join("target").exists());
+    }
+
+    #[test]
+    fn test_does_not_create_package_target_dir() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"entry\": \"index.ms\"\n}\n",
+        );
+        write_file(temp.path(), "index.ms", "let value := 1;\n");
+        write_file(
+            temp.path(),
+            "index.test.ms",
+            r#"let Testing := import "@std/testing";
+
+export let test () :=
+  (
+    Testing.describe("target");
+    Testing.it("passes", Testing.toBe(1, 1));
+    Testing.endDescribe()
+  );
+"#,
+        );
+
+        let output = run_musi(&["test"], temp.path());
+
+        assert_success(&output);
+        assert!(!temp.path().join("target").exists());
+    }
+
+    #[test]
+    fn build_default_writes_entry_artifact_without_target_dir() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"entry\": \"index.ms\"\n}\n",
+        );
+        write_file(temp.path(), "index.ms", "let value := 1;\n");
+
+        let output = run_musi(&["build"], temp.path());
+
+        assert_success(&output);
+        assert!(temp.path().join("index.seam").exists());
+        assert!(!temp.path().join("target").exists());
+    }
+
+    #[test]
     fn test_captures_passing_module_output() {
         let temp = TempDir::new();
         write_file(
@@ -320,14 +382,15 @@ export let test () :=
             temp.path(),
             "io.test.ms",
             r#"let Testing := import "@std/testing";
-let Runtime := import "musi:runtime";
+let Io := import "musi:io";
+let Log := import "musi:log";
 
 export let test () :=
   (
     Testing.describe("io");
-    Runtime.ioPrintLine("hidden stdout");
-    Runtime.ioPrintErrorLine("hidden stderr");
-    Runtime.logWrite(40, "hidden log");
+    Io.printLine("hidden stdout");
+    Io.printErrorLine("hidden stderr");
+    Log.write(40, "hidden log");
     Testing.it("passes", Testing.toBe(1, 1));
     Testing.endDescribe()
   );

@@ -1,6 +1,6 @@
 use std::env::{args_os, current_dir};
 
-use musi_foundation::runtime as foundation_runtime;
+use musi_foundation::process as foundation_process;
 use musi_native::NativeHost;
 use musi_vm::{EffectCall, Value, VmError, VmHostContext};
 
@@ -11,8 +11,8 @@ use super::{
 
 pub(super) fn register(host: &mut NativeHost) {
     host.register_effect_handler(
-        foundation_runtime::EFFECT,
-        foundation_runtime::PROCESS_ARG_COUNT_OP,
+        foundation_process::EFFECT,
+        foundation_process::ARG_COUNT_OP,
         |effect, args| {
             if !args.is_empty() {
                 return Err(invalid_runtime_args(effect, "no arguments", args.len()));
@@ -22,8 +22,8 @@ pub(super) fn register(host: &mut NativeHost) {
     );
 
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::PROCESS_ARG_AT_OP,
+        foundation_process::EFFECT,
+        foundation_process::ARG_AT_OP,
         |ctx, effect, args| {
             let [Value::Int(index)] = args else {
                 return Err(invalid_runtime_args(effect, "integer index", args.len()));
@@ -42,8 +42,8 @@ pub(super) fn register(host: &mut NativeHost) {
     );
 
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::PROCESS_CWD_OP,
+        foundation_process::EFFECT,
+        foundation_process::CWD_OP,
         |ctx, effect, args| {
             if !args.is_empty() {
                 return Err(invalid_runtime_args(effect, "no arguments", args.len()));
@@ -54,8 +54,8 @@ pub(super) fn register(host: &mut NativeHost) {
     );
 
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::PROCESS_RUN_OP,
+        foundation_process::EFFECT,
+        foundation_process::RUN_OP,
         |ctx, effect, args| {
             let command = string_arg(ctx, effect, args, "processRun")?;
             Ok(Value::Int(run_shell_command(command, effect)?))
@@ -63,8 +63,8 @@ pub(super) fn register(host: &mut NativeHost) {
     );
 
     host.register_effect_handler(
-        foundation_runtime::EFFECT,
-        foundation_runtime::PROCESS_EXIT_OP,
+        foundation_process::EFFECT,
+        foundation_process::EXIT_OP,
         |effect, args| {
             let [Value::Int(_code)] = args else {
                 return Err(invalid_runtime_args(effect, "integer code", args.len()));

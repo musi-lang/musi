@@ -774,6 +774,43 @@ export let test () := 0;
     }
 
     #[test]
+    fn std_manifest_uses_restructured_public_paths() {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .expect("repo root should resolve");
+        let manifest = fs::read_to_string(repo_root.join("packages/std/musi.json"))
+            .expect("std manifest should be readable");
+
+        for legacy in [
+            "\"./array\"",
+            "\"./list\"",
+            "\"./slice\"",
+            "\"./iter\"",
+            "\"./time\"",
+            "\"./io/prompt\"",
+        ] {
+            assert!(
+                !manifest.contains(legacy),
+                "legacy std export remains: {legacy}"
+            );
+        }
+        for current in [
+            "\"./collections/array\"",
+            "\"./collections/list\"",
+            "\"./collections/slice\"",
+            "\"./collections/iter\"",
+            "\"./datetime\"",
+            "\"./cli/prompt\"",
+            "\"./crypto\"",
+            "\"./uuid\"",
+            "\"./semver\"",
+        ] {
+            assert!(manifest.contains(current), "std export missing: {current}");
+        }
+    }
+
+    #[test]
     fn compiles_static_reexport_chain_across_packages() {
         let temp = TempDir::new();
         write_file(

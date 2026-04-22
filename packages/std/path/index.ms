@@ -1,4 +1,4 @@
-let core := import "./_core.ms";
+let core := import "./core.ms";
 
 --- Platform path value.
 export let Path := core.Path;

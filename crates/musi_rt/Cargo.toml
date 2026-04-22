@@ -21,7 +21,10 @@ music_session = { path = "../music_session" }
 music_term = { path = "../music_term" }
 musi_vm = { path = "../musi_vm" }
 base64 = { workspace = true }
+getrandom = { workspace = true }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
+uuid = { workspace = true }
 
 [lints]
 workspace = true

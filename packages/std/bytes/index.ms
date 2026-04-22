@@ -1,4 +1,4 @@
-let core := import "./_core.ms";
+let core := import "./core.ms";
 
 --- Byte buffer backed by integer byte values.
 export let Bytes := core.Bytes;

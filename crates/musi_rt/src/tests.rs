@@ -364,10 +364,11 @@ export let test () :=
             .register_module_text(
                 "main",
                 r#"
-            let Runtime := import "musi:runtime";
-            export let argCount () : Int := Runtime.processArgCount();
-            export let cwd () : String := Runtime.processCwd();
-            export let now () : Int := Runtime.timeNowUnixMs();
+            let Process := import "musi:process";
+            let Time := import "musi:time";
+            export let argCount () : Int := Process.argCount();
+            export let cwd () : String := Process.cwd();
+            export let now () : Int := Time.nowUnixMs();
         "#,
             )
             .unwrap();
@@ -397,10 +398,11 @@ export let test () :=
             .register_module_text(
                 "main",
                 r#"
-            let Runtime := import "musi:runtime";
-            export let envGet (name : String) : String := Runtime.envGet(name);
-            export let envHas (name : String) : Int := Runtime.envHas(name);
-            export let random () : Int := Runtime.randomInt();
+            let Env := import "musi:env";
+            let Random := import "musi:random";
+            export let envGet (name : String) : String := Env.get(name);
+            export let envHas (name : String) : Int := Env.has(name);
+            export let random () : Int := Random.int();
         "#,
             )
             .unwrap();
@@ -428,9 +430,11 @@ export let test () :=
             .register_module_text(
                 "main",
                 r#"
-            let Runtime := import "musi:runtime";
-            export let envSet (name : String, value : String) : Int := Runtime.envSet(name, value);
-            export let envRemove (name : String) : Int := Runtime.envRemove(name);
+            let Env := import "musi:env";
+            export let envGet (name : String) : String := Env.get(name);
+            export let envHas (name : String) : Int := Env.has(name);
+            export let envSet (name : String, value : String) : Int := Env.set(name, value);
+            export let envRemove (name : String) : Int := Env.remove(name);
         "#,
             )
             .unwrap();
@@ -474,14 +478,16 @@ export let test () :=
             .register_module_text(
                 "main",
                 r#"
-            let Runtime := import "musi:runtime";
+            let Fs := import "musi:fs";
+            let Io := import "musi:io";
+            let Log := import "musi:log";
             export let roundtrip (path : String, text : String) : String := (
-              Runtime.fsWriteText(path, text);
-              Runtime.fsReadText(path)
+              Fs.writeText(path, text);
+              Fs.readText(path)
             );
             export let logAndPrint () : Unit := (
-              Runtime.logInfo("runtime-log");
-              Runtime.ioPrint("runtime-print")
+              Log.info("runtime-log");
+              Io.print("runtime-print")
             );
         "#,
             )
@@ -512,13 +518,14 @@ export let test () :=
             .register_module_text(
                 "main",
                 r#"
-            let Runtime := import "musi:runtime";
+            let Io := import "musi:io";
+            let Log := import "musi:log";
             export let test () : Unit := (
-              Runtime.ioPrint("out");
-              Runtime.ioPrintLine(" line");
-              Runtime.ioPrintError("err");
-              Runtime.ioPrintErrorLine(" line");
-              Runtime.logWrite(40, "boom")
+              Io.print("out");
+              Io.printLine(" line");
+              Io.printError("err");
+              Io.printErrorLine(" line");
+              Log.write(40, "boom")
             );
         "#,
             )
@@ -540,11 +547,12 @@ export let test () :=
             .register_module_text(
                 "main",
                 r#"
-            let Runtime := import "musi:runtime";
+            let Io := import "musi:io";
+            let Log := import "musi:log";
             export let test () : Unit := (
-              Runtime.ioPrintLine("hidden");
-              Runtime.ioPrintErrorLine("hidden");
-              Runtime.logWrite(40, "hidden")
+              Io.printLine("hidden");
+              Io.printErrorLine("hidden");
+              Log.write(40, "hidden")
             );
         "#,
             )
@@ -764,8 +772,8 @@ mod failure {
             .register_module_text(
                 "main",
                 r#"
-            let Runtime := import "musi:runtime";
-            export let quit (code : Int) : Unit := Runtime.processExit(code);
+            let Process := import "musi:process";
+            export let quit (code : Int) : Unit := Process.exit(code);
         "#,
             )
             .unwrap();

@@ -2,7 +2,7 @@ let option := import "@std/option";
 let Option := option.Option;
 let path := import "@std/path";
 let Path := path.Path;
-let runtime := import "musi:runtime";
+let processHost := import "musi:process";
 
 --- Process command text.
 export opaque let Command := data {
@@ -33,21 +33,21 @@ export let(self : ExitCode).toInt () : Int :=
   );
 
 --- Number of process args.
-export let argsCount () : Int := runtime.processArgCount();
+export let argsCount () : Int := processHost.argCount();
 
 --- Process arg by index.
 export let argAt (index : Int) : Option[String] :=
-  match runtime.processArgAt(index) (
+  match processHost.argAt(index) (
   | value if value = "" => option.noneOf[String]()
   | value => option.someOf[String](value)
   );
 
 --- Current working directory.
-export let cwd () : Path := path.fromString(runtime.processCwd());
+export let cwd () : Path := path.fromString(processHost.cwd());
 
 --- Run a shell command.
 export let run (target : Command) : ExitCode :=
-  exitCode(runtime.processRun(target.toString()));
+  exitCode(processHost.run(target.toString()));
 
 --- Exit current process.
-export let exit (code : ExitCode) : Unit := runtime.processExit(code.toInt());
+export let exit (code : ExitCode) : Unit := processHost.exit(code.toInt());

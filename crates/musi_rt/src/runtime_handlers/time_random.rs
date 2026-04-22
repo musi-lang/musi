@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
 
-use musi_foundation::runtime as foundation_runtime;
+use musi_foundation::{random as foundation_random, time as foundation_time};
 use musi_native::NativeHost;
 use musi_vm::Value;
 
@@ -13,8 +13,8 @@ use super::{
 
 pub(super) fn register(host: &mut NativeHost) {
     host.register_effect_handler(
-        foundation_runtime::EFFECT,
-        foundation_runtime::TIME_NOW_UNIX_MS_OP,
+        foundation_time::EFFECT,
+        foundation_time::NOW_UNIX_MS_OP,
         |effect, args| {
             if !args.is_empty() {
                 return Err(invalid_runtime_args(effect, "no arguments", args.len()));
@@ -24,8 +24,8 @@ pub(super) fn register(host: &mut NativeHost) {
     );
 
     host.register_effect_handler(
-        foundation_runtime::EFFECT,
-        foundation_runtime::TIME_MONOTONIC_MS_OP,
+        foundation_time::EFFECT,
+        foundation_time::MONOTONIC_MS_OP,
         |effect, args| {
             if !args.is_empty() {
                 return Err(invalid_runtime_args(effect, "no arguments", args.len()));
@@ -37,8 +37,8 @@ pub(super) fn register(host: &mut NativeHost) {
     );
 
     host.register_effect_handler(
-        foundation_runtime::EFFECT,
-        foundation_runtime::TIME_SLEEP_MS_OP,
+        foundation_time::EFFECT,
+        foundation_time::SLEEP_MS_OP,
         |effect, args| {
             let [Value::Int(ms)] = args else {
                 return Err(invalid_runtime_args(
@@ -59,8 +59,8 @@ pub(super) fn register(host: &mut NativeHost) {
 fn register_random(host: &mut NativeHost, random_state: &RandomStateCell) {
     let int_random_state = Arc::clone(random_state);
     host.register_effect_handler(
-        foundation_runtime::EFFECT,
-        foundation_runtime::RANDOM_INT_OP,
+        foundation_random::EFFECT,
+        foundation_random::INT_OP,
         move |effect, args| {
             if !args.is_empty() {
                 return Err(invalid_runtime_args(effect, "no arguments", args.len()));
@@ -71,8 +71,8 @@ fn register_random(host: &mut NativeHost, random_state: &RandomStateCell) {
 
     let ranged_random_state = Arc::clone(random_state);
     host.register_effect_handler(
-        foundation_runtime::EFFECT,
-        foundation_runtime::RANDOM_INT_IN_RANGE_OP,
+        foundation_random::EFFECT,
+        foundation_random::INT_IN_RANGE_OP,
         move |effect, args| {
             let [Value::Int(lower_bound), Value::Int(upper_bound)] = args else {
                 return Err(invalid_runtime_args(
@@ -91,8 +91,8 @@ fn register_random(host: &mut NativeHost, random_state: &RandomStateCell) {
 
     let bool_random_state = Arc::clone(random_state);
     host.register_effect_handler(
-        foundation_runtime::EFFECT,
-        foundation_runtime::RANDOM_BOOL_OP,
+        foundation_random::EFFECT,
+        foundation_random::BOOL_OP,
         move |effect, args| {
             if !args.is_empty() {
                 return Err(invalid_runtime_args(effect, "no arguments", args.len()));
@@ -103,8 +103,8 @@ fn register_random(host: &mut NativeHost, random_state: &RandomStateCell) {
 
     let float_random_state = Arc::clone(random_state);
     host.register_effect_handler(
-        foundation_runtime::EFFECT,
-        foundation_runtime::RANDOM_FLOAT_01_OP,
+        foundation_random::EFFECT,
+        foundation_random::FLOAT_01_OP,
         move |effect, args| {
             if !args.is_empty() {
                 return Err(invalid_runtime_args(effect, "no arguments", args.len()));

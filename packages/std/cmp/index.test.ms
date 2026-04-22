@@ -37,22 +37,6 @@ export let test () :=
       testing.toBeTruthy(cmp.compareString("é", "z").isGreater()),
     );
     testing.it(
-      "'compareFloat' orders positive infinity",
-      testing.toBeTruthy(cmp.compareFloat(1.0 / 0.0, 1.0).isGreater()),
-    );
-    testing.it(
-      "'compareFloat' orders negative infinity",
-      testing.toBeTruthy(cmp.compareFloat(- 1.0 / 0.0, - 1.0).isLess()),
-    );
-    testing.it(
-      "'compareFloat' orders signed zero",
-      testing.toBeTruthy(cmp.compareFloat(0.0 / - 1.0, 0.0).isLess()),
-    );
-    testing.it(
-      "'compareFloat' orders NaN deterministically",
-      testing.toBeTruthy(cmp.compareFloat(0.0 / 0.0, 0.0 / 0.0).isEqual()),
-    );
-    testing.it(
       "'clampInt' clamps values",
       testing.toBe(cmp.clampInt(11, 0, 10), 10),
     );

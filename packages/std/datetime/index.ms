@@ -1,4 +1,4 @@
-let core := import "./_core.ms";
+let core := import "./core.ms";
 
 --- Span of time in milliseconds.
 export let Duration := core.Duration;
@@ -29,6 +29,9 @@ export let monotonic := core.monotonic;
 
 --- Sleep for a duration.
 export let sleep := core.sleep;
+
+--- Duration as milliseconds.
+export let durationMillis := core.durationMillis;
 
 --- Duration as milliseconds.
 export let(self : Duration).toMillis () : Int := core.durationMillis(self);

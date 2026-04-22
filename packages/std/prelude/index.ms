@@ -1,6 +1,6 @@
 let bytes := import "@std/bytes";
 let cmp := import "@std/cmp";
-let list := import "@std/list";
+let collections := import "@std/collections";
 let option := import "@std/option";
 let path := import "@std/path";
 let result := import "@std/result";
@@ -70,7 +70,7 @@ export let Result := result.Result;
 --- Prelude comparison ordering type.
 export let Ordering := cmp.Ordering;
 --- Prelude list type.
-export let List := list.List;
+export let List := collections.list.List;
 --- Prelude path type.
 export let Path := path.Path;
 --- Prelude bytes type.

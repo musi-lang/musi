@@ -1,4 +1,4 @@
-let runtime := import "musi:runtime";
+let pathHost := import "musi:path";
 
 --- Platform path value.
 export opaque let Path := data {
@@ -16,24 +16,24 @@ export let toString (target : Path) : String :=
 
 --- Internal implementation for `join`.
 export let join (target : Path, other : Path) : Path :=
-  fromString(runtime.pathJoin(toString(target), toString(other)));
+  fromString(pathHost.join(toString(target), toString(other)));
 
 --- Internal implementation for `normalize`.
 export let normalize (target : Path) : Path :=
-  fromString(runtime.pathNormalize(toString(target)));
+  fromString(pathHost.normalize(toString(target)));
 
 --- Internal implementation for `dirName`.
 export let dirName (target : Path) : Path :=
-  fromString(runtime.pathDirname(toString(target)));
+  fromString(pathHost.dirname(toString(target)));
 
 --- Internal implementation for `baseName`.
 export let baseName (target : Path) : String :=
-  runtime.pathBasename(toString(target));
+  pathHost.basename(toString(target));
 
 --- Internal implementation for `extName`.
 export let extName (target : Path) : String :=
-  runtime.pathExtname(toString(target));
+  pathHost.extname(toString(target));
 
 --- Internal implementation for `isAbsolute`.
 export let isAbsolute (target : Path) : Bool :=
-  runtime.pathIsAbsolute(toString(target)) > 0;
+  pathHost.isAbsolute(toString(target)) > 0;

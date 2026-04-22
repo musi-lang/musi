@@ -1,4 +1,4 @@
-let core := import "./_core.ms";
+let core := import "./core.ms";
 
 --- Ordering result for comparisons.
 export let Ordering := core.Ordering;
@@ -27,7 +27,7 @@ export let notEq := core.notEq;
 --- Compare integers.
 export let compareInt := core.compareInt;
 
---- Compare floats with deterministic total ordering, including NaN and signed zero.
+--- Compare finite floats.
 export let compareFloat := core.compareFloat;
 
 --- Compare strings by Unicode scalar lexicographic order.

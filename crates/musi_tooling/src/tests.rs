@@ -2,6 +2,7 @@
 
 use std::env::temp_dir;
 use std::fs;
+use std::io;
 use std::mem::drop;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -16,9 +17,10 @@ use musi_project::{Project, ProjectDiagKind, ProjectError, ProjectOptions};
 
 use crate::{
     ToolInlayHintKind, ToolSemanticModifier, ToolSemanticTokenKind, ToolingDiagKind, ToolingError,
-    collect_project_diagnostics_with_overlay, completions_for_project_file_with_overlay,
-    hover_for_project_file_with_overlay, inlay_hints_for_project_file_with_overlay,
-    load_direct_graph, module_docs_for_project_file_with_overlay, project_error_report,
+    artifact::write_output, collect_project_diagnostics_with_overlay,
+    completions_for_project_file_with_overlay, hover_for_project_file_with_overlay,
+    inlay_hints_for_project_file_with_overlay, load_direct_graph,
+    module_docs_for_project_file_with_overlay, project_error_report,
     semantic_tokens_for_project_file_with_overlay, session_error_report, tooling_error_report,
 };
 
@@ -94,6 +96,33 @@ fn assert_session_error_report(
 
 mod success {
     use super::*;
+
+    #[test]
+    fn failed_artifact_write_removes_empty_created_parent() {
+        let temp = TempDir::new();
+        let target = temp.path().join("target/debug/out.seam");
+
+        let err = write_output(&target, |_| Err(io::Error::other("write failed")))
+            .expect_err("write should fail");
+
+        assert!(matches!(err, ToolingError::ToolingIoFailed { .. }));
+        assert!(!temp.path().join("target").exists());
+    }
+
+    #[test]
+    fn failed_artifact_write_keeps_existing_parent() {
+        let temp = TempDir::new();
+        let parent = temp.path().join("target");
+        fs::create_dir_all(&parent).expect("target dir should be created");
+
+        let err = write_output(&parent.join("out.seam"), |_| {
+            Err(io::Error::other("write failed"))
+        })
+        .expect_err("write should fail");
+
+        assert!(matches!(err, ToolingError::ToolingIoFailed { .. }));
+        assert!(parent.exists());
+    }
 
     #[test]
     fn loads_direct_graph_with_relative_imports() {
@@ -652,20 +681,14 @@ let Core := import "musi:core";
 let Int := Core.Int;
 let String := Core.String;
 
-export opaque let Runtime := effect {
+export opaque let Env := effect {
   let envGet (name : String) : String;
   let envHas (name : String) : Int;
   let envSet (name : String, value : String) : Int;
 };
 "#;
-        write_file(
-            temp.path(),
-            "crates/musi_foundation/modules/runtime.ms",
-            source,
-        );
-        let path = temp
-            .path()
-            .join("crates/musi_foundation/modules/runtime.ms");
+        write_file(temp.path(), "crates/musi_foundation/modules/env.ms", source);
+        let path = temp.path().join("crates/musi_foundation/modules/env.ms");
 
         let tokens = semantic_tokens_for_project_file_with_overlay(&path, Some(source));
 
@@ -686,12 +709,12 @@ export opaque let Runtime := effect {
         }));
         assert!(tokens.iter().any(|token| {
             token.kind == ToolSemanticTokenKind::Parameter
-                && token.range.start_line == 8
+                && token.range.start_line == 7
                 && token.range.start_col == 15
         }));
         assert!(tokens.iter().any(|token| {
             token.kind == ToolSemanticTokenKind::Parameter
-                && token.range.start_line == 9
+                && token.range.start_line == 8
                 && token.range.start_col == 15
         }));
         assert!(tokens.iter().any(|token| {
@@ -701,7 +724,7 @@ export opaque let Runtime := effect {
         }));
         assert!(!tokens.iter().any(|token| {
             token.kind == ToolSemanticTokenKind::Type
-                && matches!(token.range.start_line, 8 | 9)
+                && matches!(token.range.start_line, 7..=9)
                 && matches!(token.range.start_col, 15 | 30)
         }));
     }
@@ -713,40 +736,35 @@ export opaque let Runtime := effect {
 let Core := import \"musi:core\";
 let Int := Core.Int;
 let String := Core.String;
+let Float := Core.Float;
 let Unit := Core.Unit;
 
-export opaque let Runtime := effect {
-  let randomBool () : Int;
-  let randomFloat01 () : Float;
+export opaque let Env := effect {
+  let bool () : Int;
+  let float01 () : Float;
 };
 
-export let randomFloat01 () : Float := ask Runtime.randomFloat01();
+export let float01 () : Float := ask Env.float01();
 ";
-        write_file(
-            temp.path(),
-            "crates/musi_foundation/modules/runtime.ms",
-            source,
-        );
-        let path = temp
-            .path()
-            .join("crates/musi_foundation/modules/runtime.ms");
+        write_file(temp.path(), "crates/musi_foundation/modules/env.ms", source);
+        let path = temp.path().join("crates/musi_foundation/modules/env.ms");
 
         let tokens = semantic_tokens_for_project_file_with_overlay(&path, Some(source));
 
         assert!(tokens.iter().any(|token| {
             token.kind == ToolSemanticTokenKind::Type
-                && token.range.start_line == 8
-                && token.range.start_col == 26
+                && token.range.start_line == 9
+                && token.range.start_col == 20
         }));
         assert!(tokens.iter().any(|token| {
             token.kind == ToolSemanticTokenKind::Type
-                && token.range.start_line == 11
-                && token.range.start_col == 31
+                && token.range.start_line == 12
+                && token.range.start_col == 25
         }));
         assert!(!tokens.iter().any(|token| {
             token.kind == ToolSemanticTokenKind::Variable
-                && matches!(token.range.start_line, 8 | 11)
-                && matches!(token.range.start_col, 26 | 31)
+                && matches!(token.range.start_line, 9 | 12)
+                && matches!(token.range.start_col, 20 | 25)
         }));
     }
 
@@ -818,21 +836,16 @@ export let Type := Type;
 let Core := import \"musi:core\";
 let Int := Core.Int;
 let String := Core.String;
+let Float := Core.Float;
 
-export opaque let Runtime := effect {
-  let randomFloat01 () : Float;
+export opaque let Env := effect {
+  let float01 () : Float;
 };
 ";
-        write_file(
-            temp.path(),
-            "crates/musi_foundation/modules/runtime.ms",
-            source,
-        );
-        let path = temp
-            .path()
-            .join("crates/musi_foundation/modules/runtime.ms");
+        write_file(temp.path(), "crates/musi_foundation/modules/env.ms", source);
+        let path = temp.path().join("crates/musi_foundation/modules/env.ms");
 
-        let hover = hover_for_project_file_with_overlay(&path, Some(source), 6, 26)
+        let hover = hover_for_project_file_with_overlay(&path, Some(source), 7, 20)
             .expect("return annotation should hover");
 
         assert!(

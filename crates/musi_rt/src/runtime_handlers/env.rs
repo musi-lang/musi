@@ -1,6 +1,6 @@
 use std::env::{remove_var, set_var, var, var_os};
 
-use musi_foundation::runtime as foundation_runtime;
+use musi_foundation::env as foundation_env;
 use musi_native::NativeHost;
 use musi_vm::{EffectCall, Value, VmError, VmHostContext};
 
@@ -8,8 +8,8 @@ use super::invalid_runtime_args;
 
 pub(super) fn register(host: &mut NativeHost) {
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::ENV_GET_OP,
+        foundation_env::EFFECT,
+        foundation_env::GET_OP,
         |ctx, effect, args| {
             let name = string_arg(ctx, effect, args, "envGet")?;
             ctx.alloc_string(var(name).unwrap_or_default())
@@ -17,8 +17,8 @@ pub(super) fn register(host: &mut NativeHost) {
     );
 
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::ENV_HAS_OP,
+        foundation_env::EFFECT,
+        foundation_env::HAS_OP,
         |ctx, effect, args| {
             let name = string_arg(ctx, effect, args, "envHas")?;
             Ok(Value::Int(i64::from(var_os(name).is_some())))
@@ -26,8 +26,8 @@ pub(super) fn register(host: &mut NativeHost) {
     );
 
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::ENV_SET_OP,
+        foundation_env::EFFECT,
+        foundation_env::SET_OP,
         |ctx, effect, args| {
             let [name, value] = args else {
                 return Err(invalid_runtime_args(
@@ -57,8 +57,8 @@ pub(super) fn register(host: &mut NativeHost) {
     );
 
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::ENV_REMOVE_OP,
+        foundation_env::EFFECT,
+        foundation_env::REMOVE_OP,
         |ctx, effect, args| {
             let name = string_arg(ctx, effect, args, "envRemove")?;
             if !valid_env_key(name) {

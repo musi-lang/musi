@@ -1,6 +1,6 @@
 let option := import "@std/option";
 let Option := option.Option;
-let runtime := import "musi:runtime";
+let envHost := import "musi:env";
 
 --- Environment variable key.
 export opaque let Key := data {
@@ -37,19 +37,19 @@ let varText (target : Var) : String :=
 export let(self : Var).toString () : String := varText(self);
 
 --- Returns true when variable exists.
-export let has (target : Key) : Bool := runtime.envHas(keyText(target)) > 0;
+export let has (target : Key) : Bool := envHost.has(keyText(target)) > 0;
 
 --- Read an environment variable.
 export let get (target : Key) : Option[Var] :=
   match has(target) (
-  | ok if ok => option.someOf[Var](var(runtime.envGet(keyText(target))))
+  | ok if ok => option.someOf[Var](var(envHost.get(keyText(target))))
   | _ => option.noneOf[Var]()
   );
 
 --- Set an environment variable.
 export let set (target : Key, value : Var) : Bool :=
-  runtime.envSet(keyText(target), varText(value)) > 0;
+  envHost.set(keyText(target), varText(value)) > 0;
 
 --- Remove an environment variable.
 export let remove (target : Key) : Bool :=
-  runtime.envRemove(keyText(target)) > 0;
+  envHost.remove(keyText(target)) > 0;

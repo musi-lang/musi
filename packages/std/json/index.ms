@@ -1,4 +1,4 @@
-let runtime := import "musi:runtime";
+let jsonHost := import "musi:json";
 
 --- Normalized JSON text.
 export opaque let Json := data {
@@ -7,7 +7,7 @@ export opaque let Json := data {
 
 --- Parse and normalize JSON text.
 export let parse (source : String) : Json :=
-  .Json(source := runtime.jsonNormalize(source));
+  .Json(source := jsonHost.normalize(source));
 
 --- Render JSON text.
 export let(self : Json).stringify () : String :=
@@ -16,4 +16,4 @@ export let(self : Json).stringify () : String :=
   );
 
 --- Returns true when source is valid JSON.
-export let isValid (source : String) : Bool := runtime.jsonIsValid(source) > 0;
+export let isValid (source : String) : Bool := jsonHost.isValid(source) > 0;

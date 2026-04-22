@@ -1,4 +1,4 @@
-let core := import "./_core.ms";
+let core := import "./core.ms";
 
 --- Recoverable success or failure value.
 export let Result := core.Result;

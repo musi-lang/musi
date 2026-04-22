@@ -1,4 +1,4 @@
-let core := import "./_core.ms";
+let core := import "./core.ms";
 
 --- Optional value with either a present value or no value.
 export let Option := core.Option;

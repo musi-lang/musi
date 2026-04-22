@@ -17,6 +17,10 @@ export let test () :=
       testing.toBeTruthy("  trim  ".trim() = "trim"),
     );
     testing.it(
+      "'concat' joins strings",
+      testing.toBeTruthy(text.concat("hello", " world") = "hello world"),
+    );
+    testing.it(
       "'toLowerCase' lowers letters",
       testing.toBeTruthy("ABC".toLowerCase() = "abc"),
     );

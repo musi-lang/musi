@@ -1,14 +1,21 @@
 --- Standard library version.
 export let version := "0.1.0";
 
---- Assertion helpers module.
-export let assert := import "@std/assert";
---- Array helpers module.
-export let array := import "@std/array";
---- Byte sequence helpers module.
-export let bytes := import "@std/bytes";
+--- Commonly imported standard library surface.
+export let prelude := import "@std/prelude";
+--- Optional value helpers module.
+export let option := import "@std/option";
+--- Recoverable result helpers module.
+export let result := import "@std/result";
 --- Comparison helpers module.
 export let cmp := import "@std/cmp";
+
+--- Collections module namespace.
+export let collections := import "@std/collections";
+--- Byte sequence helpers module.
+export let bytes := import "@std/bytes";
+--- Text helpers module.
+export let text := import "@std/text";
 --- Text and byte encoding module namespace.
 export let encoding :=
   {
@@ -16,45 +23,49 @@ export let encoding :=
     hex := import "@std/encoding/hex",
     utf8 := import "@std/encoding/utf8",
   };
---- Environment variable helpers module.
-export let env := import "@std/env";
---- Filesystem helpers module.
-export let fs := import "@std/fs";
---- Foreign function interface helpers module.
-export let ffi := import "@std/ffi";
---- Terminal I/O helpers module.
-export let io := import "@std/io";
---- Iterator-style sequence helpers module.
-export let iter := import "@std/iter";
 --- JSON helpers module.
 export let json := import "@std/json";
---- Logging helpers module.
-export let log := import "@std/log";
---- List helpers module.
-export let list := import "@std/list";
+
 --- Math helpers module.
 export let math := import "@std/math";
---- Optional value helpers module.
-export let option := import "@std/option";
---- Typed operating system target helpers module.
-export let os := import "@std/os";
---- Path helpers module.
-export let path := import "@std/path";
---- Commonly imported standard library surface.
-export let prelude := import "@std/prelude";
---- Process helpers module.
-export let process := import "@std/process";
+--- Formatting helpers module.
+export let fmt := import "@std/fmt";
+--- Error value helpers module.
+export let errors := import "@std/errors";
+
+--- Date and time helpers module.
+export let datetime := import "@std/datetime";
 --- Random number helpers module.
 export let random := import "@std/random";
---- Recoverable result helpers module.
-export let result := import "@std/result";
---- Slice helpers module.
-export let slice := import "@std/slice";
+--- Cryptographic helpers module.
+export let crypto := import "@std/crypto";
+--- UUID helpers module.
+export let uuid := import "@std/uuid";
+--- Semantic version helpers module.
+export let semver := import "@std/semver";
+
+--- Filesystem helpers module.
+export let fs := import "@std/fs";
+--- Path helpers module.
+export let path := import "@std/path";
+--- Terminal I/O helpers module.
+export let io := import "@std/io";
+--- Command-line helpers module.
+export let cli := import "@std/cli";
+--- Environment variable helpers module.
+export let env := import "@std/env";
+--- Process helpers module.
+export let process := import "@std/process";
+--- Typed operating system target helpers module.
+export let os := import "@std/os";
 --- Raw system target facts module.
 export let sys := import "@std/sys";
+
+--- Assertion helpers module.
+export let assert := import "@std/assert";
 --- Testing helpers module.
 export let testing := import "@std/testing";
---- Text helpers module.
-export let text := import "@std/text";
---- Time helpers module.
-export let time := import "@std/time";
+--- Logging helpers module.
+export let log := import "@std/log";
+--- Foreign function interface helpers module.
+export let ffi := import "@std/ffi";

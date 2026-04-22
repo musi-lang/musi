@@ -55,8 +55,6 @@ export let eq[T](left : T, right : T) : Bool := left = right;
 --- Generic inequality with built-in equality semantics.
 export let notEq[T](left : T, right : T) : Bool := left /= right;
 
-native "musi" let compareFloatTotalIntrinsic (left : Float, right : Float) : Int;
-
 --- Internal implementation for `compareInt`.
 export let compareInt (left : Int, right : Int) : Ordering :=
   match ()(
@@ -67,16 +65,11 @@ export let compareInt (left : Int, right : Int) : Ordering :=
 
 --- Internal implementation for `compareFloat`.
 export let compareFloat (left : Float, right : Float) : Ordering :=
-  (
-    let order := unsafe {
-    compareFloatTotalIntrinsic(left, right);
-  };
   match ()(
-    | _ if order < 0 => less()
-    | _ if order > 0 => greater()
-    | _ => equal()
-  )
-);
+    | _ if left < right => less()
+    | _ if left > right => greater()
+    | _ => equal ()
+  );
 
 --- Internal implementation for `compareString`.
 export let compareString (left : String, right : String) : Ordering :=

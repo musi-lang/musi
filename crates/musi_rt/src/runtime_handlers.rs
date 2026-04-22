@@ -9,12 +9,18 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
-use musi_foundation::runtime as foundation_runtime;
+use musi_foundation::{
+    crypto_host as foundation_crypto, encoding_host as foundation_encoding, fmt as foundation_fmt,
+    fs as foundation_fs, io as foundation_io, json_host as foundation_json, log as foundation_log,
+    path_host as foundation_path, random as foundation_random, text as foundation_text,
+    uuid_host as foundation_uuid,
+};
 use musi_native::NativeHost;
 use musi_vm::{
     EffectCall, Value, VmDiagKind, VmError, VmErrorKind, VmHostCallContext, VmHostContext,
 };
 use music_base::diag::DiagContext;
+use sha2::{Digest, Sha256};
 
 use crate::output::RuntimeOutputSinkCell;
 
@@ -34,16 +40,19 @@ pub fn register_runtime_handlers(host: &mut NativeHost, output: &RuntimeOutputSi
     register_path_handlers(host);
     register_json_handlers(host);
     register_encoding_handlers(host);
+    register_format_handlers(host);
+    register_crypto_handlers(host);
+    register_uuid_handlers(host);
 }
 
 fn register_log_io_handlers(host: &mut NativeHost, output: &RuntimeOutputSinkCell) {
     let log_info_output = Arc::clone(output);
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::LOG_INFO_OP,
+        foundation_log::EFFECT,
+        foundation_log::INFO_OP,
         move |ctx, effect, args| {
             let message = string_arg(ctx, effect, args, "logInfo")?;
-            let line = format!("[musi:runtime] {message}");
+            let line = format!("[musi:log] {message}");
             log_info_output
                 .lock()
                 .map_err(|_| runtime_host_unavailable(effect, "runtime output lock"))?
@@ -55,8 +64,8 @@ fn register_log_io_handlers(host: &mut NativeHost, output: &RuntimeOutputSinkCel
 
     let log_write_output = Arc::clone(output);
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::LOG_WRITE_OP,
+        foundation_log::EFFECT,
+        foundation_log::WRITE_OP,
         move |ctx, effect, args| {
             let [Value::Int(level), message] = args else {
                 return Err(invalid_runtime_args(
@@ -80,16 +89,16 @@ fn register_log_io_handlers(host: &mut NativeHost, output: &RuntimeOutputSinkCel
 
     let stdout_output = Arc::clone(output);
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::IO_PRINT_OP,
+        foundation_io::EFFECT,
+        foundation_io::PRINT_OP,
         move |ctx, effect, args| {
             write_stream(ctx, effect, args, StreamKind::Stdout, false, &stdout_output)
         },
     );
     let stdout_line_output = Arc::clone(output);
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::IO_PRINT_LINE_OP,
+        foundation_io::EFFECT,
+        foundation_io::PRINT_LINE_OP,
         move |ctx, effect, args| {
             write_stream(
                 ctx,
@@ -103,16 +112,16 @@ fn register_log_io_handlers(host: &mut NativeHost, output: &RuntimeOutputSinkCel
     );
     let stderr_output = Arc::clone(output);
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::IO_PRINT_ERROR_OP,
+        foundation_io::EFFECT,
+        foundation_io::PRINT_ERROR_OP,
         move |ctx, effect, args| {
             write_stream(ctx, effect, args, StreamKind::Stderr, false, &stderr_output)
         },
     );
     let stderr_line_output = Arc::clone(output);
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::IO_PRINT_ERROR_LINE_OP,
+        foundation_io::EFFECT,
+        foundation_io::PRINT_ERROR_LINE_OP,
         move |ctx, effect, args| {
             write_stream(
                 ctx,
@@ -125,8 +134,8 @@ fn register_log_io_handlers(host: &mut NativeHost, output: &RuntimeOutputSinkCel
         },
     );
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::IO_READ_LINE_OP,
+        foundation_io::EFFECT,
+        foundation_io::READ_LINE_OP,
         |ctx, effect, args| {
             if !args.is_empty() {
                 return Err(invalid_runtime_args(effect, "no arguments", args.len()));
@@ -136,10 +145,80 @@ fn register_log_io_handlers(host: &mut NativeHost, output: &RuntimeOutputSinkCel
     );
 }
 
+fn register_format_handlers(host: &mut NativeHost) {
+    host.register_effect_handler_with_context(
+        foundation_fmt::EFFECT,
+        foundation_fmt::INT_OP,
+        |ctx, effect, args| {
+            let [Value::Int(value)] = args else {
+                return Err(invalid_runtime_args(effect, "integer value", args.len()));
+            };
+            ctx.alloc_string(value.to_string())
+        },
+    );
+    host.register_effect_handler_with_context(
+        foundation_fmt::EFFECT,
+        foundation_fmt::FLOAT_OP,
+        |ctx, effect, args| {
+            let [Value::Float(value)] = args else {
+                return Err(invalid_runtime_args(effect, "float value", args.len()));
+            };
+            ctx.alloc_string(value.to_string())
+        },
+    );
+}
+
+fn register_crypto_handlers(host: &mut NativeHost) {
+    host.register_effect_handler_with_context(
+        foundation_random::EFFECT,
+        foundation_random::ENTROPY_HEX_OP,
+        |ctx, effect, args| {
+            let [Value::Int(count)] = args else {
+                return Err(invalid_runtime_args(effect, "byte count", args.len()));
+            };
+            let count = usize::try_from((*count).max(0)).unwrap_or(0);
+            let mut bytes = vec![0u8; count];
+            getrandom::fill(&mut bytes).map_err(|error| runtime_effect_failed(effect, error))?;
+            ctx.alloc_string(hex_encode(&bytes))
+        },
+    );
+    host.register_effect_handler_with_context(
+        foundation_crypto::EFFECT,
+        foundation_crypto::SHA256_HEX_OP,
+        |ctx, effect, args| {
+            let source = string_arg(ctx, effect, args, "sha256Hex")?;
+            let digest = Sha256::digest(source.as_bytes());
+            ctx.alloc_string(hex_encode(&digest))
+        },
+    );
+    host.register_effect_handler_with_context(
+        foundation_crypto::EFFECT,
+        foundation_crypto::SHA256_BASE64_OP,
+        |ctx, effect, args| {
+            let source = string_arg(ctx, effect, args, "sha256Base64")?;
+            let digest = Sha256::digest(source.as_bytes());
+            ctx.alloc_string(BASE64_STANDARD.encode(digest))
+        },
+    );
+}
+
+fn register_uuid_handlers(host: &mut NativeHost) {
+    host.register_effect_handler_with_context(
+        foundation_uuid::EFFECT,
+        foundation_uuid::V4_OP,
+        |ctx, effect, args| {
+            if !args.is_empty() {
+                return Err(invalid_runtime_args(effect, "no arguments", args.len()));
+            }
+            ctx.alloc_string(uuid::Uuid::new_v4().to_string())
+        },
+    );
+}
+
 fn register_fs_handlers(host: &mut NativeHost) {
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::FS_READ_TEXT_OP,
+        foundation_fs::EFFECT,
+        foundation_fs::READ_TEXT_OP,
         |ctx, effect, args| {
             let path = string_arg(ctx, effect, args, "fsReadText")?.to_owned();
             let text =
@@ -149,8 +228,8 @@ fn register_fs_handlers(host: &mut NativeHost) {
     );
 
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::FS_WRITE_TEXT_OP,
+        foundation_fs::EFFECT,
+        foundation_fs::WRITE_TEXT_OP,
         |ctx, effect, args| {
             let [path, text] = args else {
                 return Err(invalid_runtime_args(
@@ -172,8 +251,8 @@ fn register_fs_handlers(host: &mut NativeHost) {
     );
 
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::FS_EXISTS_OP,
+        foundation_fs::EFFECT,
+        foundation_fs::EXISTS_OP,
         |ctx, effect, args| {
             let path = string_arg(ctx, effect, args, "fsExists")?;
             Ok(Value::Int(i64::from(Path::new(path).exists())))
@@ -181,8 +260,8 @@ fn register_fs_handlers(host: &mut NativeHost) {
     );
 
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::FS_APPEND_TEXT_OP,
+        foundation_fs::EFFECT,
+        foundation_fs::APPEND_TEXT_OP,
         |ctx, effect, args| {
             let [path, text] = args else {
                 return Err(invalid_runtime_args(
@@ -207,8 +286,8 @@ fn register_fs_handlers(host: &mut NativeHost) {
     );
 
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::FS_REMOVE_OP,
+        foundation_fs::EFFECT,
+        foundation_fs::REMOVE_OP,
         |ctx, effect, args| {
             let path = string_arg(ctx, effect, args, "fsRemove")?;
             Ok(Value::Int(i64::from(fs::remove_file(path).is_ok())))
@@ -216,8 +295,8 @@ fn register_fs_handlers(host: &mut NativeHost) {
     );
 
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::FS_CREATE_DIR_ALL_OP,
+        foundation_fs::EFFECT,
+        foundation_fs::CREATE_DIR_ALL_OP,
         |ctx, effect, args| {
             let path = string_arg(ctx, effect, args, "fsCreateDirAll")?;
             Ok(Value::Int(i64::from(fs::create_dir_all(path).is_ok())))
@@ -226,17 +305,23 @@ fn register_fs_handlers(host: &mut NativeHost) {
 }
 
 fn register_text_handlers(host: &mut NativeHost) {
+    register_text_unary_handlers(host);
+    register_text_binary_handlers(host);
+    register_text_index_handlers(host);
+}
+
+fn register_text_unary_handlers(host: &mut NativeHost) {
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::TEXT_LENGTH_OP,
+        foundation_text::EFFECT,
+        foundation_text::LENGTH_OP,
         |ctx, effect, args| {
             let value = string_arg(ctx, effect, args, "textLength")?;
             Ok(Value::Int(saturating_usize_to_i64(value.chars().count())))
         },
     );
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::TEXT_TRIM_OP,
+        foundation_text::EFFECT,
+        foundation_text::TRIM_OP,
         |ctx, effect, args| {
             transform_string_arg(ctx, effect, args, "textTrim", |value| {
                 value.trim().to_owned()
@@ -244,22 +329,49 @@ fn register_text_handlers(host: &mut NativeHost) {
         },
     );
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::TEXT_TO_LOWERCASE_OP,
+        foundation_text::EFFECT,
+        foundation_text::TO_LOWERCASE_OP,
         |ctx, effect, args| {
             transform_string_arg(ctx, effect, args, "textToLowerCase", str::to_lowercase)
         },
     );
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::TEXT_TO_UPPERCASE_OP,
+        foundation_text::EFFECT,
+        foundation_text::TO_UPPERCASE_OP,
         |ctx, effect, args| {
             transform_string_arg(ctx, effect, args, "textToUpperCase", str::to_uppercase)
         },
     );
+}
+
+fn register_text_binary_handlers(host: &mut NativeHost) {
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::TEXT_CONTAINS_OP,
+        foundation_text::EFFECT,
+        foundation_text::CONCAT_OP,
+        |ctx, effect, args| {
+            let [left, right] = args else {
+                return Err(invalid_runtime_args(
+                    effect,
+                    "left and right strings",
+                    args.len(),
+                ));
+            };
+            let left = ctx
+                .string(left)
+                .ok_or_else(|| invalid_runtime_args(effect, "left string", left.kind()))?;
+            let right = ctx
+                .string(right)
+                .ok_or_else(|| invalid_runtime_args(effect, "right string", right.kind()))?;
+            let mut text =
+                String::with_capacity(left.as_str().len().saturating_add(right.as_str().len()));
+            text.push_str(left.as_str());
+            text.push_str(right.as_str());
+            ctx.alloc_string(text)
+        },
+    );
+    host.register_effect_handler_with_context(
+        foundation_text::EFFECT,
+        foundation_text::CONTAINS_OP,
         |ctx, effect, args| {
             text_predicate(ctx, effect, args, "textContains", |value, needle| {
                 value.contains(needle)
@@ -267,8 +379,8 @@ fn register_text_handlers(host: &mut NativeHost) {
         },
     );
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::TEXT_STARTS_WITH_OP,
+        foundation_text::EFFECT,
+        foundation_text::STARTS_WITH_OP,
         |ctx, effect, args| {
             text_predicate(ctx, effect, args, "textStartsWith", |value, needle| {
                 value.starts_with(needle)
@@ -276,8 +388,8 @@ fn register_text_handlers(host: &mut NativeHost) {
         },
     );
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::TEXT_ENDS_WITH_OP,
+        foundation_text::EFFECT,
+        foundation_text::ENDS_WITH_OP,
         |ctx, effect, args| {
             text_predicate(ctx, effect, args, "textEndsWith", |value, needle| {
                 value.ends_with(needle)
@@ -286,10 +398,96 @@ fn register_text_handlers(host: &mut NativeHost) {
     );
 }
 
+fn register_text_index_handlers(host: &mut NativeHost) {
+    host.register_effect_handler_with_context(
+        foundation_text::EFFECT,
+        foundation_text::INDEX_OF_OP,
+        |ctx, effect, args| {
+            let [value, needle] = args else {
+                return Err(invalid_runtime_args(
+                    effect,
+                    "value and needle strings",
+                    args.len(),
+                ));
+            };
+            let value = ctx
+                .string(value)
+                .ok_or_else(|| invalid_runtime_args(effect, "value string", value.kind()))?;
+            let needle = ctx
+                .string(needle)
+                .ok_or_else(|| invalid_runtime_args(effect, "needle string", needle.kind()))?;
+            Ok(Value::Int(
+                value
+                    .as_str()
+                    .find(needle.as_str())
+                    .and_then(|index| i64::try_from(index).ok())
+                    .unwrap_or(-1),
+            ))
+        },
+    );
+    host.register_effect_handler_with_context(
+        foundation_text::EFFECT,
+        foundation_text::SLICE_OP,
+        |ctx, effect, args| {
+            let [value, Value::Int(start), Value::Int(end)] = args else {
+                return Err(invalid_runtime_args(
+                    effect,
+                    "value string and integer bounds",
+                    args.len(),
+                ));
+            };
+            let value = ctx
+                .string(value)
+                .ok_or_else(|| invalid_runtime_args(effect, "value string", value.kind()))?;
+            ctx.alloc_string(text_slice(value.as_str(), *start, *end))
+        },
+    );
+    host.register_effect_handler_with_context(
+        foundation_text::EFFECT,
+        foundation_text::BYTE_AT_OP,
+        |ctx, effect, args| {
+            let [value, Value::Int(index)] = args else {
+                return Err(invalid_runtime_args(
+                    effect,
+                    "value string and integer index",
+                    args.len(),
+                ));
+            };
+            let value = ctx
+                .string(value)
+                .ok_or_else(|| invalid_runtime_args(effect, "value string", value.kind()))?;
+            let byte = usize::try_from(*index)
+                .ok()
+                .and_then(|index| value.as_str().as_bytes().get(index).copied())
+                .map_or(-1, i64::from);
+            Ok(Value::Int(byte))
+        },
+    );
+}
+
+fn text_slice(value: &str, start: i64, end: i64) -> String {
+    let len = value.len();
+    let start = usize::try_from(start.max(0)).unwrap_or(0).min(len);
+    let end = usize::try_from(end.max(0)).unwrap_or(0).min(len);
+    let start = floor_char_boundary(value, start);
+    let end = floor_char_boundary(value, end);
+    if end < start {
+        return String::new();
+    }
+    value.get(start..end).unwrap_or("").to_owned()
+}
+
+const fn floor_char_boundary(value: &str, mut index: usize) -> usize {
+    while index > 0 && !value.is_char_boundary(index) {
+        index -= 1;
+    }
+    index
+}
+
 fn register_path_handlers(host: &mut NativeHost) {
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::PATH_JOIN_OP,
+        foundation_path::EFFECT,
+        foundation_path::JOIN_OP,
         |ctx, effect, args| {
             let [left, right] = args else {
                 return Err(invalid_runtime_args(
@@ -313,8 +511,8 @@ fn register_path_handlers(host: &mut NativeHost) {
         },
     );
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::PATH_NORMALIZE_OP,
+        foundation_path::EFFECT,
+        foundation_path::NORMALIZE_OP,
         |ctx, effect, args| {
             let value = string_arg(ctx, effect, args, "pathNormalize")?;
             ctx.alloc_string(
@@ -327,8 +525,8 @@ fn register_path_handlers(host: &mut NativeHost) {
         },
     );
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::PATH_DIRNAME_OP,
+        foundation_path::EFFECT,
+        foundation_path::DIRNAME_OP,
         |ctx, effect, args| {
             let value = string_arg(ctx, effect, args, "pathDirname")?;
             let dirname = Path::new(value)
@@ -339,8 +537,8 @@ fn register_path_handlers(host: &mut NativeHost) {
         },
     );
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::PATH_BASENAME_OP,
+        foundation_path::EFFECT,
+        foundation_path::BASENAME_OP,
         |ctx, effect, args| {
             let value = string_arg(ctx, effect, args, "pathBasename")?;
             let basename = Path::new(value)
@@ -351,8 +549,8 @@ fn register_path_handlers(host: &mut NativeHost) {
         },
     );
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::PATH_EXTNAME_OP,
+        foundation_path::EFFECT,
+        foundation_path::EXTNAME_OP,
         |ctx, effect, args| {
             let value = string_arg(ctx, effect, args, "pathExtname")?;
             let extname = Path::new(value)
@@ -363,8 +561,8 @@ fn register_path_handlers(host: &mut NativeHost) {
         },
     );
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::PATH_IS_ABSOLUTE_OP,
+        foundation_path::EFFECT,
+        foundation_path::IS_ABSOLUTE_OP,
         |ctx, effect, args| {
             let value = string_arg(ctx, effect, args, "pathIsAbsolute")?;
             Ok(Value::Int(i64::from(Path::new(value).is_absolute())))
@@ -374,8 +572,8 @@ fn register_path_handlers(host: &mut NativeHost) {
 
 fn register_json_handlers(host: &mut NativeHost) {
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::JSON_IS_VALID_OP,
+        foundation_json::EFFECT,
+        foundation_json::IS_VALID_OP,
         |ctx, effect, args| {
             let source = string_arg(ctx, effect, args, "jsonIsValid")?;
             Ok(Value::Int(i64::from(
@@ -385,8 +583,8 @@ fn register_json_handlers(host: &mut NativeHost) {
     );
 
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::JSON_NORMALIZE_OP,
+        foundation_json::EFFECT,
+        foundation_json::NORMALIZE_OP,
         |ctx, effect, args| {
             let source = string_arg(ctx, effect, args, "jsonNormalize")?.to_owned();
             ctx.alloc_string(normalize_json(&source, effect)?)
@@ -396,37 +594,37 @@ fn register_json_handlers(host: &mut NativeHost) {
 
 fn register_encoding_handlers(host: &mut NativeHost) {
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::HEX_ENCODE_OP,
+        foundation_encoding::EFFECT,
+        foundation_encoding::HEX_ENCODE_OP,
         |ctx, effect, args| {
             let source = string_arg(ctx, effect, args, "hexEncode")?.to_owned();
             ctx.alloc_string(hex_encode(source.as_bytes()))
         },
     );
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::HEX_DECODE_OP,
+        foundation_encoding::EFFECT,
+        foundation_encoding::HEX_DECODE_OP,
         |ctx, effect, args| decode_utf8_encoded(ctx, effect, args, "hexDecode", decode_hex),
     );
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::HEX_IS_VALID_OP,
+        foundation_encoding::EFFECT,
+        foundation_encoding::HEX_IS_VALID_OP,
         |ctx, effect, args| {
             let source = string_arg(ctx, effect, args, "hexIsValid")?;
             Ok(Value::Int(i64::from(decode_hex(source).is_ok())))
         },
     );
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::BASE64_ENCODE_OP,
+        foundation_encoding::EFFECT,
+        foundation_encoding::BASE64_ENCODE_OP,
         |ctx, effect, args| {
             let source = string_arg(ctx, effect, args, "base64Encode")?.to_owned();
             ctx.alloc_string(BASE64_STANDARD.encode(source.as_bytes()))
         },
     );
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::BASE64_DECODE_OP,
+        foundation_encoding::EFFECT,
+        foundation_encoding::BASE64_DECODE_OP,
         |ctx, effect, args| {
             decode_utf8_encoded(ctx, effect, args, "base64Decode", |source| {
                 BASE64_STANDARD
@@ -436,8 +634,8 @@ fn register_encoding_handlers(host: &mut NativeHost) {
         },
     );
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::BASE64_IS_VALID_OP,
+        foundation_encoding::EFFECT,
+        foundation_encoding::BASE64_IS_VALID_OP,
         |ctx, effect, args| {
             let source = string_arg(ctx, effect, args, "base64IsValid")?;
             Ok(Value::Int(i64::from(
@@ -446,18 +644,18 @@ fn register_encoding_handlers(host: &mut NativeHost) {
         },
     );
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::UTF8_ENCODE_OP,
+        foundation_encoding::EFFECT,
+        foundation_encoding::UTF8_ENCODE_OP,
         |ctx, effect, args| transform_string_arg(ctx, effect, args, "utf8Encode", str::to_owned),
     );
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::UTF8_DECODE_OP,
+        foundation_encoding::EFFECT,
+        foundation_encoding::UTF8_DECODE_OP,
         |ctx, effect, args| transform_string_arg(ctx, effect, args, "utf8Decode", str::to_owned),
     );
     host.register_effect_handler_with_context(
-        foundation_runtime::EFFECT,
-        foundation_runtime::UTF8_IS_VALID_OP,
+        foundation_encoding::EFFECT,
+        foundation_encoding::UTF8_IS_VALID_OP,
         |ctx, effect, args| {
             let bytes = string_arg(ctx, effect, args, "utf8IsValid")?;
             Ok(Value::Int(i64::from(from_utf8(bytes.as_bytes()).is_ok())))

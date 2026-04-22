@@ -5,7 +5,7 @@ export let test () :=
   (
     testing.describe("std");
     let sameBytes := std.bytes.fromArray([1, 2]);
-    let oneList := std.list.of[Int](1);
+    let oneList := std.collections.list.of[Int](1);
     let currentOs := std.os.targetOs(std.os.current);
     let noneInt := std.option.noneOf[Int]();
     testing.it(
@@ -15,7 +15,10 @@ export let test () :=
     testing.it(
       "root re-exports 'list' family",
       testing.toBeTruthy(
-        std.list.equalsInt(oneList, std.list.fromArray[Int]([1]))
+        std.collections.list.equalsInt(
+          oneList,
+          std.collections.list.fromArray[Int]([1]),
+        )
       ),
     );
     testing.it(

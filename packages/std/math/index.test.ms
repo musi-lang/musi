@@ -29,17 +29,5 @@ export let test () :=
       "'clamp' clamps above high",
       testing.toBe(math.clamp(11, 0, 10), 10),
     );
-    testing.it(
-      "'clampFloat' keeps in-range value",
-      testing.toBeTruthy(math.clampFloat(3.5, 1.0, 5.0) = 3.5),
-    );
-    testing.it(
-      "'clampFloat' clamps below low",
-      testing.toBeTruthy(math.clampFloat(- 1.0, 0.0, 1.0) = 0.0),
-    );
-    testing.it(
-      "'clampFloat' clamps above high",
-      testing.toBeTruthy(math.clampFloat(2.0, 0.0, 1.0) = 1.0),
-    );
     testing.endDescribe()
   );

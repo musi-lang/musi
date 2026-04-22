@@ -1,17 +1,17 @@
-let runtime := import "musi:runtime";
+let randomHost := import "musi:random";
 
 --- Random integer in half-open bounds.
 export let nextIntInRange (lowerBound : Int, upperBound : Int) : Int :=
   match () (
   | _ if upperBound <= lowerBound => lowerBound
-  | _ => runtime.randomIntInRange(lowerBound, upperBound)
+  | _ => randomHost.intInRange(lowerBound, upperBound)
   );
 
 --- Random float in zero-to-one range.
-export let nextFloat () : Float := runtime.randomFloat01();
+export let nextFloat () : Float := randomHost.float01();
 
 --- Random boolean value.
-export let nextBool () : Bool := runtime.randomBool() /= 0;
+export let nextBool () : Bool := randomHost.bool() /= 0;
 
 --- Random boolean by integer percent chance.
 export let chance (percent : Int) : Bool :=

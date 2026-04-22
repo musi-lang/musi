@@ -1,16 +1,10 @@
-let core := import "./_core.ms";
+let core := import "./core.ms";
 
 --- Build an empty sequence.
 export let empty := core.empty;
 
---- Build a one-value array.
-export let single := core.single;
-
---- Build a two-value array.
-export let pair := core.pair;
-
---- Copy sequence values.
-export let copy := core.copy;
+--- Build a one-value iterator.
+export let once := core.once;
 
 --- Concatenate two sequences.
 export let concat := core.concat;
@@ -19,14 +13,13 @@ export let concat := core.concat;
 export let append := core.append;
 
 --- Prepend a leading value.
-export let prepend [T] (value : T, values : []T) : []T :=
-    core.prepend[T](values, value);
+export let prepend := core.prepend;
+
+--- Collect iterator values into an array.
+export let collect := core.collect;
 
 --- Compare integer sequences for equality.
 export let equalsInt := core.equalsInt;
-
---- Compare integer arrays for inequality.
-export let notEqualsInt := core.notEqualsInt;
 
 --- Returns true when sequence is empty.
 export let isEmpty := core.isEmpty;
