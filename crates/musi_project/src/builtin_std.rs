@@ -3,209 +3,93 @@ pub const STD_MANIFEST_PATH: &str = "builtin:/@std/musi.json";
 pub const STD_ROOT_DIR: &str = "builtin:/@std";
 pub const STD_MANIFEST: &str = include_str!("../../../packages/std/musi.json");
 pub const STD_FILES: &[(&str, &str)] = &[
-    (
-        "assert/index.ms",
-        include_str!("../../../packages/std/assert/index.ms"),
-    ),
-    (
-        "bytes/core.ms",
-        include_str!("../../../packages/std/bytes/core.ms"),
-    ),
-    (
-        "bytes/index.ms",
-        include_str!("../../../packages/std/bytes/index.ms"),
-    ),
-    (
-        "cli/index.ms",
-        include_str!("../../../packages/std/cli/index.ms"),
-    ),
+    ("assert.ms", include_str!("../../../packages/std/assert.ms")),
+    ("bits.ms", include_str!("../../../packages/std/bits.ms")),
+    ("bytes.ms", include_str!("../../../packages/std/bytes.ms")),
+    ("cli.ms", include_str!("../../../packages/std/cli.ms")),
     (
         "cli/prompt.ms",
         include_str!("../../../packages/std/cli/prompt.ms"),
     ),
+    ("cmp.ms", include_str!("../../../packages/std/cmp.ms")),
     (
-        "cmp/core.ms",
-        include_str!("../../../packages/std/cmp/core.ms"),
+        "collections.ms",
+        include_str!("../../../packages/std/collections.ms"),
     ),
     (
-        "cmp/index.ms",
-        include_str!("../../../packages/std/cmp/index.ms"),
+        "collections/array.ms",
+        include_str!("../../../packages/std/collections/array.ms"),
     ),
     (
-        "collections/array/core.ms",
-        include_str!("../../../packages/std/collections/array/core.ms"),
+        "collections/iter.ms",
+        include_str!("../../../packages/std/collections/iter.ms"),
     ),
     (
-        "collections/array/index.ms",
-        include_str!("../../../packages/std/collections/array/index.ms"),
+        "collections/list.ms",
+        include_str!("../../../packages/std/collections/list.ms"),
     ),
     (
-        "collections/index.ms",
-        include_str!("../../../packages/std/collections/index.ms"),
+        "collections/slice.ms",
+        include_str!("../../../packages/std/collections/slice.ms"),
+    ),
+    ("crypto.ms", include_str!("../../../packages/std/crypto.ms")),
+    (
+        "datetime.ms",
+        include_str!("../../../packages/std/datetime.ms"),
     ),
     (
-        "collections/iter/core.ms",
-        include_str!("../../../packages/std/collections/iter/core.ms"),
+        "encoding.ms",
+        include_str!("../../../packages/std/encoding.ms"),
     ),
     (
-        "collections/iter/index.ms",
-        include_str!("../../../packages/std/collections/iter/index.ms"),
+        "encoding/base64.ms",
+        include_str!("../../../packages/std/encoding/base64.ms"),
     ),
     (
-        "collections/list/core.ms",
-        include_str!("../../../packages/std/collections/list/core.ms"),
+        "encoding/hex.ms",
+        include_str!("../../../packages/std/encoding/hex.ms"),
     ),
     (
-        "collections/list/index.ms",
-        include_str!("../../../packages/std/collections/list/index.ms"),
+        "encoding/utf8.ms",
+        include_str!("../../../packages/std/encoding/utf8.ms"),
+    ),
+    ("env.ms", include_str!("../../../packages/std/env.ms")),
+    ("errors.ms", include_str!("../../../packages/std/errors.ms")),
+    ("ffi.ms", include_str!("../../../packages/std/ffi.ms")),
+    ("fmt.ms", include_str!("../../../packages/std/fmt.ms")),
+    ("fs.ms", include_str!("../../../packages/std/fs.ms")),
+    ("io.ms", include_str!("../../../packages/std/io.ms")),
+    ("json.ms", include_str!("../../../packages/std/json.ms")),
+    ("log.ms", include_str!("../../../packages/std/log.ms")),
+    ("math.ms", include_str!("../../../packages/std/math.ms")),
+    (
+        "math/float.ms",
+        include_str!("../../../packages/std/math/float.ms"),
     ),
     (
-        "collections/slice/core.ms",
-        include_str!("../../../packages/std/collections/slice/core.ms"),
+        "math/integer.ms",
+        include_str!("../../../packages/std/math/integer.ms"),
+    ),
+    ("option.ms", include_str!("../../../packages/std/option.ms")),
+    ("os.ms", include_str!("../../../packages/std/os.ms")),
+    ("path.ms", include_str!("../../../packages/std/path.ms")),
+    (
+        "prelude.ms",
+        include_str!("../../../packages/std/prelude.ms"),
     ),
     (
-        "collections/slice/index.ms",
-        include_str!("../../../packages/std/collections/slice/index.ms"),
+        "process.ms",
+        include_str!("../../../packages/std/process.ms"),
     ),
+    ("random.ms", include_str!("../../../packages/std/random.ms")),
+    ("result.ms", include_str!("../../../packages/std/result.ms")),
+    ("semver.ms", include_str!("../../../packages/std/semver.ms")),
+    ("std.ms", include_str!("../../../packages/std/std.ms")),
+    ("sys.ms", include_str!("../../../packages/std/sys.ms")),
     (
-        "crypto/index.ms",
-        include_str!("../../../packages/std/crypto/index.ms"),
+        "testing.ms",
+        include_str!("../../../packages/std/testing.ms"),
     ),
-    (
-        "datetime/core.ms",
-        include_str!("../../../packages/std/datetime/core.ms"),
-    ),
-    (
-        "datetime/index.ms",
-        include_str!("../../../packages/std/datetime/index.ms"),
-    ),
-    (
-        "encoding/base64/index.ms",
-        include_str!("../../../packages/std/encoding/base64/index.ms"),
-    ),
-    (
-        "encoding/hex/index.ms",
-        include_str!("../../../packages/std/encoding/hex/index.ms"),
-    ),
-    (
-        "encoding/index.ms",
-        include_str!("../../../packages/std/encoding/index.ms"),
-    ),
-    (
-        "encoding/utf8/index.ms",
-        include_str!("../../../packages/std/encoding/utf8/index.ms"),
-    ),
-    (
-        "env/index.ms",
-        include_str!("../../../packages/std/env/index.ms"),
-    ),
-    (
-        "errors/index.ms",
-        include_str!("../../../packages/std/errors/index.ms"),
-    ),
-    (
-        "ffi/index.ms",
-        include_str!("../../../packages/std/ffi/index.ms"),
-    ),
-    (
-        "fmt/index.ms",
-        include_str!("../../../packages/std/fmt/index.ms"),
-    ),
-    (
-        "fs/index.ms",
-        include_str!("../../../packages/std/fs/index.ms"),
-    ),
-    ("index.ms", include_str!("../../../packages/std/index.ms")),
-    (
-        "io/index.ms",
-        include_str!("../../../packages/std/io/index.ms"),
-    ),
-    (
-        "json/index.ms",
-        include_str!("../../../packages/std/json/index.ms"),
-    ),
-    (
-        "log/index.ms",
-        include_str!("../../../packages/std/log/index.ms"),
-    ),
-    (
-        "math/_float.ms",
-        include_str!("../../../packages/std/math/_float.ms"),
-    ),
-    (
-        "math/_int.ms",
-        include_str!("../../../packages/std/math/_int.ms"),
-    ),
-    (
-        "math/index.ms",
-        include_str!("../../../packages/std/math/index.ms"),
-    ),
-    (
-        "option/core.ms",
-        include_str!("../../../packages/std/option/core.ms"),
-    ),
-    (
-        "option/index.ms",
-        include_str!("../../../packages/std/option/index.ms"),
-    ),
-    (
-        "os/core.ms",
-        include_str!("../../../packages/std/os/core.ms"),
-    ),
-    (
-        "os/index.ms",
-        include_str!("../../../packages/std/os/index.ms"),
-    ),
-    (
-        "path/core.ms",
-        include_str!("../../../packages/std/path/core.ms"),
-    ),
-    (
-        "path/index.ms",
-        include_str!("../../../packages/std/path/index.ms"),
-    ),
-    (
-        "prelude/index.ms",
-        include_str!("../../../packages/std/prelude/index.ms"),
-    ),
-    (
-        "process/index.ms",
-        include_str!("../../../packages/std/process/index.ms"),
-    ),
-    (
-        "random/index.ms",
-        include_str!("../../../packages/std/random/index.ms"),
-    ),
-    (
-        "result/core.ms",
-        include_str!("../../../packages/std/result/core.ms"),
-    ),
-    (
-        "result/index.ms",
-        include_str!("../../../packages/std/result/index.ms"),
-    ),
-    (
-        "semver/index.ms",
-        include_str!("../../../packages/std/semver/index.ms"),
-    ),
-    (
-        "sys/index.ms",
-        include_str!("../../../packages/std/sys/index.ms"),
-    ),
-    (
-        "testing/index.ms",
-        include_str!("../../../packages/std/testing/index.ms"),
-    ),
-    (
-        "text/index.ms",
-        include_str!("../../../packages/std/text/index.ms"),
-    ),
-    (
-        "text/string.ms",
-        include_str!("../../../packages/std/text/string.ms"),
-    ),
-    (
-        "uuid/index.ms",
-        include_str!("../../../packages/std/uuid/index.ms"),
-    ),
+    ("text.ms", include_str!("../../../packages/std/text.ms")),
+    ("uuid.ms", include_str!("../../../packages/std/uuid.ms")),
 ];

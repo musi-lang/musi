@@ -9,7 +9,6 @@ use self::intrinsics::{MODULE as INTRINSICS_SOURCE, SPEC as INTRINSICS_SPEC};
 use self::io::{MODULE as IO_SOURCE, SPEC as IO_SPEC};
 use self::json_host::{MODULE as JSON_HOST_SOURCE, SPEC as JSON_HOST_SPEC};
 use self::log::{MODULE as LOG_SOURCE, SPEC as LOG_SPEC};
-use self::path_host::{MODULE as PATH_HOST_SOURCE, SPEC as PATH_HOST_SPEC};
 use self::process::{MODULE as PROCESS_SOURCE, SPEC as PROCESS_SPEC};
 use self::random::{MODULE as RANDOM_SOURCE, SPEC as RANDOM_SPEC};
 use self::syntax::{MODULE as SYNTAX_SOURCE, SPEC as SYNTAX_SPEC};
@@ -105,28 +104,10 @@ pub mod text {
     pub const MODULE: &str = include_str!("../modules/text.ms");
     pub const EFFECT: &str = "musi:text::Text";
     pub const LENGTH_OP: &str = "length";
-    pub const TRIM_OP: &str = "trim";
     pub const CONCAT_OP: &str = "concat";
-    pub const TO_LOWERCASE_OP: &str = "toLowerCase";
-    pub const TO_UPPERCASE_OP: &str = "toUpperCase";
-    pub const CONTAINS_OP: &str = "contains";
-    pub const STARTS_WITH_OP: &str = "startsWith";
-    pub const ENDS_WITH_OP: &str = "endsWith";
-    pub const INDEX_OF_OP: &str = "indexOf";
     pub const SLICE_OP: &str = "slice";
     pub const BYTE_AT_OP: &str = "byteAt";
-}
-
-pub mod path_host {
-    pub const SPEC: &str = "musi:path";
-    pub const MODULE: &str = include_str!("../modules/path_host.ms");
-    pub const EFFECT: &str = "musi:path::PathHost";
-    pub const JOIN_OP: &str = "join";
-    pub const NORMALIZE_OP: &str = "normalize";
-    pub const DIRNAME_OP: &str = "dirname";
-    pub const BASENAME_OP: &str = "basename";
-    pub const EXTNAME_OP: &str = "extname";
-    pub const IS_ABSOLUTE_OP: &str = "isAbsolute";
+    pub const FROM_BYTE_OP: &str = "fromByte";
 }
 
 pub mod json_host {
@@ -141,9 +122,6 @@ pub mod encoding_host {
     pub const SPEC: &str = "musi:encoding";
     pub const MODULE: &str = include_str!("../modules/encoding_host.ms");
     pub const EFFECT: &str = "musi:encoding::EncodingHost";
-    pub const HEX_ENCODE_OP: &str = "hexEncode";
-    pub const HEX_DECODE_OP: &str = "hexDecode";
-    pub const HEX_IS_VALID_OP: &str = "hexIsValid";
     pub const BASE64_ENCODE_OP: &str = "base64Encode";
     pub const BASE64_DECODE_OP: &str = "base64Decode";
     pub const BASE64_IS_VALID_OP: &str = "base64IsValid";
@@ -212,7 +190,6 @@ const FS_MODULE: FoundationModule = (FS_SPEC, FS_SOURCE);
 const TIME_MODULE: FoundationModule = (TIME_SPEC, TIME_SOURCE);
 const RANDOM_MODULE: FoundationModule = (RANDOM_SPEC, RANDOM_SOURCE);
 const TEXT_MODULE: FoundationModule = (TEXT_SPEC, TEXT_SOURCE);
-const PATH_HOST_MODULE: FoundationModule = (PATH_HOST_SPEC, PATH_HOST_SOURCE);
 const JSON_HOST_MODULE: FoundationModule = (JSON_HOST_SPEC, JSON_HOST_SOURCE);
 const ENCODING_HOST_MODULE: FoundationModule = (ENCODING_HOST_SPEC, ENCODING_HOST_SOURCE);
 const FMT_MODULE: FoundationModule = (FMT_SPEC, FMT_SOURCE);
@@ -222,7 +199,7 @@ const LOG_MODULE: FoundationModule = (LOG_SPEC, LOG_SOURCE);
 const TEST_MODULE: FoundationModule = (TEST_SPEC, TEST_SOURCE);
 const SYNTAX_MODULE: FoundationModule = (SYNTAX_SPEC, SYNTAX_SOURCE);
 
-const FOUNDATION_MODULES: [FoundationModule; 19] = [
+const FOUNDATION_MODULES: [FoundationModule; 18] = [
     CORE_MODULE,
     INTRINSICS_MODULE,
     ENV_MODULE,
@@ -233,7 +210,6 @@ const FOUNDATION_MODULES: [FoundationModule; 19] = [
     TIME_MODULE,
     RANDOM_MODULE,
     TEXT_MODULE,
-    PATH_HOST_MODULE,
     JSON_HOST_MODULE,
     ENCODING_HOST_MODULE,
     FMT_MODULE,

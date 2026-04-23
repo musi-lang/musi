@@ -67,6 +67,9 @@ export let String := String;
 @musi.known(name := "Rune")
 export let Rune := Rune;
 
+@musi.known(name := "Bits")
+export let Bits := Bits;
+
 @musi.known(name := "Range")
 export let Range := Range;
 
