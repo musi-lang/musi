@@ -1,13 +1,12 @@
 use std::env::{args_os, current_dir};
+use std::process::Command;
 
 use musi_foundation::process as foundation_process;
 use musi_native::NativeHost;
-use musi_vm::{EffectCall, Value, VmError, VmHostContext};
+use musi_vm::{EffectCall, Value, VmError};
 
-use super::{
-    invalid_runtime_args, run_shell_command, runtime_effect_failed, runtime_effect_unsupported,
-    saturating_usize_to_i64,
-};
+use super::errors::{invalid_runtime_args, runtime_effect_failed, runtime_effect_unsupported};
+use super::values::{saturating_usize_to_i64, string_arg};
 
 pub(super) fn register(host: &mut NativeHost) {
     host.register_effect_handler(
@@ -74,16 +73,18 @@ pub(super) fn register(host: &mut NativeHost) {
     );
 }
 
-fn string_arg<'a>(
-    ctx: &'a VmHostContext<'_>,
-    effect: &EffectCall,
-    args: &'a [Value],
-    op_name: &str,
-) -> Result<&'a str, VmError> {
-    let [value] = args else {
-        return Err(invalid_runtime_args(effect, "one string", args.len()));
-    };
-    ctx.string(value).map(|text| text.as_str()).ok_or_else(|| {
-        invalid_runtime_args(effect, format!("{op_name} string").as_str(), value.kind())
-    })
+fn run_shell_command(command: &str, effect: &EffectCall) -> Result<i64, VmError> {
+    let status = if cfg!(windows) {
+        Command::new("cmd")
+            .args([windows_shell_flag().as_str(), command])
+            .status()
+    } else {
+        Command::new("sh").args(["-c", command]).status()
+    }
+    .map_err(|error| runtime_effect_failed(effect, error))?;
+    Ok(i64::from(status.code().unwrap_or(-1)))
+}
+
+fn windows_shell_flag() -> String {
+    ['/', 'C'].into_iter().collect()
 }

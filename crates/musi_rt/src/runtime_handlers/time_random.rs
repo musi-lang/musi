@@ -1,15 +1,14 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread::sleep;
-use std::time::Duration;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use musi_foundation::{random as foundation_random, time as foundation_time};
 use musi_native::NativeHost;
-use musi_vm::Value;
+use musi_vm::{EffectCall, Value, VmError};
 
-use super::{
-    RandomStateCell, current_unix_millis, invalid_runtime_args, monotonic_origin, next_random_int,
-    random_float01, random_int_in_range, random_seed,
-};
+use super::errors::{invalid_runtime_args, runtime_effect_failed};
+
+type RandomStateCell = Arc<Mutex<u64>>;
 
 pub(super) fn register(host: &mut NativeHost) {
     host.register_effect_handler(
@@ -112,4 +111,51 @@ fn register_random(host: &mut NativeHost, random_state: &RandomStateCell) {
             Ok(Value::Float(random_float01(&float_random_state)))
         },
     );
+}
+
+fn current_unix_millis(effect: &EffectCall) -> Result<i64, VmError> {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| runtime_effect_failed(effect, error))?;
+    Ok(i64::try_from(now.as_millis()).unwrap_or(i64::MAX))
+}
+
+fn random_seed() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| {
+            let nanos = duration.as_nanos();
+            u64::try_from(nanos).unwrap_or(u64::MAX)
+        })
+}
+
+fn next_random_int(state: &RandomStateCell) -> i64 {
+    let mut value = state.lock().expect("random state should lock");
+    *value = value
+        .wrapping_mul(6_364_136_223_846_793_005)
+        .wrapping_add(1);
+    i64::from_ne_bytes(value.to_ne_bytes()) & i64::MAX
+}
+
+fn random_int_in_range(state: &RandomStateCell, lower_bound: i64, upper_bound: i64) -> i64 {
+    if upper_bound <= lower_bound {
+        return lower_bound;
+    }
+    let span = u64::try_from(upper_bound - lower_bound).unwrap_or(0);
+    if span == 0 {
+        return lower_bound;
+    }
+    let raw = u64::try_from(next_random_int(state)).unwrap_or(0);
+    let offset = i64::try_from(raw % span).unwrap_or(0);
+    lower_bound + offset
+}
+
+fn random_float01(state: &RandomStateCell) -> f64 {
+    let raw_bits = u32::try_from(next_random_int(state) & i64::from(u32::MAX)).unwrap_or(u32::MAX);
+    f64::from(raw_bits) / f64::from(u32::MAX)
+}
+
+fn monotonic_origin() -> &'static Instant {
+    static ORIGIN: OnceLock<Instant> = OnceLock::new();
+    ORIGIN.get_or_init(Instant::now)
 }

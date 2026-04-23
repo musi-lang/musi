@@ -638,7 +638,7 @@ export let unwrapOr [T] (value : Option[T], fallback : T) : T :=
 let Intrinsics := import "musi:test";
 
 export let toBe (actual : Int, expected : Int) := actual = expected;
-export let toBeTruthy (actual : Bool) := actual;
+export let toBeTrue (actual : Bool) := actual;
 
 export let describe (name : String) :=
     Intrinsics.suiteStart(name);
@@ -660,7 +660,7 @@ let Option := import "@std/option";
 export let test () :=
     (
       Testing.describe("std root");
-      Testing.it("bytes chain", Testing.toBeTruthy(Bytes.equals([1, 2], [1, 2])));
+      Testing.it("bytes chain", Testing.toBeTrue(Bytes.equals([1, 2], [1, 2])));
       Testing.it("math chain", Testing.toBe(Math.clamp(9, 0, 4), 4));
       Testing.it("option chain", Testing.toBe(Option.unwrapOr[Int](Option.none[Int](), 5), 5));
       Testing.endDescribe()

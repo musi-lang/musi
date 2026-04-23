@@ -2,9 +2,10 @@ use std::env::{remove_var, set_var, var, var_os};
 
 use musi_foundation::env as foundation_env;
 use musi_native::NativeHost;
-use musi_vm::{EffectCall, Value, VmError, VmHostContext};
+use musi_vm::Value;
 
-use super::invalid_runtime_args;
+use super::errors::invalid_runtime_args;
+use super::values::string_arg;
 
 pub(super) fn register(host: &mut NativeHost) {
     host.register_effect_handler_with_context(
@@ -72,20 +73,6 @@ pub(super) fn register(host: &mut NativeHost) {
             Ok(Value::Int(1))
         },
     );
-}
-
-fn string_arg<'a>(
-    ctx: &'a VmHostContext<'_>,
-    effect: &EffectCall,
-    args: &'a [Value],
-    op_name: &str,
-) -> Result<&'a str, VmError> {
-    let [value] = args else {
-        return Err(invalid_runtime_args(effect, "one string", args.len()));
-    };
-    ctx.string(value).map(|text| text.as_str()).ok_or_else(|| {
-        invalid_runtime_args(effect, format!("{op_name} string").as_str(), value.kind())
-    })
 }
 
 fn valid_env_key(name: &str) -> bool {
