@@ -44,6 +44,9 @@ pub enum HirTyKind {
     Rune,
     CString,
     CPtr,
+    Bits {
+        width: u32,
+    },
     NatLit(u64),
     Named {
         name: Symbol,

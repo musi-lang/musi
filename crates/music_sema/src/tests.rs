@@ -483,11 +483,34 @@ mod success {
             None,
             None,
         );
-        assert!(
-            has_diag(&sema, SemaDiagKind::InvalidCallTarget),
-            "{:?}",
-            sema.diags()
+        let diag = find_diag(&sema, SemaDiagKind::InvalidCallTarget)
+            .expect("invalid call target diagnostic");
+        assert_eq!(
+            diag.message(),
+            "call target `value` expected callable type, found `Unknown`"
         );
+        assert_eq!(
+            diag.labels()[0].message(),
+            "`value` has type `Unknown` here"
+        );
+    }
+
+    #[test]
+    fn invalid_call_target_names_direct_callee_without_nested_category() {
+        let sema = check(
+            r"
+        let fromByte : Any := 1 :?> Any;
+        fromByte();
+    ",
+        );
+
+        let diag = find_diag(&sema, SemaDiagKind::InvalidCallTarget)
+            .expect("invalid call target diagnostic");
+        assert_eq!(
+            diag.message(),
+            "call target `fromByte` expected callable type, found `Any`"
+        );
+        assert_eq!(diag.labels()[0].message(), "`fromByte` has type `Any` here");
     }
 
     #[test]
@@ -1315,6 +1338,83 @@ mod success {
         );
         assert!(
             !has_diag(&sema, SemaDiagKind::TypeMismatch),
+            "{:?}",
+            sema.diags()
+        );
+    }
+
+    #[test]
+    fn logical_operator_family_accepts_bool_and_matching_bits() {
+        let sema = check(
+            r"
+        export let boolAnd (left : Bool, right : Bool) : Bool := left and right;
+        export let boolOr (left : Bool, right : Bool) : Bool := left or right;
+        export let boolXor (left : Bool, right : Bool) : Bool := left xor right;
+        export let bitsAnd (left : Bits[4], right : Bits[4]) : Bits[4] := left and right;
+        export let bitsOr (left : Bits[4], right : Bits[4]) : Bits[4] := left or right;
+        export let bitsXor (left : Bits[4], right : Bits[4]) : Bits[4] := left xor right;
+        export let bitsNot (value : Bits[4]) : Bits[4] := not value;
+    ",
+        );
+        assert!(
+            !has_diag(&sema, SemaDiagKind::BinaryOperatorHasNoExecutableLowering),
+            "{:?}",
+            sema.diags()
+        );
+        assert!(
+            !has_diag(&sema, SemaDiagKind::LogicalOperatorDomainMismatch),
+            "{:?}",
+            sema.diags()
+        );
+        assert!(
+            !has_diag(&sema, SemaDiagKind::TypeMismatch),
+            "{:?}",
+            sema.diags()
+        );
+    }
+
+    #[test]
+    fn logical_operator_family_accepts_symbolic_bits_width() {
+        let sema = check(
+            r"
+        export let bitsAnd [N : Nat] (left : Bits[N], right : Bits[N]) : Bits[N] :=
+            left and right;
+        export let bitsNot [N : Nat] (value : Bits[N]) : Bits[N] := not value;
+    ",
+        );
+        assert!(
+            !has_diag(&sema, SemaDiagKind::InvalidBitsWidth),
+            "{:?}",
+            sema.diags()
+        );
+        assert!(
+            !has_diag(&sema, SemaDiagKind::LogicalOperatorDomainMismatch),
+            "{:?}",
+            sema.diags()
+        );
+        assert!(
+            !has_diag(&sema, SemaDiagKind::UnaryLogicalOperatorDomainMismatch),
+            "{:?}",
+            sema.diags()
+        );
+    }
+
+    #[test]
+    fn logical_operator_family_rejects_mismatched_domains() {
+        let sema = check(
+            r"
+        export let badBits (left : Bits[4], right : Bits[8]) := left and right;
+        export let badInt (left : Int, right : Int) := left and right;
+        export let badNot (value : Int) := not value;
+    ",
+        );
+        assert!(
+            has_diag(&sema, SemaDiagKind::LogicalOperatorDomainMismatch),
+            "{:?}",
+            sema.diags()
+        );
+        assert!(
+            has_diag(&sema, SemaDiagKind::UnaryLogicalOperatorDomainMismatch),
             "{:?}",
             sema.diags()
         );

@@ -15,6 +15,7 @@ impl Vm {
             Value::Int(value) => ValueView::Int(*value),
             Value::Nat(value) => ValueView::Nat(*value),
             Value::Float(value) => ValueView::Float(*value),
+            Value::Bits(value) => ValueView::Bits(value),
             Value::String(text) => ValueView::String(StringView::new(
                 self.heap.string(*text).expect("live string"),
             )),

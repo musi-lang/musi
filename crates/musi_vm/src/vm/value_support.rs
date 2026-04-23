@@ -135,6 +135,7 @@ impl Vm {
 
     pub(crate) fn values_equal(&self, left: &Value, right: &Value) -> bool {
         match (left, right) {
+            (Value::Bits(left), Value::Bits(right)) => left == right,
             (Value::Float(left), Value::Float(right)) => left.to_bits() == right.to_bits(),
             (Value::String(left), Value::String(right)) => {
                 self.heap.string(*left).ok() == self.heap.string(*right).ok()

@@ -78,6 +78,7 @@ fn canonical_surface_ty_kind(surface: &ModuleSurface, kind: &SurfaceTyKind) -> S
         SurfaceTyKind::Tuple { items } => canonical_surface_tuple(surface, items),
         SurfaceTyKind::Seq { item } => format!("[]{}", canonical_surface_ty(surface, *item)),
         SurfaceTyKind::Array { dims, item } => canonical_surface_array(surface, dims, *item),
+        SurfaceTyKind::Bits { width } => format!("Bits[{width}]"),
         SurfaceTyKind::Range { bound } => canonical_surface_wrapped(surface, "Range", *bound),
         SurfaceTyKind::Handler {
             effect,
@@ -336,6 +337,7 @@ impl<'a> SurfaceTyBuilder<'a> {
                 dims: self.lower_dims(dims.clone()),
                 item: self.lower(*item),
             },
+            HirTyKind::Bits { width } => SurfaceTyKind::Bits { width: *width },
             HirTyKind::Range { .. } => self.lower_range_kind(kind),
             HirTyKind::Handler {
                 effect,
@@ -497,6 +499,7 @@ impl<'ctx, 'ctx_state, 'interner, 'env> SurfaceTyImporter<'ctx, 'ctx_state, 'int
                 dims: self.import_dims(dims),
                 item: self.import(*item),
             },
+            SurfaceTyKind::Bits { width } => HirTyKind::Bits { width: *width },
             SurfaceTyKind::Range { .. } => self.import_range_kind(kind),
             SurfaceTyKind::Handler {
                 effect,

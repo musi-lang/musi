@@ -257,7 +257,9 @@ fn contains_named_value_ref_children(kind: &IrExprKind, expected: &str) -> bool 
                     .iter()
                     .any(|update| contains_named_value_ref(&update.expr, expected))
         }
-        IrExprKind::Binary { left, right, .. } => {
+        IrExprKind::Binary { left, right, .. }
+        | IrExprKind::BoolAnd { left, right }
+        | IrExprKind::BoolOr { left, right } => {
             contains_named_value_ref(left, expected) || contains_named_value_ref(right, expected)
         }
         IrExprKind::Match { scrutinee, arms } => {
@@ -328,7 +330,9 @@ fn contains_named_value_ref_children_with_prefix(kind: &IrExprKind, expected: &s
         IrExprKind::Record { fields, .. } => fields
             .iter()
             .any(|field| contains_named_value_ref_with_prefix(&field.expr, expected)),
-        IrExprKind::Binary { left, right, .. } => {
+        IrExprKind::Binary { left, right, .. }
+        | IrExprKind::BoolAnd { left, right }
+        | IrExprKind::BoolOr { left, right } => {
             contains_named_value_ref_with_prefix(left, expected)
                 || contains_named_value_ref_with_prefix(right, expected)
         }

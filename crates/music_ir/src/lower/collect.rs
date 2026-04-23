@@ -44,6 +44,8 @@ impl<'a> SyntheticNameSetMut<'a> {
                 self.collect_in_assign_target(target);
             }
             IrExprKind::Binary { left, right, .. }
+            | IrExprKind::BoolAnd { left, right }
+            | IrExprKind::BoolOr { left, right }
             | IrExprKind::Range {
                 lower: left,
                 upper: right,
@@ -220,6 +222,8 @@ fn collect_used_bindings_nested(expr: &IrExpr, out: BoundNameSetMut<'_>) {
         }
         IrExprKind::Assign { target, value } => collect_used_in_assign_target(value, target, out),
         IrExprKind::Binary { left, right, .. }
+        | IrExprKind::BoolAnd { left, right }
+        | IrExprKind::BoolOr { left, right }
         | IrExprKind::Range {
             lower: left,
             upper: right,
@@ -315,6 +319,8 @@ fn collect_local_decl_bindings_nested(expr: &IrExpr, out: BoundNameSetMut<'_>) {
         | IrExprKind::TempLet { value, .. }
         | IrExprKind::Assign { value, .. } => collect_local_decl_bindings(value, out),
         IrExprKind::Binary { left, right, .. }
+        | IrExprKind::BoolAnd { left, right }
+        | IrExprKind::BoolOr { left, right }
         | IrExprKind::Range {
             lower: left,
             upper: right,

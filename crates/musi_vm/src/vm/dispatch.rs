@@ -200,11 +200,11 @@ impl Vm {
             Opcode::StGlob => self.exec_fast_stglob(runtime),
             Opcode::LdC => self.exec_fast_ldconst(runtime),
             Opcode::LdCI4 => self.exec_fast_ldsmi(runtime),
-            Opcode::Add => self.exec_fast_int_op(i64::checked_add),
-            Opcode::Sub => self.exec_fast_int_op(i64::checked_sub),
-            Opcode::Mul => self.exec_fast_int_op(i64::checked_mul),
-            Opcode::DivS => self.exec_fast_int_op(i64::checked_div),
-            Opcode::RemS => self.exec_fast_int_op(i64::checked_rem),
+            Opcode::Add => self.exec_fast_int_op(runtime, i64::checked_add),
+            Opcode::Sub => self.exec_fast_int_op(runtime, i64::checked_sub),
+            Opcode::Mul => self.exec_fast_int_op(runtime, i64::checked_mul),
+            Opcode::DivS => self.exec_fast_int_op(runtime, i64::checked_div),
+            Opcode::RemS => self.exec_fast_int_op(runtime, i64::checked_rem),
             Opcode::Br => self.exec_fast_br(runtime),
             Opcode::BrFalse => self.exec_fast_brfalse(runtime),
             Opcode::Call => self.execute_runtime_call(runtime),
@@ -256,7 +256,11 @@ impl Vm {
             | Opcode::CltS
             | Opcode::CgtS
             | Opcode::CleS
-            | Opcode::CgeS => self.exec_scalar(instruction),
+            | Opcode::CgeS
+            | Opcode::And
+            | Opcode::Or
+            | Opcode::Xor
+            | Opcode::Not => self.exec_scalar(instruction),
             Opcode::Br | Opcode::BrFalse | Opcode::BrTbl => self.exec_branch(instruction),
             Opcode::Call if matches!(instruction.operand, music_seam::Operand::I16(_)) => {
                 self.exec_type(instruction)
@@ -893,8 +897,18 @@ impl Vm {
 
     fn exec_fast_int_op(
         &mut self,
+        runtime: &RuntimeInstruction,
         op: impl FnOnce(i64, i64) -> Option<i64>,
     ) -> VmResult<StepOutcome> {
+        let frame = self.current_frame()?;
+        let stack_len = frame.stack.len();
+        let has_int_args = stack_len >= 2
+            && matches!(frame.stack.get(stack_len - 1), Some(Value::Int(_)))
+            && matches!(frame.stack.get(stack_len - 2), Some(Value::Int(_)));
+        if !has_int_args {
+            let instruction = self.current_raw_instruction(runtime.raw_index)?;
+            return self.execute_instr(&instruction);
+        }
         let frame = self.current_frame_mut()?;
         let right = pop_int_from_stack(frame)?;
         let left = pop_int_from_stack(frame)?;
@@ -922,8 +936,10 @@ impl Vm {
             return self.exec_branch(&instruction);
         };
         let cond = self.pop_value()?;
-        if matches!(cond, Value::Unit) || self.bool_flag(&cond) == Some(false) {
-            self.jump_to_ip(target)?;
+        match self.bool_flag(&cond) {
+            Some(false) => self.jump_to_ip(target)?,
+            Some(true) => {}
+            None => return Err(Self::invalid_value_kind(VmValueKind::Bool, &cond)),
         }
         Ok(StepOutcome::Continue)
     }

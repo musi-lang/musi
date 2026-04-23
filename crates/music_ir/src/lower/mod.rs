@@ -28,6 +28,7 @@ use crate::api::{
 
 mod array;
 mod assign;
+mod binary;
 mod bindings;
 mod call;
 mod closures;
@@ -472,16 +473,17 @@ fn lower_misc_expr(ctx: &mut LowerCtx<'_>, expr_id: HirExprId, kind: &HirExprKin
                 ty_name,
             }
         }
-        HirExprKind::TypeCast { base, .. } => IrExprKind::TyCast {
-            base: lower_boxed_expr(ctx, *base),
-            ty_name: render_ty_name(
-                sema,
+        HirExprKind::TypeCast { base, .. } => {
+            let target = sema.type_test_target(expr_id).unwrap_or_else(|| {
                 sema.try_expr_ty(expr_id).unwrap_or_else(|| {
                     lowering_invariant_violation("expr type missing for type cast")
-                }),
-                interner,
-            ),
-        },
+                })
+            });
+            IrExprKind::TyCast {
+                base: lower_boxed_expr(ctx, *base),
+                ty_name: render_ty_name(sema, target, interner),
+            }
+        }
         HirExprKind::Resume { expr } => IrExprKind::Resume {
             expr: expr.map(|expr| lower_boxed_expr(ctx, expr)),
         },
@@ -689,7 +691,7 @@ fn lower_splice_expr(kind: &HirSpliceKind) -> IrExprKind {
     IrExprKind::SyntaxValue { raw }
 }
 
-fn lowering_invariant_violation(description: impl AsRef<str>) -> ! {
+pub fn lowering_invariant_violation(description: impl AsRef<str>) -> ! {
     lowering_invariant(
         IrDiagKind::LoweringInvariantViolated,
         DiagContext::new().with("subject", description.as_ref()),
@@ -1190,8 +1192,23 @@ fn lower_binary_expr(
     if matches!(op, HirBinaryOp::In) {
         return lower_in_expr(ctx, expr_id, left, right);
     }
+    if matches!(op, HirBinaryOp::And | HirBinaryOp::Or) {
+        let left_ty =
+            ctx.sema.ty(ctx.sema.try_expr_ty(left).unwrap_or_else(|| {
+                lowering_invariant_violation("expr type missing for logical left")
+            }));
+        if matches!(left_ty.kind, HirTyKind::Bool) {
+            let left = lower_boxed_expr(ctx, left);
+            let right = lower_boxed_expr(ctx, right);
+            return if matches!(op, HirBinaryOp::And) {
+                IrExprKind::BoolAnd { left, right }
+            } else {
+                IrExprKind::BoolOr { left, right }
+            };
+        }
+    }
     IrExprKind::Binary {
-        op: lower_binary_op(ctx, op, left, right, interner),
+        op: binary::lower_binary_op(ctx, op, left, right, interner),
         left: lower_boxed_expr(ctx, left),
         right: lower_boxed_expr(ctx, right),
     }
@@ -1208,78 +1225,6 @@ fn lower_expr_list(ctx: &mut LowerCtx<'_>, exprs: SliceRange<HirExprId>) -> Box<
         .map(|expr| lower_expr(ctx, expr))
         .collect::<Vec<_>>()
         .into_boxed_slice()
-}
-
-fn lower_binary_op(
-    ctx: &LowerCtx<'_>,
-    op: &HirBinaryOp,
-    left: HirExprId,
-    right: HirExprId,
-    interner: &Interner,
-) -> IrBinaryOp {
-    let sema = ctx.sema;
-    let left_ty = sema.ty(sema
-        .try_expr_ty(left)
-        .unwrap_or_else(|| lowering_invariant_violation("expr type missing for binary left")));
-    let right_ty = sema.ty(sema
-        .try_expr_ty(right)
-        .unwrap_or_else(|| lowering_invariant_violation("expr type missing for binary right")));
-    let wants_float = matches!(
-        left_ty.kind,
-        HirTyKind::Float | HirTyKind::Float32 | HirTyKind::Float64
-    ) || matches!(
-        right_ty.kind,
-        HirTyKind::Float | HirTyKind::Float32 | HirTyKind::Float64
-    );
-    let wants_string =
-        matches!(left_ty.kind, HirTyKind::String) || matches!(right_ty.kind, HirTyKind::String);
-    match op {
-        HirBinaryOp::Add => {
-            if wants_string {
-                IrBinaryOp::StrCat
-            } else if wants_float {
-                IrBinaryOp::FAdd
-            } else {
-                IrBinaryOp::IAdd
-            }
-        }
-        HirBinaryOp::Sub => {
-            if wants_float {
-                IrBinaryOp::FSub
-            } else {
-                IrBinaryOp::ISub
-            }
-        }
-        HirBinaryOp::Mul => {
-            if wants_float {
-                IrBinaryOp::FMul
-            } else {
-                IrBinaryOp::IMul
-            }
-        }
-        HirBinaryOp::Div => {
-            if wants_float {
-                IrBinaryOp::FDiv
-            } else {
-                IrBinaryOp::IDiv
-            }
-        }
-        HirBinaryOp::Rem => {
-            if wants_float {
-                IrBinaryOp::FRem
-            } else {
-                IrBinaryOp::IRem
-            }
-        }
-        HirBinaryOp::Eq => IrBinaryOp::Eq,
-        HirBinaryOp::Ne => IrBinaryOp::Ne,
-        HirBinaryOp::Lt => IrBinaryOp::Lt,
-        HirBinaryOp::Gt => IrBinaryOp::Gt,
-        HirBinaryOp::Le => IrBinaryOp::Le,
-        HirBinaryOp::Ge => IrBinaryOp::Ge,
-        HirBinaryOp::UserOp(ident) => IrBinaryOp::Other(interner.resolve(ident.name).into()),
-        other => IrBinaryOp::Other(format!("{other:?}").into()),
-    }
 }
 
 fn decl_binding_id(sema: &SemaModule, ident: Ident) -> Option<NameBindingId> {

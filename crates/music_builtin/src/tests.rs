@@ -70,6 +70,15 @@ mod success {
     }
 
     #[test]
+    fn test_algorithmic_modules_stay_out_of_foundation() {
+        let specs = all_foundation_modules()
+            .iter()
+            .map(|def| def.spec)
+            .collect::<BTreeSet<_>>();
+        assert!(!specs.contains("musi:path"));
+    }
+
+    #[test]
     fn test_std_package_file_paths_are_unique() {
         let mut paths = BTreeSet::new();
         for def in all_std_package_files() {

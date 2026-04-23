@@ -42,12 +42,7 @@ impl CheckPass<'_, '_, '_> {
         }
         if matches!(
             op,
-            HirBinaryOp::Or
-                | HirBinaryOp::Xor
-                | HirBinaryOp::And
-                | HirBinaryOp::Shl
-                | HirBinaryOp::Shr
-                | HirBinaryOp::UserOp(_)
+            HirBinaryOp::Shl | HirBinaryOp::Shr | HirBinaryOp::UserOp(_)
         ) {
             self.diag(
                 origin.span,
@@ -333,6 +328,9 @@ impl CheckPass<'_, '_, '_> {
             | HirBinaryOp::Mul
             | HirBinaryOp::Div
             | HirBinaryOp::Rem => self.numeric_binary_type(origin, left_ty, right_ty),
+            HirBinaryOp::Or | HirBinaryOp::Xor | HirBinaryOp::And => {
+                self.logical_binary_type(origin, op, left_ty, right_ty)
+            }
             HirBinaryOp::Eq
             | HirBinaryOp::TypeEq
             | HirBinaryOp::Ne
@@ -341,14 +339,59 @@ impl CheckPass<'_, '_, '_> {
             | HirBinaryOp::Le
             | HirBinaryOp::Ge => builtins.bool_,
             HirBinaryOp::Assign
-            | HirBinaryOp::Or
-            | HirBinaryOp::Xor
-            | HirBinaryOp::And
             | HirBinaryOp::Range { .. }
             | HirBinaryOp::In
             | HirBinaryOp::Shl
             | HirBinaryOp::Shr
             | HirBinaryOp::UserOp(_) => builtins.unknown,
+        }
+    }
+
+    fn logical_binary_type(
+        &mut self,
+        origin: HirOrigin,
+        op: &HirBinaryOp,
+        left_ty: HirTyId,
+        right_ty: HirTyId,
+    ) -> HirTyId {
+        let builtins = self.builtins();
+        if self.ty_matches(builtins.bool_, left_ty) && self.ty_matches(builtins.bool_, right_ty) {
+            return builtins.bool_;
+        }
+        if self.matching_bits_tys(left_ty, right_ty) {
+            return left_ty;
+        }
+        let left = self.render_ty(left_ty);
+        let right = self.render_ty(right_ty);
+        self.diag_with(
+            origin.span,
+            DiagKind::LogicalOperatorDomainMismatch,
+            DiagContext::new()
+                .with("operator", logical_operator_name(op))
+                .with("left", left)
+                .with("right", right),
+        );
+        builtins.unknown
+    }
+
+    fn matching_bits_tys(&self, left_ty: HirTyId, right_ty: HirTyId) -> bool {
+        match (self.ty(left_ty).kind, self.ty(right_ty).kind) {
+            (HirTyKind::Bits { width: left }, HirTyKind::Bits { width: right }) => left == right,
+            (
+                HirTyKind::Named {
+                    name: left_name,
+                    args: left_args,
+                },
+                HirTyKind::Named {
+                    name: right_name,
+                    args: right_args,
+                },
+            ) if left_name == self.known().bits && right_name == self.known().bits => {
+                self.ty_ids(left_args).len() == 1
+                    && self.ty_ids(right_args).len() == 1
+                    && self.ty_matches(left_ty, right_ty)
+            }
+            _ => false,
         }
     }
 
@@ -401,5 +444,14 @@ impl CheckPass<'_, '_, '_> {
                 .shape_facts_by_name(shape_name)
                 .map(|facts| facts.key.clone()),
         }
+    }
+}
+
+const fn logical_operator_name(op: &HirBinaryOp) -> &'static str {
+    match op {
+        HirBinaryOp::Or => "or",
+        HirBinaryOp::Xor => "xor",
+        HirBinaryOp::And => "and",
+        _ => "<operator>",
     }
 }

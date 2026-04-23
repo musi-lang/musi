@@ -328,7 +328,7 @@ impl CheckPass<'_, '_, '_> {
         }
         let (surface, _) = import_record_export_for_expr(self, module_expr, pointer_name)?;
         let module_key = surface.module_key().as_str();
-        if module_key != "@std/ffi" && !module_key.ends_with("ffi/index.ms") {
+        if module_key != "@std/ffi" && !module_key.ends_with("ffi.ms") {
             return None;
         }
         let export = surface

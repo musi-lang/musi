@@ -144,6 +144,9 @@ pub enum SurfaceTyKind {
     Rune,
     CString,
     CPtr,
+    Bits {
+        width: u32,
+    },
     NatLit(u64),
     Named {
         name: Box<str>,

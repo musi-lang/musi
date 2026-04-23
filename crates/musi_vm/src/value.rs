@@ -75,6 +75,7 @@ pub enum Value {
     Int(i64),
     Nat(u64),
     Float(f64),
+    Bits(BitsValue),
     String(GcRef),
     CPtr(usize),
     Syntax(GcRef),
@@ -91,6 +92,94 @@ pub enum Value {
 }
 
 impl Eq for Value {}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BitsValue {
+    width: u32,
+    words: Box<[u64]>,
+}
+
+impl BitsValue {
+    #[must_use]
+    pub fn from_u64(width: u32, value: u64) -> Self {
+        let mut words = vec![0; words_for_bits(width)];
+        if let Some(first) = words.first_mut() {
+            *first = value;
+        }
+        Self::new(width, words)
+    }
+
+    #[must_use]
+    pub fn new(width: u32, mut words: Vec<u64>) -> Self {
+        words.resize(words_for_bits(width), 0);
+        if let Some(last) = words.last_mut() {
+            *last &= last_word_mask(width);
+        }
+        Self {
+            width,
+            words: words.into_boxed_slice(),
+        }
+    }
+
+    #[must_use]
+    pub const fn width(&self) -> u32 {
+        self.width
+    }
+
+    #[must_use]
+    pub fn to_u64(&self) -> Option<u64> {
+        if self.width > 64 {
+            return None;
+        }
+        Some(self.words.first().copied().unwrap_or(0))
+    }
+
+    #[must_use]
+    pub fn and(&self, other: &Self) -> Option<Self> {
+        self.zip_words(other, |left, right| left & right)
+    }
+
+    #[must_use]
+    pub fn or(&self, other: &Self) -> Option<Self> {
+        self.zip_words(other, |left, right| left | right)
+    }
+
+    #[must_use]
+    pub fn xor(&self, other: &Self) -> Option<Self> {
+        self.zip_words(other, |left, right| left ^ right)
+    }
+
+    #[must_use]
+    pub fn not(&self) -> Self {
+        Self::new(self.width, self.words.iter().map(|word| !word).collect())
+    }
+
+    fn zip_words(&self, other: &Self, op: impl Fn(u64, u64) -> u64) -> Option<Self> {
+        (self.width == other.width).then(|| {
+            Self::new(
+                self.width,
+                self.words
+                    .iter()
+                    .zip(other.words.iter())
+                    .map(|(left, right)| op(*left, *right))
+                    .collect(),
+            )
+        })
+    }
+}
+
+fn words_for_bits(width: u32) -> usize {
+    usize::try_from(width.saturating_add(63) / 64).unwrap_or(usize::MAX)
+}
+
+const fn last_word_mask(width: u32) -> u64 {
+    let used = width % 64;
+    if used == 0 {
+        u64::MAX
+    } else {
+        (1_u64 << used) - 1
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct SequenceValue {
@@ -317,6 +406,7 @@ pub enum ValueView<'a> {
     Int(i64),
     Nat(u64),
     Float(f64),
+    Bits(&'a BitsValue),
     Bool(bool),
     String(StringView<'a>),
     CPtr(usize),
@@ -341,6 +431,11 @@ pub fn render_value_view(view: ValueView<'_>) -> Option<String> {
         ValueView::Int(value) => Some(value.to_string()),
         ValueView::Nat(value) => Some(value.to_string()),
         ValueView::Float(value) => Some(value.to_string()),
+        ValueView::Bits(value) => Some(format!(
+            "<bits:{}:0x{:x}>",
+            value.width(),
+            value.to_u64().unwrap_or(0)
+        )),
         ValueView::Bool(value) => Some(if value { ".True" } else { ".False" }.to_owned()),
         ValueView::String(text) => Some(text.as_str().to_owned()),
         ValueView::Syntax(term) => Some(term.term().text().to_owned()),
@@ -590,6 +685,7 @@ impl Value {
             Self::Int(_) => VmValueKind::Int,
             Self::Nat(_) => VmValueKind::Nat,
             Self::Float(_) => VmValueKind::Float,
+            Self::Bits(_) => VmValueKind::Bits,
             Self::String(_) => VmValueKind::String,
             Self::CPtr(_) => VmValueKind::CPtr,
             Self::Syntax(_) => VmValueKind::Syntax,
@@ -620,6 +716,7 @@ impl Value {
             | Self::Int(_)
             | Self::Nat(_)
             | Self::Float(_)
+            | Self::Bits(_)
             | Self::CPtr(_)
             | Self::Procedure(_)
             | Self::Type(_)
@@ -643,6 +740,7 @@ impl Value {
             | Self::Int(_)
             | Self::Nat(_)
             | Self::Float(_)
+            | Self::Bits(_)
             | Self::CPtr(_)
             | Self::Procedure(_)
             | Self::Type(_)

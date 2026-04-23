@@ -1,6 +1,6 @@
 use music_seam::{Instruction, Opcode, Operand};
 
-use crate::VmStackKind;
+use crate::{VmStackKind, VmValueKind};
 
 use super::{StepOutcome, Value, Vm, VmError, VmErrorKind, VmResult};
 
@@ -19,8 +19,10 @@ impl Vm {
                     return Err(Self::invalid_operand(instruction));
                 };
                 let cond = self.pop_value()?;
-                if matches!(cond, Value::Unit) || self.bool_flag(&cond) == Some(false) {
-                    self.jump_to(label)?;
+                match self.bool_flag(&cond) {
+                    Some(false) => self.jump_to(label)?,
+                    Some(true) => {}
+                    None => return Err(Self::invalid_value_kind(VmValueKind::Bool, &cond)),
                 }
                 Ok(StepOutcome::Continue)
             }

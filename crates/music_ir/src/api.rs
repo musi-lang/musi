@@ -181,6 +181,10 @@ fn lower_surface_named_callable_type_term(types: &[SurfaceTy], ty: &SurfaceTy) -
             left: Box::new(lower_surface_type_term_id(types, *left)),
             right: Box::new(lower_surface_type_term_id(types, *right)),
         }),
+        SurfaceTyKind::Bits { width } => lower_named_term(
+            "Bits",
+            vec![TypeTerm::new(TypeTermKind::NatLit(u64::from(*width)))].into_boxed_slice(),
+        ),
         SurfaceTyKind::Handler {
             effect,
             input,
@@ -386,6 +390,10 @@ pub enum IrBinaryOp {
     Gt,
     Le,
     Ge,
+    LogicalXor,
+    BitsAnd,
+    BitsOr,
+    BitsXor,
     Other(Box<str>),
 }
 
@@ -728,6 +736,14 @@ pub enum IrExprKind {
     },
     Binary {
         op: IrBinaryOp,
+        left: Box<IrExpr>,
+        right: Box<IrExpr>,
+    },
+    BoolAnd {
+        left: Box<IrExpr>,
+        right: Box<IrExpr>,
+    },
+    BoolOr {
         left: Box<IrExpr>,
         right: Box<IrExpr>,
     },

@@ -26,6 +26,7 @@ pub struct KnownSymbols {
     pub float64: Symbol,
     pub string_: Symbol,
     pub rune: Symbol,
+    pub bits: Symbol,
     pub range: Symbol,
     pub pin: Symbol,
     pub closed_range: Symbol,
@@ -83,6 +84,7 @@ impl KnownSymbols {
             float64: interner.intern(BuiltinTypeId::Float64.name()),
             string_: interner.intern(BuiltinTypeId::String.name()),
             rune: interner.intern(BuiltinTypeId::Rune.name()),
+            bits: interner.intern(BuiltinTypeId::Bits.name()),
             range: interner.intern(BuiltinTypeId::Range.name()),
             pin: interner.intern(BuiltinTypeId::Pin.name()),
             closed_range: interner.intern(BuiltinTypeId::ClosedRange.name()),
@@ -115,7 +117,7 @@ impl KnownSymbols {
     }
 
     #[must_use]
-    pub const fn compiler_prelude(self) -> [Symbol; 34] {
+    pub const fn compiler_prelude(self) -> [Symbol; 35] {
         [
             self.type_,
             self.array,
@@ -140,6 +142,7 @@ impl KnownSymbols {
             self.float64,
             self.string_,
             self.rune,
+            self.bits,
             self.range,
             self.pin,
             self.closed_range,

@@ -7,7 +7,7 @@ This spec defines Musi's runtime memory law.
 It does not claim current implementation completeness. Current repo facts that inform this spec include:
 
 - `Array`, `CString`, and `CPtr` already exist in `crates/musi_foundation/modules/core.ms`
-- `CString` and `CPtr` are re-exported by `packages/std/prelude/index.ms`
+- `CString` and `CPtr` are re-exported by `packages/std/prelude.ms`
 - current VM values include `CPtr` and heap-backed data in `crates/musi_vm/src/value.rs`
 
 ## Core Law

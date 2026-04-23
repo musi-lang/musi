@@ -227,6 +227,7 @@ fn render_collection_ty_name(
         HirTyKind::Tuple { items } => render_tuple_ty_name(sema, *items, interner),
         HirTyKind::Seq { item } => format!("[]{}", render_ty_name(sema, *item, interner)).into(),
         HirTyKind::Array { dims, item } => render_array_ty_name(sema, dims, *item, interner),
+        HirTyKind::Bits { width } => format!("Bits[{width}]").into(),
         _ => return None,
     })
 }

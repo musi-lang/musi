@@ -428,6 +428,17 @@ impl PassBase<'_, '_, '_> {
             return self.apply_substituted_type_constructor(found, args);
         }
         let args = self.substitute_ty_list(args, subst);
+        if name == self.known().bits {
+            let arg_ids = self.ty_ids(args);
+            if let [width_ty] = arg_ids.as_slice() {
+                if let HirTyKind::NatLit(width) = self.ty(*width_ty).kind
+                    && width > 0
+                    && let Ok(width) = u32::try_from(width)
+                {
+                    return self.alloc_ty(HirTyKind::Bits { width });
+                }
+            }
+        }
         self.alloc_ty(HirTyKind::Named { name, args })
     }
 

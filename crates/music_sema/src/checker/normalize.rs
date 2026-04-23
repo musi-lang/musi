@@ -104,6 +104,7 @@ impl PassBase<'_, '_, '_> {
             HirTyKind::Tuple { items } => self.render_tuple_ty(*items),
             HirTyKind::Seq { item } => format!("[]{}", self.render_ty(*item)),
             HirTyKind::Array { dims, item } => self.render_array_ty(dims.clone(), *item),
+            HirTyKind::Bits { width } => format!("Bits[{width}]"),
             _ => return None,
         })
     }
@@ -286,7 +287,7 @@ impl PassBase<'_, '_, '_> {
             || self.ty_matches_handler_or_record(left, right)
     }
 
-    const fn ty_matches_primitives(left: &HirTyKind, right: &HirTyKind) -> bool {
+    fn ty_matches_primitives(left: &HirTyKind, right: &HirTyKind) -> bool {
         matches!(
             (left, right),
             (HirTyKind::Type, HirTyKind::Type)
@@ -311,7 +312,7 @@ impl PassBase<'_, '_, '_> {
                 | (HirTyKind::String, HirTyKind::String)
                 | (HirTyKind::CString, HirTyKind::CString)
                 | (HirTyKind::CPtr, HirTyKind::CPtr)
-        )
+        ) || matches!((left, right), (HirTyKind::Bits { width: left }, HirTyKind::Bits { width: right }) if left == right)
     }
 
     fn ty_matches_named_or_arrow(&self, left: &HirTyKind, right: &HirTyKind) -> bool {
@@ -509,6 +510,7 @@ impl PassBase<'_, '_, '_> {
             known.empty,
             known.unit,
             known.bool_,
+            known.bits,
             known.range,
             known.pin,
             known.closed_range,
@@ -633,6 +635,7 @@ impl PassBase<'_, '_, '_> {
     fn lower_type_operator_expr(&mut self, expr: HirExprId, origin: HirOrigin) -> Option<HirTyId> {
         Some(match self.expr(expr).kind {
             HirExprKind::Apply { callee, args } => self.lower_apply_type_expr(origin, callee, args),
+            HirExprKind::Index { base, args } => self.lower_apply_type_expr(origin, base, args),
             HirExprKind::Binary { op, left, right } => {
                 self.lower_binary_type_expr(origin, &op, left, right)
             }
@@ -692,6 +695,9 @@ impl PassBase<'_, '_, '_> {
                 self.lower_type_expr(arg, origin)
             })
             .collect::<Vec<_>>();
+        if args.is_empty() {
+            return callee_ty;
+        }
         if self
             .remaining_constructor_kind(origin, callee_ty, args.len())
             .is_none()
@@ -730,6 +736,7 @@ impl PassBase<'_, '_, '_> {
             "Range" if all_args.len() == 1 => {
                 self.alloc_ty(HirTyKind::Range { bound: all_args[0] })
             }
+            "Bits" if all_args.len() == 1 => self.lower_bits_ty(origin, all_args[0]),
             _ => {
                 let args = self.alloc_ty_list(all_args);
                 self.alloc_ty(HirTyKind::Named { name, args })
@@ -737,8 +744,44 @@ impl PassBase<'_, '_, '_> {
         }
     }
 
+    fn lower_bits_ty(&mut self, origin: HirOrigin, width_ty: HirTyId) -> HirTyId {
+        match self.ty(width_ty).kind {
+            HirTyKind::NatLit(width) if width > 0 && u32::try_from(width).is_ok() => {
+                self.alloc_ty(HirTyKind::Bits {
+                    width: u32::try_from(width).unwrap_or(u32::MAX),
+                })
+            }
+            HirTyKind::Named { name, args }
+                if self.ty_ids(args).is_empty() && self.type_param_is_nat(name) =>
+            {
+                let args = self.alloc_ty_list([width_ty]);
+                self.alloc_ty(HirTyKind::Named {
+                    name: self.known().bits,
+                    args,
+                })
+            }
+            _ => {
+                let width = self.render_ty(width_ty);
+                self.diag_with(
+                    origin.span,
+                    DiagKind::InvalidBitsWidth,
+                    DiagContext::new().with("width", width),
+                );
+                self.builtins().error
+            }
+        }
+    }
+
+    fn type_param_is_nat(&self, name: Symbol) -> bool {
+        self.type_param_kind(name)
+            .is_some_and(|kind| self.ty_matches(kind, self.builtins().nat))
+    }
+
     fn type_constructor_param_kinds(&self, name: Symbol) -> Option<Vec<HirTyId>> {
         let known = self.known();
+        if name == known.bits {
+            return Some(vec![self.builtins().nat]);
+        }
         if [
             known.array,
             known.range,

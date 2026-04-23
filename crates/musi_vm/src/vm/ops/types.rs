@@ -1,6 +1,6 @@
 use music_seam::{Instruction, Opcode, Operand, TypeId};
 
-use crate::VmValueKind;
+use crate::{BitsValue, VmValueKind};
 
 use super::{StepOutcome, Value, Vm, VmError, VmErrorKind, VmResult};
 
@@ -24,6 +24,9 @@ impl Vm {
             "String" | "CString" => matches!(value, Value::String(_)),
             "Syntax" => matches!(value, Value::Syntax(_)),
             "Module" => matches!(value, Value::Module(_)),
+            _ if bits_width_from_type_name(ty_name).is_some() => {
+                matches!(value, Value::Bits(bits) if Some(bits.width()) == bits_width_from_type_name(ty_name))
+            }
             _ => match value {
                 Value::Seq(seq) => self.heap.sequence_ty(*seq).is_ok_and(|seq_ty| seq_ty == ty),
                 Value::Data(data) => self.heap.data(*data).is_ok_and(|data| data.ty == ty),
@@ -87,6 +90,9 @@ impl Vm {
                 if self.value_matches_type(module_slot, &value, ty) {
                     self.push_value(value)?;
                     Ok(StepOutcome::Continue)
+                } else if let Some(value) = self.cast_value(module_slot, &value, ty)? {
+                    self.push_value(value)?;
+                    Ok(StepOutcome::Continue)
                 } else {
                     Err(VmError::new(VmErrorKind::InvalidTypeCast {
                         expected: self.module(module_slot)?.program.type_name(ty).into(),
@@ -97,6 +103,33 @@ impl Vm {
             _ => Err(Self::invalid_dispatch(instruction, "type")),
         }
     }
+
+    fn cast_value(&self, module_slot: usize, value: &Value, ty: TypeId) -> VmResult<Option<Value>> {
+        let ty_name = self.module(module_slot)?.program.type_name(ty);
+        if let Some(width) = bits_width_from_type_name(ty_name) {
+            return Ok(match value {
+                Value::Nat(value) => Some(Value::Bits(BitsValue::from_u64(width, *value))),
+                Value::Int(value) => u64::try_from(*value)
+                    .ok()
+                    .map(|value| Value::Bits(BitsValue::from_u64(width, value))),
+                _ => None,
+            });
+        }
+        match (ty_name, value) {
+            ("Nat" | "Nat64", Value::Bits(bits)) => Ok(bits.to_u64().map(Value::Nat)),
+            ("Int" | "Int64", Value::Bits(bits)) => Ok(bits
+                .to_u64()
+                .and_then(|value| i64::try_from(value).ok())
+                .map(Value::Int)),
+            _ => Ok(None),
+        }
+    }
+}
+
+fn bits_width_from_type_name(name: &str) -> Option<u32> {
+    let inner = name.strip_prefix("Bits[")?.strip_suffix(']')?;
+    let width = inner.parse::<u32>().ok()?;
+    (width > 0).then_some(width)
 }
 
 fn int_value_in_range(value: &Value, min: i64, max: i64) -> bool {

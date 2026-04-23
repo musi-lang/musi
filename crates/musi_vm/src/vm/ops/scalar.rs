@@ -1,5 +1,7 @@
 use music_seam::{Instruction, Opcode};
 
+use crate::VmValueKind;
+
 use super::{StepOutcome, Value, Vm, VmError, VmErrorKind, VmResult};
 
 impl Vm {
@@ -144,7 +146,64 @@ impl Vm {
                 )?;
                 Ok(StepOutcome::Continue)
             }
+            Opcode::And => self.logical_binary_op(BoolOp::And),
+            Opcode::Or => self.logical_binary_op(BoolOp::Or),
+            Opcode::Xor => self.logical_binary_op(BoolOp::Xor),
+            Opcode::Not => self.logical_not(),
             _ => Err(Self::invalid_dispatch(instruction, "scalar")),
         }
     }
+
+    fn logical_binary_op(&mut self, op: BoolOp) -> VmResult<StepOutcome> {
+        let right = self.pop_value()?;
+        let left = self.pop_value()?;
+        let module_slot = self.current_module_slot()?;
+        if let (Some(left), Some(right)) = (self.bool_flag(&left), self.bool_flag(&right)) {
+            let value = match op {
+                BoolOp::And => left && right,
+                BoolOp::Or => left || right,
+                BoolOp::Xor => left ^ right,
+            };
+            let value = self.bool_value(module_slot, value)?;
+            self.push_value(value)?;
+            return Ok(StepOutcome::Continue);
+        }
+        if let (Value::Bits(left), Value::Bits(right)) = (&left, &right) {
+            let value = match op {
+                BoolOp::And => left.and(right),
+                BoolOp::Or => left.or(right),
+                BoolOp::Xor => left.xor(right),
+            }
+            .ok_or_else(|| {
+                VmError::new(VmErrorKind::ArithmeticFailed {
+                    detail: "bits width mismatch".into(),
+                })
+            })?;
+            self.push_value(Value::Bits(value))?;
+            return Ok(StepOutcome::Continue);
+        }
+        Err(Self::invalid_value_kind(left.kind(), &right))
+    }
+
+    fn logical_not(&mut self) -> VmResult<StepOutcome> {
+        let value = self.pop_value()?;
+        if let Some(flag) = self.bool_flag(&value) {
+            let module_slot = self.current_module_slot()?;
+            let value = self.bool_value(module_slot, !flag)?;
+            self.push_value(value)?;
+            return Ok(StepOutcome::Continue);
+        }
+        if let Value::Bits(value) = value {
+            self.push_value(Value::Bits(value.not()))?;
+            return Ok(StepOutcome::Continue);
+        }
+        Err(Self::invalid_value_kind(VmValueKind::Bool, &value))
+    }
+}
+
+#[derive(Clone, Copy)]
+enum BoolOp {
+    And,
+    Or,
+    Xor,
 }

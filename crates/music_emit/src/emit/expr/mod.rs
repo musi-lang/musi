@@ -306,11 +306,18 @@ impl ProcedureEmitter<'_, '_> {
                 self.compile_binary(op, left, right, diags);
                 true
             }
+            IrExprKind::BoolAnd { left, right } => {
+                self.compile_bool_and(left, right, diags);
+                true
+            }
+            IrExprKind::BoolOr { left, right } => {
+                self.compile_bool_or(left, right, diags);
+                true
+            }
             IrExprKind::Not { expr: inner } => {
                 self.compile_expr(inner, true, diags);
-                emit_zero(self);
                 self.code.push(CodeEntry::Instruction(Instruction::new(
-                    Opcode::Ceq,
+                    Opcode::Not,
                     Operand::None,
                 )));
                 true

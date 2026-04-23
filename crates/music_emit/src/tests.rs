@@ -123,6 +123,28 @@ mod success {
     }
 
     #[test]
+    fn emits_logical_operator_family_opcodes() {
+        assert_module_opcodes(
+            r"
+        export let boolAnd (left : Bool, right : Bool) : Bool := left and right;
+        export let boolOr (left : Bool, right : Bool) : Bool := left or right;
+        export let boolXor (left : Bool, right : Bool) : Bool := left xor right;
+        export let bitsAnd (left : Bits[4], right : Bits[4]) : Bits[4] := left and right;
+        export let bitsOr (left : Bits[4], right : Bits[4]) : Bits[4] := left or right;
+        export let bitsXor (left : Bits[4], right : Bits[4]) : Bits[4] := left xor right;
+        export let bitsNot (value : Bits[4]) : Bits[4] := not value;
+    ",
+            &[
+                Opcode::BrFalse,
+                Opcode::And,
+                Opcode::Or,
+                Opcode::Xor,
+                Opcode::Not,
+            ],
+        );
+    }
+
+    #[test]
     fn emits_module_entry_for_top_level_expression_statement() {
         let emitted = emit_module(
             r"

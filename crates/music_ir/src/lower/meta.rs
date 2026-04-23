@@ -220,6 +220,7 @@ fn format_surface_ty(surface: &ModuleSurface, ty: SurfaceTyId) -> String {
         SurfaceTyKind::Tuple { items } => format_tuple_surface_ty(surface, items),
         SurfaceTyKind::Seq { item } => format!("[]{}", format_surface_ty(surface, *item)),
         SurfaceTyKind::Array { dims, item } => format_array_surface_ty(surface, dims, *item),
+        SurfaceTyKind::Bits { width } => format!("Bits[{width}]"),
         SurfaceTyKind::Range { bound } => format!("Range[{}]", format_surface_ty(surface, *bound)),
         SurfaceTyKind::Handler {
             effect,

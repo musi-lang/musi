@@ -249,6 +249,7 @@ fn value_to_comptime(
         Value::Int(value) => Ok(ComptimeValue::Int(*value)),
         Value::Nat(value) => Ok(ComptimeValue::Nat(*value)),
         Value::Float(value) => Ok(ComptimeValue::Float(value.to_string().into_boxed_str())),
+        Value::Bits(_) => Err("bits escape rejected".into()),
         Value::String(_) => match vm.inspect(value) {
             ValueView::String(text) => Ok(ComptimeValue::String(text.as_str().into())),
             _ => Err("string view missing".into()),

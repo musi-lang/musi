@@ -447,7 +447,9 @@ fn collect_expr_types_binding_and_control(
             collect_expr_types_iter(state, layout, captures);
             true
         }
-        IrExprKind::Binary { left, right, .. } => {
+        IrExprKind::Binary { left, right, .. }
+        | IrExprKind::BoolAnd { left, right }
+        | IrExprKind::BoolOr { left, right } => {
             collect_expr_types(state, layout, left);
             collect_expr_types(state, layout, right);
             true

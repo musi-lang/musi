@@ -230,6 +230,13 @@ let total := left + right;
 
 Infix use desugars to a call of the resolved operator name after parse precedence is fixed. Operator definitions do not define precedence or associativity.
 
+`and`, `or`, `xor`, and `not` are one logical operator family. Operand types select the typed instance:
+
+- `Bool` `and` and `or` are conditional and evaluate the right operand only when needed.
+- `Bool` `xor` is eager.
+- `Bits[N]` `and`, `or`, `xor`, and `not` evaluate operands eagerly and combine bits pointwise.
+- Conditions must have type `Bool`; Musi has no truthiness for integers, bits, unit, strings, arrays, or data values.
+
 Syntax operators are not overloadable value operators:
 
 - `:=`

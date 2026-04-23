@@ -132,6 +132,7 @@ impl Vm {
             | Value::Int(_)
             | Value::Nat(_)
             | Value::Float(_)
+            | Value::Bits(_)
             | Value::String(_)
             | Value::CPtr(_)
             | Value::Syntax(_)

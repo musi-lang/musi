@@ -12,7 +12,8 @@ use crate::vm::{RuntimeFusedOp, RuntimeKernel};
 use musi_foundation::register_modules;
 use music_module::ModuleKey;
 use music_seam::descriptor::{
-    DataDescriptor, DataVariantDescriptor, ProcedureDescriptor, TypeDescriptor,
+    DataDescriptor, DataVariantDescriptor, ExportDescriptor, ExportTarget, ProcedureDescriptor,
+    TypeDescriptor,
 };
 use music_seam::{Artifact, CodeEntry, Instruction, Opcode, Operand};
 use music_seam::{ProcedureId, StringId, TypeId};
@@ -20,9 +21,9 @@ use music_session::{Session, SessionOptions};
 use music_term::{TypeTerm, TypeTermKind};
 
 use super::{
-    EffectCall, ForeignCall, Program, ProgramTypeAbiKind, RejectingLoader, Value, ValueView, Vm,
-    VmError, VmErrorKind, VmHost, VmHostCallContext, VmHostContext, VmLoader, VmOptions, VmResult,
-    render_value_view,
+    BitsValue, EffectCall, ForeignCall, Program, ProgramTypeAbiKind, RejectingLoader, Value,
+    ValueView, Vm, VmError, VmErrorKind, VmHost, VmHostCallContext, VmHostContext, VmLoader,
+    VmOptions, VmResult, render_value_view,
 };
 
 #[derive(Default)]
@@ -172,6 +173,39 @@ fn call_result_error(source: &str, options: VmOptions, reason: &str) -> VmError 
     let mut vm = Vm::with_rejecting_host(program, options);
     vm.initialize().expect("vm init should succeed");
     vm.call_export("result", &[]).expect_err(reason)
+}
+
+fn alloc_exported_bits_proc(artifact: &mut Artifact, name: &str, opcode: Opcode, params: u16) {
+    let label = artifact.intern_string("L0");
+    let name = artifact.intern_string(name);
+    let mut code = vec![
+        CodeEntry::Label(music_seam::Label { id: 0 }),
+        CodeEntry::Instruction(Instruction::new(Opcode::LdLoc, Operand::Local(0))),
+    ];
+    if params == 2 {
+        code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::LdLoc,
+            Operand::Local(1),
+        )));
+    }
+    code.push(CodeEntry::Instruction(Instruction::new(
+        opcode,
+        Operand::None,
+    )));
+    code.push(CodeEntry::Instruction(Instruction::new(
+        Opcode::Ret,
+        Operand::None,
+    )));
+    let proc = artifact.procedures.alloc(
+        ProcedureDescriptor::new(name, params, params, code.into_boxed_slice())
+            .with_export(true)
+            .with_labels(Box::new([label])),
+    );
+    let _ = artifact.exports.alloc(ExportDescriptor::new(
+        name,
+        false,
+        ExportTarget::Procedure(proc),
+    ));
 }
 
 fn alloc_named_type(artifact: &mut Artifact, full_name: &str) -> TypeId {
@@ -901,6 +935,119 @@ mod success {
             render_value_view(vm.inspect(&equal)).as_deref(),
             Some(".True")
         );
+    }
+
+    #[test]
+    fn logical_bool_and_or_short_circuit_and_xor_is_eager() {
+        let program = compile_program(
+            &[(
+                "main",
+                r"
+            let explode () : Bool := (1 / 0) = 0;
+            export let andShort () : Bool := (0 = 1) and explode();
+            export let orShort () : Bool := (0 = 0) or explode();
+            export let xorEager () : Bool := (0 = 0) xor explode();
+        ",
+            )],
+            "main",
+        );
+        let mut vm = Vm::with_rejecting_host(program, VmOptions);
+        vm.initialize().expect("vm init should succeed");
+
+        let and_value = vm.call_export("andShort", &[]).expect("and short");
+        assert_eq!(
+            render_value_view(vm.inspect(&and_value)).as_deref(),
+            Some(".False")
+        );
+
+        let or_value = vm.call_export("orShort", &[]).expect("or short");
+        assert_eq!(
+            render_value_view(vm.inspect(&or_value)).as_deref(),
+            Some(".True")
+        );
+
+        let err = vm.call_export("xorEager", &[]).expect_err("xor eager");
+        assert!(matches!(err.kind(), VmErrorKind::ArithmeticFailed { .. }));
+    }
+
+    #[test]
+    fn logical_bits_ops_are_eager_pointwise() {
+        let mut artifact = Artifact::new();
+        alloc_exported_bits_proc(&mut artifact, "bitsAnd", Opcode::And, 2);
+        alloc_exported_bits_proc(&mut artifact, "bitsOr", Opcode::Or, 2);
+        alloc_exported_bits_proc(&mut artifact, "bitsXor", Opcode::Xor, 2);
+        alloc_exported_bits_proc(&mut artifact, "bitsNot", Opcode::Not, 1);
+        let program = Program::from_artifact(artifact).expect("program load should succeed");
+        let mut vm = Vm::with_rejecting_host(program, VmOptions);
+        vm.initialize().expect("vm init should succeed");
+        let a = Value::Bits(BitsValue::from_u64(4, 10));
+        let b = Value::Bits(BitsValue::from_u64(4, 12));
+
+        assert_eq!(
+            vm.call_export("bitsAnd", &[a.clone(), b.clone()])
+                .expect("bits and"),
+            Value::Bits(BitsValue::from_u64(4, 8))
+        );
+        assert_eq!(
+            vm.call_export("bitsOr", &[a.clone(), b.clone()])
+                .expect("bits or"),
+            Value::Bits(BitsValue::from_u64(4, 14))
+        );
+        assert_eq!(
+            vm.call_export("bitsXor", &[a.clone(), b])
+                .expect("bits xor"),
+            Value::Bits(BitsValue::from_u64(4, 6))
+        );
+        assert_eq!(
+            vm.call_export("bitsNot", &[a]).expect("bits not"),
+            Value::Bits(BitsValue::from_u64(4, 5))
+        );
+    }
+
+    #[test]
+    fn brfalse_rejects_non_bool_condition() {
+        let mut artifact = Artifact::new();
+        let l0 = artifact.intern_string("L0");
+        let l1 = artifact.intern_string("L1");
+        let name = artifact.intern_string("branch");
+        let proc = artifact.procedures.alloc(
+            ProcedureDescriptor::new(
+                name,
+                1,
+                1,
+                Box::new([
+                    CodeEntry::Label(music_seam::Label { id: 0 }),
+                    CodeEntry::Instruction(Instruction::new(Opcode::LdLoc, Operand::Local(0))),
+                    CodeEntry::Instruction(Instruction::new(Opcode::BrFalse, Operand::Label(1))),
+                    CodeEntry::Instruction(Instruction::new(Opcode::LdCI4, Operand::I16(1))),
+                    CodeEntry::Instruction(Instruction::new(Opcode::Ret, Operand::None)),
+                    CodeEntry::Label(music_seam::Label { id: 1 }),
+                    CodeEntry::Instruction(Instruction::new(Opcode::LdCI4, Operand::I16(0))),
+                    CodeEntry::Instruction(Instruction::new(Opcode::Ret, Operand::None)),
+                ]),
+            )
+            .with_export(true)
+            .with_labels(Box::new([l0, l1])),
+        );
+        let _ = artifact.exports.alloc(ExportDescriptor::new(
+            name,
+            false,
+            ExportTarget::Procedure(proc),
+        ));
+        let program = Program::from_artifact(artifact).expect("program load should succeed");
+        let mut vm = Vm::with_rejecting_host(program, VmOptions);
+        vm.initialize().expect("vm init should succeed");
+
+        let err = vm
+            .call_export("branch", &[Value::Int(0)])
+            .expect_err("br.false should reject Int");
+        assert!(matches!(
+            err.kind(),
+            VmErrorKind::InvalidValueKind {
+                expected: crate::VmValueKind::Bool,
+                found: crate::VmValueKind::Int
+            }
+        ));
     }
 
     #[test]

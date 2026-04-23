@@ -261,7 +261,7 @@ impl CheckPass<'_, '_, '_> {
             HirExprKind::TypeTest { base, ty, as_name } => {
                 self.check_type_test_expr(id, base, ty, as_name)
             }
-            HirExprKind::TypeCast { base, ty } => self.check_type_cast_expr(base, ty),
+            HirExprKind::TypeCast { base, ty } => self.check_type_cast_expr(id, base, ty),
             HirExprKind::Prefix { op, expr } => self.check_prefix_expr(id, origin, &op, expr),
             HirExprKind::PartialRange { kind, expr } => {
                 self.check_partial_range_expr(id, origin, kind, expr)
@@ -541,7 +541,12 @@ impl CheckPass<'_, '_, '_> {
         ExprFacts::new(builtins.bool_, base_facts.effects)
     }
 
-    fn check_type_cast_expr(&mut self, base: HirExprId, ty_expr: HirExprId) -> ExprFacts {
+    fn check_type_cast_expr(
+        &mut self,
+        expr_id: HirExprId,
+        base: HirExprId,
+        ty_expr: HirExprId,
+    ) -> ExprFacts {
         let ctx = self;
         let base_facts = check_expr(ctx, base);
         let origin = ctx.expr(ty_expr).origin;
@@ -549,6 +554,7 @@ impl CheckPass<'_, '_, '_> {
         if ctx.contains_mut_ty(ty) {
             ctx.diag(origin.span, DiagKind::MutForbiddenInTypeCastTarget, "");
         }
+        ctx.set_type_test_target(expr_id, ty);
         ExprFacts::new(ty, base_facts.effects)
     }
 
@@ -580,8 +586,19 @@ impl CheckPass<'_, '_, '_> {
             HirPrefixOp::Neg => ctx.numeric_unary_type(origin, inner_facts.ty),
             HirPrefixOp::Not => {
                 let bool_ty = ctx.builtins().bool_;
-                ctx.type_mismatch(origin, bool_ty, inner_facts.ty);
-                bool_ty
+                if ctx.ty_matches(bool_ty, inner_facts.ty) || ctx.is_bits_ty(inner_facts.ty) {
+                    inner_facts.ty
+                } else {
+                    let found = ctx.render_ty(inner_facts.ty);
+                    ctx.diag_with(
+                        origin.span,
+                        DiagKind::UnaryLogicalOperatorDomainMismatch,
+                        DiagContext::new()
+                            .with("operator", "not")
+                            .with("found", found),
+                    );
+                    ctx.builtins().unknown
+                }
             }
             HirPrefixOp::Mut => ctx.alloc_ty(HirTyKind::Mut {
                 inner: inner_facts.ty,
@@ -761,7 +778,18 @@ impl CheckPass<'_, '_, '_> {
             | HirTyKind::Rune
             | HirTyKind::CString
             | HirTyKind::CPtr
+            | HirTyKind::Bits { .. }
             | HirTyKind::NatLit(_) => false,
+        }
+    }
+
+    fn is_bits_ty(&self, ty: HirTyId) -> bool {
+        match self.ty(ty).kind {
+            HirTyKind::Bits { .. } => true,
+            HirTyKind::Named { name, args } => {
+                name == self.known().bits && self.ty_ids(args).len() == 1
+            }
+            _ => false,
         }
     }
 

@@ -32,6 +32,7 @@ pub enum VmValueKind {
     Int,
     Nat,
     Float,
+    Bits,
     Bool,
     String,
     CPtr,

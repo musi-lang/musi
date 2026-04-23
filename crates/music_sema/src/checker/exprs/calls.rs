@@ -458,7 +458,7 @@ impl CheckPass<'_, '_, '_> {
             origin.span,
             DiagKind::InvalidCallTarget,
             DiagContext::new()
-                .with("target", format!("callee `{subject}`"))
+                .with("target", subject)
                 .with("found", found),
         );
     }
@@ -720,5 +720,5 @@ impl CheckPass<'_, '_, '_> {
 }
 
 fn is_std_ffi_module(module_key: &str) -> bool {
-    module_key == "@std/ffi" || module_key.ends_with("ffi/index.ms")
+    module_key == "@std/ffi" || module_key.ends_with("ffi.ms")
 }

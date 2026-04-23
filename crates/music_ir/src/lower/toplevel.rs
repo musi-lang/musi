@@ -691,6 +691,7 @@ fn render_hir_ty_name(sema: &SemaModule, ty: HirTyId, interner: &Interner) -> Bo
         .into_boxed_str(),
         HirTyKind::Seq { .. }
         | HirTyKind::Array { .. }
+        | HirTyKind::Bits { .. }
         | HirTyKind::Range { .. }
         | HirTyKind::Handler { .. }
         | HirTyKind::Pi { .. }

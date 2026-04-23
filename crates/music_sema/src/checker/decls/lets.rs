@@ -652,6 +652,6 @@ fn is_explicit_comptime_expr(ctx: &CheckPass<'_, '_, '_>, expr: HirExprId) -> bo
 }
 
 fn is_std_ffi_unsafe_public_pointer_op(module_key: &str, name: &str) -> bool {
-    (module_key == "@std/ffi" || module_key.ends_with("ffi/index.ms"))
+    (module_key == "@std/ffi" || module_key.ends_with("ffi.ms"))
         && matches!(name, "offset" | "read" | "write")
 }

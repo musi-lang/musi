@@ -22,7 +22,9 @@ type ExpansionSeenSet = BTreeSet<ModuleKey>;
 
 impl Session {
     fn is_std_prelude_module_key(key: &str) -> bool {
-        key.starts_with("@@std@") && Path::new(key).ends_with(Path::new("prelude").join("index.ms"))
+        key.starts_with("@@std@")
+            && (Path::new(key).ends_with("prelude.ms")
+                || Path::new(key).ends_with(Path::new("prelude").join("std.ms")))
     }
 
     fn auto_prelude_target(&self, key: &ModuleKey) -> Option<ModuleKey> {

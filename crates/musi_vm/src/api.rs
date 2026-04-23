@@ -7,8 +7,8 @@ pub use super::program::{
 };
 #[allow(unused_imports)]
 pub use super::value::{
-    ClosureView, ForeignView, IsolateId, ModuleView, ProcedureValue, RecordView, SeqView,
-    StringView, SyntaxView, Value, ValueView, render_value_view,
+    BitsValue, ClosureView, ForeignView, IsolateId, ModuleView, ProcedureValue, RecordView,
+    SeqView, StringView, SyntaxView, Value, ValueView, render_value_view,
 };
 pub use super::vm::{
     BoundI64Call, BoundInitCall, BoundSeq2x2Call, BoundSeq2x2PackedArg, Vm, VmOptions, VmRuntime,

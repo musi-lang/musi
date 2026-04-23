@@ -115,7 +115,8 @@ fn validate_surface_ty(types: &[SurfaceTy], ty: &SurfaceTy, diags: &mut IrDiagLi
                 validate_surface_ty_id(types, field.ty, diags);
             }
         }
-        SurfaceTyKind::Error
+        SurfaceTyKind::Bits { .. }
+        | SurfaceTyKind::Error
         | SurfaceTyKind::Unknown
         | SurfaceTyKind::Type
         | SurfaceTyKind::Syntax
