@@ -1,7 +1,7 @@
 catalog syntax music_syntax SyntaxDiagKind crates/music_syntax/src/diag_catalog_gen.rs
 
 diag InvalidChar 1200
-  message "invalid character `{ch}`"
+  message "character `{ch}` invalid"
   primary "character `{ch}` not valid here"
 
 diag UnterminatedStringLiteral 1201
@@ -33,11 +33,11 @@ diag MissingDigitsAfterBasePrefix 1207
   primary "base `{base}` prefix needs digits"
 
 diag InvalidDigitForBase 1208
-  message "invalid digit `{ch}` in base `{base}` literal"
+  message "digit `{ch}` invalid in base `{base}` literal"
   primary "digit `{ch}` not valid for base `{base}`"
 
 diag UnexpectedUnderscoreInNumberLiteral 1209
-  message "unexpected `_` in number literal"
+  message "number literal `_` unexpected"
   primary "underscore cannot appear here"
 
 diag MissingDigitAfterUnderscoreInNumberLiteral 1210
@@ -76,47 +76,47 @@ diag ExpectedFourOrSixHexDigitsInUnicodeEscape 1218
   primary "`\\u` escape length must be 4 or 6 hex digits"
 
 diag InvalidUnicodeScalar 1219
-  message "invalid unicode scalar `U+{value}`"
+  message "unicode scalar `U+{value}` invalid"
   primary "unicode scalar `U+{value}` not valid"
 
 diag ExpectedToken 1300
-  message "expected {expected}, found {found}"
+  message "token expected {expected}, found {found}"
   primary "found {found} here"
 
 diag ExpectedExpression 1301
-  message "expected expression, found {found}"
+  message "expression expected, found {found}"
   primary "found {found} here"
 
 diag ExpectedPattern 1302
-  message "expected pattern, found {found}"
+  message "pattern expected, found {found}"
   primary "found {found} here"
 
 diag ExpectedMember 1303
-  message "expected member, found {found}"
+  message "member expected, found {found}"
   primary "found {found} here"
 
 diag ExpectedIdentifier 1304
-  message "expected identifier, found {found}"
+  message "identifier expected, found {found}"
   primary "found {found} here"
 
 diag ExpectedSpliceTarget 1305
-  message "expected splice target, found {found}"
+  message "splice target expected, found {found}"
   primary "found {found} here"
 
 diag ExpectedOperatorMemberName 1306
-  message "expected operator member name, found {found}"
+  message "operator member name expected, found {found}"
   primary "found {found} here"
 
 diag ExpectedFieldTarget 1307
-  message "expected field name or tuple index, found {found}"
+  message "field name or tuple index expected, found {found}"
   primary "found {found} here"
 
 diag ExpectedConstraintOperator 1308
-  message "expected constraint operator `<:` or `:`, found {found}"
+  message "constraint operator `<:` or `:` expected, found {found}"
   primary "found {found} here"
 
 diag ExpectedAttrValue 1309
-  message "expected attribute value, found {found}"
+  message "attribute value expected, found {found}"
   primary "found {found} here"
 
 diag SpliceOutsideQuote 1310

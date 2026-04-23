@@ -1,7 +1,7 @@
 catalog sema music_sema SemaDiagKind crates/music_sema/src/diag_catalog_gen.rs
 
 diag AttrDuplicateRepr 3000
-  message "duplicate `@repr`"
+  message "`@repr` attribute duplicate"
 
 diag AttrReprRequiresKindString 3001
   message "`@repr` needs string `kind` argument"
@@ -10,19 +10,19 @@ diag AttrLayoutArgRequiresName 3002
   message "`@layout` argument needs name"
 
 diag AttrDuplicateLayoutAlign 3003
-  message "duplicate `@layout align`"
+  message "`@layout align` attribute duplicate"
 
 diag AttrLayoutAlignRequiresU32 3004
   message "`@layout align` needs u32 value"
 
 diag AttrDuplicateLayoutPack 3005
-  message "duplicate `@layout pack`"
+  message "`@layout pack` attribute duplicate"
 
 diag AttrLayoutPackRequiresU32 3006
   message "`@layout pack` needs u32 value"
 
 diag AttrUnknownArg 3007
-  message "unknown attribute argument `{argument}`"
+  message "attribute argument `{argument}` unknown"
 
 diag AttrKnownRequiresPlainBindLet 3008
   message "`@musi.known` needs plain bind `let` target"
@@ -37,7 +37,7 @@ diag AttrKnownRequiresExport 3011
   message "`@musi.known` needs exported binding"
 
 diag AttrKnownUnknownName 3012
-  message "unknown `@musi.known` name"
+  message "`@musi.known` name unknown"
 
 diag AttrIntrinsicRequiresNameString 3013
   message "`@musi.intrinsic` needs string `name` argument"
@@ -85,63 +85,63 @@ diag AttrWhenRequiresStringList 3020
   message "`@target` needs string list for `feature`"
 
 diag ForeignSignatureRequired 3021
-  message "native signature required"
+  message "native binding needs signature"
 
 diag InvalidPartialModifier 3120
-  message "invalid `partial` target"
+  message "`partial` target invalid"
 
 diag PartialForeignConflict 3121
   message "`partial` conflicts with native binding"
 
 diag InvalidFfiType 3022
-  message "invalid native interface type"
+  message "native interface type invalid"
 
 diag LawMustBePure 3023
   message "law must be pure"
 
 diag CollectDuplicateDataVariant 3024
-  message "duplicate data variant `{variant}`"
-  secondary "data variant `{variant}` first declared here"
+  message "data variant `{variant}` duplicate"
+  secondary "data variant `{variant}` previous declaration"
 
 diag DuplicateDataVariantDiscriminant 3025
-  message "duplicate data variant discriminant `{discriminant}`"
+  message "data variant discriminant `{discriminant}` duplicate"
 
 diag InvalidDataVariantDiscriminant 3026
-  message "invalid data variant discriminant `{discriminant}`"
+  message "data variant discriminant `{discriminant}` invalid"
 
 diag CyclicDataVariantDiscriminant 3027
   message "cyclic data variant discriminant"
 
 diag CollectDuplicateEffectOp 3028
-  message "duplicate effect operation `{operation}`"
-  secondary "effect operation `{operation}` first declared here"
+  message "effect operation `{operation}` duplicate"
+  secondary "effect operation `{operation}` previous declaration"
 
 diag CollectDuplicateEffectLaw 3029
-  message "duplicate effect law `{law}`"
-  secondary "effect law `{law}` first declared here"
+  message "effect law `{law}` duplicate"
+  secondary "effect law `{law}` previous declaration"
 
 diag CollectDuplicateShapeMember 3030
-  message "duplicate shape member `{member}`"
+  message "shape member `{member}` duplicate"
 
 diag CollectDuplicateShapeLaw 3031
-  message "duplicate shape law `{law}`"
+  message "shape law `{law}` duplicate"
 
 diag UnknownExport 3032
-  message "unknown export binding `{name}`"
+  message "export binding `{name}` unknown"
 
 diag InvalidRequestTarget 3033
-  message "invalid ask target, expected effect operation call"
+  message "ask target expected effect operation call"
   primary "ask target must be effect operation call"
   help "write `ask Effect.op(...)`"
 
 diag UnknownEffect 3034
-  message "unknown effect `{effect}`"
+  message "effect `{effect}` unknown"
 
 diag DuplicateHandlerClause 3035
-  message "duplicate answer clause `{clause}`"
+  message "answer clause `{clause}` duplicate"
 
 diag UnknownEffectOp 3036
-  message "unknown effect operation `{operation}`"
+  message "effect operation `{operation}` unknown"
 
 diag HandlerClauseArityMismatch 3037
   message "answer clause parameter count differs from operation"
@@ -153,7 +153,7 @@ diag HandleRequiresSingleValueClause 3038
   help "add exactly one `value => ...` clause"
 
 diag HandlerMissingOperationClause 3039
-  message "missing answer operation clause `{operation}`"
+  message "answer operation clause `{operation}` missing"
   help "add clause for each handled operation"
 
 diag ResumeOutsideHandlerClause 3040
@@ -167,24 +167,24 @@ diag EffectNotDeclared 3041
   help "add effect to effect annotation or remove ask"
 
 diag GivenMemberArityMismatch 3042
-  message "expected `{expected}` parameters for given member `{member}`, found `{found}`"
+  message "given member `{member}` expected `{expected}` parameters, found `{found}`"
   primary "given member `{member}` parameters declared here"
 
 diag UnknownGivenMember 3043
-  message "unknown given member `{member}`"
+  message "given member `{member}` unknown"
 
 diag GivenMemberValueRequired 3044
-  message "missing value for given member `{member}`"
+  message "given member `{member}` missing value"
   primary "given member `{member}` needs value"
 
 diag DuplicateGivenMember 3045
-  message "duplicate given member `{member}`"
+  message "given member `{member}` duplicate"
 
 diag MissingGivenMember 3046
-  message "missing given member `{member}`"
+  message "given member `{member}` missing"
 
 diag InvalidGivenTarget 3047
-  message "invalid given target `{target}`"
+  message "given target `{target}` invalid"
   primary "given target `{target}` found here"
 
 diag SealedShape 3048
@@ -192,10 +192,10 @@ diag SealedShape 3048
   primary "sealed shape `{shape}` used here"
 
 diag UnknownShape 3049
-  message "unknown shape `{shape}`"
+  message "shape `{shape}` unknown"
 
 diag DuplicateGiven 3050
-  message "duplicate given for `{shape}`"
+  message "given for shape `{shape}` duplicate"
 
 diag PlainLetRequiresIrrefutablePattern 3051
   message "plain `let` needs irrefutable pattern"
@@ -213,14 +213,14 @@ diag ArraySpreadRequiresOneDimensionalArray 3055
   message "array spread needs one-dimensional array"
 
 diag InvalidSpreadSource 3056
-  message "invalid spread source `{source}`"
+  message "spread source `{source}` invalid"
   primary "spread source not valid here"
 
 diag DuplicateRecordField 3058
-  message "duplicate record field `{field}`"
+  message "record field `{field}` duplicate"
 
 diag MissingRecordField 3123
-  message "missing record field `{field}`"
+  message "record field `{field}` missing"
 
 diag VariantMissingDataContext 3059
   message "variant constructor needs data type context"
@@ -229,7 +229,7 @@ diag VariantConstructorArityMismatch 3060
   message "variant constructor payload count differs from declaration"
 
 diag VariantNamedFieldsRequired 3105
-  message "variant named fields required"
+  message "variant payload needs named fields"
   primary "variant needs named payload fields"
 
 diag VariantNamedFieldsUnexpected 3106
@@ -237,42 +237,42 @@ diag VariantNamedFieldsUnexpected 3106
   primary "variant does not accept named payload fields"
 
 diag DuplicateVariantField 3107
-  message "duplicate variant field `{field}`"
+  message "variant field `{field}` duplicate"
 
 diag MissingVariantField 3108
-  message "missing variant field `{field}`"
+  message "variant field `{field}` missing"
 
 diag UnknownVariantField 3109
-  message "unknown variant payload field `{field}`"
+  message "variant payload field `{field}` unknown"
 
 diag MixedVariantPayloadStyle 3110
   message "mixed variant payload style"
   primary "variant payload fields must be all named or all positional"
 
 diag InvalidVariantArity 3061
-  message "invalid variant payload count, expected `{expected}`, found `{found}`"
+  message "variant payload count expected `{expected}`, found `{found}`"
 
 diag UnknownDataVariant 3062
-  message "unknown data variant `{variant}`"
+  message "data variant `{variant}` unknown"
 
 diag RecordLiteralRequiresNamedFields 3063
   message "record literal needs named fields"
 
 diag ArrayLiteralLengthUnknownFromRuntimeSpread 3064
-  message "unknown array literal length after runtime spread `{spread}`"
+  message "array literal length unknown after runtime spread `{spread}`"
 
 diag ArrayLiteralLengthMismatch 3065
-  message "expected array literal length `{expected}`, found `{found}`"
+  message "array literal length expected `{expected}`, found `{found}`"
 
 diag SumConstructorArityMismatch 3066
   message "sum constructor payload count differs from sum arm"
 
 diag InvalidIndexArgCount 3067
-  message "invalid index argument count, expected `{expected}`, found `{found}`"
+  message "index argument count expected `{expected}`, found `{found}`"
 
 diag InvalidCallTarget 3068
-  message "invalid call target `{target}`, found `{found}`"
-  primary "{target} has type `{found}` here"
+  message "call target `{target}` expected callable type, found `{found}`"
+  primary "`{target}` has type `{found}` here"
 
 diag CallArityMismatch 3069
   message "call `{callee}` expected `{expected}` arguments, found `{found}`"
@@ -289,10 +289,10 @@ diag CallSpreadAfterNamedArgument 3112
   help "move spread arguments before named arguments"
 
 diag CallNamedArgumentUnknown 3113
-  message "unknown named call argument `{argument}`"
+  message "named call argument `{argument}` unknown"
 
 diag CallNamedArgumentDuplicate 3114
-  message "duplicate named call argument `{argument}`"
+  message "named call argument `{argument}` duplicate"
 
 diag CallNamedArgumentAlreadyProvided 3115
   message "named call argument already provided"
@@ -314,7 +314,7 @@ diag PinRequiresUnsafeBlock 3126
   primary "pin action must appear inside `unsafe` block"
 
 diag UnsupportedPinTarget 3124
-  message "unsupported pin target `{target}`"
+  message "pin target `{target}` unsupported"
   primary "`{target}` cannot be pinned"
 
 diag PinnedValueEscapes 3125
@@ -322,7 +322,7 @@ diag PinnedValueEscapes 3125
   primary "`{name}` returned from pin body"
 
 diag InvalidTypeApplication 3070
-  message "invalid type application target `{target}`"
+  message "type application target `{target}` invalid"
 
 diag CallRuntimeSpreadRequiresArrayAny 3072
   message "call runtime spread needs `[]Any`"
@@ -341,24 +341,24 @@ diag TargetGateRejected 3075
   message "target gate rejected item"
 
 diag InvalidIndexTarget 3076
-  message "invalid index target `{target}`"
+  message "index target `{target}` invalid"
   primary "index target must support indexing"
 
 diag UnknownField 3078
-  message "unknown record field `{field}`"
+  message "record field `{field}` unknown"
 
 diag AmbiguousDotCallable 3102
-  message "ambiguous dot-callable match"
+  message "dot-callable match ambiguous"
 
 diag DotCallableRequiresMutableReceiver 3103
   message "dot-callable needs mutable receiver"
 
 diag InvalidFieldTarget 3079
-  message "invalid field target `{target}`"
+  message "field target `{target}` invalid"
   primary "field target not valid here"
 
 diag InvalidRecordUpdateTarget 3081
-  message "invalid record update target `{target}`"
+  message "record update target `{target}` invalid"
   primary "record update target must be record value"
 
 diag MutForbiddenInTypeTestTarget 3082
@@ -372,21 +372,30 @@ diag WriteTargetRequiresMut 3084
   primary "assignment target must be mutable"
 
 diag UnsupportedAssignmentTarget 3088
-  message "unsupported assignment target `{target}`"
+  message "assignment target `{target}` unsupported"
   primary "assignment target not writable"
 
 diag NumericOperandRequired 3089
-  message "numeric operand required"
+  message "operand needs numeric type"
 
 diag BinaryOperatorHasNoExecutableLowering 3090
   message "binary operator has no executable lowering"
+
+diag LogicalOperatorDomainMismatch 3127
+  message "operator `{operator}` needs `Bool` or matching `Bits[N]`, found `{left}` and `{right}`"
+
+diag UnaryLogicalOperatorDomainMismatch 3128
+  message "operator `{operator}` needs `Bool` or `Bits[N]`, found `{found}`"
+
+diag InvalidBitsWidth 3129
+  message "bits width `{width}` expected positive natural literal"
 
 diag TypeMismatch 3091
   message "{subject} expected `{expected}`, found `{found}`"
   primary "{subject} has type `{found}` here"
 
 diag InvalidTypeExpression 3092
-  message "invalid type expression `{target}`"
+  message "type expression `{target}` invalid"
 
 diag TypeApplicationArityMismatch 3093
   message "type application argument count differs from type parameters"
@@ -395,7 +404,7 @@ diag ArrayTypeRequiresItem 3094
   message "array type needs item type"
 
 diag AmbiguousVariantTag 3095
-  message "ambiguous variant tag; add type annotation"
+  message "variant tag ambiguous"
   primary "variant tag needs type context"
   help "add type annotation"
 
@@ -409,7 +418,7 @@ diag UnsatisfiedConstraint 3098
   message "unsatisfied constraint"
 
 diag AmbiguousGivenMatch 3099
-  message "ambiguous given match"
+  message "given match ambiguous"
 
 diag ConstrainedNonCallableBinding 3100
   message "non-callable `let` cannot have `where` constraints"

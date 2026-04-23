@@ -17,7 +17,7 @@ const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: SyntaxDiagKind::InvalidChar,
         code: 1200,
-        message: "invalid character `{ch}`",
+        message: "character `{ch}` invalid",
         primary: "character `{ch}` not valid here",
         secondary: None,
         help: None,
@@ -81,7 +81,7 @@ const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: SyntaxDiagKind::InvalidDigitForBase,
         code: 1208,
-        message: "invalid digit `{ch}` in base `{base}` literal",
+        message: "digit `{ch}` invalid in base `{base}` literal",
         primary: "digit `{ch}` not valid for base `{base}`",
         secondary: None,
         help: None,
@@ -89,7 +89,7 @@ const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: SyntaxDiagKind::UnexpectedUnderscoreInNumberLiteral,
         code: 1209,
-        message: "unexpected `_` in number literal",
+        message: "number literal `_` unexpected",
         primary: "underscore cannot appear here",
         secondary: None,
         help: None,
@@ -169,7 +169,7 @@ const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: SyntaxDiagKind::InvalidUnicodeScalar,
         code: 1219,
-        message: "invalid unicode scalar `U+{value}`",
+        message: "unicode scalar `U+{value}` invalid",
         primary: "unicode scalar `U+{value}` not valid",
         secondary: None,
         help: None,
@@ -177,7 +177,7 @@ const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: SyntaxDiagKind::ExpectedToken,
         code: 1300,
-        message: "expected {expected}, found {found}",
+        message: "token expected {expected}, found {found}",
         primary: "found {found} here",
         secondary: None,
         help: None,
@@ -185,7 +185,7 @@ const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: SyntaxDiagKind::ExpectedExpression,
         code: 1301,
-        message: "expected expression, found {found}",
+        message: "expression expected, found {found}",
         primary: "found {found} here",
         secondary: None,
         help: None,
@@ -193,7 +193,7 @@ const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: SyntaxDiagKind::ExpectedPattern,
         code: 1302,
-        message: "expected pattern, found {found}",
+        message: "pattern expected, found {found}",
         primary: "found {found} here",
         secondary: None,
         help: None,
@@ -201,7 +201,7 @@ const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: SyntaxDiagKind::ExpectedMember,
         code: 1303,
-        message: "expected member, found {found}",
+        message: "member expected, found {found}",
         primary: "found {found} here",
         secondary: None,
         help: None,
@@ -209,7 +209,7 @@ const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: SyntaxDiagKind::ExpectedIdentifier,
         code: 1304,
-        message: "expected identifier, found {found}",
+        message: "identifier expected, found {found}",
         primary: "found {found} here",
         secondary: None,
         help: None,
@@ -217,7 +217,7 @@ const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: SyntaxDiagKind::ExpectedSpliceTarget,
         code: 1305,
-        message: "expected splice target, found {found}",
+        message: "splice target expected, found {found}",
         primary: "found {found} here",
         secondary: None,
         help: None,
@@ -225,7 +225,7 @@ const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: SyntaxDiagKind::ExpectedOperatorMemberName,
         code: 1306,
-        message: "expected operator member name, found {found}",
+        message: "operator member name expected, found {found}",
         primary: "found {found} here",
         secondary: None,
         help: None,
@@ -233,7 +233,7 @@ const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: SyntaxDiagKind::ExpectedFieldTarget,
         code: 1307,
-        message: "expected field name or tuple index, found {found}",
+        message: "field name or tuple index expected, found {found}",
         primary: "found {found} here",
         secondary: None,
         help: None,
@@ -241,7 +241,7 @@ const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: SyntaxDiagKind::ExpectedConstraintOperator,
         code: 1308,
-        message: "expected constraint operator `<:` or `:`, found {found}",
+        message: "constraint operator `<:` or `:` expected, found {found}",
         primary: "found {found} here",
         secondary: None,
         help: None,
@@ -249,7 +249,7 @@ const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: SyntaxDiagKind::ExpectedAttrValue,
         code: 1309,
-        message: "expected attribute value, found {found}",
+        message: "attribute value expected, found {found}",
         primary: "found {found} here",
         secondary: None,
         help: None,

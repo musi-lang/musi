@@ -25,7 +25,7 @@ const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: ResolveDiagKind::InvalidStmt,
         code: 3201,
-        message: "invalid top-level statement",
+        message: "top-level statement invalid",
         primary: "top-level item or expression belongs here",
         secondary: None,
         help: None,
@@ -41,7 +41,7 @@ const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: ResolveDiagKind::ImportResolveFailed,
         code: 3203,
-        message: "unresolved source import specifier `{spec}`",
+        message: "source import specifier `{spec}` unresolved",
         primary: "{reason} `{spec}`",
         secondary: None,
         help: None,
@@ -49,7 +49,7 @@ const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: ResolveDiagKind::InvalidImportSpec,
         code: 3204,
-        message: "invalid import specifier",
+        message: "import specifier invalid",
         primary: "string literal import specifier belongs here",
         secondary: None,
         help: None,

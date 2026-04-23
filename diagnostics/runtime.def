@@ -1,13 +1,13 @@
 catalog runtime musi_rt RuntimeDiagKind crates/musi_rt/src/diag_catalog_gen.rs
 
 diag RootModuleRequired 6000
-  message "runtime root module required"
+  message "runtime needs root module"
 
 diag MissingModuleSource 6001
-  message "missing runtime module source `{spec}`"
+  message "runtime module source `{spec}` missing"
 
 diag InvalidSyntaxValue 6002
-  message "invalid syntax value `{found}`"
+  message "syntax value `{found}` invalid"
 
 diag SessionFailed 6003
   message "runtime session `{phase}` failed (`{detail}`)"

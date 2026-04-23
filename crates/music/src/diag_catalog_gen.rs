@@ -17,8 +17,8 @@ const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: MusicCliDiagKind::UnsupportedRunArgs,
         code: 5500,
-        message: "unsupported music `run` argument `{argument}`",
-        primary: "unsupported music `run` argument `{argument}`",
+        message: "music `run` argument `{argument}` unsupported",
+        primary: "music `run` argument `{argument}` unsupported",
         secondary: None,
         help: None,
     },

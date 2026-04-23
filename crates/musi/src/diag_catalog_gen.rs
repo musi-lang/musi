@@ -33,8 +33,8 @@ const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: CliDiagKind::UnsupportedRunArgs,
         code: 5302,
-        message: "unsupported musi run argument `{argument}`",
-        primary: "unsupported musi run argument `{argument}`",
+        message: "musi run argument `{argument}` unsupported",
+        primary: "musi run argument `{argument}` unsupported",
         secondary: None,
         help: None,
     },
@@ -57,8 +57,8 @@ const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: CliDiagKind::UnknownTarget,
         code: 5305,
-        message: "unknown target `{target}` in project",
-        primary: "unknown target `{target}`",
+        message: "project target `{target}` unknown",
+        primary: "project target `{target}` not found",
         secondary: None,
         help: None,
     },

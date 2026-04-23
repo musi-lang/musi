@@ -39,6 +39,37 @@ diag Known 1000
 
         validate_catalogs(&[catalog]).unwrap();
     }
+
+    #[test]
+    fn accepts_concrete_subject_first_wording() {
+        let catalog = parse_catalog(
+            Path::new("test.def"),
+            r#"
+catalog demo crate DemoKind crates/demo/src/diag_catalog_gen.rs
+diag UnknownOpcode 1000
+  message "opcode `{opcode}` unknown"
+  primary "opcode `{opcode}` unknown"
+"#,
+        )
+        .unwrap();
+
+        validate_catalogs(&[catalog]).unwrap();
+    }
+
+    #[test]
+    fn accepts_category_kind_with_subject_first_message() {
+        let catalog = parse_catalog(
+            Path::new("test.def"),
+            r#"
+catalog demo crate DemoKind crates/demo/src/diag_catalog_gen.rs
+diag MissingPackageName 1000
+  message "package `{path}` missing name"
+"#,
+        )
+        .unwrap();
+
+        validate_catalogs(&[catalog]).unwrap();
+    }
 }
 
 mod failure {
@@ -86,24 +117,6 @@ end
     }
 
     #[test]
-    fn rejects_suffix_category_wording() {
-        let catalog = parse_catalog(
-            Path::new("test.def"),
-            r#"
-catalog demo crate DemoKind crates/demo/src/diag_catalog_gen.rs
-diag Bad 1000
-  message "opcode `{opcode}` unknown"
-  primary "opcode `{opcode}` unknown"
-"#,
-        )
-        .unwrap();
-
-        let error = validate_catalogs(&[catalog]).unwrap_err();
-
-        assert!(error.0.contains("category after subject"));
-    }
-
-    #[test]
     fn rejects_bare_vague_wording() {
         let catalog = parse_catalog(
             Path::new("test.def"),
@@ -119,27 +132,6 @@ diag Bad 1000
         let error = validate_catalogs(&[catalog]).unwrap_err();
 
         assert!(error.0.contains("lacks concrete subject"));
-    }
-
-    #[test]
-    fn rejects_kind_message_category_mismatch() {
-        let catalog = parse_catalog(
-            Path::new("test.def"),
-            r#"
-catalog demo crate DemoKind crates/demo/src/diag_catalog_gen.rs
-diag MissingPackageName 1000
-  message "package name absent for `{path}`"
-"#,
-        )
-        .unwrap();
-
-        let error = validate_catalogs(&[catalog]).unwrap_err();
-
-        assert!(
-            error
-                .0
-                .contains("message must start with `missing` to match diagnostic kind")
-        );
     }
 
     #[test]

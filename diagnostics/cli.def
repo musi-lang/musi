@@ -7,7 +7,7 @@ diag TaskFailed 5301
   message "task `{name}` failed"
 
 diag UnsupportedRunArgs 5302
-  message "unsupported musi run argument `{argument}`"
+  message "musi run argument `{argument}` unsupported"
 
 diag PackageAlreadyInitialized 5303
   message "package path `{path}` already initialized"
@@ -16,8 +16,8 @@ diag MissingPackageName 5304
   message "missing package name for `{path}`"
 
 diag UnknownTarget 5305
-  message "unknown target `{target}` in project"
-  primary "unknown target `{target}`"
+  message "project target `{target}` unknown"
+  primary "project target `{target}` not found"
 
 diag CheckCommandFailed 5306
   message "musi check command failed"

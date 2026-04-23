@@ -5,7 +5,7 @@ diag ExpectedName 3200
   primary "`let` binding name belongs here"
 
 diag InvalidStmt 3201
-  message "invalid top-level statement"
+  message "top-level statement invalid"
   primary "top-level item or expression belongs here"
 
 diag UnboundName 3202
@@ -13,9 +13,9 @@ diag UnboundName 3202
   primary "name `{name}` unresolved in this scope"
 
 diag ImportResolveFailed 3203
-  message "unresolved source import specifier `{spec}`"
+  message "source import specifier `{spec}` unresolved"
   primary "{reason} `{spec}`"
 
 diag InvalidImportSpec 3204
-  message "invalid import specifier"
+  message "import specifier invalid"
   primary "string literal import specifier belongs here"
