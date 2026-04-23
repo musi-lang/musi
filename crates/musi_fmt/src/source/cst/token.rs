@@ -11,16 +11,16 @@ use crate::{
 };
 
 use super::{
-    BraceFrame, BraceKind, DeclarationState, ParenFrame, ParenKind, PendingAttachment,
-    SourceFormatter, TokenFormatRole, TokenWriteOptions, next_non_comma_token_kind,
+    BraceFrame, BraceKind, CstFormatter, CstLeafRole, DeclarationState, ParenFrame, ParenKind,
+    PendingAttachment, TokenWriteOptions, next_non_comma_token_kind,
 };
 
-impl SourceFormatter<'_> {
+impl CstFormatter<'_> {
     pub(super) fn write_token(
         &mut self,
         kind: TokenKind,
         text: &str,
-        role: TokenFormatRole,
+        role: CstLeafRole,
         span: Span,
         options: TokenWriteOptions,
     ) {
@@ -58,7 +58,7 @@ impl SourceFormatter<'_> {
         &mut self,
         kind: TokenKind,
         text: &str,
-        role: TokenFormatRole,
+        role: CstLeafRole,
         options: TokenWriteOptions,
     ) {
         match kind {
@@ -145,7 +145,7 @@ impl SourceFormatter<'_> {
     fn finish_token_write(
         &mut self,
         kind: TokenKind,
-        role: TokenFormatRole,
+        role: CstLeafRole,
         span: Span,
         options: TokenWriteOptions,
     ) {
@@ -159,17 +159,17 @@ impl SourceFormatter<'_> {
         self.set_last_token_end(span);
     }
 
-    fn update_pending_attachment(&mut self, role: TokenFormatRole) {
-        if role == TokenFormatRole::AttributeEnd {
+    fn update_pending_attachment(&mut self, role: CstLeafRole) {
+        if role == CstLeafRole::AttributeEnd {
             self.newline();
             self.pending_attachment = PendingAttachment::ItemDoc;
-        } else if role != TokenFormatRole::Attribute {
+        } else if role != CstLeafRole::Attribute {
             self.pending_attachment = PendingAttachment::None;
         }
     }
 }
 
-impl SourceFormatter<'_> {
+impl CstFormatter<'_> {
     pub(super) fn should_break_after_current_comma(
         &self,
         lexed: &LexedSource,
@@ -301,7 +301,7 @@ impl SourceFormatter<'_> {
         &self,
         lexed: &LexedSource,
         token_index: usize,
-        role: TokenFormatRole,
+        role: CstLeafRole,
     ) -> bool {
         if self.options.line_width == 0 {
             return false;
@@ -330,7 +330,7 @@ impl SourceFormatter<'_> {
         }
         let flat_len = if matches!(
             role,
-            TokenFormatRole::ParamParen | TokenFormatRole::MemberParamParen
+            CstLeafRole::ParamParen | CstLeafRole::MemberParamParen
         ) || self.declaration_head_active
         {
             let tail_len = declaration_tail_flat_len(lexed, token_index);
@@ -349,13 +349,13 @@ impl SourceFormatter<'_> {
                 <= self.options.line_width
     }
 
-    fn should_force_block_group(&self, role: TokenFormatRole) -> bool {
+    fn should_force_block_group(&self, role: CstLeafRole) -> bool {
         match role {
-            TokenFormatRole::CallParen => self.options.call_argument_layout == GroupLayout::Block,
-            TokenFormatRole::ParamParen => {
+            CstLeafRole::CallParen => self.options.call_argument_layout == GroupLayout::Block,
+            CstLeafRole::ParamParen => {
                 self.options.declaration_parameter_layout == GroupLayout::Block
             }
-            TokenFormatRole::MemberParamParen => {
+            CstLeafRole::MemberParamParen => {
                 self.options.effect_member_parameter_layout == GroupLayout::Block
             }
             _ => false,
@@ -363,14 +363,14 @@ impl SourceFormatter<'_> {
     }
 }
 
-impl SourceFormatter<'_> {
+impl CstFormatter<'_> {
     fn write_original_token(&mut self, _kind: TokenKind, text: &str) {
         self.write_indent_if_needed();
         self.out.push_str(text);
         self.line_len = self.line_len.saturating_add(text.len());
     }
 
-    fn write_open_brace(&mut self, text: &str, role: TokenFormatRole) {
+    fn write_open_brace(&mut self, text: &str, role: CstLeafRole) {
         if self.previous != Some(TokenKind::ColonEq) {
             self.continuation_indent = 0;
         }
@@ -383,7 +383,7 @@ impl SourceFormatter<'_> {
         self.out.push_str(text);
         self.line_len = self.line_len.saturating_add(text.len());
         self.braces.push(BraceFrame::new(
-            if role == TokenFormatRole::CommaListBrace {
+            if role == CstLeafRole::CommaListBrace {
                 BraceKind::CommaList
             } else {
                 BraceKind::Block
@@ -394,16 +394,16 @@ impl SourceFormatter<'_> {
         self.newline();
     }
 
-    fn write_open_paren(&mut self, text: &str, role: TokenFormatRole, break_after_open: bool) {
+    fn write_open_paren(&mut self, text: &str, role: CstLeafRole, break_after_open: bool) {
         let paren = match role {
-            TokenFormatRole::SequenceParen => Some(ParenKind::Sequence),
-            TokenFormatRole::MatchParen
+            CstLeafRole::SequenceParen => Some(ParenKind::Sequence),
+            CstLeafRole::MatchParen
                 if self.options.match_arm_indent == MatchArmIndent::PipeAligned =>
             {
                 Some(ParenKind::MatchAligned)
             }
-            TokenFormatRole::MatchParen => Some(ParenKind::Match),
-            TokenFormatRole::ForeignGroupParen => Some(ParenKind::ForeignGroup),
+            CstLeafRole::MatchParen => Some(ParenKind::Match),
+            CstLeafRole::ForeignGroupParen => Some(ParenKind::ForeignGroup),
             _ => None,
         };
         if let Some(paren) = paren {
@@ -429,8 +429,9 @@ impl SourceFormatter<'_> {
         }
         if (matches!(
             role,
-            TokenFormatRole::ParamParen | TokenFormatRole::MemberParamParen
+            CstLeafRole::ParamParen | CstLeafRole::MemberParamParen
         ) && self.previous != Some(TokenKind::Backslash))
+            || self.previous == Some(TokenKind::KwLet)
             || self.declaration_state == DeclarationState::NameBeforeParams
             || self.needs_space_before(TokenKind::LParen)
         {
@@ -443,7 +444,7 @@ impl SourceFormatter<'_> {
             ParenKind::Regular,
             !matches!(
                 role,
-                TokenFormatRole::ParamParen | TokenFormatRole::MemberParamParen
+                CstLeafRole::ParamParen | CstLeafRole::MemberParamParen
             ),
         ));
         self.indent = self.indent.saturating_add(1);
@@ -456,10 +457,10 @@ impl SourceFormatter<'_> {
         }
     }
 
-    fn write_open_bracket(&mut self, text: &str, role: TokenFormatRole, break_after_open: bool) {
+    fn write_open_bracket(&mut self, text: &str, role: CstLeafRole, break_after_open: bool) {
         if matches!(
             role,
-            TokenFormatRole::TypeParamBracket | TokenFormatRole::ArrayTypeBracket
+            CstLeafRole::TypeParamBracket | CstLeafRole::ArrayTypeBracket
         ) || self.previous == Some(TokenKind::ColonEq)
             || self.previous == Some(TokenKind::Pipe)
         {
@@ -468,7 +469,7 @@ impl SourceFormatter<'_> {
         self.write_punct(TokenKind::LBracket, text);
         self.parens.push(ParenFrame::with_trailing_commas(
             ParenKind::Bracket,
-            role != TokenFormatRole::TypeParamBracket,
+            role != CstLeafRole::TypeParamBracket,
         ));
         self.indent = self.indent.saturating_add(1);
         if break_after_open {
@@ -533,7 +534,7 @@ impl SourceFormatter<'_> {
     }
 }
 
-impl SourceFormatter<'_> {
+impl CstFormatter<'_> {
     fn write_trailing_comma(&mut self) {
         if self.previous == Some(TokenKind::Comma) {
             return;
@@ -594,7 +595,7 @@ impl SourceFormatter<'_> {
         })
     }
 
-    fn write_regular(&mut self, kind: TokenKind, text: &str, role: TokenFormatRole) {
+    fn write_regular(&mut self, kind: TokenKind, text: &str, role: CstLeafRole) {
         if kind == TokenKind::KwExport
             && self.indent == 0
             && !self.out.is_empty()
@@ -614,7 +615,7 @@ impl SourceFormatter<'_> {
     }
 }
 
-impl SourceFormatter<'_> {
+impl CstFormatter<'_> {
     fn update_state(&mut self, kind: TokenKind) {
         match kind {
             TokenKind::KwLet => {

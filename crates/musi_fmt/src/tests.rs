@@ -181,6 +181,15 @@ mod success {
     }
 
     #[test]
+    fn keeps_space_after_unary_not() {
+        let source = "let value := not zero1();";
+
+        let result = format_source(source, &options()).unwrap();
+
+        assert_eq!(result.text, "let value := not zero1();\n");
+    }
+
+    #[test]
     fn wraps_long_word_operator_chain_at_default_width() {
         let source = "let value := aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa and bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb and cccccccccccccccccccccccccccccccccccccccc;";
 
@@ -241,13 +250,13 @@ mod success {
 
     #[test]
     fn keeps_call_arguments_on_one_line_when_they_fit_width() {
-        let source = "let ok := testing.it(\"adds values\", testing.toBeTruthy(add(1, 2)));";
+        let source = "let ok := testing.it(\"adds values\", testing.toBeTrue(add(1, 2)));";
 
         let result = format_source(source, &options()).unwrap();
 
         assert_eq!(
             result.text,
-            "let ok := testing.it(\"adds values\", testing.toBeTruthy(add(1, 2)));\n"
+            "let ok := testing.it(\"adds values\", testing.toBeTrue(add(1, 2)));\n"
         );
         assert!(
             result
@@ -275,6 +284,72 @@ mod success {
                 .lines()
                 .all(|line| line.chars().count() <= options.line_width)
         );
+    }
+
+    #[test]
+    fn keeps_space_after_let_for_receiver_methods() {
+        let source = "export let(self : Error).message () : String := self;";
+
+        let result = format_source(source, &options()).unwrap();
+
+        assert_eq!(
+            result.text,
+            "export let (self : Error).message () : String := self;\n"
+        );
+        let second = format_source(&result.text, &options()).unwrap();
+        assert_eq!(second.text, result.text);
+    }
+
+    #[test]
+    fn keeps_bind_operator_attached_to_broken_receiver_signature() {
+        let mut options = options();
+        options.line_width = 64;
+        let source = r"export let(self : Option[T]).fold [T, U] (onNone : U, onSome : T -> U) : U
+  :=
+  fold[T, U](self, onNone, onSome);
+";
+
+        let result = format_source(source, &options).unwrap();
+
+        assert_eq!(
+            result.text,
+            r"export let (self : Option[T]).fold [T, U] (
+  onNone : U,
+  onSome : T -> U
+) : U := fold[T, U](self, onNone, onSome);
+"
+        );
+        assert!(
+            result
+                .text
+                .lines()
+                .all(|line| line.chars().count() <= options.line_width)
+        );
+        let second = format_source(&result.text, &options).unwrap();
+        assert_eq!(second.text, result.text);
+    }
+
+    #[test]
+    fn keeps_fitting_rhs_after_multiline_receiver_signature() {
+        let source = r"export let (self : Result[T, E]).fold [T, E, U] (
+  onOk : T -> U,
+  onErr : E -> U
+) : U :=
+  fold[T, E, U](self, onOk, onErr);
+";
+
+        let result = format_source(source, &options()).unwrap();
+
+        assert_eq!(
+            result.text,
+            r"export let (self : Result[T, E]).fold [T, E, U] (
+  onOk : T -> U,
+  onErr : E -> U
+) : U := fold[T, E, U](self, onOk, onErr);
+"
+        );
+        let second = format_source(&result.text, &options()).unwrap();
+        assert_eq!(second.text, result.text);
     }
 
     #[test]
@@ -1125,7 +1200,7 @@ let io := import "@std/io";
     #[test]
     fn format_file_writes_changed_file() {
         let root = temp_dir();
-        let path = root.join("index.ms");
+        let path = root.join("std.ms");
         fs::write(&path, "let x:=1;").unwrap();
 
         let change = format_file(&path, &options(), false).unwrap();
@@ -1179,17 +1254,17 @@ let io := import "@std/io";
     #[test]
     fn preserves_multiline_test_sequence_regression() {
         let source = r#"let testing := import "@std/testing";
-let array := import "./index.ms";
+let array := import "./std.ms";
 
 export let test () :=
   (
     testing.describe("array");
-    testing.it("'copy' clones sequence values", testing.toBeTruthy(array.equalsInt(array.copy[Int]([1, 2, 3]), [1, 2, 3])));
-    testing.it("'concat' joins two sequences", testing.toBeTruthy(array.equalsInt(array.concat[Int]([1, 2], [3, 4]), [1, 2, 3, 4])));
-    testing.it("'append' adds trailing value", testing.toBeTruthy(array.equalsInt(array.append[Int]([1, 2], 3), [1, 2, 3])));
-    testing.it("'prepend' adds leading value", testing.toBeTruthy(array.equalsInt(array.prepend[Int](0, [1, 2]), [0, 1, 2])));
-    testing.it("'isEmpty' detects empty arrays", testing.toBeTruthy(array.isEmpty[Int]([])));
-    testing.it("'nonEmpty' detects non-empty arrays", testing.toBeTruthy(array.nonEmpty[Int]([1])));
+    testing.it("'copy' clones sequence values", testing.toBeTrue(array.equalsInt(array.copy[Int]([1, 2, 3]), [1, 2, 3])));
+    testing.it("'concat' joins two sequences", testing.toBeTrue(array.equalsInt(array.concat[Int]([1, 2], [3, 4]), [1, 2, 3, 4])));
+    testing.it("'append' adds trailing value", testing.toBeTrue(array.equalsInt(array.append[Int]([1, 2], 3), [1, 2, 3])));
+    testing.it("'prepend' adds leading value", testing.toBeTrue(array.equalsInt(array.prepend[Int](0, [1, 2]), [0, 1, 2])));
+    testing.it("'isEmpty' detects empty arrays", testing.toBeTrue(array.isEmpty[Int]([])));
+    testing.it("'nonEmpty' detects non-empty arrays", testing.toBeTrue(array.nonEmpty[Int]([1])));
     testing.endDescribe()
   );
 "#;
@@ -1201,7 +1276,7 @@ export let test () :=
 
         assert_eq!(
             result.text,
-            r#"let array := import "./index.ms";
+            r#"let array := import "./std.ms";
 let testing := import "@std/testing";
 
 export let test () :=
@@ -1209,33 +1284,31 @@ export let test () :=
     testing.describe("array");
     testing.it(
       "'copy' clones sequence values",
-      testing.toBeTruthy(array.equalsInt(array.copy[Int]([1, 2, 3]), [1, 2, 3]))
+      testing.toBeTrue(array.equalsInt(array.copy[Int]([1, 2, 3]), [1, 2, 3]))
     );
     testing.it(
       "'concat' joins two sequences",
-      testing.toBeTruthy(
+      testing.toBeTrue(
         array.equalsInt(array.concat[Int]([1, 2], [3, 4]), [1, 2, 3, 4])
       )
     );
     testing.it(
       "'append' adds trailing value",
-      testing.toBeTruthy(
-        array.equalsInt(array.append[Int]([1, 2], 3), [1, 2, 3])
-      )
+      testing.toBeTrue(array.equalsInt(array.append[Int]([1, 2], 3), [1, 2, 3]))
     );
     testing.it(
       "'prepend' adds leading value",
-      testing.toBeTruthy(
+      testing.toBeTrue(
         array.equalsInt(array.prepend[Int](0, [1, 2]), [0, 1, 2])
       )
     );
     testing.it(
       "'isEmpty' detects empty arrays",
-      testing.toBeTruthy(array.isEmpty[Int]([]))
+      testing.toBeTrue(array.isEmpty[Int]([]))
     );
     testing.it(
       "'nonEmpty' detects non-empty arrays",
-      testing.toBeTruthy(array.nonEmpty[Int]([1]))
+      testing.toBeTrue(array.nonEmpty[Int]([1]))
     );
     testing.endDescribe()
   );
@@ -1322,7 +1395,7 @@ mod failure {
     #[test]
     fn check_mode_does_not_write_changed_file() {
         let root = temp_dir();
-        let path = root.join("index.ms");
+        let path = root.join("std.ms");
         fs::write(&path, "let x:=1;").unwrap();
 
         let change = format_file(&path, &options(), true).unwrap();

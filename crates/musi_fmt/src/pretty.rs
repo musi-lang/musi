@@ -57,8 +57,32 @@ impl Doc {
     }
 
     #[must_use]
+    pub const fn hardline() -> Self {
+        Self::hard_line()
+    }
+
+    #[must_use]
     pub fn concat(docs: impl Into<Vec<Self>>) -> Self {
         Self::Concat(docs.into())
+    }
+
+    #[must_use]
+    pub fn join(docs: impl IntoIterator<Item = Self>, separator: &Self) -> Self {
+        let mut docs = docs.into_iter();
+        let Some(first) = docs.next() else {
+            return Self::Nil;
+        };
+        let mut joined = vec![first];
+        for doc in docs {
+            joined.push(separator.clone());
+            joined.push(doc);
+        }
+        Self::Concat(joined)
+    }
+
+    #[must_use]
+    pub fn join_hardline(docs: impl IntoIterator<Item = Self>) -> Self {
+        Self::join(docs, &Self::hard_line())
     }
 
     #[must_use]
@@ -154,6 +178,17 @@ pub fn render(doc: &Doc, options: &PrettyOptions) -> String {
             }),
         }
     }
+    out
+}
+
+#[must_use]
+pub fn render_with_final_newline(doc: &Doc, options: &PrettyOptions) -> String {
+    let mut out = render(doc, options);
+    if out.ends_with('\n') {
+        return out;
+    }
+    trim_trailing_spaces(&mut out);
+    out.push('\n');
     out
 }
 

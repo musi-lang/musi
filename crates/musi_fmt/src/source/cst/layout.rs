@@ -2,25 +2,66 @@ use crate::{FormatOptions, GroupLayout, MatchArmArrowAlignment};
 
 use super::is_let_line;
 
-pub(super) fn enforce_bind_line_width(text: String, options: &FormatOptions) -> String {
+pub(super) fn format_bind_layout(text: String, options: &FormatOptions) -> String {
     if options.line_width == 0 {
         return text;
     }
     let mut out = String::with_capacity(text.len());
-    for line in text.lines() {
-        if line.chars().count() > options.line_width
-            && is_let_line(line)
-            && let Some(broken) = break_long_let_signature_line(line, options)
+    let lines: Vec<&str> = text.lines().collect();
+    let mut index = 0usize;
+    while index < lines.len() {
+        let line = lines[index];
+        if let Some(previous) = out
+            .strip_suffix('\n')
+            .and_then(last_line)
+            .map(str::to_owned)
+            && previous.trim_start().starts_with(") :")
+            && previous.trim_end().ends_with(":=")
+            && is_single_line_bind_rhs(line)
         {
-            out.push_str(&broken);
+            let joined = format!("{} {}", previous.trim_end(), line.trim_start());
+            if joined.chars().count() <= options.line_width {
+                remove_last_line(&mut out);
+                out.push_str(&joined);
+                out.push('\n');
+                index = index.saturating_add(1);
+                continue;
+            }
+        }
+        if is_standalone_bind_operator(line)
+            && let Some(previous) = out
+                .strip_suffix('\n')
+                .and_then(last_line)
+                .map(str::to_owned)
+            && is_bind_signature_line(&previous)
+        {
+            remove_last_line(&mut out);
+            let joined = format!("{} :=", previous.trim_end());
+            if joined.chars().count() > options.line_width
+                && let Some(broken) = split_long_let_signature(&joined, options)
+            {
+                out.push_str(&broken);
+            } else {
+                out.push_str(&joined);
+                out.push('\n');
+            }
+            index = index.saturating_add(1);
             continue;
         }
         if line.chars().count() > options.line_width
             && is_let_line(line)
-            && let Some(index) = line.find(" := ")
+            && let Some(broken) = split_long_let_signature(line, options)
         {
-            let lhs_end = index.saturating_add(" :=".len());
-            let rhs_start = index.saturating_add(" := ".len());
+            out.push_str(&broken);
+            index = index.saturating_add(1);
+            continue;
+        }
+        if line.chars().count() > options.line_width
+            && is_let_line(line)
+            && let Some(bind_index) = line.find(" := ")
+        {
+            let lhs_end = bind_index.saturating_add(" :=".len());
+            let rhs_start = bind_index.saturating_add(" := ".len());
             let Some(lhs) = line.get(..lhs_end) else {
                 out.push_str(line);
                 out.push('\n');
@@ -41,15 +82,54 @@ pub(super) fn enforce_bind_line_width(text: String, options: &FormatOptions) -> 
             out.push_str(&options.indent_unit());
             out.push_str(rhs.trim_start());
             out.push('\n');
+            index = index.saturating_add(1);
             continue;
         }
         out.push_str(line);
         out.push('\n');
+        index = index.saturating_add(1);
     }
     out
 }
 
-fn break_long_let_signature_line(line: &str, options: &FormatOptions) -> Option<String> {
+fn is_standalone_bind_operator(line: &str) -> bool {
+    line.trim() == ":="
+}
+
+fn is_single_line_bind_rhs(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    !trimmed.is_empty()
+        && !trimmed.starts_with('|')
+        && !trimmed.starts_with("---")
+        && !trimmed.starts_with("--")
+        && !trimmed.starts_with("match ")
+        && !trimmed.starts_with("given ")
+        && !trimmed.starts_with("data ")
+        && !trimmed.starts_with("effect ")
+        && !trimmed.starts_with("shape ")
+        && !trimmed.starts_with("unsafe ")
+        && !trimmed.starts_with("pin ")
+        && !trimmed.starts_with([')', '}', ']'])
+}
+
+fn is_bind_signature_line(line: &str) -> bool {
+    is_let_line(line) || line.trim_start().starts_with(") :")
+}
+
+fn last_line(text: &str) -> Option<&str> {
+    text.lines().next_back()
+}
+
+fn remove_last_line(text: &mut String) {
+    let trimmed = text.trim_end_matches('\n');
+    let Some(index) = trimmed.rfind('\n') else {
+        text.clear();
+        return;
+    };
+    text.truncate(index.saturating_add(1));
+}
+
+fn split_long_let_signature(line: &str, options: &FormatOptions) -> Option<String> {
     let open = line.rfind(" (")?.saturating_add(1);
     let close = matching_close_paren(line, open)?;
     let inner = line.get(open + 1..close)?;
@@ -123,7 +203,7 @@ fn split_top_level_commas(text: &str) -> Vec<&str> {
     items
 }
 
-pub(super) fn compact_record_fields(text: String, options: &FormatOptions) -> String {
+pub(super) fn format_record_layout(text: String, options: &FormatOptions) -> String {
     if options.record_field_layout == GroupLayout::Block {
         return text;
     }
@@ -137,7 +217,8 @@ pub(super) fn compact_record_fields(text: String, options: &FormatOptions) -> St
             index = index.saturating_add(1);
             continue;
         }
-        let Some((candidate, next_index)) = compact_field_block(&lines, index, options) else {
+        let Some((candidate, next_index)) = compact_record_field_block(&lines, index, options)
+        else {
             out.push(line.to_owned());
             index = index.saturating_add(1);
             continue;
@@ -152,7 +233,7 @@ pub(super) fn compact_record_fields(text: String, options: &FormatOptions) -> St
     formatted
 }
 
-fn compact_field_block(
+fn compact_record_field_block(
     lines: &[&str],
     start: usize,
     options: &FormatOptions,
@@ -172,13 +253,13 @@ fn compact_field_block(
         return None;
     }
     let prefix = line.trim_end().trim_end_matches('{').trim_end();
-    let candidate = compact_comma_fields(prefix, &fields)
-        .or_else(|| compact_semicolon_fields(prefix, &fields))?;
+    let candidate = compact_record_comma_fields(prefix, &fields)
+        .or_else(|| compact_record_semicolon_fields(prefix, &fields))?;
     (options.line_width == 0 || candidate.chars().count() <= options.line_width)
         .then_some((candidate, cursor.saturating_add(1)))
 }
 
-fn compact_comma_fields(prefix: &str, fields: &[String]) -> Option<String> {
+fn compact_record_comma_fields(prefix: &str, fields: &[String]) -> Option<String> {
     let mut compacted = Vec::with_capacity(fields.len());
     for field in fields {
         if !field.ends_with(',') || field.contains('{') || field.contains('}') {
@@ -189,7 +270,7 @@ fn compact_comma_fields(prefix: &str, fields: &[String]) -> Option<String> {
     Some(format!("{prefix} {{ {} }};", compacted.join(", ")))
 }
 
-fn compact_semicolon_fields(prefix: &str, fields: &[String]) -> Option<String> {
+fn compact_record_semicolon_fields(prefix: &str, fields: &[String]) -> Option<String> {
     let mut compacted = Vec::with_capacity(fields.len());
     for field in fields {
         if !is_simple_semicolon_field(field) {
@@ -214,19 +295,19 @@ fn is_simple_semicolon_field(field: &str) -> bool {
         && !field.starts_with(['/', '-'])
 }
 
-pub(super) fn align_match_arrows(text: String, options: &FormatOptions) -> String {
+pub(super) fn format_match_arrow_layout(text: String, options: &FormatOptions) -> String {
     match options.match_arm_arrow_alignment {
         MatchArmArrowAlignment::None => text,
         MatchArmArrowAlignment::Consecutive => {
-            align_match_arrow_runs(&text, options, MatchArmArrowAlignment::Consecutive)
+            apply_match_arrow_runs(&text, options, MatchArmArrowAlignment::Consecutive)
         }
         MatchArmArrowAlignment::Block => {
-            align_match_arrow_runs(&text, options, MatchArmArrowAlignment::Block)
+            apply_match_arrow_runs(&text, options, MatchArmArrowAlignment::Block)
         }
     }
 }
 
-fn align_match_arrow_runs(
+fn apply_match_arrow_runs(
     text: &str,
     options: &FormatOptions,
     alignment: MatchArmArrowAlignment,
@@ -242,7 +323,7 @@ fn align_match_arrow_runs(
             continue;
         }
         if in_match && trimmed == ");" {
-            align_match_arrow_run(&mut lines, &run, options);
+            apply_match_arrow_run(&mut lines, &run, options);
             run.clear();
             in_match = false;
             continue;
@@ -253,11 +334,11 @@ fn align_match_arrow_runs(
         if is_match_arm_line(trimmed) {
             run.push(index);
         } else if alignment == MatchArmArrowAlignment::Consecutive {
-            align_match_arrow_run(&mut lines, &run, options);
+            apply_match_arrow_run(&mut lines, &run, options);
             run.clear();
         }
     }
-    align_match_arrow_run(&mut lines, &run, options);
+    apply_match_arrow_run(&mut lines, &run, options);
     let mut out = lines.join("\n");
     if text.ends_with('\n') {
         out.push('\n');
@@ -265,7 +346,7 @@ fn align_match_arrow_runs(
     out
 }
 
-fn align_match_arrow_run(lines: &mut [String], run: &[usize], options: &FormatOptions) {
+fn apply_match_arrow_run(lines: &mut [String], run: &[usize], options: &FormatOptions) {
     if run.len() < 2 {
         return;
     }

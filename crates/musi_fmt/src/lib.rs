@@ -4,7 +4,6 @@ mod markdown;
 mod paths;
 pub mod pretty;
 mod protected;
-mod roles;
 mod source;
 mod token_class;
 

@@ -109,6 +109,7 @@ const fn is_other_spacing_keyword(kind: TokenKind) -> bool {
             | TokenKind::KwAny
             | TokenKind::KwAs
             | TokenKind::KwImport
+            | TokenKind::KwNot
             | TokenKind::KwRequire
             | TokenKind::KwQuote
             | TokenKind::KwSome
