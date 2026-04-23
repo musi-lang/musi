@@ -131,13 +131,13 @@ mod success {
         assert_success(&output);
         assert!(temp.path().join("sample/musi.json").exists());
         assert!(temp.path().join("sample/index.ms").exists());
-        assert!(temp.path().join("sample/add.test.ms").exists());
+        assert!(temp.path().join("sample/__tests__/add.test.ms").exists());
         assert!(temp.path().join("sample/.gitignore").exists());
         let manifest = fs::read_to_string(temp.path().join("sample/musi.json"))
             .expect("manifest should be readable");
         let index = fs::read_to_string(temp.path().join("sample/index.ms"))
             .expect("index should be readable");
-        let test = fs::read_to_string(temp.path().join("sample/add.test.ms"))
+        let test = fs::read_to_string(temp.path().join("sample/__tests__/add.test.ms"))
             .expect("test should be readable");
         assert!(manifest.contains("\"name\""));
         assert!(manifest.contains("sample"));
@@ -162,7 +162,7 @@ mod success {
         assert_success(&output);
         assert!(temp.path().join("musi.json").exists());
         assert!(temp.path().join("index.ms").exists());
-        assert!(temp.path().join("add.test.ms").exists());
+        assert!(temp.path().join("__tests__/add.test.ms").exists());
     }
 
     #[test]
@@ -1083,7 +1083,7 @@ mod e2e {
         let test_output = run_musi(&["test"], &temp.path().join("sample"));
         assert_success(&test_output);
         let stdout = String::from_utf8_lossy(&test_output.stdout);
-        assert!(stdout.contains("✓ add.test.ms (1)"));
+        assert!(stdout.contains("✓ __tests__/add.test.ms (1)"));
         assert!(stdout.contains("adds values"));
         assert!(!stdout.contains("@@std"));
     }

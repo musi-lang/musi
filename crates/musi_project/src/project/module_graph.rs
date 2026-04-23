@@ -105,16 +105,28 @@ pub(super) fn build_import_map(
             for import_site in &module.imports {
                 let import_spec = import_site.spec.as_str();
                 let remapped = manifest_map
-                    .resolve(&module.local_scope_key, &ModuleSpecifier::new(import_spec))
-                    .map_or_else(|| import_spec.to_owned(), |spec| spec.as_str().to_owned());
-                let target = resolve_import_spec(
-                    record,
-                    module,
-                    &remapped,
-                    package_records,
-                    package_name_index,
-                )
-                .ok_or_else(|| unresolved_import(module, import_site, &remapped))?;
+                    .resolve(&module.local_scope_key, &ModuleSpecifier::new(import_spec));
+                let remapped_spec = remapped
+                    .as_ref()
+                    .map_or(import_spec, ModuleSpecifier::as_str);
+                let target = if remapped.is_some() {
+                    resolve_import_map_target(
+                        record,
+                        module,
+                        remapped_spec,
+                        package_records,
+                        package_name_index,
+                    )
+                } else {
+                    resolve_import_spec(
+                        record,
+                        module,
+                        import_spec,
+                        package_records,
+                        package_name_index,
+                    )
+                }
+                .ok_or_else(|| unresolved_import(module, import_site, remapped_spec))?;
                 let _ = scope.insert(import_spec.to_owned(), target.as_str().to_owned());
             }
         }
@@ -149,6 +161,32 @@ fn unresolved_import(
         module.text.clone(),
         diag,
     )))
+}
+
+fn resolve_import_map_target(
+    package: &PackageRecord,
+    module: &LoadedModule,
+    spec: &str,
+    package_records: &PackageRecordMap,
+    package_name_index: &BTreeMap<String, PackageId>,
+) -> Option<ModuleKey> {
+    resolve_package_root_spec(package, spec)
+        .or_else(|| resolve_import_spec(package, module, spec, package_records, package_name_index))
+}
+
+fn resolve_package_root_spec(package: &PackageRecord, spec: &str) -> Option<ModuleKey> {
+    if let Some(target) = resolve_spec(spec) {
+        return Some(target);
+    }
+    if spec.starts_with("./") || spec.starts_with("../") {
+        return resolve_module_target(
+            &package.package.root_dir,
+            &package.relative_modules,
+            None,
+            spec,
+        );
+    }
+    None
 }
 
 fn resolve_import_spec(

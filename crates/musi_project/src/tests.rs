@@ -615,7 +615,41 @@ mod success {
     }
 
     #[test]
-    fn discovers_co_located_project_test_targets() {
+    fn manifest_imports_resolve_relative_targets_from_package_root() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            r##"{
+  "name": "app",
+  "version": "1.0.0",
+  "entry": "./features/root.ms",
+  "imports": { "#internal": "./internal/index.ms" }
+}"##,
+        );
+        write_file(
+            temp.path(),
+            "features/root.ms",
+            r##"let Internal := import "#internal";
+export let result : Int := Internal.value;
+"##,
+        );
+        write_file(
+            temp.path(),
+            "internal/index.ms",
+            r"export let value : Int := 42;",
+        );
+
+        let output = Project::load(temp.path(), ProjectOptions::default())
+            .expect("project loads")
+            .compile_root_entry()
+            .expect("module compiles");
+
+        assert!(output.artifact.validate().is_ok());
+    }
+
+    #[test]
+    fn discovers_nested_project_test_targets() {
         let temp = TempDir::new();
         write_file(
             temp.path(),
@@ -634,19 +668,20 @@ mod success {
             r#"{
   "name": "@std",
   "version": "0.1.0",
-  "exports": "./index.ms"
+  "entry": "./std.ms",
+  "exports": "./std.ms"
 }"#,
         );
         write_file(
             temp.path(),
-            "packages/std/index.ms",
+            "packages/std/std.ms",
             r#"
 export let version := "0.1.0";
 "#,
         );
         write_file(
             temp.path(),
-            "packages/std/testing/index.ms",
+            "packages/std/testing.ms",
             r#"
 export let pass := { passed := .True, message := "" };
 export let describe (_name, _body) : Unit ~> Unit := _body();
@@ -655,7 +690,7 @@ export let it (_name, _body) : Unit ~> Unit := _body();
         );
         write_file(
             temp.path(),
-            "packages/std/math/index.test.ms",
+            "packages/std/__tests__/math.test.ms",
             r"
 export let test () : Unit := 0;
 ",
@@ -668,7 +703,7 @@ export let test () : Unit := 0;
         assert!(tests.iter().any(|test| {
             test.module_key
                 .as_str()
-                .contains("@@std@0.1.0/math/index.test.ms")
+                .contains("@@std@0.1.0/__tests__/math.test.ms")
         }));
     }
 
@@ -789,6 +824,7 @@ export let test () := 0;
             "\"./iter\"",
             "\"./time\"",
             "\"./io/prompt\"",
+            "\"./sys\"",
         ] {
             assert!(
                 !manifest.contains(legacy),
@@ -801,6 +837,7 @@ export let test () := 0;
             "\"./collections/slice\"",
             "\"./collections/iter\"",
             "\"./datetime\"",
+            "\"./encoding\"",
             "\"./cli/prompt\"",
             "\"./crypto\"",
             "\"./uuid\"",
@@ -808,6 +845,35 @@ export let test () := 0;
         ] {
             assert!(manifest.contains(current), "std export missing: {current}");
         }
+    }
+
+    #[test]
+    fn std_sys_is_private_implementation_module() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "dependencies": { "@std": "*" }
+}"#,
+        );
+        write_file(
+            temp.path(),
+            "index.ms",
+            r#"let Sys := import "@std/sys";
+export let result : Int := 1;
+"#,
+        );
+
+        let error = Project::load(temp.path(), ProjectOptions::default())
+            .expect_err("@std/sys should not resolve as public export");
+
+        assert_eq!(
+            error.diag_code(),
+            Some(ProjectDiagKind::SourceImportUnresolved.code())
+        );
     }
 
     #[test]
@@ -897,6 +963,9 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
         let bytes = surface
             .exported_value("bytes")
             .expect("bytes export should exist");
+        let encoding = surface
+            .exported_value("encoding")
+            .expect("encoding export should exist");
         let math = surface
             .exported_value("math")
             .expect("math export should exist");
@@ -906,15 +975,19 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
 
         assert_eq!(
             bytes.import_record_target.as_ref(),
-            Some(&ModuleKey::new("@@std@0.1.0/bytes/index.ms"))
+            Some(&ModuleKey::new("@@std@0.1.0/bytes.ms"))
+        );
+        assert_eq!(
+            encoding.import_record_target.as_ref(),
+            Some(&ModuleKey::new("@@std@0.1.0/encoding.ms"))
         );
         assert_eq!(
             math.import_record_target.as_ref(),
-            Some(&ModuleKey::new("@@std@0.1.0/math/index.ms"))
+            Some(&ModuleKey::new("@@std@0.1.0/math.ms"))
         );
         assert_eq!(
             option.import_record_target.as_ref(),
-            Some(&ModuleKey::new("@@std@0.1.0/option/index.ms"))
+            Some(&ModuleKey::new("@@std@0.1.0/option.ms"))
         );
     }
 
@@ -925,18 +998,18 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
             .canonicalize()
             .expect("repo root should resolve");
         let project = Project::load(&repo_root, ProjectOptions::default()).expect("project loads");
-        let test_key = ModuleKey::new("@@std@0.1.0/index.test.ms");
+        let test_key = ModuleKey::new("@@std@0.1.0/__tests__/std.test.ms");
         let mut session = project.build_session().expect("project session builds");
         let resolved = session
             .resolve_module(&test_key)
-            .expect("@std index.test should resolve")
+            .expect("@std __tests__/std.test should resolve")
             .clone();
 
         assert!(
             resolved
                 .imports
                 .iter()
-                .any(|import| import.to == ModuleKey::new("@@std@0.1.0/index.ms"))
+                .any(|import| import.to == ModuleKey::new("@@std@0.1.0/std.ms"))
         );
     }
 
@@ -967,23 +1040,23 @@ export let bytes := Std.bytes;
             r#"{
   "name": "@std",
   "version": "0.1.0",
-  "entry": "./index.ms",
+  "entry": "./std.ms",
   "exports": {
-    ".": "./index.ms",
-    "./bytes": "./bytes/index.ms"
+    ".": "./std.ms",
+    "./bytes": "./bytes.ms"
   }
 }"#,
         );
         write_file(
             temp.path(),
-            "packages/std/index.ms",
+            "packages/std/std.ms",
             r#"
 export let bytes := import "@std/bytes";
 "#,
         );
         write_file(
             temp.path(),
-            "packages/std/bytes/index.ms",
+            "packages/std/bytes.ms",
             r"
 export let equals (left : []Int, right : []Int) : Bool := left = right;
 ",
@@ -1002,7 +1075,7 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
 
         assert_eq!(
             bytes.import_record_target.as_ref(),
-            Some(&ModuleKey::new("@@std@0.1.0/bytes/index.ms"))
+            Some(&ModuleKey::new("@@std@0.1.0/bytes.ms"))
         );
     }
 
@@ -1026,17 +1099,17 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
             r#"{
   "name": "@std",
   "version": "0.1.0",
-  "entry": "./index.ms",
+  "entry": "./std.ms",
   "exports": {
-    ".": "./index.ms",
-    "./prelude": "./prelude/index.ms",
-    "./option": "./option/index.ms"
+    ".": "./std.ms",
+    "./prelude": "./prelude.ms",
+    "./option": "./option.ms"
   }
 }"#,
         );
         write_file(
             temp.path(),
-            "packages/std/index.ms",
+            "packages/std/std.ms",
             r#"
 export let Prelude := import "@std/prelude";
 export let Option := import "@std/option";
@@ -1044,7 +1117,7 @@ export let Option := import "@std/option";
         );
         write_file(
             temp.path(),
-            "packages/std/prelude/index.ms",
+            "packages/std/prelude.ms",
             r#"
 let OptionPkg := import "@std/option";
 export let Int := Int;
@@ -1055,7 +1128,7 @@ export let none := OptionPkg.none;
         );
         write_file(
             temp.path(),
-            "packages/std/option/index.ms",
+            "packages/std/option.ms",
             r"
 export opaque let Option[T] := data {
   | Some(T)
