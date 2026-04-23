@@ -7,6 +7,7 @@ mod diag;
 mod diagnostics;
 mod direct;
 mod errors;
+mod navigation;
 mod semantic;
 
 pub use analysis::{
@@ -28,6 +29,12 @@ pub use diagnostics::{
 };
 pub use direct::{DirectGraph, load_direct_graph};
 pub use errors::{ToolingError, ToolingResult};
+pub use navigation::{
+    ToolDocumentSymbol, ToolLocation, ToolTextEdit, ToolWorkspaceEdit, ToolWorkspaceSymbol,
+    definition_for_project_file_with_overlay, document_symbols_for_project_file_with_overlay,
+    prepare_rename_for_project_file_with_overlay, references_for_project_file_with_overlay,
+    rename_for_project_file_with_overlay, workspace_symbols_for_project_file_with_overlay,
+};
 pub use semantic::{
     ToolSemanticModifier, ToolSemanticModifierList, ToolSemanticToken, ToolSemanticTokenKind,
     ToolSemanticTokenList, semantic_tokens_for_project_file,

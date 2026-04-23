@@ -3,14 +3,16 @@ use std::path::{Component, Path, PathBuf};
 
 use async_lsp::lsp_types::{
     CompletionItem, CompletionItemKind, CompletionTextEdit, Diagnostic,
-    DiagnosticRelatedInformation, DiagnosticSeverity, Documentation, InlayHint, InlayHintKind,
-    InlayHintLabel, InlayHintTooltip, Location, NumberOrString, Position, Range, SemanticToken,
-    SemanticTokenModifier, SemanticTokenType, SemanticTokensLegend, TextEdit, Url,
+    DiagnosticRelatedInformation, DiagnosticSeverity, DocumentSymbol, Documentation, InlayHint,
+    InlayHintKind, InlayHintLabel, InlayHintTooltip, Location, NumberOrString, Position, Range,
+    SemanticToken, SemanticTokenModifier, SemanticTokenType, SemanticTokensLegend,
+    SymbolInformation, SymbolKind, TextEdit, Url, WorkspaceEdit,
 };
 use musi_tooling::{
     CliDiagnostic, CliDiagnosticLabel, CliDiagnosticRange, ToolCompletion, ToolCompletionKind,
-    ToolInlayHint, ToolInlayHintKind, ToolPosition, ToolRange, ToolSemanticModifier,
-    ToolSemanticToken, ToolSemanticTokenKind,
+    ToolDocumentSymbol, ToolInlayHint, ToolInlayHintKind, ToolLocation, ToolPosition, ToolRange,
+    ToolSemanticModifier, ToolSemanticToken, ToolSemanticTokenKind, ToolSymbolKind,
+    ToolWorkspaceEdit, ToolWorkspaceSymbol,
 };
 
 pub(super) fn to_lsp_completion(completion: ToolCompletion) -> CompletionItem {
@@ -33,6 +35,67 @@ pub(super) fn to_lsp_completion(completion: ToolCompletion) -> CompletionItem {
     }
 }
 
+pub(super) fn to_lsp_location(location: ToolLocation) -> Option<Location> {
+    Some(Location {
+        uri: Url::from_file_path(location.path).ok()?,
+        range: to_tool_range(&location.range),
+    })
+}
+
+pub(super) fn to_lsp_document_symbol(symbol: ToolDocumentSymbol) -> DocumentSymbol {
+    #[allow(deprecated)]
+    DocumentSymbol {
+        name: symbol.name,
+        detail: None,
+        kind: to_symbol_kind(symbol.kind),
+        tags: None,
+        deprecated: None,
+        range: to_tool_range(&symbol.range),
+        selection_range: to_tool_range(&symbol.selection_range),
+        children: (!symbol.children.is_empty()).then(|| {
+            symbol
+                .children
+                .into_iter()
+                .map(to_lsp_document_symbol)
+                .collect()
+        }),
+    }
+}
+
+pub(super) fn to_lsp_symbol_information(symbol: ToolWorkspaceSymbol) -> Option<SymbolInformation> {
+    #[allow(deprecated)]
+    Some(SymbolInformation {
+        name: symbol.name,
+        kind: to_symbol_kind(symbol.kind),
+        tags: None,
+        deprecated: None,
+        location: to_lsp_location(symbol.location)?,
+        container_name: None,
+    })
+}
+
+pub(super) fn to_lsp_workspace_edit(edit: ToolWorkspaceEdit) -> WorkspaceEdit {
+    let changes = edit
+        .changes
+        .into_iter()
+        .filter_map(|(path, edits)| {
+            let uri = Url::from_file_path(path).ok()?;
+            Some((
+                uri,
+                edits
+                    .into_iter()
+                    .map(|edit| TextEdit::new(to_tool_range(&edit.range), edit.new_text))
+                    .collect(),
+            ))
+        })
+        .collect();
+    WorkspaceEdit {
+        changes: Some(changes),
+        document_changes: None,
+        change_annotations: None,
+    }
+}
+
 const fn to_completion_item_kind(kind: ToolCompletionKind) -> CompletionItemKind {
     match kind {
         ToolCompletionKind::Keyword => CompletionItemKind::KEYWORD,
@@ -47,6 +110,19 @@ const fn to_completion_item_kind(kind: ToolCompletionKind) -> CompletionItemKind
         ToolCompletionKind::Module => CompletionItemKind::MODULE,
         ToolCompletionKind::Property => CompletionItemKind::PROPERTY,
         ToolCompletionKind::EnumMember => CompletionItemKind::ENUM_MEMBER,
+    }
+}
+
+const fn to_symbol_kind(kind: ToolSymbolKind) -> SymbolKind {
+    match kind {
+        ToolSymbolKind::Function | ToolSymbolKind::Procedure => SymbolKind::FUNCTION,
+        ToolSymbolKind::Variable | ToolSymbolKind::Parameter => SymbolKind::VARIABLE,
+        ToolSymbolKind::TypeParameter => SymbolKind::TYPE_PARAMETER,
+        ToolSymbolKind::Type => SymbolKind::STRUCT,
+        ToolSymbolKind::Namespace => SymbolKind::NAMESPACE,
+        ToolSymbolKind::Alias => SymbolKind::CONSTANT,
+        ToolSymbolKind::Property => SymbolKind::PROPERTY,
+        ToolSymbolKind::EnumMember => SymbolKind::ENUM_MEMBER,
     }
 }
 

@@ -703,7 +703,7 @@ fn clean_block_doc_text(text: &str, opener_len: usize) -> String {
         .to_owned()
 }
 
-fn binding_symbol_kind(
+pub fn binding_symbol_kind(
     binding_id: NameBindingId,
     binding: &NameBinding,
     sema: Option<&SemaModule>,

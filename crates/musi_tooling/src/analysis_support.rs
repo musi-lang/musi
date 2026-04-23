@@ -104,7 +104,6 @@ fn foundation_module_key_for_path(path: &Path) -> Option<ModuleKey> {
         "time.ms" => "musi:time",
         "random.ms" => "musi:random",
         "text.ms" => "musi:text",
-        "path_host.ms" => "musi:path",
         "json_host.ms" => "musi:json",
         "encoding_host.ms" => "musi:encoding",
         "fmt.ms" => "musi:fmt",

@@ -54,6 +54,23 @@ mod success {
         assert!(result.capabilities.semantic_tokens_provider.is_some());
         assert!(result.capabilities.inlay_hint_provider.is_some());
         assert!(result.capabilities.completion_provider.is_some());
+        assert_eq!(
+            result.capabilities.definition_provider,
+            Some(OneOf::Left(true))
+        );
+        assert_eq!(
+            result.capabilities.references_provider,
+            Some(OneOf::Left(true))
+        );
+        assert_eq!(
+            result.capabilities.document_symbol_provider,
+            Some(OneOf::Left(true))
+        );
+        assert_eq!(
+            result.capabilities.workspace_symbol_provider,
+            Some(OneOf::Left(true))
+        );
+        assert!(result.capabilities.rename_provider.is_some());
     }
 
     #[test]

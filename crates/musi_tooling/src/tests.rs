@@ -18,10 +18,13 @@ use musi_project::{Project, ProjectDiagKind, ProjectError, ProjectOptions};
 use crate::{
     ToolInlayHintKind, ToolSemanticModifier, ToolSemanticTokenKind, ToolingDiagKind, ToolingError,
     artifact::write_output, collect_project_diagnostics_with_overlay,
-    completions_for_project_file_with_overlay, hover_for_project_file_with_overlay,
+    completions_for_project_file_with_overlay, definition_for_project_file_with_overlay,
+    document_symbols_for_project_file_with_overlay, hover_for_project_file_with_overlay,
     inlay_hints_for_project_file_with_overlay, load_direct_graph,
-    module_docs_for_project_file_with_overlay, project_error_report,
-    semantic_tokens_for_project_file_with_overlay, session_error_report, tooling_error_report,
+    module_docs_for_project_file_with_overlay, prepare_rename_for_project_file_with_overlay,
+    project_error_report, references_for_project_file_with_overlay,
+    rename_for_project_file_with_overlay, semantic_tokens_for_project_file_with_overlay,
+    session_error_report, tooling_error_report, workspace_symbols_for_project_file_with_overlay,
 };
 
 static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(0);
@@ -244,6 +247,108 @@ span.lower
     }
 
     #[test]
+    fn definition_resolves_local_binding_from_reference() {
+        let temp = TempDir::new();
+        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let source = "let before := 1;\nlet after := before;\n";
+        write_file(temp.path(), "index.ms", source);
+
+        let location = definition_for_project_file_with_overlay(
+            &temp.path().join("index.ms"),
+            Some(source),
+            2,
+            14,
+        )
+        .expect("definition should resolve");
+
+        assert_eq!(location.path, temp.path().join("index.ms"));
+        assert_eq!(location.range.start_line, 1);
+        assert_eq!(location.range.start_col, 5);
+        assert_eq!(location.range.end_col, 11);
+    }
+
+    #[test]
+    fn references_include_definition_when_requested() {
+        let temp = TempDir::new();
+        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let source = "let before := 1;\nlet after := before;\n";
+        write_file(temp.path(), "index.ms", source);
+
+        let references = references_for_project_file_with_overlay(
+            &temp.path().join("index.ms"),
+            Some(source),
+            2,
+            14,
+            true,
+        );
+
+        assert_eq!(references.len(), 2);
+        assert_eq!(references[0].range.start_line, 1);
+        assert_eq!(references[1].range.start_line, 2);
+    }
+
+    #[test]
+    fn rename_returns_workspace_edits_for_definition_and_references() {
+        let temp = TempDir::new();
+        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let source = "let before := 1;\nlet after := before;\n";
+        write_file(temp.path(), "index.ms", source);
+
+        let prepared = prepare_rename_for_project_file_with_overlay(
+            &temp.path().join("index.ms"),
+            Some(source),
+            2,
+            14,
+        )
+        .expect("rename should prepare");
+        let edit = rename_for_project_file_with_overlay(
+            &temp.path().join("index.ms"),
+            Some(source),
+            2,
+            14,
+            "renamed",
+        )
+        .expect("rename should produce edits");
+        let edits = edit
+            .changes
+            .get(&temp.path().join("index.ms"))
+            .expect("file edits should exist");
+
+        assert_eq!(prepared.1, "before");
+        assert_eq!(edits.len(), 2);
+        assert!(edits.iter().all(|edit| edit.new_text == "renamed"));
+    }
+
+    #[test]
+    fn document_and_workspace_symbols_include_local_defs() {
+        let temp = TempDir::new();
+        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let source = "let before := 1;\nlet after := before;\n";
+        write_file(temp.path(), "index.ms", source);
+
+        let document_symbols = document_symbols_for_project_file_with_overlay(
+            &temp.path().join("index.ms"),
+            Some(source),
+        );
+        let workspace_symbols = workspace_symbols_for_project_file_with_overlay(
+            &temp.path().join("index.ms"),
+            Some(source),
+            "bef",
+        );
+
+        assert!(
+            document_symbols
+                .iter()
+                .any(|symbol| symbol.name == "before")
+        );
+        assert!(
+            workspace_symbols
+                .iter()
+                .any(|symbol| symbol.name == "before")
+        );
+    }
+
+    #[test]
     fn semantic_tokens_complete_textmate_without_lexical_overrides() {
         let temp = TempDir::new();
         write_file(temp.path(), "musi.json", APP_MANIFEST);
@@ -449,9 +554,9 @@ one.inc(2);
         write_file(
             temp.path(),
             "methods.ms",
-            "export let(self : String).length () : Int := 1;\n",
+            "export let(self : String).byteSize () : Int := 1;\n",
         );
-        let source = "import \"./methods.ms\";\n\"abc\".length();\n";
+        let source = "import \"./methods.ms\";\n\"abc\".byteSize();\n";
         write_file(temp.path(), "index.ms", source);
 
         let hover =
@@ -463,7 +568,7 @@ one.inc(2);
         assert!(
             hover
                 .contents
-                .starts_with("```musi\n(procedure) length : () -> Int\n```"),
+                .starts_with("```musi\n(procedure) byteSize : () -> Int\n```"),
             "{}",
             hover.contents
         );
