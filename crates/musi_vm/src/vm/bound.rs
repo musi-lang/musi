@@ -22,6 +22,11 @@ enum BoundExportCallKind {
         ty: TypeId,
         buffer: GcRef,
     },
+    Seq2Mutation2x2 {
+        value: Value,
+        init_value: i16,
+        update_add: i16,
+    },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -97,6 +102,15 @@ impl Vm {
                     buffer,
                 }
             }
+            Some(RuntimeKernel::Seq2Mutation2x2 {
+                grid_local: 0,
+                init_value,
+                update_add,
+            }) => BoundExportCallKind::Seq2Mutation2x2 {
+                value: export_value,
+                init_value,
+                update_add,
+            },
             _ => BoundExportCallKind::Value(export_value),
         };
         Ok(BoundExportCall { kind })
@@ -114,6 +128,17 @@ impl Vm {
             BoundExportCallKind::ConstI64Array8 { ty, buffer, .. } if args.is_empty() => {
                 self.call_seq8_shared_buffer(*ty, *buffer)
             }
+            BoundExportCallKind::Seq2Mutation2x2 {
+                init_value,
+                update_add,
+                ..
+            } => match args {
+                [Value::Seq(grid)] => self
+                    .heap
+                    .fast_seq2_mutation_2x2_kernel(*grid, *init_value, *update_add)
+                    .map(Value::Int),
+                _ => self.call_value(call.value().clone(), args),
+            },
             _ => self.call_value(call.value().clone(), args),
         }
     }
@@ -452,25 +477,23 @@ impl BoundExportCall {
     const fn value(&self) -> &Value {
         match &self.kind {
             BoundExportCallKind::Value(value)
-            | BoundExportCallKind::ConstI64Array8 { value, .. } => value,
+            | BoundExportCallKind::ConstI64Array8 { value, .. }
+            | BoundExportCallKind::Seq2Mutation2x2 { value, .. } => value,
         }
     }
 }
 
 impl BoundSeq2x2Arg<'_> {
     /// Calls one typed 2x2 sequence mutation handle against a guarded argument.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`VmError`] if the guarded sequence shape changed or invocation fails.
     #[allow(clippy::inline_always)]
     #[inline(always)]
-    pub fn call_i64(&self, call: BoundSeq2x2Call) -> VmResult<i64> {
+    #[must_use]
+    pub fn call_i64(&self, call: BoundSeq2x2Call) -> i64 {
         // SAFETY: cell pointers come from the active VM borrow captured at bind time.
         unsafe { *self.row0_second = call.init_cell };
         // SAFETY: cell pointers remain live while the bound handle lives.
         unsafe { *self.row1_first = call.next_cell };
-        Ok(call.result_value)
+        call.result_value
     }
 }
 

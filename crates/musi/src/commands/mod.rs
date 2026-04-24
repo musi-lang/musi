@@ -1,4 +1,4 @@
-use std::env::current_dir;
+use std::env::{current_dir, var};
 use std::ffi::OsStr;
 use std::fs;
 use std::io::{self, Read};
@@ -28,6 +28,7 @@ use musi_tooling::{
     CliDiagnosticsReport, DiagnosticsFormat, ToolingError, project_error_report,
     render_project_error, render_session_error, session_error_report, write_artifact_bytes,
 };
+use musi_vm::VmOptions;
 use music_sema::TargetInfo;
 use music_session::{Session, SessionError};
 
@@ -219,15 +220,11 @@ pub fn build(
 }
 
 pub fn run_project(target: Option<&Path>, args: &[String]) -> MusiResult {
-    if let Some(argument) = args.first() {
-        return Err(MusiError::UnsupportedRunArgs {
-            argument: argument.clone(),
-        });
-    }
+    let vm_options = mvm_options_from_args(args)?;
     let anchor = project_anchor(target)?;
     let project = load_project_ancestor(anchor, ProjectOptions::default())?;
     let entry = resolve_project_entry(&project, target)?;
-    let mut runtime = project_runtime(&project);
+    let mut runtime = project_runtime_with_vm(&project, RuntimeOutputMode::Inherit, vm_options);
     runtime.load_root(entry.module_key.as_str())?;
     Ok(())
 }
@@ -635,13 +632,14 @@ fn project_anchor(target: Option<&Path>) -> MusiResult<PathBuf> {
     ))
 }
 
-fn project_runtime(project: &Project) -> Runtime {
-    project_runtime_with_output(project, RuntimeOutputMode::Inherit)
+fn project_runtime_with_output(project: &Project, output: RuntimeOutputMode) -> Runtime {
+    project_runtime_with_vm(project, output, VmOptions)
 }
 
-fn project_runtime_with_output(project: &Project, output: RuntimeOutputMode) -> Runtime {
+fn project_runtime_with_vm(project: &Project, output: RuntimeOutputMode, vm: VmOptions) -> Runtime {
     let mut options = RuntimeOptions::default();
     options.session.import_map = project.import_map().clone();
+    options.vm = vm;
     options.output = output;
     let mut runtime = Runtime::new(NativeHost::new(), options);
     for (key, text) in project.module_texts() {
@@ -650,6 +648,15 @@ fn project_runtime_with_output(project: &Project, output: RuntimeOutputMode) -> 
             .expect("project module texts should register into runtime");
     }
     runtime
+}
+
+fn mvm_options_from_args(args: &[String]) -> MusiResult<VmOptions> {
+    let env_options = var("MVM_OPTIONS").ok();
+    VmOptions::parse_mvm_options(env_options.as_deref(), args).map_err(|error| {
+        MusiError::UnsupportedRunArgs {
+            argument: error.message().to_owned(),
+        }
+    })
 }
 
 fn resolve_project_entry(project: &Project, target: Option<&Path>) -> MusiResult<ProjectEntry> {

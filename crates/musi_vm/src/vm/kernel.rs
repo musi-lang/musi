@@ -2,8 +2,8 @@ use crate::{VmIndexSpace, VmValueKind};
 use music_seam::{ProcedureId, TypeId};
 
 use super::{
-    CompareOp, GcRef, RuntimeKernel, RuntimeSeq2Mutation, Value, Vm, VmError, VmErrorKind,
-    VmOptimizationLevel, VmResult,
+    CompareOp, GcRef, MvmMode, RuntimeKernel, RuntimeSeq2Mutation, Value, Vm, VmError, VmErrorKind,
+    VmResult,
 };
 
 impl Vm {
@@ -29,7 +29,8 @@ impl Vm {
     }
 
     const fn kernels_enabled(&self) -> bool {
-        matches!(self.options.optimization_level, VmOptimizationLevel::Tiered)
+        self.options.features.has_runtime_kernels()
+            && !matches!(self.options.mode, MvmMode::DebugInterpreter)
             && self.options.instruction_budget.is_none()
             && self.options.stack_frame_limit.is_none()
     }

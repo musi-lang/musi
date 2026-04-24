@@ -20,7 +20,7 @@ Current public entrypoints by crate. Keep this list high-signal. Do not mirror e
 ## Runtime libraries
 
 - `music_seam` — SEAM artifact encode/decode, SEAM HIL model/verifier, lowered `.seam` text, instruction/types surface
-- `musi_vm` — `Program`, `Vm`, runtime `Value`, value inspection views, host/loader traits, VM errors
+- `musi_vm` — `Program`, `Vm`, `VmOptions`, `MvmMode`, `MvmFeatures`, `VmOptimizationLevel`, `MvmOptionsParseError`, runtime `Value`, bound call handles, value inspection views, host/loader traits, VM errors
 - `musi_native` — `NativeHost`, native test report types
 - `musi_rt` — `Runtime`, `RuntimeOptions`, runtime errors
 - `musi_foundation` — compiler-owned foundation/runtime module registration helpers

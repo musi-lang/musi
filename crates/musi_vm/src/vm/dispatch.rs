@@ -7,7 +7,7 @@ use crate::{VmIndexSpace, VmStackKind, VmValueKind};
 
 use super::state::{CallFrame, CallFrameList, EffectHandler, EffectHandlerList, StepOutcome};
 use super::{
-    CompareOp, GcRef, OperandShape, RuntimeCallMode, RuntimeCallShape, RuntimeFusedOp,
+    CompareOp, GcRef, MvmMode, OperandShape, RuntimeCallMode, RuntimeCallShape, RuntimeFusedOp,
     RuntimeInstruction, RuntimeOperand, Value, ValueList, VmError, VmErrorKind, VmResult,
 };
 
@@ -187,11 +187,13 @@ impl Vm {
         &mut self,
         runtime: &RuntimeInstruction,
     ) -> VmResult<StepOutcome> {
-        if let Some(fused) = runtime.fused {
-            return self.exec_fused(fused);
-        }
-        if let Some((compare, target)) = runtime.compare_branch {
-            return self.exec_compare_branch(compare, target);
+        if self.optimized_dispatch_enabled() {
+            if let Some(fused) = runtime.fused {
+                return self.exec_fused(fused);
+            }
+            if let Some((compare, target)) = runtime.compare_branch {
+                return self.exec_compare_branch(compare, target);
+            }
         }
         match runtime.opcode {
             Opcode::LdLoc => self.exec_fast_ldloc(runtime),
@@ -281,6 +283,11 @@ impl Vm {
             }
             _ => Err(Self::invalid_dispatch(instruction, "general")),
         }
+    }
+
+    const fn optimized_dispatch_enabled(&self) -> bool {
+        self.options.features.has_fused_dispatch()
+            && !matches!(self.options.mode, MvmMode::DebugInterpreter)
     }
 }
 

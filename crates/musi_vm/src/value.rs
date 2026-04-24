@@ -376,14 +376,6 @@ impl SequenceValue {
         }
     }
 
-    pub(crate) fn set_int_pair_cell(&mut self, index: usize, value: i64) -> Option<()> {
-        let SequenceStorage::IntPair(cells) = &mut self.storage else {
-            return None;
-        };
-        *cells.get_mut(index)? = value;
-        Some(())
-    }
-
     pub(crate) const fn int_pair_mut(&mut self) -> Option<&mut [i64; 2]> {
         let SequenceStorage::IntPair(cells) = &mut self.storage else {
             return None;

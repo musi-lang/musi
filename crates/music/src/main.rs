@@ -1,6 +1,7 @@
 mod cli;
 mod diag;
 
+use std::env::var;
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 use std::path::{Path, PathBuf};
@@ -171,29 +172,34 @@ fn build(path: &Path, out: Option<&Path>) -> MusicResult {
 }
 
 fn run_target(path: &Path, args: &[String]) -> MusicResult {
-    if let Some(argument) = args.first() {
-        return Err(MusicError::UnsupportedRunArgs {
-            argument: argument.clone(),
-        });
-    }
+    let vm_options = mvm_options_from_args(args)?;
     if path.extension().is_some_and(|ext| ext == "seam") {
         let bytes = read_artifact_bytes(path)?;
         let program = Program::from_bytes(&bytes)?;
-        return run_program(program);
+        return run_program(program, vm_options);
     }
     let graph = load_direct_graph(path)?;
     let mut session = graph.build_session(SessionOptions::default())?;
     let output = session.compile_entry(graph.entry_key())?;
     let program = Program::from_bytes(&output.bytes)?;
-    run_program(program)
+    run_program(program, vm_options)
 }
 
-fn run_program(program: Program) -> MusicResult {
-    let mut vm = Vm::with_rejecting_host(program, VmOptions);
+fn run_program(program: Program, vm_options: VmOptions) -> MusicResult {
+    let mut vm = Vm::with_rejecting_host(program, vm_options);
     vm.initialize()?;
     let main_result = vm.call_export("main", &[])?;
     print_vm_value(&vm, &main_result);
     Ok(())
+}
+
+fn mvm_options_from_args(args: &[String]) -> MusicResult<VmOptions> {
+    let env_options = var("MVM_OPTIONS").ok();
+    VmOptions::parse_mvm_options(env_options.as_deref(), args).map_err(|error| {
+        MusicError::UnsupportedRunArgs {
+            argument: error.message().to_owned(),
+        }
+    })
 }
 
 fn print_artifact_metadata(path: &Path) -> MusicResult {

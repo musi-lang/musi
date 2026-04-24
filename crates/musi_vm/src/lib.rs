@@ -15,10 +15,11 @@ mod vm;
 
 pub use api::{
     BitsValue, BoundExportCall, BoundI64Call, BoundInitCall, BoundSeq2x2Arg, BoundSeq2x2Call,
-    BoundSeq8Call, ClosureView, ForeignView, HeapCollectionStats, IsolateId, ModuleView, Program,
-    ProgramDataLayout, ProgramDataVariantLayout, ProgramExport, ProgramExportKind,
-    ProgramTypeAbiKind, RecordView, RejectingHost, RejectingLoader, SeqView, StringView, Value,
-    ValueView, Vm, VmHost, VmHostCallContext, VmHostContext, VmLoader, VmOptions, VmRuntime,
+    BoundSeq8Call, ClosureView, ForeignView, HeapCollectionStats, IsolateId, ModuleView,
+    MvmFeatures, MvmMode, MvmOptionsParseError, Program, ProgramDataLayout,
+    ProgramDataVariantLayout, ProgramExport, ProgramExportKind, ProgramTypeAbiKind, RecordView,
+    RejectingHost, RejectingLoader, SeqView, StringView, Value, ValueView, Vm, VmHost,
+    VmHostCallContext, VmHostContext, VmLoader, VmOptimizationLevel, VmOptions, VmRuntime,
     render_value_view,
 };
 pub use diag::VmDiagKind;

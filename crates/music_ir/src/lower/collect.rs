@@ -277,7 +277,7 @@ fn collect_nested_bindings(
         }
         IrExprKind::Index { base, indices } => {
             collect(base, out);
-            collect_expr_slice(indices, out, collect_used_bindings);
+            collect_expr_slice(indices, out, collect);
         }
         IrExprKind::ModuleGet { base, .. }
         | IrExprKind::RecordGet { base, .. }
@@ -293,26 +293,26 @@ fn collect_nested_bindings(
         | IrExprKind::Request { args: exprs, .. }
         | IrExprKind::ClosureNew {
             captures: exprs, ..
-        } => collect_expr_slice(exprs, out, collect_used_bindings),
+        } => collect_expr_slice(exprs, out, collect),
         IrExprKind::ArrayCat { parts, .. }
         | IrExprKind::CallParts { args: parts, .. }
         | IrExprKind::RequestSeq { args: parts, .. } => {
-            collect_seq_part_exprs(parts, out, collect_used_bindings);
+            collect_seq_part_exprs(parts, out, collect);
         }
         IrExprKind::Record { fields, .. } => {
-            collect_record_field_exprs(fields, out, collect_used_bindings);
+            collect_record_field_exprs(fields, out, collect);
         }
         IrExprKind::RecordUpdate { base, updates, .. } => {
             collect(base, out);
-            collect_record_field_exprs(updates, out, collect_used_bindings);
+            collect_record_field_exprs(updates, out, collect);
         }
         IrExprKind::Match { scrutinee, arms } => collect_match(scrutinee, arms, out),
         IrExprKind::Call { callee, args } => {
             collect(callee, out);
-            collect_call_arg_exprs(args, out, collect_used_bindings);
+            collect_call_arg_exprs(args, out, collect);
         }
         IrExprKind::IntrinsicCall { args, .. } => {
-            collect_call_arg_exprs(args, out, collect_used_bindings);
+            collect_call_arg_exprs(args, out, collect);
         }
         IrExprKind::AnswerLit { value, ops, .. } => {
             collect(value, out);
