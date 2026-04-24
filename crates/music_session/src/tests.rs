@@ -1,7 +1,8 @@
 #![allow(unused_imports)]
 
 use musi_vm::{
-    EffectCall, ForeignCall, Program, Value, Vm, VmError, VmErrorKind, VmHost, VmOptions, VmResult,
+    EffectCall, ForeignCall, Program, Value, ValueView, Vm, VmError, VmErrorKind, VmHost,
+    VmHostCallContext, VmHostContext, VmOptions, VmResult,
 };
 use music_base::diag::Diag;
 use music_emit::{EmitDiagKind, emit_diag_kind};
@@ -79,7 +80,7 @@ fn register_test_intrinsics(session: &mut Session) {
         .set_module_text(
             &ModuleKey::new("musi:test"),
             r#"
-            export foreign "musi" (
+            export native "musi" (
               let suiteStart (name : String) : Unit;
               let testCase (name : String, passed : Bool) : Unit;
               let suiteEnd () : Unit;
@@ -117,13 +118,23 @@ fn compile_main_entry_with_source(source: &str) -> CompiledOutput {
 struct CtfeTestHost;
 
 impl VmHost for CtfeTestHost {
-    fn call_foreign(&mut self, foreign: &ForeignCall, _args: &[Value]) -> VmResult<Value> {
+    fn call_foreign(
+        &mut self,
+        _ctx: VmHostCallContext<'_, '_>,
+        foreign: &ForeignCall,
+        _args: &[Value],
+    ) -> VmResult<Value> {
         Err(VmError::new(VmErrorKind::ForeignCallRejected {
             foreign: foreign.name().into(),
         }))
     }
 
-    fn handle_effect(&mut self, effect: &EffectCall, _args: &[Value]) -> VmResult<Value> {
+    fn handle_effect(
+        &mut self,
+        _ctx: VmHostCallContext<'_, '_>,
+        effect: &EffectCall,
+        _args: &[Value],
+    ) -> VmResult<Value> {
         match (effect.effect_name(), effect.op_name()) {
             ("main::Clock", "tick") => Ok(Value::Int(42)),
             _ => Err(VmError::new(VmErrorKind::EffectRejected {
@@ -203,7 +214,7 @@ macro_rules! assert_main_entry_compiles_with {
 macro_rules! assert_emit_failure_with_unknown_type_value {
     ($run:expr $(,)?) => {{
         let mut session = session();
-        set_main_text(&mut session, "export let answer : Int := 42;");
+        set_main_text(&mut session, "export let result : Int := 42;");
         session.inject_emit_failure_for_tests(
             vec![
                 Diag::error("unknown emitted type value `Injected`")
@@ -233,10 +244,10 @@ mod success {
         let output = compile_main_entry_with_source(
             r"
         let add (a : Int, b : Int) : Int := a + b;
-        export let answer () : Int := comptime add(20, 22);
+        export let result () : Int := comptime add(20, 22);
     ",
         );
-        assert_eq!(run_export(&output, "answer"), Value::Int(42));
+        assert_eq!(run_export(&output, "result"), Value::Int(42));
     }
 
     #[test]
@@ -245,10 +256,10 @@ mod success {
             r"
         let add (a : Int, b : Int) : Int := a + b;
         let scale (comptime n : Int, x : Int) : Int := x * n;
-        export let answer () : Int := scale(add(20, 22), 2);
+        export let result () : Int := scale(add(20, 22), 2);
     ",
         );
-        assert_eq!(run_export(&output, "answer"), Value::Int(84));
+        assert_eq!(run_export(&output, "result"), Value::Int(84));
     }
 
     #[test]
@@ -260,26 +271,26 @@ mod success {
           | None
         };
         let make () : Maybe := .Some(42);
-        export let answer () : Int := match comptime make() (
+        export let result () : Int := match comptime make() (
           | .Some(value) => value
           | .None => 0
         );
     ",
         );
-        assert_eq!(run_export(&output, "answer"), Value::Int(42));
+        assert_eq!(run_export(&output, "result"), Value::Int(42));
     }
 
     #[test]
     fn compiles_comptime_sequence_value_as_runtime_value() {
         let output = compile_main_entry_with_source(
             r"
-        export let answer () : Int := match comptime [40, 2] (
+        export let result () : Int := match comptime [40, 2] (
           | [left, right] => left + right
           | _ => 0
         );
     ",
         );
-        assert_eq!(run_export(&output, "answer"), Value::Int(42));
+        assert_eq!(run_export(&output, "result"), Value::Int(42));
     }
 
     #[test]
@@ -288,10 +299,10 @@ mod success {
             r"
         let makeAdder (n : Int) := \(x : Int) => x + n;
         let add := comptime makeAdder(40);
-        export let answer () : Int := add(2);
+        export let result () : Int := add(2);
     ",
         );
-        assert_eq!(run_export(&output, "answer"), Value::Int(42));
+        assert_eq!(run_export(&output, "result"), Value::Int(42));
     }
 
     #[test]
@@ -301,13 +312,14 @@ mod success {
         let Clock := effect {
           let tick () : Int;
         };
-        export let answer () : Int := comptime handle request Clock.tick() using Clock {
+        let clockAnswer := answer Clock {
           value => value;
           tick(k) => resume 21;
         };
+        export let result () : Int := comptime handle ask Clock.tick() answer clockAnswer;
     ",
         );
-        assert_eq!(run_export(&output, "answer"), Value::Int(21));
+        assert_eq!(run_export(&output, "result"), Value::Int(21));
     }
 
     #[test]
@@ -321,18 +333,18 @@ mod success {
           @comptimeSafe
           let tick () : Int;
         };
-        export let answer () : Int := comptime request Clock.tick();
+        export let result () : Int := comptime ask Clock.tick();
     ",
         );
         let output = compile_main_entry(&mut session);
-        assert_eq!(run_export(&output, "answer"), Value::Int(42));
+        assert_eq!(run_export(&output, "result"), Value::Int(42));
     }
 
     #[test]
     fn compiles_module_to_artifact_bytes_and_text() {
         let output = assert_main_module_compiles_with(
-            "export let answer : Int := 42;",
-            &[".global $main::answer export"],
+            "export let result : Int := 42;",
+            &[".global $main::result export"],
         );
         assert!(!output.bytes.is_empty());
     }
@@ -340,8 +352,8 @@ mod success {
     #[test]
     fn compiles_piped_calls_as_normal_calls() {
         let output = assert_main_module_compiles_with(
-            "export let add (left : Int, right : Int) : Int := left + right; export let answer : Int := 1 |> add(2);",
-            &[".global $main::answer export"],
+            "export let add (left : Int, right : Int) : Int := left + right; export let result : Int := 1 |> add(2);",
+            &[".global $main::result export"],
         );
         assert!(output.artifact.validate().is_ok());
     }
@@ -350,18 +362,30 @@ mod success {
     fn compiles_reachable_entry_graph() {
         let output = compile_main_entry_with_dep(
             "export let base : Int := 41;",
-            "import \"dep\"; export let answer : Int := 42;",
+            "import \"dep\"; export let result : Int := 42;",
         );
         assert_output_contains(
             &output,
-            &[".global $dep::base export", ".global $main::answer export"],
+            &[".global $dep::base export", ".global $main::result export"],
+        );
+    }
+
+    #[test]
+    fn anonymous_import_exports_enter_lexical_scope() {
+        let output = compile_main_entry_with_dep(
+            "export let base : Int := 41;",
+            r#"import "dep"; export let result : Int := base + 1;"#,
+        );
+        assert_output_contains(
+            &output,
+            &["ld.glob $dep::base", ".global $main::result export"],
         );
     }
 
     #[test]
     fn resolve_reuses_cached_parse_product() {
         let mut session = session();
-        set_main_text(&mut session, "export let answer : Int := 42;");
+        set_main_text(&mut session, "export let result : Int := 42;");
 
         let _ = session.parse_module(&main_key()).unwrap();
         let after_parse = session.stats().clone();
@@ -377,10 +401,10 @@ mod success {
             "export let id[T] (x : T) : T := x;",
             r#"
             let dep := import "dep";
-            export let answer () : Int := dep.id[Int](42);
+            export let result () : Int := dep.id[Int](42);
         "#,
         );
-        assert_output_contains(&output, &["$dep::id", "$main::answer"]);
+        assert_output_contains(&output, &["$dep::id", "$main::result"]);
     }
 
     #[test]
@@ -390,7 +414,7 @@ mod success {
             r#"
             let core := import "dep";
             export let copy := core.copy;
-            export let answer () : []Int := copy[Int]([1, 2, 3]);
+            export let result () : []Int := copy[Int]([1, 2, 3]);
         "#,
         );
 
@@ -398,38 +422,39 @@ mod success {
             &output,
             &[
                 ".procedure $main::copy::init",
-                "cls.new $dep::copy",
-                "$main::answer",
+                "new.fn $dep::copy",
+                "$main::result",
             ],
         );
-        let int_array_ty = output
-            .artifact
-            .types
-            .iter()
-            .find_map(|(id, _)| (output.artifact.type_name(id) == "[]Int").then_some(id))
-            .unwrap();
-        assert_eq!(
-            run_export(&output, "answer"),
-            Value::sequence(int_array_ty, [1, 2, 3].map(Value::Int))
-        );
+        let program = Program::from_bytes(&output.bytes).expect("program should load");
+        let mut vm = Vm::with_rejecting_host(program, VmOptions);
+        vm.initialize().expect("program should initialize");
+        let value = vm.call_export("result", &[]).expect("export should run");
+        let ValueView::Seq(seq) = vm.inspect(&value) else {
+            panic!("result should return sequence");
+        };
+        assert_eq!(seq.len(), 3);
+        assert_eq!(seq.get(0), Some(Value::Int(1)));
+        assert_eq!(seq.get(1), Some(Value::Int(2)));
+        assert_eq!(seq.get(2), Some(Value::Int(3)));
     }
 
     #[test]
-    fn compiles_imported_instance_alias_as_global_value() {
+    fn compiles_imported_given_alias_as_global_value() {
         let output = compile_main_entry_with_dep(
             r"
-            export let Eq[T] := class {
+            export let Eq[T] := shape {
               let eq (left : T, right : T) : Bool;
             };
 
-            export let intEq := instance Eq[Int] {
+            export let intEq := given Eq[Int] {
               let eq (left : Int, right : Int) : Bool := left = right;
             };
         ",
             r#"
             let core := import "dep";
             export let intEq := core.intEq;
-            export let answer () : Int := 42;
+            export let result () : Int := 42;
         "#,
         );
 
@@ -441,7 +466,7 @@ mod success {
                 ".global $main::intEq export",
             ],
         );
-        assert_eq!(run_export(&output, "answer"), Value::Int(42));
+        assert_eq!(run_export(&output, "result"), Value::Int(42));
     }
 
     #[test]
@@ -449,9 +474,9 @@ mod success {
         let output = assert_main_module_compiles_with(
             r"
             let scale (comptime n : Int, x : Int) : Int := x * n;
-            export let answer () : Int := scale(3, 14);
+            export let result () : Int := scale(3, 14);
         ",
-            &["scale$ct$0_i3", "$main::answer"],
+            &["scale$ct$0_i3", "$main::result"],
         );
         assert!(output.artifact.validate().is_ok());
     }
@@ -460,9 +485,9 @@ mod success {
     fn compiles_comptime_quote_expr_expansion() {
         let output = assert_main_module_compiles_with(
             r"
-            export let answer () : Int := comptime quote (40 + 2);
+            export let result () : Int := comptime quote (40 + 2);
         ",
-            &["$main::answer", "i.add"],
+            &["$main::result", "add"],
         );
         assert!(output.artifact.validate().is_ok());
     }
@@ -472,10 +497,10 @@ mod success {
         let output = assert_main_module_compiles_with(
             r"
             comptime quote {
-                export let answer () : Int := 42;
+                export let result () : Int := 42;
             };
         ",
-            &["$main::answer", "ld.smi 42"],
+            &["$main::result", "ld.c.i4 42"],
         );
         assert!(output.artifact.validate().is_ok());
     }
@@ -486,11 +511,11 @@ mod success {
             r"
             comptime quote {
                 comptime quote {
-                    export let answer () : Int := 42;
+                    export let result () : Int := 42;
                 };
             };
         ",
-            &["$main::answer", "ld.smi 42"],
+            &["$main::result", "ld.c.i4 42"],
         );
         assert!(output.artifact.validate().is_ok());
     }
@@ -500,11 +525,11 @@ mod success {
         let output = assert_main_module_compiles_with(
             r"
             let generated : Syntax := comptime quote {
-                export let answer () : Int := 42;
+                export let result () : Int := 42;
             };
             comptime generated;
         ",
-            &["$main::answer", "ld.smi 42"],
+            &["$main::result", "ld.c.i4 42"],
         );
         assert!(output.artifact.validate().is_ok());
     }
@@ -514,7 +539,7 @@ mod success {
         let output = compile_main_entry_with_dep(
             r"
             export let generated : Syntax := comptime quote {
-                export let answer () : Int := 42;
+                export let result () : Int := 42;
             };
         ",
             r#"
@@ -522,7 +547,7 @@ mod success {
             comptime dep.generated;
         "#,
         );
-        assert_output_contains(&output, &["$main::answer", "ld.smi 42"]);
+        assert_output_contains(&output, &["$main::result", "ld.c.i4 42"]);
     }
 
     #[test]
@@ -530,11 +555,11 @@ mod success {
         let output = assert_main_module_compiles_with(
             r"
             let generated (value : Int) : Syntax := comptime quote {
-                export let answer () : Int := #(value);
+                export let result () : Int := #(value);
             };
             comptime generated(42);
         ",
-            &["$main::answer", "ld.smi 42"],
+            &["$main::result", "ld.c.i4 42"],
         );
         assert!(output.artifact.validate().is_ok());
     }
@@ -544,7 +569,7 @@ mod success {
         let output = compile_main_entry_with_dep(
             r"
             export let generated (value : Int) : Syntax := comptime quote {
-                export let answer () : Int := #(value);
+                export let result () : Int := #(value);
             };
         ",
             r#"
@@ -552,7 +577,7 @@ mod success {
             comptime dep.generated(42);
         "#,
         );
-        assert_output_contains(&output, &["$main::answer", "ld.smi 42"]);
+        assert_output_contains(&output, &["$main::result", "ld.c.i4 42"]);
     }
 
     #[test]
@@ -562,10 +587,10 @@ mod success {
             r#"
             let dep := import "dep";
             let tools := { id := dep.id };
-            export let answer () : Int := tools.id[Int](42);
+            export let result () : Int := tools.id[Int](42);
         "#,
         );
-        assert_output_contains(&output, &["ty.apply", "$main::answer"]);
+        assert_output_contains(&output, &["call", "$main::result"]);
     }
 
     #[test]
@@ -574,14 +599,14 @@ mod success {
             "export let base : Int := 41;",
             r#"
             let dep := import "dep";
-            export let answer () : Int := (
+            export let result () : Int := (
               let local := mut dep.base;
               local := local + 1;
               local
             );
         "#,
         );
-        assert_output_contains(&output, &["ld.glob $dep::base", "$main::answer"]);
+        assert_output_contains(&output, &["ld.glob $dep::base", "$main::result"]);
     }
 
     #[test]
@@ -594,7 +619,7 @@ mod success {
             );
             export let quoted : Syntax := quote (#(1 + 2));
         ",
-            &["seq.getn", "seq.setn", "syntax expr \"#(1 + 2)\""],
+            &["ld.elem", "st.elem", "syntax expr \"#(1 + 2)\""],
         );
         assert!(output.artifact.constants.iter().any(|(_, constant)| {
             matches!(
@@ -610,13 +635,13 @@ mod success {
         let _ = assert_main_entry_compiles_with!(
             r"
             let apply (f : Int -> Int, x : Int) : Int := f(x);
-            export let answer (x : Int) : Int := (
+            export let result (x : Int) : Int := (
               let base : Int := 41;
               let add_base (y : Int) : Int := y + base;
               apply(add_base, x)
             );
         ",
-            &["call.cls", "cls.new"],
+            &["call.ind", "new.fn"],
         );
     }
 
@@ -629,10 +654,10 @@ mod success {
         };
 
         let render (port : Int, secure : Bool) : Int := port;
-        export let read () : String using { Console } := request Console.readLine(prompt := ">");
+        export let read () : String require { Console } := ask Console.readLine(prompt := ">");
         export let main () : Int := render(secure := 0 = 0, port := 8080);
         "#,
-            &["call $main::render", "eff.invk $main::Console $readLine"],
+            &["call $main::render", "raise $main::Console $readLine"],
         );
     }
 
@@ -640,7 +665,7 @@ mod success {
     fn compiles_local_recursive_callable_let() {
         let _ = assert_main_entry_compiles_with!(
             r"
-            export let answer (n : Int) : Int := (
+            export let result (n : Int) : Int := (
               let rec loop (x : Int) : Int := match x (| 0 => 0 | _ => loop(x - 1));
               loop(n)
             );
@@ -653,7 +678,7 @@ mod success {
     fn compiles_case_tuple_and_array_patterns() {
         let _ = assert_main_entry_compiles_with!(
             r"
-            export let answer () : Int := (
+            export let result () : Int := (
               let pair := (1, 2);
               let items := [3, 4];
               let p : Int := match pair (| (1, b) => b | _ => 0);
@@ -661,7 +686,7 @@ mod success {
               p + q
             );
         ",
-            &["seq.get", "br.false"],
+            &["ld.elem", "br.false"],
         );
     }
 
@@ -669,14 +694,14 @@ mod success {
     fn compiles_records_with_projection_and_update() {
         let _ = assert_main_entry_compiles_with!(
             r"
-            export let answer () : Int := (
+            export let result () : Int := (
               let r := { y := 2, x := 1 };
               let a : Int := r.x;
               let s := { ...r, x := 3 };
               a + s.x
             );
         ",
-            &["data.get", "data.new", ".type $\"{ x: Int; y: Int }\""],
+            &["ld.fld", "new.obj", ".type $\"{ x: Int; y: Int }\""],
         );
     }
 
@@ -687,13 +712,13 @@ mod success {
             let Box[T] := data {
               value : T;
             };
-            export let answer () : String := (
+            export let result () : String := (
               let boxed : Box[String] := { value := "Nora" };
               let renamed := { ...boxed, value := "Miso" };
               renamed.value
             );
         "#,
-            &["data.get", "data.new", ".type $main::Box"],
+            &["ld.fld", "new.obj", ".type $main::Box"],
         );
     }
 
@@ -701,28 +726,28 @@ mod success {
     fn compiles_record_field_assignment() {
         let output = assert_main_entry_compiles_with!(
             r"
-            export let answer () : Int := (
+            export let result () : Int := (
               let r := mut { x := 1, y := 2 };
               r.x := 3;
               r.x
             );
         ",
-            &["data.set"],
+            &["st.fld"],
         );
-        assert!(output.text.contains("data.set"), "{}", output.text);
+        assert!(output.text.contains("st.fld"), "{}", output.text);
     }
 
     #[test]
     fn compiles_record_destructuring_let_patterns() {
         let _ = assert_main_entry_compiles_with!(
             r"
-            export let answer () : Int := (
+            export let result () : Int := (
               let r := { y := 2, x := 1 };
               let {x, y} := r;
               x + y
             );
         ",
-            &["data.get"],
+            &["ld.fld"],
         );
     }
 
@@ -730,7 +755,7 @@ mod success {
     fn compiles_tuple_and_array_destructuring_let_patterns() {
         let _ = assert_main_entry_compiles_with!(
             r"
-            export let answer () : Int := (
+            export let result () : Int := (
               let pair := (1, 2);
               let items := [3, 4];
               let (a, b) := pair;
@@ -738,7 +763,7 @@ mod success {
               a + b + c + d
             );
         ",
-            &["seq.get"],
+            &["ld.elem"],
         );
     }
 
@@ -746,7 +771,7 @@ mod success {
     fn compiles_capturing_recursion_record_patterns_and_type_values() {
         let _ = assert_main_entry_compiles_with!(
             r"
-            export let answer (n : Int) : Int := (
+            export let result (n : Int) : Int := (
               let base := 1;
               let rec loop (x : Int) : Int := match x (| 0 => base | _ => loop(x - 1));
               let point := { x := 1, y := 2 };
@@ -754,7 +779,7 @@ mod success {
               picked + loop(n)
             );
         ",
-            &["data.get", "call.cls"],
+            &["ld.fld", "call.ind"],
         );
     }
 
@@ -763,7 +788,7 @@ mod success {
         let _ = assert_main_entry_compiles_with!(
             r"
             let Maybe := data { | Some(Int) | None };
-            export let answer () : Int := (
+            export let result () : Int := (
               let x : Maybe := .Some(1);
               match x (
               | .Some(y) => y
@@ -772,10 +797,10 @@ mod success {
             );
         ",
             &[
-                "data.tag",
+                "ld.fld",
                 "br.tbl",
-                "data.get",
-                "data.new",
+                "ld.fld",
+                "new.obj",
                 ".type $main::Maybe"
             ],
         );
@@ -786,7 +811,7 @@ mod success {
         let _ = assert_main_entry_compiles_with!(
             r"
             let Maybe := data { | Some(Int) | None };
-            export let answer () : Int := (
+            export let result () : Int := (
               let x := .Some(1);
               match x (
               | .Some(y) => y
@@ -794,7 +819,7 @@ mod success {
               )
             );
         ",
-            &["data.tag", "br.tbl", "data.get", "data.new"],
+            &["ld.fld", "br.tbl", "ld.fld", "new.obj"],
         );
     }
 
@@ -803,38 +828,39 @@ mod success {
         let _ = assert_main_entry_compiles_with!(
             r#"
             let Console := effect { let readLine () : String; };
-            export let answer () : String :=
-              handle request Console.readLine() using Console {
-                value => value;
-                readLine(k) => resume "ok";
-              };
+            let consoleAnswer := answer Console {
+              value => value;
+              readLine(k) => resume "ok";
+            };
+            export let result () : String :=
+              handle ask Console.readLine() answer consoleAnswer;
         "#,
-            &["hdl.push", "hdl.pop", "eff.invk", "eff.resume"],
+            &["hdl.push", "hdl.pop", "raise", "resume"],
         );
     }
 
     #[test]
-    fn compiles_exported_foreign_declarations_into_artifact() {
+    fn compiles_exported_native_declarations_into_artifact() {
         let _ = assert_main_module_compiles_with(
             r#"
-            export foreign "c" (
+            export native "c" (
               let puts (msg : CString) : Int;
             );
-            export let answer : Int := 1;
+            export let result : Int := 1;
         "#,
-            &[".foreign $main::puts param $CString result $Int abi \"c\" symbol \"puts\" export"],
+            &[".native $main::puts param $CString result $Int abi \"c\" symbol \"puts\" export"],
         );
     }
 
     #[test]
-    fn lowers_link_attrs_into_foreign_descriptors() {
+    fn lowers_link_attrs_into_native_descriptors() {
         let mut session = session();
         session
             .set_module_text(
                 &ModuleKey::new("main"),
                 r#"
             @link(name := "m")
-            foreign "c" (
+            native "c" (
               let sin (x : Float) : Float;
             );
         "#,
@@ -845,7 +871,7 @@ mod success {
         assert!(output.artifact.validate().is_ok());
         assert!(
             output.text.contains(
-                ".foreign $main::sin param $Float result $Float abi \"c\" symbol \"sin\" link \"m\""
+                ".native $main::sin param $Float result $Float abi \"c\" symbol \"sin\" link \"m\""
             ),
             "{}",
             output.text
@@ -853,18 +879,18 @@ mod success {
     }
 
     #[test]
-    fn skips_gated_foreign_declarations_for_target() {
+    fn skips_gated_native_declarations_for_target() {
         let mut session =
             session_with_target(TargetInfo::new().with_os("linux").with_arch("x86_64"));
         session
             .set_module_text(
                 &ModuleKey::new("main"),
                 r#"
-            @when(os := "LiNuX", arch := "x86_64")
-            foreign let clock_gettime (id : Int, out : CPtr) : Int;
+            @target(os := "LiNuX", arch := "x86_64")
+            native let clock_gettime (id : Int, out : CPtr) : Int;
 
-            @when(os := "windows")
-            foreign let QueryPerformanceCounter (out : CPtr) : Int;
+            @target(os := "windows")
+            native let QueryPerformanceCounter (out : CPtr) : Int;
         "#,
             )
             .unwrap();
@@ -876,7 +902,7 @@ mod success {
     }
 
     #[test]
-    fn matches_gated_foreign_declarations_by_target_family() {
+    fn matches_gated_native_declarations_by_target_family() {
         let mut session = session_with_target(
             TargetInfo::new()
                 .with_os("macOS")
@@ -889,11 +915,11 @@ mod success {
             .set_module_text(
                 &ModuleKey::new("main"),
                 r#"
-            @when(family := ["darwin", "bsd"], arch := ["x86-64", "aarch64"], pointerWidth := 64)
-            foreign let mach_absolute_time () : Nat64;
+            @target(family := ["darwin", "bsd"], arch := ["x86-64", "aarch64"], pointerWidth := 64)
+            native let mach_absolute_time () : Nat64;
 
-            @when(family := "windows")
-            foreign let GetLastError () : Nat64;
+            @target(family := "windows")
+            native let GetLastError () : Nat64;
         "#,
             )
             .unwrap();
@@ -915,15 +941,15 @@ mod success {
             .set_module_text(
                 &ModuleKey::new("main"),
                 r#"
-            foreign let musi_true () : Bool;
+            native let musi_true () : Bool;
 
             @foo.bar(baz := "qux")
-            export let answer : Int := 42;
+            export let result : Int := 42;
 
             @musi.codegen(mode := "test")
             export let meaning : Int := 1;
 
-            export let Eq[T] := class {
+            export let Eq[T] := shape {
               let (=) (a : T, b : T) : Bool;
               law reflexive (x : T) := unsafe { musi_true(); };
             };
@@ -944,7 +970,7 @@ mod success {
         assert!(
             meta.iter().any(|(target, key, values)| {
                 target == "main::Eq"
-                    && key == "class.laws"
+                    && key == "capability.laws"
                     && values == &vec!["reflexive".to_owned()]
             }),
             "{meta:?}"
@@ -959,7 +985,7 @@ mod success {
         );
         assert!(
             meta.iter().any(|(target, key, values)| {
-                target == "main::answer"
+                target == "main::result"
                     && key == "inert.attr"
                     && values == &vec!["@foo.bar(baz := \"qux\")".to_owned()]
             }),
@@ -983,9 +1009,9 @@ mod success {
             .set_module_text(
                 &ModuleKey::new("main"),
                 r"
-            foreign let musi_true () : Bool;
+            native let musi_true () : Bool;
 
-            export let Eq[T] := class {
+            export let Eq[T] := shape {
               let (=) (a : T, b : T) : Bool;
               law reflexive (x : T) := unsafe { musi_true(); };
             };
@@ -1010,7 +1036,7 @@ mod success {
             .module_text(&suite.suite_module_key)
             .expect("suite source should be materialized in session");
         assert!(
-            suite_source.contains("foreign let musi_true () : Bool;"),
+            suite_source.contains("native let musi_true () : Bool;"),
             "{suite_source}"
         );
         assert!(
@@ -1030,21 +1056,21 @@ mod success {
     }
 
     #[test]
-    fn synthesizes_class_laws_for_reachable_monomorphic_instances() {
+    fn synthesizes_shape_laws_for_reachable_monomorphic_givens() {
         let mut session = session();
         register_test_intrinsics(&mut session);
         session
             .set_module_text(
                 &ModuleKey::new("main"),
                 r"
-            foreign let musi_true () : Bool;
+            native let musi_true () : Bool;
 
-            export let IntEq := class {
+            export let IntEq := shape {
               let eq (a : Int, b : Int) : Bool;
               law reflexive (x : Int) := eq(x, x);
             };
 
-            let eqInt := instance IntEq {
+            let eqInt := given IntEq {
               let eq (a : Int, b : Int) : Bool := unsafe { musi_true(); };
             };
         ",
@@ -1071,20 +1097,20 @@ mod success {
     }
 
     #[test]
-    fn synthesizes_generic_class_laws_for_exported_concrete_instances() {
+    fn synthesizes_generic_shape_laws_for_exported_concrete_givens() {
         let mut session = session();
         register_test_intrinsics(&mut session);
         session
             .set_module_text(
                 &ModuleKey::new("main"),
                 r"
-            export let Eq[T] := class {
+            export let Eq[T] := shape {
               let eq (left : T, right : T) : Bool;
               law reflexive (value : T) := eq(value, value);
               law symmetric (left : T, right : T) := eq(left, right) = eq(right, left);
             };
 
-            export let intEq := instance Eq[Int] {
+            export let intEq := given Eq[Int] {
               let eq (left : Int, right : Int) : Bool := left = right;
             };
         ",
@@ -1098,24 +1124,24 @@ mod success {
     }
 
     #[test]
-    fn synthesizes_law_suites_for_concrete_constrained_instances() {
+    fn synthesizes_law_suites_for_concrete_constrained_givens() {
         let mut session = session();
         session
             .set_module_text(
                 &ModuleKey::new("main"),
                 r"
-            export let Mark[T] := class { };
+            export let Mark[T] := shape { };
 
-            let markInt := instance Mark[Int] { };
+            let markInt := given Mark[Int] { };
 
             let requireMark (x : Int) : Int where Int : Mark := x;
 
-            export let Foo := class {
+            export let Foo := shape {
               let useMark (x : Int) : Int;
               law reflexive (x : Int) := useMark(x) = x;
             };
 
-            let fooInt := instance Foo where Int : Mark {
+            let fooInt := given Foo where Int : Mark {
               let useMark (x : Int) : Int := (
                 let helper (y : Int) : Int := requireMark(y);
                 helper(x)
@@ -1139,12 +1165,12 @@ mod success {
                 r"
             let Option[T] := data { | Some(Int) | None };
 
-            let Eq[T] := class { };
-            let eqInt := instance Eq[Int] { };
+            let Eq[T] := shape { };
+            let eqInt := given Eq[Int] { };
 
             let Console := effect { let readLine () : String; };
 
-            export let f (x : Int) : Int where Int : Eq using { Console } := x;
+            export let f (x : Int) : Int where Int : Eq require { Console } := x;
             export let sumId (x : Int + String) : Int + String := x;
             export let tupId (x : (Int, String)) : (Int, String) := x;
             export let arrId (x : [2]Int) : [2]Int := x;
@@ -1164,7 +1190,7 @@ mod success {
             "{meta:?}"
         );
         assert!(
-            meta_has_exact(&meta, "main::f", "value.effects", &["using { Console }"]),
+            meta_has_exact(&meta, "main::f", "value.effects", &["require { Console }"]),
             "{meta:?}"
         );
         assert!(
@@ -1223,11 +1249,11 @@ mod success {
         set_main_text(
             &mut session,
             r"
-            let Eq[T] := class {
+            let Eq[T] := shape {
               let eq (left : T, right : T) : Bool;
             };
 
-            let intEq := instance Eq[Int] {
+            let intEq := given Eq[Int] {
               let eq (left : Int, right : Int) : Bool := left = right;
             };
 
@@ -1256,7 +1282,7 @@ mod failure {
           @comptimeSafe
           let tick () : Int;
         };
-        export let answer () : Int := comptime request Clock.tick();
+        export let result () : Int := comptime ask Clock.tick();
     ",
         );
         let error = session
@@ -1303,7 +1329,7 @@ mod failure {
             .unwrap();
         set_main_text(
             &mut session,
-            "import \"dep\"; export let answer : Int := 42;",
+            "import \"dep\"; export let result : Int := 42;",
         );
 
         let _ = compile_main_entry(&mut session);
@@ -1325,7 +1351,7 @@ mod failure {
         session
             .set_module_text(
                 &ModuleKey::new("main"),
-                "import \"missing\"; export let answer : Int := 42;",
+                "import \"missing\"; export let result : Int := 42;",
             )
             .unwrap();
 
@@ -1348,7 +1374,7 @@ mod failure {
         session
             .set_module_text(
                 &ModuleKey::new("main"),
-                "export let answer : Int := \"no\";",
+                "export let result : Int := \"no\";",
             )
             .unwrap();
 
@@ -1369,7 +1395,7 @@ mod failure {
     #[test]
     fn lower_module_propagates_ir_failure_with_typed_kind() {
         let mut session = session();
-        set_main_text(&mut session, "export let answer : Int := 42;");
+        set_main_text(&mut session, "export let result : Int := 42;");
         session.inject_ir_failure_for_tests(
             vec![
                 Diag::error(IrDiagKind::LoweringRequiresSemaCleanModule.message())
@@ -1405,20 +1431,20 @@ mod failure {
     }
 
     #[test]
-    fn rejects_polymorphic_instances_for_class_law_suites() {
+    fn rejects_polymorphic_givens_for_class_law_suites() {
         let mut session = session();
         session
             .set_module_text(
                 &ModuleKey::new("main"),
                 r"
-            foreign let musi_true () : Bool;
+            native let musi_true () : Bool;
 
-            export let Eq[T] := class {
+            export let Eq[T] := shape {
               let eq (a : T, b : T) : Bool;
               law reflexive (x : T) := eq(x, x);
             };
 
-            instance[T] Eq[T] {
+            given[T] Eq[T] {
               let eq (a : T, b : T) : Bool := unsafe { musi_true(); };
             };
         ",

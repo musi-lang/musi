@@ -1,5 +1,5 @@
 pub use super::gc::HeapCollectionStats;
-pub use super::host::{RejectingHost, VmHost};
+pub use super::host::{RejectingHost, VmHost, VmHostCallContext, VmHostContext};
 pub use super::loader::{RejectingLoader, VmLoader};
 pub use super::program::{
     Program, ProgramDataLayout, ProgramDataVariantLayout, ProgramExport, ProgramExportKind,
@@ -7,7 +7,10 @@ pub use super::program::{
 };
 #[allow(unused_imports)]
 pub use super::value::{
-    ClosureView, ForeignView, ModuleView, RecordView, SeqView, StringView, SyntaxView, Value,
-    ValueView, render_value_view,
+    BitsValue, ClosureView, ForeignView, IsolateId, ModuleView, ProcedureValue, RecordView,
+    SeqView, StringView, SyntaxView, Value, ValueView, render_value_view,
 };
-pub use super::vm::{Vm, VmOptions};
+pub use super::vm::{
+    BoundI64Call, BoundInitCall, BoundSeq2x2Arg, BoundSeq2x2Call, BoundSeq8Call, Vm, VmOptions,
+    VmRuntime,
+};

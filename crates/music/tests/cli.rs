@@ -7,6 +7,7 @@ use std::process::Output;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use musi_tooling::ToolingDiagKind;
 use serde_json::Value;
 
 static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(0);
@@ -59,6 +60,10 @@ fn parse_json(output: &[u8]) -> Value {
 
 fn golden_json(text: &str) -> Value {
     serde_json::from_str(text).expect("golden JSON should parse")
+}
+
+fn tooling_diag_code(kind: ToolingDiagKind) -> String {
+    format!("MS{:04}", kind.code().raw())
 }
 
 fn assert_success(output: &Output) {
@@ -145,8 +150,8 @@ mod success {
 
         assert_success(&output);
         let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.contains("module @seam.projection"));
-        assert!(stdout.contains("fn @"));
+        assert!(stdout.contains("module seam.projection"));
+        assert!(stdout.contains("fn "));
         assert!(stdout.contains("::main"));
     }
 
@@ -171,8 +176,8 @@ mod success {
 
         assert_success(&output);
         let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.contains("module @seam.projection"));
-        assert!(stdout.contains("fn @"));
+        assert!(stdout.contains("module seam.projection"));
+        assert!(stdout.contains("fn "));
         assert!(stdout.contains("::main"));
     }
 
@@ -239,7 +244,10 @@ mod failure {
         let payload = parse_json(&output.stdout);
         assert_eq!(payload["status"], "error");
         assert_eq!(payload["diagnostics"][0]["phase"], "tooling");
-        assert_eq!(payload["diagnostics"][0]["code"], "MS5101");
+        assert_eq!(
+            payload["diagnostics"][0]["code"],
+            tooling_diag_code(ToolingDiagKind::PackageImportRequiresMusi)
+        );
     }
 
     #[test]

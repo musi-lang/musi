@@ -46,7 +46,7 @@ fn validate_catalog_shape(catalog: &Catalog) -> DiaggenResult {
         && (catalog.crate_name.is_none() || catalog.enum_name.is_none() || catalog.output.is_none())
     {
         return Err(DiaggenError(format!(
-            "catalog `{}` generated output requires crate, enum, and output path",
+            "catalog `{}` generated output needs crate, enum, and output path",
             catalog.owner
         )));
     }
@@ -103,6 +103,9 @@ fn validate_maps(catalog: &Catalog, kinds: &BTreeSet<&str>) -> DiaggenResult {
 fn validate_entry(catalog: &Catalog, entry: &Entry) -> DiaggenResult {
     validate_text(catalog, entry, "message", &entry.message)?;
     validate_text(catalog, entry, "primary", &entry.primary)?;
+    if let Some(secondary) = &entry.secondary {
+        validate_text(catalog, entry, "secondary", secondary)?;
+    }
     if let Some(help) = &entry.help {
         validate_text(catalog, entry, "help", help)?;
     }
@@ -119,12 +122,6 @@ fn validate_text(catalog: &Catalog, entry: &Entry, field: &str, text: &str) -> D
     if text == "type mismatch" {
         return Err(DiaggenError(format!(
             "{}.{} {field} lacks expected and found types",
-            catalog.owner, entry.kind
-        )));
-    }
-    if has_suffix_category(text) {
-        return Err(DiaggenError(format!(
-            "{}.{} {field} puts diagnostic category after subject",
             catalog.owner, entry.kind
         )));
     }
@@ -145,30 +142,6 @@ fn validate_text(catalog: &Catalog, entry: &Entry, field: &str, text: &str) -> D
     Ok(())
 }
 
-fn has_suffix_category(text: &str) -> bool {
-    category_suffix(text, "unknown")
-        || category_suffix(text, "invalid")
-        || category_suffix(text, "unsupported")
-        || category_suffix(text, "missing")
-        || category_suffix(text, "duplicate")
-}
-
-fn category_suffix(text: &str, category: &str) -> bool {
-    let mut saw_subject = false;
-    let mut previous_word = "";
-    for word in text.split_whitespace() {
-        let normalized = word.trim_matches(|ch: char| !ch.is_ascii_alphabetic());
-        if normalized == category {
-            return saw_subject && previous_word != "not";
-        }
-        if !normalized.is_empty() {
-            saw_subject = true;
-            previous_word = normalized;
-        }
-    }
-    false
-}
-
 fn is_bare_vague_text(text: &str) -> bool {
     matches!(
         text,
@@ -177,7 +150,7 @@ fn is_bare_vague_text(text: &str) -> bool {
             | "unknown effect"
             | "unknown effect operation"
             | "invalid target"
-            | "invalid request target"
+            | "invalid ask target"
             | "arity mismatch"
             | "call arity mismatch"
             | "type mismatch"

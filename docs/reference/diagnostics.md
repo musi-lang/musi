@@ -6,7 +6,7 @@ Musi diagnostics follow Clang-style precision: exact source location, concrete s
 
 - Every user-facing diagnostic comes from typed diagnostic enums in owning crate/phase.
 - Every source diagnostic has one primary label on offending token/expression.
-- Headlines name exact broken thing when known: source text, symbol, operator, field, variant, import specifier, type, or expected/found pair.
+- Headlines name exact broken thing when known: source text, symbol, operator, field, variant, import specifier, type, `given`, `mut`, `known`, or expected/found pair.
 - Secondary labels point to related source: declaration, expected annotation, parameter, previous definition, operation signature.
 - Hints explain actionable repair. Fix-its only for exact replacement.
 - Do not use articles in headlines: `a`, `an`, `the`.
@@ -19,14 +19,14 @@ Musi diagnostics follow Clang-style precision: exact source location, concrete s
 - type mismatch
 + return value expected `Int`, found `String`
 
-- callee lacks callable type
-+ callee `foo` lacks callable type `Int`
+- effect missing declaration
++ effect `Console.readLine` missing from `given`
 
 - unknown field
 + field `name` missing from record type `{ id : Int }`
 
-- duplicate class member
-+ duplicate class member `equals`
+- duplicate given binding
++ duplicate given binding `Eq`
 ```
 
 ## Renderer Shape

@@ -49,6 +49,37 @@ mod success {
 
         assert_eq!(render(&doc, &options(8)), "[\n  long_value,\n]");
     }
+
+    #[test]
+    fn join_inserts_separator_between_docs() {
+        let doc = Doc::join(
+            [Doc::text("a"), Doc::text("b"), Doc::text("c")],
+            &Doc::text(", "),
+        );
+
+        assert_eq!(render(&doc, &options(80)), "a, b, c");
+    }
+
+    #[test]
+    fn join_hardline_uses_newlines_between_docs() {
+        let doc = Doc::join_hardline([Doc::text("alpha"), Doc::text("beta")]);
+
+        assert_eq!(render(&doc, &options(80)), "alpha\nbeta");
+    }
+
+    #[test]
+    fn render_with_final_newline_appends_single_newline() {
+        let doc = Doc::text("value");
+
+        assert_eq!(render_with_final_newline(&doc, &options(80)), "value\n");
+    }
+
+    #[test]
+    fn render_with_final_newline_does_not_duplicate_existing_newline() {
+        let doc = Doc::concat(vec![Doc::text("value"), Doc::hardline()]);
+
+        assert_eq!(render_with_final_newline(&doc, &options(80)), "value\n");
+    }
 }
 
 mod failure {}

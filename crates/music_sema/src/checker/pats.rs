@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use music_arena::SliceRange;
-use music_base::Span;
+use music_base::{Span, diag::DiagContext};
 use music_hir::{HirPatId, HirPatKind, HirRecordPatField, HirTyId, HirTyKind, HirVariantPatArg};
 use music_names::Ident;
 use music_names::NameBindingId;
@@ -236,10 +236,10 @@ impl CheckPass<'_, '_, '_> {
             };
             if !seen.insert(name.name) {
                 let field_name = self.resolve_symbol(name.name).to_owned();
-                self.diag_named(
+                self.diag_with(
                     name.span,
                     DiagKind::DuplicateVariantField,
-                    format!("duplicate variant field `{field_name}`"),
+                    DiagContext::new().with("field", field_name),
                 );
             }
             let expected =
@@ -248,10 +248,10 @@ impl CheckPass<'_, '_, '_> {
         }
         for field_name in field_names.iter().flatten() {
             if !seen.contains(&self.intern(field_name)) {
-                self.diag_named(
+                self.diag_with(
                     span,
                     DiagKind::MissingVariantField,
-                    format!("missing variant field `{field_name}`"),
+                    DiagContext::new().with("field", field_name),
                 );
             }
         }
@@ -270,10 +270,10 @@ impl CheckPass<'_, '_, '_> {
             .position(|field| field.as_deref() == Some(field_name.as_str()))
             .and_then(|index| expected_args.get(index).copied())
             .unwrap_or_else(|| {
-                self.diag_named(
+                self.diag_with(
                     name.span,
                     DiagKind::UnknownVariantField,
-                    format!("unknown variant field `{field_name}`"),
+                    DiagContext::new().with("field", field_name),
                 );
                 fallback
             })

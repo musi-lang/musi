@@ -4,7 +4,7 @@ use musi_vm::{ForeignCall, ProgramTypeAbiKind, VmResult};
 use music_seam::TypeId;
 
 use crate::ffi::{FfiTypeRef, build_ffi_type, touch_ffi_type};
-use crate::native_abi_unsupported;
+use crate::native_abi_issue;
 
 #[derive(Debug)]
 pub enum NativeAbiType {
@@ -60,13 +60,12 @@ fn native_abi_type(
     seen: &mut BTreeSet<u32>,
 ) -> VmResult<NativeAbiType> {
     if !seen.insert(ty.raw()) {
-        return Err(native_abi_unsupported(
+        return Err(native_abi_issue(
             foreign,
             format!(
                 "native ABI type `{}` is recursive by value",
                 foreign.type_name(ty)
-            )
-            .into(),
+            ),
         ));
     }
     let abi_ty = match foreign.type_abi_kind(ty) {
@@ -79,13 +78,12 @@ fn native_abi_type(
         ProgramTypeAbiKind::DataTransparent => transparent_abi_type(foreign, ty, seen)?,
         ProgramTypeAbiKind::DataReprCProduct => repr_c_product_abi_type(foreign, ty, seen)?,
         ProgramTypeAbiKind::Unsupported => {
-            return Err(native_abi_unsupported(
+            return Err(native_abi_issue(
                 foreign,
                 format!(
                     "type `{}` is not native-ABI compatible",
                     foreign.type_name(ty)
-                )
-                .into(),
+                ),
             ));
         }
     };
@@ -99,33 +97,30 @@ fn transparent_abi_type(
     seen: &mut BTreeSet<u32>,
 ) -> VmResult<NativeAbiType> {
     let layout = foreign.type_data_layout(ty).ok_or_else(|| {
-        native_abi_unsupported(
+        native_abi_issue(
             foreign,
             format!(
                 "transparent type `{}` is missing layout",
                 foreign.type_name(ty)
-            )
-            .into(),
+            ),
         )
     })?;
     let variant = layout.single_variant().ok_or_else(|| {
-        native_abi_unsupported(
+        native_abi_issue(
             foreign,
             format!(
                 "transparent type `{}` is not a single-variant wrapper",
                 foreign.type_name(ty)
-            )
-            .into(),
+            ),
         )
     })?;
     let Some(field_ty) = variant.field_tys.first().copied() else {
-        return Err(native_abi_unsupported(
+        return Err(native_abi_issue(
             foreign,
             format!(
                 "transparent type `{}` is missing a wrapped field",
                 foreign.type_name(ty)
-            )
-            .into(),
+            ),
         ));
     };
     Ok(NativeAbiType::Transparent {
@@ -140,19 +135,18 @@ fn repr_c_product_abi_type(
     seen: &mut BTreeSet<u32>,
 ) -> VmResult<NativeAbiType> {
     let layout = foreign.type_data_layout(ty).ok_or_else(|| {
-        native_abi_unsupported(
+        native_abi_issue(
             foreign,
-            format!("repr(c) type `{}` is missing layout", foreign.type_name(ty)).into(),
+            format!("repr(c) type `{}` is missing layout", foreign.type_name(ty)),
         )
     })?;
     let variant = layout.single_variant().ok_or_else(|| {
-        native_abi_unsupported(
+        native_abi_issue(
             foreign,
             format!(
                 "repr(c) type `{}` is not a single-variant product",
                 foreign.type_name(ty)
-            )
-            .into(),
+            ),
         )
     })?;
     let fields = variant

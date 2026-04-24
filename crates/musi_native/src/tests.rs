@@ -4,7 +4,7 @@
 use musi_foundation::{register_modules, test};
 use musi_vm::{
     EffectCall, ForeignCall, NativeFailureStage, Program, ProgramTypeAbiKind, RejectingLoader,
-    Value, Vm, VmError, VmErrorKind, VmHost, VmOptions, VmResult,
+    Value, Vm, VmError, VmErrorKind, VmHost, VmHostCallContext, VmHostContext, VmOptions, VmResult,
 };
 use music_module::ModuleKey;
 use music_session::{Session, SessionOptions};
@@ -16,7 +16,12 @@ use crate::{NativeHost, NativeTestCaseResult, NativeTestReport};
 struct FallbackHost;
 
 impl VmHost for FallbackHost {
-    fn call_foreign(&mut self, foreign: &ForeignCall, _args: &[Value]) -> VmResult<Value> {
+    fn call_foreign(
+        &mut self,
+        _ctx: VmHostCallContext<'_, '_>,
+        foreign: &ForeignCall,
+        _args: &[Value],
+    ) -> VmResult<Value> {
         if foreign.name() == "main::puts" {
             return Ok(Value::Int(11));
         }
@@ -25,7 +30,12 @@ impl VmHost for FallbackHost {
         }))
     }
 
-    fn handle_effect(&mut self, effect: &EffectCall, _args: &[Value]) -> VmResult<Value> {
+    fn handle_effect(
+        &mut self,
+        _ctx: VmHostCallContext<'_, '_>,
+        effect: &EffectCall,
+        _args: &[Value],
+    ) -> VmResult<Value> {
         if effect.effect_name() == "main::Console" && effect.op_name() == "readLine" {
             return Ok(Value::Int(9));
         }
@@ -55,7 +65,7 @@ fn call_export_with_host(host: NativeHost, source: &str) -> VmResult<Value> {
     let program = compile_program(&[("main", source)], "main");
     let mut vm = Vm::new(program, RejectingLoader, host, VmOptions);
     vm.initialize()?;
-    vm.call_export("answer", &[])
+    vm.call_export("result", &[])
 }
 
 const fn is_supported_target() -> bool {
@@ -82,10 +92,10 @@ mod success {
         let value = call_export_with_host(
             host,
             r#"
-        foreign "c" (
+        native "c" (
           let puts (value : Int) : Int;
         );
-        export let answer () : Int := unsafe { puts(42); };
+        export let result () : Int := unsafe { puts(42); };
         "#,
         )
         .expect("registered foreign should succeed");
@@ -139,10 +149,10 @@ mod success {
             host,
             r#"
         let Maybe := data { | Some(Int) | None };
-        foreign "c" (
+        native "c" (
           let inspect (value : Maybe) : Int;
         );
-        export let answer () : Int := unsafe { inspect(.Some(1)); };
+        export let result () : Int := unsafe { inspect(.Some(1)); };
         "#,
         )
         .expect("layout-aware foreign should succeed");
@@ -173,10 +183,10 @@ mod success {
         let value = call_export_with_host(
             host,
             r#"
-        foreign "c" (
+        native "c" (
           let puts (value : Int) : Int;
         );
-        export let answer () : Int := unsafe { puts(42); };
+        export let result () : Int := unsafe { puts(42); };
         "#,
         )
         .expect("scalar foreign should succeed");
@@ -189,10 +199,10 @@ mod success {
     fn native_abi_support_link_smoke() {
         let source = r#"
         @link(name := "c", symbol := "strerror")
-        foreign "c" let strerror (code : Int) : CString;
+        native "c" let strerror (code : Int) : CString;
         @link(name := "c", symbol := "strlen")
-        foreign "c" let strlen (value : CString) : Int;
-        export let answer () : Int := unsafe { strlen(strerror(2)); };
+        native "c" let strlen (value : CString) : Int;
+        export let result () : Int := unsafe { strlen(strerror(2)); };
     "#;
         let value = call_export_with_host(NativeHost::default(), source)
             .expect("linked native call should succeed");
@@ -207,30 +217,44 @@ mod success {
     fn native_abi_cstring_results_roundtrip() {
         let source = r#"
         @link(name := "/usr/lib/libSystem.B.dylib", symbol := "getprogname")
-        foreign "c" let musi_native_test_progname () : CString;
+        native "c" let musi_native_test_progname () : CString;
         @link(name := "/usr/lib/libSystem.B.dylib", symbol := "strchr")
-        foreign "c" let strchr (value : CString, code : Int) : CString;
-        export let answer () : CString := unsafe { strchr(musi_native_test_progname(), 0); };
+        native "c" let strchr (value : CString, code : Int) : CString;
+        export let result () : CString := unsafe { strchr(musi_native_test_progname(), 0); };
     "#;
-        let value = call_export_with_host(NativeHost::default(), source)
+        let program = compile_program(&[("main", source)], "main");
+        let mut vm = Vm::new(program, RejectingLoader, NativeHost::default(), VmOptions);
+        vm.initialize().expect("program should initialize");
+        let value = vm
+            .call_export("result", &[])
             .expect("cstring result should succeed");
-
-        assert_eq!(value, Value::string(""));
+        let musi_vm::ValueView::String(text) = vm.inspect(&value) else {
+            panic!("expected string result");
+        };
+        assert_eq!(text.as_str(), "");
     }
 
     #[test]
     fn dispatches_registered_effect_handler() {
         let mut host = NativeHost::new();
-        host.register_effect_handler("main::Console", "readLine", |_effect, args| {
-            assert_eq!(args, &[Value::string(">")]);
-            Ok(Value::Int(5))
-        });
+        host.register_effect_handler_with_context(
+            "main::Console",
+            "readLine",
+            |ctx, _effect, args| {
+                let [prompt] = args else {
+                    panic!("expected prompt");
+                };
+                let prompt = ctx.string(prompt).expect("prompt should be string");
+                assert_eq!(prompt.as_str(), ">");
+                Ok(Value::Int(5))
+            },
+        );
 
         let value = call_export_with_host(
             host,
             r#"
         let Console := effect { let readLine (prompt : String) : Int; };
-        export let answer () : Int := request Console.readLine(">");
+        export let result () : Int := ask Console.readLine(">");
         "#,
         )
         .expect("registered effect should succeed");
@@ -246,10 +270,10 @@ mod success {
         let value = call_export_with_host(
             host,
             r#"
-        foreign "c" (
+        native "c" (
           let puts (value : Int) : Int;
         );
-        export let answer () : Int := unsafe { puts(1); };
+        export let result () : Int := unsafe { puts(1); };
         "#,
         )
         .expect("registered foreign should win");
@@ -264,10 +288,10 @@ mod success {
         let value = call_export_with_host(
             host,
             r#"
-        foreign "c" (
+        native "c" (
           let puts (value : Int) : Int;
         );
-        export let answer () : Int := unsafe { puts(1); };
+        export let result () : Int := unsafe { puts(1); };
         "#,
         )
         .expect("fallback should handle foreign");
@@ -284,10 +308,10 @@ mod success {
         let value = call_export_with_host(
             host,
             r#"
-        foreign "c" (
+        native "c" (
           let puts (value : Int) : Int;
         );
-        export let answer () : Int := unsafe { puts(1); };
+        export let result () : Int := unsafe { puts(1); };
         "#,
         )
         .expect("shared state should be visible");
@@ -303,7 +327,7 @@ mod success {
             r#"
             let Test := import "{spec}";
 
-            export let answer () :=
+            export let result () :=
                 (
                   Test.suiteStart("demo");
                   Test.testCase("first", 1 = 1);
@@ -318,7 +342,7 @@ mod success {
         let mut vm = Vm::new(program, RejectingLoader, host.clone(), VmOptions);
         vm.initialize().expect("vm init should succeed");
         let _ = vm
-            .call_export("answer", &[])
+            .call_export("result", &[])
             .expect("test export should run");
 
         let report = host.finish_test_session("main");
@@ -359,10 +383,10 @@ mod failure {
         let value = call_export_with_host(
             host,
             r#"
-        foreign "system" (
+        native "system" (
           let puts (value : Int) : Int;
         );
-        export let answer () : Int := unsafe { puts(42); };
+        export let result () : Int := unsafe { puts(42); };
         "#,
         )
         .expect("non-c foreign should still dispatch through registered host");
@@ -374,8 +398,8 @@ mod failure {
     fn native_abi_symbol_failures_report_typed_errors() {
         let source = r#"
         @link(name := "c")
-        foreign "c" let musi_native_test_missing_symbol (value : Int) : Int;
-        export let answer () : Int := unsafe { musi_native_test_missing_symbol(1); };
+        native "c" let musi_native_test_missing_symbol (value : Int) : Int;
+        export let result () : Int := unsafe { musi_native_test_missing_symbol(1); };
     "#;
         let err = call_export_with_host(NativeHost::default(), source)
             .expect_err("missing symbol should fail");
@@ -394,10 +418,10 @@ mod failure {
         let err = call_export_with_host(
             NativeHost::new(),
             r#"
-        foreign "c" (
+        native "c" (
           let puts (value : Int) : Int;
         );
-        export let answer () : Int := unsafe { puts(1); };
+        export let result () : Int := unsafe { puts(1); };
         "#,
         )
         .expect_err("missing host edge should reject");
@@ -413,7 +437,7 @@ mod failure {
         let source = format!(
             r#"
         let Test := import "{spec}";
-        export let answer () := Test.testCase("first", 1 = 1);
+        export let result () := Test.testCase("first", 1 = 1);
         "#,
             spec = test::SPEC,
         );
@@ -430,7 +454,7 @@ mod failure {
             NativeHost::new(),
             r#"
         let Console := effect { let readLine (prompt : String) : Int; };
-        export let answer () : Int := request Console.readLine(">");
+        export let result () : Int := ask Console.readLine(">");
         "#,
         )
         .expect_err("unsupported target should reject");

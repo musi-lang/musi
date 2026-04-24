@@ -11,10 +11,10 @@ impl Parser<'_> {
 
     pub(crate) fn parse_attr(&mut self) -> ParseResult<SyntaxNodeId> {
         let at = self.expect_token(TokenKind::At)?;
-        let mut children = vec![at, self.expect_ident_element()?];
+        let mut children = vec![at, self.expect_attr_name_element()?];
         while let Some(dot) = self.eat(TokenKind::Dot) {
             children.push(dot);
-            children.push(self.expect_ident_element()?);
+            children.push(self.expect_attr_name_element()?);
         }
         if self.at(TokenKind::LParen) {
             let open = self.advance_element();
@@ -34,6 +34,14 @@ impl Parser<'_> {
         Ok(self
             .builder
             .push_node_from_children(SyntaxNodeKind::Attr, children))
+    }
+
+    fn expect_attr_name_element(&mut self) -> ParseResult<SyntaxElementId> {
+        if matches!(self.peek_kind(), TokenKind::Ident | TokenKind::KwKnown) {
+            Ok(self.advance_element())
+        } else {
+            self.expect_ident_element()
+        }
     }
 
     fn parse_attr_arg(&mut self) -> ParseResult<SyntaxNodeId> {

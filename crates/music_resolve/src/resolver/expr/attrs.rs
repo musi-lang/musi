@@ -29,7 +29,7 @@ where
         if export_mod_node.is_some()
             && (export_foreign_abi.is_some() || is_foreign_group_target(&node))
         {
-            mods = mods.with_foreign(HirForeignMod::new(export_foreign_abi));
+            mods = mods.with_native(HirNativeMod::new(export_foreign_abi));
         }
 
         let target = node.child_nodes().find(|n| {
@@ -110,10 +110,7 @@ where
     ) -> (Option<HirExportMod>, Option<Symbol>) {
         debug_assert_eq!(node.kind(), SyntaxNodeKind::ExportMod);
         let opaque = node.child_tokens().any(|t| t.kind() == TokenKind::KwOpaque);
-        let foreign_abi = if node
-            .child_tokens()
-            .any(|t| t.kind() == TokenKind::KwForeign)
-        {
+        let foreign_abi = if node.child_tokens().any(|t| t.kind() == TokenKind::KwNative) {
             node.child_tokens()
                 .find(|t| t.kind() == TokenKind::String)
                 .and_then(SyntaxToken::text)

@@ -1,6 +1,6 @@
 use super::{Program, VmError, VmErrorKind, VmResult};
 
-pub trait VmLoader {
+pub trait VmLoader: Send {
     /// Loads one runtime module by specifier text.
     ///
     /// # Errors

@@ -8,11 +8,12 @@ use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use music_base::diag::DiagCode;
+use music_base::diag::{DiagCode, DiagContext};
 use music_module::ModuleKey;
 use music_seam::Artifact;
 
 use crate::builtin_std::STD_FILES;
+use crate::diag::ProjectDiagKind;
 use crate::manifest::{
     FmtGroupLayout, FmtMatchArmArrowAlignment, FmtOperatorBreak, FmtProfile, License, LicenseFile,
     PackageManifest, PublishConfig,
@@ -71,15 +72,24 @@ fn run_git(root: &Path, args: &[&str]) {
     );
 }
 
-fn assert_manifest_validation_error(manifest: &str, load_note: &str, message: &str) {
+fn assert_manifest_validation_error(
+    manifest: &str,
+    load_note: &str,
+    kind: ProjectDiagKind,
+    context: &DiagContext,
+) {
     let temp = TempDir::new();
     write_file(temp.path(), "musi.json", manifest);
-    write_file(temp.path(), "index.ms", r"export let answer : Int := 42;");
+    write_file(temp.path(), "index.ms", r"export let result : Int := 42;");
 
     let error = Project::load(temp.path(), ProjectOptions::default()).expect_err(load_note);
 
-    assert_eq!(error.diag_code(), Some(DiagCode::new(3606)));
-    assert_eq!(error.diag_message().as_deref(), Some(message));
+    let expected_message = kind.message_with(context);
+    assert_eq!(error.diag_code(), Some(kind.code()));
+    assert_eq!(
+        error.diag_message().as_deref(),
+        Some(expected_message.as_str())
+    );
 }
 
 fn write_option_prelude_entry(root: &Path) {
@@ -87,7 +97,7 @@ fn write_option_prelude_entry(root: &Path) {
         root,
         "index.ms",
         r"
-export let answer () : Option[Int] := someOf[Int](1);
+export let result () : Option[Int] := someOf[Int](1);
 ",
     );
 }
@@ -207,7 +217,7 @@ mod success {
         write_file(
             temp.path(),
             "index.ms",
-            r#"import "util"; export let answer : Int := 42;"#,
+            r#"import "util"; export let result : Int := 42;"#,
         );
         write_file(
             temp.path(),
@@ -229,7 +239,7 @@ mod success {
 
         assert!(output.artifact.validate().is_ok());
         assert!(output.text.contains("@util@0.1.0/index.ms::base"));
-        assert!(output.text.contains("@app@1.0.0/index.ms::answer"));
+        assert!(output.text.contains("@app@1.0.0/index.ms::result"));
         assert!(project.package("util").is_some());
         assert_eq!(project.workspace().members.len(), 1);
     }
@@ -245,7 +255,7 @@ mod success {
   "version": "1.0.0"
 }"#,
         );
-        write_file(temp.path(), "index.ms", "export let answer : Int := 42;");
+        write_file(temp.path(), "index.ms", "export let result : Int := 42;");
         write_file(
             temp.path(),
             "src/main.ms",
@@ -284,7 +294,7 @@ mod success {
         write_file(
             temp.path(),
             "index.ms",
-            r#"import "ext"; export let answer : Int := 42;"#,
+            r#"import "ext"; export let result : Int := 42;"#,
         );
         write_file(
             &registry_root,
@@ -298,7 +308,7 @@ mod success {
         write_file(
             &registry_root,
             "ext/1.2.0/index.ms",
-            r"export let ext_answer : Int := 7;",
+            r"export let ext_result : Int := 7;",
         );
 
         let project = Project::load(
@@ -415,7 +425,7 @@ mod success {
   "exports": "./index.ms"
 }"#,
         );
-        write_file(&git_root, "index.ms", r"export let ext_answer : Int := 7;");
+        write_file(&git_root, "index.ms", r"export let ext_result : Int := 7;");
         run_git(&git_root, &["init", "--initial-branch=main"]);
         run_git(&git_root, &["add", "."]);
         run_git(
@@ -551,7 +561,7 @@ mod success {
   }
 }"#,
         );
-        write_file(temp.path(), "index.ms", r"export let answer : Int := 42;");
+        write_file(temp.path(), "index.ms", r"export let result : Int := 42;");
 
         let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
         let plan = project.task_plan("test").expect("task plan should resolve");
@@ -579,7 +589,7 @@ mod success {
         write_file(
             temp.path(),
             "index.ms",
-            r#"import "alias"; export let answer : Int := 42;"#,
+            r#"import "alias"; export let result : Int := 42;"#,
         );
         write_file(
             temp.path(),
@@ -605,7 +615,41 @@ mod success {
     }
 
     #[test]
-    fn discovers_co_located_project_test_targets() {
+    fn manifest_imports_resolve_relative_targets_from_package_root() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            r##"{
+  "name": "app",
+  "version": "1.0.0",
+  "entry": "./features/root.ms",
+  "imports": { "#internal": "./internal/index.ms" }
+}"##,
+        );
+        write_file(
+            temp.path(),
+            "features/root.ms",
+            r##"let Internal := import "#internal";
+export let result : Int := Internal.value;
+"##,
+        );
+        write_file(
+            temp.path(),
+            "internal/index.ms",
+            r"export let value : Int := 42;",
+        );
+
+        let output = Project::load(temp.path(), ProjectOptions::default())
+            .expect("project loads")
+            .compile_root_entry()
+            .expect("module compiles");
+
+        assert!(output.artifact.validate().is_ok());
+    }
+
+    #[test]
+    fn discovers_nested_project_test_targets() {
         let temp = TempDir::new();
         write_file(
             temp.path(),
@@ -617,26 +661,27 @@ mod success {
   "workspace": ["packages/std"]
 }"#,
         );
-        write_file(temp.path(), "index.ms", r"export let answer : Int := 42;");
+        write_file(temp.path(), "index.ms", r"export let result : Int := 42;");
         write_file(
             temp.path(),
             "packages/std/musi.json",
             r#"{
   "name": "@std",
   "version": "0.1.0",
-  "exports": "./index.ms"
+  "entry": "./std.ms",
+  "exports": "./std.ms"
 }"#,
         );
         write_file(
             temp.path(),
-            "packages/std/index.ms",
+            "packages/std/std.ms",
             r#"
 export let version := "0.1.0";
 "#,
         );
         write_file(
             temp.path(),
-            "packages/std/testing/index.ms",
+            "packages/std/testing.ms",
             r#"
 export let pass := { passed := .True, message := "" };
 export let describe (_name, _body) : Unit ~> Unit := _body();
@@ -645,7 +690,7 @@ export let it (_name, _body) : Unit ~> Unit := _body();
         );
         write_file(
             temp.path(),
-            "packages/std/math/index.test.ms",
+            "packages/std/__tests__/math.test.ms",
             r"
 export let test () : Unit := 0;
 ",
@@ -658,7 +703,7 @@ export let test () : Unit := 0;
         assert!(tests.iter().any(|test| {
             test.module_key
                 .as_str()
-                .contains("@@std@0.1.0/math/index.test.ms")
+                .contains("@@std@0.1.0/__tests__/math.test.ms")
         }));
     }
 
@@ -677,7 +722,7 @@ export let test () : Unit := 0;
             temp.path(),
             "index.ms",
             r"
-foreign let musi_true () : Bool;
+native let musi_true () : Bool;
 
 export let Console := effect {
   let readLine () : String;
@@ -764,6 +809,74 @@ export let test () := 0;
     }
 
     #[test]
+    fn std_manifest_uses_restructured_public_paths() {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .expect("repo root should resolve");
+        let manifest = fs::read_to_string(repo_root.join("packages/std/musi.json"))
+            .expect("std manifest should be readable");
+
+        for legacy in [
+            "\"./array\"",
+            "\"./list\"",
+            "\"./slice\"",
+            "\"./iter\"",
+            "\"./time\"",
+            "\"./io/prompt\"",
+            "\"./sys\"",
+        ] {
+            assert!(
+                !manifest.contains(legacy),
+                "legacy std export remains: {legacy}"
+            );
+        }
+        for current in [
+            "\"./collections/array\"",
+            "\"./collections/list\"",
+            "\"./collections/slice\"",
+            "\"./collections/iter\"",
+            "\"./datetime\"",
+            "\"./encoding\"",
+            "\"./cli/prompt\"",
+            "\"./crypto\"",
+            "\"./uuid\"",
+            "\"./semver\"",
+        ] {
+            assert!(manifest.contains(current), "std export missing: {current}");
+        }
+    }
+
+    #[test]
+    fn std_sys_is_private_implementation_module() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "dependencies": { "@std": "*" }
+}"#,
+        );
+        write_file(
+            temp.path(),
+            "index.ms",
+            r#"let Sys := import "@std/sys";
+export let result : Int := 1;
+"#,
+        );
+
+        let error = Project::load(temp.path(), ProjectOptions::default())
+            .expect_err("@std/sys should not resolve as public export");
+
+        assert_eq!(
+            error.diag_code(),
+            Some(ProjectDiagKind::SourceImportUnresolved.code())
+        );
+    }
+
+    #[test]
     fn compiles_static_reexport_chain_across_packages() {
         let temp = TempDir::new();
         write_file(
@@ -781,7 +894,7 @@ export let test () := 0;
             "index.ms",
             r#"
 let Hub := import "hub";
-export let answer () : Bool := Hub.Dep.equals([1, 2], [1, 2]);
+export let result () : Bool := Hub.Dep.equals([1, 2], [1, 2]);
 "#,
         );
         write_file(
@@ -832,7 +945,7 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
     }
 
     #[test]
-    fn std_root_exports_keep_static_module_targets() {
+    fn std_root_exports_keep_static_import_record_targets() {
         let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
             .canonicalize()
@@ -850,6 +963,9 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
         let bytes = surface
             .exported_value("bytes")
             .expect("bytes export should exist");
+        let encoding = surface
+            .exported_value("encoding")
+            .expect("encoding export should exist");
         let math = surface
             .exported_value("math")
             .expect("math export should exist");
@@ -858,16 +974,20 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
             .expect("option export should exist");
 
         assert_eq!(
-            bytes.module_target.as_ref(),
-            Some(&ModuleKey::new("@@std@0.1.0/bytes/index.ms"))
+            bytes.import_record_target.as_ref(),
+            Some(&ModuleKey::new("@@std@0.1.0/bytes.ms"))
         );
         assert_eq!(
-            math.module_target.as_ref(),
-            Some(&ModuleKey::new("@@std@0.1.0/math/index.ms"))
+            encoding.import_record_target.as_ref(),
+            Some(&ModuleKey::new("@@std@0.1.0/encoding.ms"))
         );
         assert_eq!(
-            option.module_target.as_ref(),
-            Some(&ModuleKey::new("@@std@0.1.0/option/index.ms"))
+            math.import_record_target.as_ref(),
+            Some(&ModuleKey::new("@@std@0.1.0/math.ms"))
+        );
+        assert_eq!(
+            option.import_record_target.as_ref(),
+            Some(&ModuleKey::new("@@std@0.1.0/option.ms"))
         );
     }
 
@@ -878,23 +998,23 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
             .canonicalize()
             .expect("repo root should resolve");
         let project = Project::load(&repo_root, ProjectOptions::default()).expect("project loads");
-        let test_key = ModuleKey::new("@@std@0.1.0/index.test.ms");
+        let test_key = ModuleKey::new("@@std@0.1.0/__tests__/std.test.ms");
         let mut session = project.build_session().expect("project session builds");
         let resolved = session
             .resolve_module(&test_key)
-            .expect("@std index.test should resolve")
+            .expect("@std __tests__/std.test should resolve")
             .clone();
 
         assert!(
             resolved
                 .imports
                 .iter()
-                .any(|import| import.to == ModuleKey::new("@@std@0.1.0/index.ms"))
+                .any(|import| import.to == ModuleKey::new("@@std@0.1.0/std.ms"))
         );
     }
 
     #[test]
-    fn std_root_member_alias_keeps_module_target() {
+    fn std_root_member_alias_keeps_import_record_target() {
         let temp = TempDir::new();
         write_file(
             temp.path(),
@@ -920,23 +1040,23 @@ export let bytes := Std.bytes;
             r#"{
   "name": "@std",
   "version": "0.1.0",
-  "entry": "./index.ms",
+  "entry": "./std.ms",
   "exports": {
-    ".": "./index.ms",
-    "./bytes": "./bytes/index.ms"
+    ".": "./std.ms",
+    "./bytes": "./bytes.ms"
   }
 }"#,
         );
         write_file(
             temp.path(),
-            "packages/std/index.ms",
+            "packages/std/std.ms",
             r#"
 export let bytes := import "@std/bytes";
 "#,
         );
         write_file(
             temp.path(),
-            "packages/std/bytes/index.ms",
+            "packages/std/bytes.ms",
             r"
 export let equals (left : []Int, right : []Int) : Bool := left = right;
 ",
@@ -954,8 +1074,8 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
             .expect("bytes export should exist");
 
         assert_eq!(
-            bytes.module_target.as_ref(),
-            Some(&ModuleKey::new("@@std@0.1.0/bytes/index.ms"))
+            bytes.import_record_target.as_ref(),
+            Some(&ModuleKey::new("@@std@0.1.0/bytes.ms"))
         );
     }
 
@@ -979,17 +1099,17 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
             r#"{
   "name": "@std",
   "version": "0.1.0",
-  "entry": "./index.ms",
+  "entry": "./std.ms",
   "exports": {
-    ".": "./index.ms",
-    "./prelude": "./prelude/index.ms",
-    "./option": "./option/index.ms"
+    ".": "./std.ms",
+    "./prelude": "./prelude.ms",
+    "./option": "./option.ms"
   }
 }"#,
         );
         write_file(
             temp.path(),
-            "packages/std/index.ms",
+            "packages/std/std.ms",
             r#"
 export let Prelude := import "@std/prelude";
 export let Option := import "@std/option";
@@ -997,7 +1117,7 @@ export let Option := import "@std/option";
         );
         write_file(
             temp.path(),
-            "packages/std/prelude/index.ms",
+            "packages/std/prelude.ms",
             r#"
 let OptionPkg := import "@std/option";
 export let Int := Int;
@@ -1008,7 +1128,7 @@ export let none := OptionPkg.none;
         );
         write_file(
             temp.path(),
-            "packages/std/option/index.ms",
+            "packages/std/option.ms",
             r"
 export opaque let Option[T] := data {
   | Some(T)
@@ -1059,10 +1179,15 @@ export let test () := Testing.it("adds values", Testing.toBe(1 + 2, 3));
         let error = Project::load(temp.path(), ProjectOptions::default())
             .expect_err("std should be disabled");
 
-        assert_eq!(error.diag_code(), Some(DiagCode::new(3615)));
+        assert_eq!(error.diag_code(), Some(DiagCode::new(5044)));
+        let context = DiagContext::new().with("spec", "@std/testing");
         assert_eq!(
             error.diag_message().as_deref(),
-            Some("unresolved import `@std/testing`")
+            Some(
+                ProjectDiagKind::SourceImportUnresolved
+                    .message_with(&context)
+                    .as_str()
+            )
         );
     }
 
@@ -1099,24 +1224,36 @@ mod failure {
   "lock": { "frozen": true }
 }"#,
         );
-        write_file(temp.path(), "index.ms", r"export let answer : Int := 42;");
+        write_file(temp.path(), "index.ms", r"export let result : Int := 42;");
 
         let error =
             Project::load(temp.path(), ProjectOptions::default()).expect_err("load should fail");
         assert!(matches!(error, ProjectError::MissingFrozenLockfile { .. }));
-        assert_eq!(error.diag_code(), Some(DiagCode::new(5020)));
+        assert_eq!(
+            error.diag_code(),
+            Some(ProjectDiagKind::MissingFrozenLockfile.code())
+        );
     }
 
     #[test]
     fn validation_error_carries_typed_diag_identity() {
+        let validation_message = ProjectDiagKind::ManifestPackageNameMissing.message();
         let error = ProjectError::ManifestValidationFailed {
-            message: "name is required".into(),
+            message: validation_message.into(),
         };
 
-        assert_eq!(error.diag_code(), Some(DiagCode::new(5006)));
+        assert_eq!(
+            error.diag_code(),
+            Some(ProjectDiagKind::ManifestValidationFailed.code())
+        );
+        let context = DiagContext::new().with("message", validation_message);
         assert_eq!(
             error.diag_message().as_deref(),
-            Some("manifest validation failed (`name is required`)")
+            Some(
+                ProjectDiagKind::ManifestValidationFailed
+                    .message_with(&context)
+                    .as_str()
+            )
         );
     }
 
@@ -1203,7 +1340,8 @@ mod failure {
   }
 }"#,
             "load should fail",
-            "invalid fmt.lineWidth value",
+            ProjectDiagKind::ManifestFmtLineWidthInvalid,
+            &DiagContext::new().with("value", 0),
         );
     }
 
@@ -1218,7 +1356,8 @@ mod failure {
   }
 }"#,
             "load should fail",
-            "invalid fmt.indentWidth value",
+            ProjectDiagKind::ManifestFmtIndentWidthInvalid,
+            &DiagContext::new().with("value", 0),
         );
     }
 
@@ -1233,7 +1372,8 @@ mod failure {
   }
 }"#,
             "load should fail",
-            "duplicate fmt.include pattern `src/**`",
+            ProjectDiagKind::ManifestFmtIncludeDuplicate,
+            &DiagContext::new().with("pattern", "src/**"),
         );
         assert_manifest_validation_error(
             r#"{
@@ -1244,7 +1384,8 @@ mod failure {
   }
 }"#,
             "load should fail",
-            "duplicate fmt.exclude pattern `target/**`",
+            ProjectDiagKind::ManifestFmtExcludeDuplicate,
+            &DiagContext::new().with("pattern", "target/**"),
         );
     }
 
@@ -1257,7 +1398,8 @@ mod failure {
   "publish": true
 }"#,
             "load should fail",
-            "invalid publish value",
+            ProjectDiagKind::ManifestPublishUnsupported,
+            &DiagContext::new().with("value", true),
         );
     }
 
@@ -1275,25 +1417,35 @@ mod failure {
         write_file(
             temp.path(),
             "index.ms",
-            "let Missing := import \"missing\";\nexport let answer : Int := 42;\n",
+            "let Missing := import \"missing\";\nexport let result : Int := 42;\n",
         );
 
         let error =
             Project::load(temp.path(), ProjectOptions::default()).expect_err("load should fail");
-        assert_eq!(error.diag_code(), Some(DiagCode::new(3615)));
+        assert_eq!(
+            error.diag_code(),
+            Some(ProjectDiagKind::SourceImportUnresolved.code())
+        );
+        let context = DiagContext::new().with("spec", "missing");
         assert_eq!(
             error.diag_message().as_deref(),
-            Some("unresolved import `missing`")
+            Some(
+                ProjectDiagKind::SourceImportUnresolved
+                    .message_with(&context)
+                    .as_str()
+            )
         );
         let diag = error.source_diag().expect("source diagnostic expected");
         assert!(diag.path().ends_with("index.ms"));
         assert_eq!(
             diag.diag().labels()[0].message(),
-            "import `missing` does not resolve"
+            ProjectDiagKind::SourceImportUnresolved
+                .label_with(&context)
+                .as_str()
         );
         assert_eq!(
             diag.diag().hint(),
-            Some("declare package/import map entry or fix import spec")
+            ProjectDiagKind::SourceImportUnresolved.hint()
         );
     }
 
@@ -1308,16 +1460,24 @@ mod failure {
   "version": "1.0.0"
 }"#,
         );
-        write_file(temp.path(), "index.ms", "export let answer : Int := 42;\n");
+        write_file(temp.path(), "index.ms", "export let result : Int := 42;\n");
 
         let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
         let error = project
             .package_entry("missing")
             .expect_err("package should be missing");
-        assert_eq!(error.diag_code(), Some(DiagCode::new(5022)));
+        assert_eq!(
+            error.diag_code(),
+            Some(ProjectDiagKind::UnknownPackage.code())
+        );
+        let context = DiagContext::new().with("name", "missing");
         assert_eq!(
             error.diag_message().as_deref(),
-            Some("unknown package `missing`")
+            Some(
+                ProjectDiagKind::UnknownPackage
+                    .message_with(&context)
+                    .as_str()
+            )
         );
     }
 
@@ -1341,7 +1501,8 @@ mod failure {
   "lib": ["!std"]
 }"#,
             "lib should be invalid",
-            "unknown lib `!std`",
+            ProjectDiagKind::ManifestLibUnknown,
+            &DiagContext::new().with("lib", "!std"),
         );
     }
 }

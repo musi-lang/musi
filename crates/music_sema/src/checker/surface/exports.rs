@@ -12,9 +12,9 @@ use super::super::{DeclState, ModuleState, TypingState};
 use super::types::{SurfaceTyBuilder, lower_surface_effect_row};
 use crate::BindingScheme;
 use crate::api::{
-    Attr, AttrArg, AttrRecordField, AttrValue, ClassMemberSurface, ClassSurface, ConstraintFacts,
-    ConstraintSurface, DataSurface, DataVariantSurface, EffectOpSurface, EffectSurface,
-    ExportedValue, InstanceSurface, LawParamSurface, LawSurface, SurfaceEffectRow, SurfaceTy,
+    Attr, AttrArg, AttrRecordField, AttrValue, ConstraintFacts, ConstraintSurface, DataSurface,
+    DataVariantSurface, EffectOpSurface, EffectSurface, ExportedValue, GivenSurface,
+    LawParamSurface, LawSurface, ShapeMemberSurface, ShapeSurface, SurfaceEffectRow, SurfaceTy,
     SurfaceTyId,
 };
 
@@ -27,7 +27,7 @@ pub(super) struct ExportBinding {
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct ExportInstance {
+pub(super) struct ExportGiven {
     pub(super) span: Span,
     pub(super) attrs: Box<[HirAttr]>,
 }
@@ -35,7 +35,7 @@ pub(super) struct ExportInstance {
 #[derive(Debug, Default)]
 pub(super) struct ModuleExports {
     pub(super) bindings: Vec<ExportBinding>,
-    pub(super) instances: Vec<ExportInstance>,
+    pub(super) givens: Vec<ExportGiven>,
 }
 
 pub(super) struct ExportSurfaceCollector<'a, 'store> {
@@ -63,18 +63,24 @@ impl<'a, 'store> ExportSurfaceCollector<'a, 'store> {
 }
 
 fn attr_is_musi(path: &[Box<str>]) -> bool {
-    matches!(path, [head] if head.as_ref() == "known" || head.as_ref() == "intrinsic")
+    matches!(path, [head, tail] if head.as_ref() == "musi" && matches!(tail.as_ref(), "known" | "intrinsic"))
         || path.first().is_some_and(|seg| seg.as_ref() == "musi")
 }
 
 fn attr_is_reserved(path: &[Box<str>]) -> bool {
     match path {
-        [head] if head.as_ref() == "known" => true,
-        [head] if head.as_ref() == "intrinsic" => true,
-        [head] if head.as_ref() == "link" => true,
-        [head] if head.as_ref() == "when" => true,
+        [head, tail]
+            if head.as_ref() == "musi" && matches!(tail.as_ref(), "known" | "intrinsic") =>
+        {
+            true
+        }
+        [head] if head.as_ref() == "native" => true,
+        [head] if head.as_ref() == "target" => true,
+        [head] if head.as_ref() == "profile" => true,
+        [head] if head.as_ref() == "lifecycle" => true,
         [head] if head.as_ref() == "repr" => true,
         [head] if head.as_ref() == "layout" => true,
+        [head] if head.as_ref() == "frozen" => true,
         [head, ..] if head.as_ref() == "diag" => true,
         [head, ..] if head.as_ref() == "musi" => true,
         _ => false,
@@ -207,8 +213,8 @@ impl ExportSurfaceCollector<'_, '_> {
                     constraint.kind,
                     self.tys.lower(constraint.value),
                 );
-                if let Some(class_key) = constraint.class_key.clone() {
-                    lowered.with_class_key(class_key)
+                if let Some(shape_key) = constraint.shape_key.clone() {
+                    lowered.with_shape_key(shape_key)
                 } else {
                     lowered
                 }
@@ -319,15 +325,17 @@ impl ExportSurfaceCollector<'_, '_> {
         export: &ExportBinding,
         symbol: Symbol,
     ) -> ExportedValue {
-        if let Some(module_target) = export_module_target(self.module, typing, export.binding) {
-            value = value.with_module_target(module_target);
+        if let Some(import_record_target) =
+            export_import_record_target(self.module, typing, export.binding)
+        {
+            value = value.with_import_record_target(import_record_target);
         }
-        if let Some(class_key) = decls
-            .class_facts_by_name()
+        if let Some(shape_key) = decls
+            .shape_facts_by_name()
             .get(&symbol)
             .map(|facts| facts.key.clone())
         {
-            value = value.with_class_key(class_key);
+            value = value.with_shape_key(shape_key);
         }
         if let Some(effect_key) = decls
             .effect_def(export.name.as_ref())
@@ -356,18 +364,18 @@ impl ExportSurfaceCollector<'_, '_> {
     }
 }
 
-fn export_module_target(
+fn export_import_record_target(
     module: &ModuleState,
     typing: &TypingState,
     binding: NameBindingId,
 ) -> Option<ModuleKey> {
     typing
-        .binding_module_targets()
+        .binding_import_record_targets()
         .get(&binding)
         .cloned()
         .or_else(|| {
             binding_value_expr(module, module.resolved.module.root, binding)
-                .and_then(|expr| expr_module_target(module, typing, expr))
+                .and_then(|expr| expr_import_record_target(module, typing, expr))
         })
 }
 
@@ -451,7 +459,7 @@ fn pat_binds(module: &ModuleState, pat_id: HirPatId, binding: NameBindingId) -> 
     }
 }
 
-fn expr_module_target(
+fn expr_import_record_target(
     module: &ModuleState,
     typing: &TypingState,
     expr_id: HirExprId,
@@ -468,7 +476,10 @@ fn expr_module_target(
         HirExprKind::Name { name } => {
             let site = NameSite::new(module.resolved.module.source_id, name.span);
             let binding = module.resolved.names.refs.get(&site).copied()?;
-            typing.binding_module_targets().get(&binding).cloned()
+            typing
+                .binding_import_record_targets()
+                .get(&binding)
+                .cloned()
         }
         _ => None,
     }
@@ -542,15 +553,15 @@ impl ExportSurfaceCollector<'_, '_> {
         })
     }
 
-    pub(super) fn collect_exported_classes(&mut self, decls: &DeclState) -> Box<[ClassSurface]> {
+    pub(super) fn collect_exported_shapes(&mut self, decls: &DeclState) -> Box<[ShapeSurface]> {
         self.collect_binding_exports(|this, export, inert_attrs, musi_attrs| {
             let symbol = this.module.resolved.names.bindings.get(export.binding).name;
-            let facts = decls.class_facts_by_name().get(&symbol)?;
+            let facts = decls.shape_facts_by_name().get(&symbol)?;
             let members = facts
                 .members
                 .iter()
                 .map(|member| {
-                    ClassMemberSurface::new(
+                    ShapeMemberSurface::new(
                         this.tys.interner.resolve(member.name),
                         member
                             .params
@@ -585,7 +596,7 @@ impl ExportSurfaceCollector<'_, '_> {
                 .collect::<Vec<_>>()
                 .into_boxed_slice();
             Some(
-                ClassSurface::new(facts.key.clone(), members, laws)
+                ShapeSurface::new(facts.key.clone(), members, laws)
                     .with_type_params(lower_type_params(&facts.type_params, this.tys.interner))
                     .with_type_param_kinds(
                         facts
@@ -662,26 +673,23 @@ impl ExportSurfaceCollector<'_, '_> {
         })
     }
 
-    pub(super) fn collect_exported_instances(
-        &mut self,
-        decls: &DeclState,
-    ) -> Box<[InstanceSurface]> {
+    pub(super) fn collect_exported_givens(&mut self, decls: &DeclState) -> Box<[GivenSurface]> {
         decls
-            .instance_facts()
+            .given_facts()
             .values()
             .filter_map(|facts| {
                 let export = self
                     .exports
-                    .instances
+                    .givens
                     .iter()
                     .find(|export| export.span == facts.origin.span)?;
                 let (inert_attrs, musi_attrs) =
                     split_export_attrs(self.module, self.tys.interner, &export.attrs);
                 Some(
-                    InstanceSurface::new(
-                        facts.class_key.clone(),
+                    GivenSurface::new(
+                        facts.shape_key.clone(),
                         facts
-                            .class_args
+                            .shape_args
                             .iter()
                             .copied()
                             .map(|ty| self.tys.lower(ty))
@@ -814,6 +822,10 @@ fn collect_call_like_exports(
         | HirExprKind::Unsafe { body } => {
             collect_expr(module, interner, *body, exports, attr_stack);
         }
+        HirExprKind::Pin { value, body, .. } => {
+            collect_expr(module, interner, *value, exports, attr_stack);
+            collect_expr(module, interner, *body, exports, attr_stack);
+        }
         HirExprKind::Call { callee, args } => {
             collect_expr(module, interner, *callee, exports, attr_stack);
             collect_arg_exprs(module, interner, args, exports, attr_stack);
@@ -854,14 +866,18 @@ fn collect_decl_or_control_exports(
         HirExprKind::Data { variants, fields } => {
             collect_data_exports(module, interner, variants, fields, exports, attr_stack);
         }
-        HirExprKind::Effect { members } | HirExprKind::Class { members, .. } => {
+        HirExprKind::Effect { members } | HirExprKind::Shape { members, .. } => {
             collect_member_exports(module, interner, members, exports, attr_stack);
         }
-        HirExprKind::Instance { class, members, .. } => {
-            collect_expr(module, interner, *class, exports, attr_stack);
+        HirExprKind::Given {
+            capability,
+            members,
+            ..
+        } => {
+            collect_expr(module, interner, *capability, exports, attr_stack);
             collect_member_exports(module, interner, members, exports, attr_stack);
         }
-        HirExprKind::HandlerLit { clauses, .. } => {
+        HirExprKind::AnswerLit { clauses, .. } => {
             collect_handle_clause_exports(module, interner, clauses, exports, attr_stack);
         }
         HirExprKind::Handle { expr, handler } => {
@@ -877,7 +893,7 @@ fn collect_decl_or_control_exports(
         | HirExprKind::Name { .. }
         | HirExprKind::Lit { .. }
         | HirExprKind::ArrayTy { .. }
-        | HirExprKind::HandlerTy { .. }
+        | HirExprKind::AnswerTy { .. }
         | HirExprKind::Variant { .. } => {}
         _ => return false,
     }
@@ -1136,21 +1152,21 @@ fn collect_direct_exports(
         HirExprKind::Let { pat, value, .. } => {
             if matches!(
                 module.resolved.module.store.exprs.get(*value).kind,
-                HirExprKind::Instance { .. }
+                HirExprKind::Given { .. }
             ) {
-                collect_exported_instance(module, *value, opaque, exports, attr_stack);
+                collect_exported_given(module, *value, opaque, exports, attr_stack);
                 return;
             }
             collect_export_bindings_from_pat(module, interner, *pat, opaque, exports, attr_stack);
         }
-        HirExprKind::Instance { .. } => {
-            collect_exported_instance(module, expr_id, opaque, exports, attr_stack);
+        HirExprKind::Given { .. } => {
+            collect_exported_given(module, expr_id, opaque, exports, attr_stack);
         }
         _ => {}
     }
 }
 
-fn collect_exported_instance(
+fn collect_exported_given(
     module: &ModuleState,
     expr_id: HirExprId,
     opaque: bool,
@@ -1161,10 +1177,10 @@ fn collect_exported_instance(
     if opaque {
         return;
     }
-    if exports.instances.iter().any(|export| export.span == span) {
+    if exports.givens.iter().any(|export| export.span == span) {
         return;
     }
-    exports.instances.push(ExportInstance {
+    exports.givens.push(ExportGiven {
         span,
         attrs: attr_stack.to_vec().into_boxed_slice(),
     });

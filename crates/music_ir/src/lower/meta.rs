@@ -114,10 +114,6 @@ const SIMPLE_SURFACE_TY_NAMES: &[SimpleSurfaceTyName] = &[
         kind: SurfaceTyKind::CPtr,
         display_name: "CPtr",
     },
-    SimpleSurfaceTyName {
-        kind: SurfaceTyKind::Module,
-        display_name: "Module",
-    },
 ];
 
 fn qualified_name(module: &ModuleKey, name: &str) -> Box<str> {
@@ -224,35 +220,24 @@ fn format_surface_ty(surface: &ModuleSurface, ty: SurfaceTyId) -> String {
         SurfaceTyKind::Tuple { items } => format_tuple_surface_ty(surface, items),
         SurfaceTyKind::Seq { item } => format!("[]{}", format_surface_ty(surface, *item)),
         SurfaceTyKind::Array { dims, item } => format_array_surface_ty(surface, dims, *item),
+        SurfaceTyKind::Bits { width } => format!("Bits[{width}]"),
         SurfaceTyKind::Range { bound } => format!("Range[{}]", format_surface_ty(surface, *bound)),
-        SurfaceTyKind::ClosedRange { bound } => {
-            format!("ClosedRange[{}]", format_surface_ty(surface, *bound))
-        }
-        SurfaceTyKind::PartialRangeFrom { bound } => {
-            format!("PartialRangeFrom[{}]", format_surface_ty(surface, *bound))
-        }
-        SurfaceTyKind::PartialRangeUpTo { bound } => {
-            format!("PartialRangeUpTo[{}]", format_surface_ty(surface, *bound))
-        }
-        SurfaceTyKind::PartialRangeThru { bound } => {
-            format!("PartialRangeThru[{}]", format_surface_ty(surface, *bound))
-        }
         SurfaceTyKind::Handler {
             effect,
             input,
             output,
         } => format!(
-            "using {} ({} -> {})",
+            "answer {} ({} -> {})",
             format_surface_ty(surface, *effect),
             format_surface_ty(surface, *input),
             format_surface_ty(surface, *output)
         ),
         SurfaceTyKind::Mut { inner } => format!("mut {}", format_surface_ty(surface, *inner)),
-        SurfaceTyKind::AnyClass { class } => {
-            format!("any {}", format_surface_ty(surface, *class))
+        SurfaceTyKind::AnyShape { capability: shape } => {
+            format!("any {}", format_surface_ty(surface, *shape))
         }
-        SurfaceTyKind::SomeClass { class } => {
-            format!("some {}", format_surface_ty(surface, *class))
+        SurfaceTyKind::SomeShape { capability: shape } => {
+            format!("some {}", format_surface_ty(surface, *shape))
         }
         SurfaceTyKind::Record { fields } => format_record_surface_ty(surface, fields),
         SurfaceTyKind::Error
@@ -280,7 +265,6 @@ fn format_surface_ty(surface: &ModuleSurface, ty: SurfaceTyId) -> String {
         | SurfaceTyKind::Rune
         | SurfaceTyKind::CString
         | SurfaceTyKind::CPtr
-        | SurfaceTyKind::Module
         | SurfaceTyKind::NatLit(_) => "<invalid-simple-surface-ty>".into(),
     }
 }
@@ -394,7 +378,7 @@ fn format_effect_row(surface: &ModuleSurface, row: &SurfaceEffectRow) -> String 
     if let Some(open) = row.open.as_deref() {
         items.push(format!("...{open}"));
     }
-    format!("using {{ {} }}", items.join(", "))
+    format!("require {{ {} }}", items.join(", "))
 }
 
 fn push_meta(out: &mut MetaRecordList, target: &str, key: &'static str, values: Box<[Box<str>]>) {
@@ -489,14 +473,14 @@ pub(super) fn collect_meta(sema: &SemaModule) -> Box<[IrMetaRecord]> {
     let mut out = Vec::<IrMetaRecord>::new();
     let surface = sema.surface();
 
-    for class in surface.exported_classes() {
-        let target = qualified_name(&class.key.module, class.key.name.as_ref());
-        if !class.laws.is_empty() {
+    for shape in surface.exported_shapes() {
+        let target = qualified_name(&shape.key.module, shape.key.name.as_ref());
+        if !shape.laws.is_empty() {
             push_meta(
                 &mut out,
                 target.as_ref(),
-                "class.laws",
-                class
+                "capability.laws",
+                shape
                     .laws
                     .iter()
                     .map(|law| law.name.clone())
@@ -507,8 +491,8 @@ pub(super) fn collect_meta(sema: &SemaModule) -> Box<[IrMetaRecord]> {
         push_inert_and_musi_attrs(
             &mut out,
             target.as_ref(),
-            &class.inert_attrs,
-            &class.musi_attrs,
+            &shape.inert_attrs,
+            &shape.musi_attrs,
         );
     }
 
@@ -556,8 +540,8 @@ pub(super) fn collect_meta(sema: &SemaModule) -> Box<[IrMetaRecord]> {
         push_export_sig_meta(&mut out, surface, target.as_ref(), export);
     }
 
-    for (idx, inst) in surface.exported_instances().iter().enumerate() {
-        let target: Box<str> = format!("{}::instance::{idx}", surface.module_key().as_str()).into();
+    for (idx, inst) in surface.exported_givens().iter().enumerate() {
+        let target: Box<str> = format!("{}::given::{idx}", surface.module_key().as_str()).into();
         push_inert_and_musi_attrs(
             &mut out,
             target.as_ref(),

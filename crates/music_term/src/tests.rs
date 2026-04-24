@@ -9,7 +9,7 @@ mod success {
     fn parses_expr_and_module_syntax_terms() {
         let expr = SyntaxTerm::parse(SyntaxShape::Expr, "40 + 2").unwrap();
         let module =
-            SyntaxTerm::parse(SyntaxShape::Module, "export let answer : Int := 42;").unwrap();
+            SyntaxTerm::parse(SyntaxShape::Module, "export let result : Int := 42;").unwrap();
         assert_eq!(expr.text(), "40 + 2");
         assert_eq!(module.shape(), SyntaxShape::Module);
     }

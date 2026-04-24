@@ -13,7 +13,7 @@ pub(super) fn lower_array_expr(
             ty_name: render_ty_name(
                 sema,
                 sema.try_expr_ty(expr_id).unwrap_or_else(|| {
-                    invalid_lowering_path("expr type missing for array literal")
+                    lowering_invariant_violation("expr type missing for array literal")
                 }),
                 interner,
             ),
@@ -80,7 +80,7 @@ fn append_array_spread_parts(
     let sema = ctx.sema;
     let spread_ty = sema
         .try_expr_ty(spread_expr)
-        .unwrap_or_else(|| invalid_lowering_path("expr type missing for array spread"));
+        .unwrap_or_else(|| lowering_invariant_violation("expr type missing for array spread"));
     match &sema.ty(spread_ty).kind {
         HirTyKind::Tuple { items } => {
             for (index, _) in sema.module().store.ty_ids.get(*items).iter().enumerate() {
@@ -102,25 +102,35 @@ fn append_array_spread_parts(
             parts.push(IrSeqPart::Spread(temp_expr.clone()));
             Ok(true)
         }
-        HirTyKind::Range { .. } => {
-            let evidence = sema
-                .expr_evidence(spread_expr)
+        HirTyKind::Range { bound } => {
+            let result_ty_name = range_sequence_type_name(sema, *bound, ctx.interner);
+            let constraint_answer = sema
+                .expr_constraint_answers(spread_expr)
                 .and_then(|items| items.first())
-                .map(|item| super::lower_evidence_expr(ctx, origin, item));
-            let Some(evidence) = evidence else {
-                return Err("range spread evidence missing".into());
+                .map(|item| super::lower_constraint_answer_expr(ctx, origin, item));
+            let Some(constraint_answer) = constraint_answer else {
+                return Err(super::lower_errors::lowering_error(
+                    "range spread evidence missing",
+                ));
             };
             parts.push(IrSeqPart::Spread(IrExpr::new(
                 origin,
                 IrExprKind::RangeMaterialize {
                     range: Box::new(temp_expr.clone()),
-                    evidence: Box::new(evidence),
+                    evidence: Box::new(constraint_answer),
+                    result_ty_name,
                 },
             )));
             Ok(true)
         }
-        _ => Err("array spread source is not tuple/array".into()),
+        _ => Err(super::lower_errors::lowering_error(
+            "array spread source is not tuple/array",
+        )),
     }
+}
+
+fn range_sequence_type_name(sema: &SemaModule, item: HirTyId, interner: &Interner) -> Box<str> {
+    format!("[]{}", render_ty_name(sema, item, interner)).into()
 }
 
 fn append_array_dim_spread_parts(
@@ -136,7 +146,9 @@ fn append_array_dim_spread_parts(
         return Ok(true);
     }
     if dims_vec.len() != 1 {
-        return Err("array spread requires 1D array".into());
+        return Err(super::lower_errors::lowering_error(
+            "array spread needs 1D array",
+        ));
     }
     match dims_vec[0] {
         HirDim::Int(len) => {
@@ -183,8 +195,9 @@ fn array_tail_kind(
         return Ok(IrExprKind::ArrayCat {
             ty_name: render_ty_name(
                 sema,
-                sema.try_expr_ty(expr_id)
-                    .unwrap_or_else(|| invalid_lowering_path("expr type missing for array cat")),
+                sema.try_expr_ty(expr_id).unwrap_or_else(|| {
+                    lowering_invariant_violation("expr type missing for array cat")
+                }),
                 interner,
             ),
             parts: parts.into_boxed_slice(),
@@ -199,13 +212,16 @@ fn array_tail_kind(
         .collect::<Option<Vec<_>>>()
         .map(Vec::into_boxed_slice);
     let Some(items) = items else {
-        return Err("array spread lowering invariant".into());
+        return Err(super::lower_errors::lowering_error(
+            "array spread lowering invariant",
+        ));
     };
     Ok(IrExprKind::Array {
         ty_name: render_ty_name(
             sema,
-            sema.try_expr_ty(expr_id)
-                .unwrap_or_else(|| invalid_lowering_path("expr type missing for array literal")),
+            sema.try_expr_ty(expr_id).unwrap_or_else(|| {
+                lowering_invariant_violation("expr type missing for array literal")
+            }),
             interner,
         ),
         items,

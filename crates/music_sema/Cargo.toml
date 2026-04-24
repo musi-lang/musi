@@ -3,7 +3,7 @@ name = "music_sema"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-description = "Semantic analysis: types, effects, class facts, and FFI validation"
+description = "Semantic analysis: types, effects, shape facts, and FFI validation"
 license.workspace = true
 publish.workspace = true
 

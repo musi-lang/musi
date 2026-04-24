@@ -15,10 +15,55 @@ mod success {
 catalog demo crate DemoKind crates/demo/src/diag_catalog_gen.rs
 diag Known 1000
   message "known"
-  primary "known"
 map demo_error_kind crate::DemoError required
   case "Known { .. }" Known
 end
+"#,
+        )
+        .unwrap();
+
+        validate_catalogs(&[catalog]).unwrap();
+    }
+
+    #[test]
+    fn accepts_missing_primary_label() {
+        let catalog = parse_catalog(
+            Path::new("test.def"),
+            r#"
+catalog demo crate DemoKind crates/demo/src/diag_catalog_gen.rs
+diag Known 1000
+  message "known"
+"#,
+        )
+        .unwrap();
+
+        validate_catalogs(&[catalog]).unwrap();
+    }
+
+    #[test]
+    fn accepts_concrete_subject_first_wording() {
+        let catalog = parse_catalog(
+            Path::new("test.def"),
+            r#"
+catalog demo crate DemoKind crates/demo/src/diag_catalog_gen.rs
+diag UnknownOpcode 1000
+  message "opcode `{opcode}` unknown"
+  primary "opcode `{opcode}` unknown"
+"#,
+        )
+        .unwrap();
+
+        validate_catalogs(&[catalog]).unwrap();
+    }
+
+    #[test]
+    fn accepts_category_kind_with_subject_first_message() {
+        let catalog = parse_catalog(
+            Path::new("test.def"),
+            r#"
+catalog demo crate DemoKind crates/demo/src/diag_catalog_gen.rs
+diag MissingPackageName 1000
+  message "package `{path}` missing name"
 "#,
         )
         .unwrap();
@@ -38,7 +83,6 @@ mod failure {
 catalog demo crate DemoKind crates/demo/src/diag_catalog_gen.rs
 diag Known 1000
   message "known"
-  primary "known"
 map demo_error_kind crate::DemoError required
   case "Known { .. }" Missing
 end
@@ -59,7 +103,6 @@ end
 catalog demo crate DemoKind crates/demo/src/diag_catalog_gen.rs
 diag Known 1000
   message "known"
-  primary "known"
 map demo_error_kind crate::DemoError required
   case "Known { .. }" Known
   case "Known { .. }" Known
@@ -71,24 +114,6 @@ end
         let error = validate_catalogs(&[catalog]).unwrap_err();
 
         assert!(error.0.contains("duplicate case `Known { .. }`"));
-    }
-
-    #[test]
-    fn rejects_suffix_category_wording() {
-        let catalog = parse_catalog(
-            Path::new("test.def"),
-            r#"
-catalog demo crate DemoKind crates/demo/src/diag_catalog_gen.rs
-diag Bad 1000
-  message "opcode `{opcode}` unknown"
-  primary "opcode `{opcode}` unknown"
-"#,
-        )
-        .unwrap();
-
-        let error = validate_catalogs(&[catalog]).unwrap_err();
-
-        assert!(error.0.contains("category after subject"));
     }
 
     #[test]

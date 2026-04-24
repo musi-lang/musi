@@ -1,18 +1,17 @@
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use musi_vm::{
-    EffectCall, ForeignCall, Program, RejectingHost, RejectingLoader, Value, Vm, VmError,
-    VmErrorKind, VmHost, VmOptions, VmResult,
+    EffectCall, ForeignCall, Program, RejectingHost, RejectingLoader, Value, ValueView, Vm,
+    VmError, VmErrorKind, VmHost, VmHostCallContext, VmOptions, VmResult,
 };
 use music_base::{Diag, SourceId};
 use music_hir::{HirExprId, HirExprKind, HirPrefixOp};
 use music_module::ModuleKey;
 use music_names::{NameBindingId, NameSite};
 use music_sema::{
-    ComptimeClassValue, ComptimeClosureValue, ComptimeDataValue, ComptimeEffectValue,
-    ComptimeForeignValue, ComptimeModuleValue, ComptimeSeqValue, ComptimeTypeValue, ComptimeValue,
-    SemaModule,
+    ComptimeClosureValue, ComptimeDataValue, ComptimeEffectValue, ComptimeForeignValue,
+    ComptimeImportRecordValue, ComptimeSeqValue, ComptimeShapeValue, ComptimeTypeValue,
+    ComptimeValue, SemaModule,
 };
 use music_term::TypeTerm;
 
@@ -192,23 +191,33 @@ impl Session {
 
 #[derive(Clone)]
 struct SafeCtfeHost {
-    host: Option<Rc<RefCell<Box<dyn VmHost>>>>,
+    host: Option<Arc<Mutex<Box<dyn VmHost>>>>,
 }
 
 impl SafeCtfeHost {
-    const fn new(host: Option<Rc<RefCell<Box<dyn VmHost>>>>) -> Self {
+    const fn new(host: Option<Arc<Mutex<Box<dyn VmHost>>>>) -> Self {
         Self { host }
     }
 }
 
 impl VmHost for SafeCtfeHost {
-    fn call_foreign(&mut self, foreign: &ForeignCall, _args: &[Value]) -> VmResult<Value> {
+    fn call_foreign(
+        &mut self,
+        _ctx: VmHostCallContext<'_, '_>,
+        foreign: &ForeignCall,
+        _args: &[Value],
+    ) -> VmResult<Value> {
         Err(VmError::new(VmErrorKind::ForeignCallRejected {
             foreign: foreign.name().into(),
         }))
     }
 
-    fn handle_effect(&mut self, effect: &EffectCall, args: &[Value]) -> VmResult<Value> {
+    fn handle_effect(
+        &mut self,
+        ctx: VmHostCallContext<'_, '_>,
+        effect: &EffectCall,
+        args: &[Value],
+    ) -> VmResult<Value> {
         if !effect.is_comptime_safe() {
             return Err(VmError::new(VmErrorKind::EffectRejected {
                 effect: effect.effect_name().into(),
@@ -217,9 +226,16 @@ impl VmHost for SafeCtfeHost {
             }));
         }
         let Some(host) = &self.host else {
-            return RejectingHost.handle_effect(effect, args);
+            return RejectingHost.handle_effect(ctx, effect, args);
         };
-        host.borrow_mut().handle_effect(effect, args)
+        let Ok(mut host) = host.lock() else {
+            return Err(VmError::new(VmErrorKind::EffectRejected {
+                effect: effect.effect_name().into(),
+                op: Some(effect.op_name().into()),
+                reason: "ctfe host lock poisoned".into(),
+            }));
+        };
+        host.handle_effect(ctx, effect, args)
     }
 }
 
@@ -233,27 +249,54 @@ fn value_to_comptime(
         Value::Int(value) => Ok(ComptimeValue::Int(*value)),
         Value::Nat(value) => Ok(ComptimeValue::Nat(*value)),
         Value::Float(value) => Ok(ComptimeValue::Float(value.to_string().into_boxed_str())),
-        Value::String(value) => Ok(ComptimeValue::String(value.as_ref().into())),
+        Value::Bits(_) => Err("bits escape rejected".into()),
+        Value::String(_) => match vm.inspect(value) {
+            ValueView::String(text) => Ok(ComptimeValue::String(text.as_str().into())),
+            _ => Err("string view missing".into()),
+        },
         Value::CPtr(value) => Ok(ComptimeValue::CPtr(*value)),
-        Value::Syntax(value) => Ok(ComptimeValue::Syntax((**value).clone())),
+        Value::Syntax(_) => match vm.inspect(value) {
+            ValueView::Syntax(term) => Ok(ComptimeValue::Syntax(term.term().clone())),
+            _ => Err("syntax view missing".into()),
+        },
         Value::Seq(_) => seq_to_comptime(root_key, vm, value),
         Value::Data(_) => data_to_comptime(root_key, vm, value),
         Value::Closure(_) => closure_to_comptime(root_key, vm, value),
+        Value::Procedure(_) => procedure_to_comptime(root_key, vm, value),
         Value::Type(value) => Ok(ComptimeValue::Type(ComptimeTypeValue {
             term: root_program(vm)?.type_term(*value),
         })),
-        Value::Module(_) => module_to_comptime(root_key, value),
+        Value::Module(_) => module_to_comptime(root_key, vm, value),
         Value::Foreign(_) => foreign_to_comptime(root_key, vm, value),
         Value::Effect(value) => Ok(ComptimeValue::Effect(ComptimeEffectValue {
             module: root_key.clone(),
             name: root_program(vm)?.effect_source_name(*value).into(),
         })),
-        Value::Class(value) => Ok(ComptimeValue::Class(ComptimeClassValue {
+        Value::Shape(value) => Ok(ComptimeValue::Shape(ComptimeShapeValue {
             module: root_key.clone(),
-            name: root_program(vm)?.class_source_name(*value).into(),
+            name: root_program(vm)?.shape_source_name(*value).into(),
         })),
         Value::Continuation(_) => Err("continuation escape rejected".into()),
     }
+}
+
+fn procedure_to_comptime(
+    root_key: &ModuleKey,
+    vm: &Vm,
+    value: &Value,
+) -> Result<ComptimeValue, Box<str>> {
+    let ValueView::Procedure(procedure) = vm.inspect(value) else {
+        return Err("procedure view missing".into());
+    };
+    let program = vm
+        .module_program(procedure.module_slot())
+        .ok_or_else(|| format!("module slot `{}` missing", procedure.module_slot()))?;
+    let module = module_key_for_slot(root_key, vm, procedure.module_slot())?;
+    Ok(ComptimeValue::Closure(ComptimeClosureValue {
+        module,
+        name: program.procedure_source_name(procedure.procedure()).into(),
+        captures: Box::default(),
+    }))
 }
 
 fn seq_to_comptime(
@@ -261,14 +304,13 @@ fn seq_to_comptime(
     vm: &Vm,
     value: &Value,
 ) -> Result<ComptimeValue, Box<str>> {
-    let seq = value
-        .as_seq()
-        .ok_or_else(|| "sequence view missing".to_owned())?;
+    let ValueView::Seq(seq) = vm.inspect(value) else {
+        return Err("sequence view missing".into());
+    };
     let ty = root_program(vm)?.type_term(seq.ty());
     let items = (0..seq.len())
         .map(|index| {
             seq.get(index)
-                .cloned()
                 .ok_or_else(|| "sequence item missing".into())
                 .and_then(|item| value_to_comptime(root_key, vm, &item))
         })
@@ -282,9 +324,9 @@ fn data_to_comptime(
     vm: &Vm,
     value: &Value,
 ) -> Result<ComptimeValue, Box<str>> {
-    let data = value
-        .as_record()
-        .ok_or_else(|| "data view missing".to_owned())?;
+    let (ValueView::Record(data) | ValueView::Data(data)) = vm.inspect(value) else {
+        return Err("data view missing".into());
+    };
     let program = root_program(vm)?;
     let ty = program.type_term(data.ty());
     let variant = program
@@ -319,9 +361,9 @@ fn closure_to_comptime(
     vm: &Vm,
     value: &Value,
 ) -> Result<ComptimeValue, Box<str>> {
-    let closure = value
-        .as_closure()
-        .ok_or_else(|| "closure view missing".to_owned())?;
+    let ValueView::Closure(closure) = vm.inspect(value) else {
+        return Err("closure view missing".into());
+    };
     let program = vm
         .module_program(closure.module_slot())
         .ok_or_else(|| format!("module slot `{}` missing", closure.module_slot()))?;
@@ -339,16 +381,22 @@ fn closure_to_comptime(
     }))
 }
 
-fn module_to_comptime(root_key: &ModuleKey, value: &Value) -> Result<ComptimeValue, Box<str>> {
-    let module = value
-        .as_module()
-        .ok_or_else(|| "module view missing".to_owned())?;
+fn module_to_comptime(
+    root_key: &ModuleKey,
+    vm: &Vm,
+    value: &Value,
+) -> Result<ComptimeValue, Box<str>> {
+    let ValueView::Module(module) = vm.inspect(value) else {
+        return Err("module view missing".into());
+    };
     let key = if module.slot() == 0 {
         root_key.clone()
     } else {
         ModuleKey::new(module.spec())
     };
-    Ok(ComptimeValue::Module(ComptimeModuleValue { key }))
+    Ok(ComptimeValue::ImportRecord(ComptimeImportRecordValue {
+        key,
+    }))
 }
 
 fn foreign_to_comptime(

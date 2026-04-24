@@ -1,13 +1,14 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use music_arena::SliceRange;
+use music_base::diag::DiagContext;
 use music_hir::{
     HirArg, HirArrayItem, HirAttr, HirBinder, HirConstraint, HirExprId, HirExprKind, HirFieldDef,
     HirMatchArm, HirMemberDef, HirMemberKind, HirOrigin, HirTemplatePart, HirTyId, HirVariantDef,
 };
 use music_names::{Ident, Symbol};
 
-use crate::api::{ClassFacts, ClassMemberFacts, DefinitionKey, LawFacts};
+use crate::api::{DefinitionKey, LawFacts, ShapeFacts, ShapeMemberFacts};
 
 use super::attrs::extract_data_layout_hints;
 use super::const_eval::record_data_variant_tag;
@@ -75,7 +76,7 @@ impl CollectPass<'_, '_, '_> {
                 | HirExprKind::Name { .. }
                 | HirExprKind::Lit { .. }
                 | HirExprKind::ArrayTy { .. }
-                | HirExprKind::HandlerTy { .. }
+                | HirExprKind::AnswerTy { .. }
                 | HirExprKind::Variant { .. }
                 | HirExprKind::Quote { .. }
                 | HirExprKind::Splice { .. }
@@ -114,6 +115,10 @@ impl CollectPass<'_, '_, '_> {
             HirExprKind::Lambda { body, .. }
             | HirExprKind::Import { arg: body }
             | HirExprKind::Request { expr: body } => self.visit_expr(body),
+            HirExprKind::Pin { value, body, .. } => {
+                self.visit_expr(value);
+                self.visit_expr(body);
+            }
             HirExprKind::Call { callee, args } => self.visit_call(callee, args),
             HirExprKind::Apply { callee, args } | HirExprKind::Index { base: callee, args } => {
                 self.visit_expr(callee);
@@ -159,13 +164,17 @@ impl CollectPass<'_, '_, '_> {
                 self.visit_expr(value);
             }
             HirExprKind::Data { variants, fields } => self.visit_data(variants, fields),
-            HirExprKind::Effect { members } | HirExprKind::Class { members, .. } => {
+            HirExprKind::Effect { members } | HirExprKind::Shape { members, .. } => {
                 for member in self.members(members) {
                     self.visit_member(&member);
                 }
             }
-            HirExprKind::Instance { class, members, .. } => {
-                self.visit_expr(class);
+            HirExprKind::Given {
+                capability,
+                members,
+                ..
+            } => {
+                self.visit_expr(capability);
                 for member in self.members(members) {
                     self.visit_member(&member);
                 }
@@ -178,7 +187,7 @@ impl CollectPass<'_, '_, '_> {
     fn visit_expr_control(&mut self, id: HirExprId) -> bool {
         match self.expr(id).kind {
             HirExprKind::Match { scrutinee, arms } => self.visit_match(scrutinee, arms),
-            HirExprKind::HandlerLit { clauses, .. } => {
+            HirExprKind::AnswerLit { clauses, .. } => {
                 for clause in self.handle_clauses(clauses) {
                     self.visit_expr(clause.body);
                 }
@@ -267,10 +276,10 @@ impl CollectPass<'_, '_, '_> {
                 self.collect_data_decl(origin, &attrs, name, type_params, variants, fields);
             }
             HirExprKind::Effect { members } => self.collect_effect_decl(name, members),
-            HirExprKind::Class {
+            HirExprKind::Shape {
                 constraints,
                 members,
-            } => self.collect_class_decl(value, name, type_params, constraints, members),
+            } => self.collect_shape_decl(value, name, type_params, constraints, members),
             _ => {}
         }
     }
@@ -428,7 +437,11 @@ impl CollectPass<'_, '_, '_> {
         origin: HirOrigin,
     ) {
         if !record_data_variant_tag(seen_tags, tag_value) {
-            self.diag(origin.span, DiagKind::DuplicateDataVariantDiscriminant, "");
+            self.diag_with(
+                origin.span,
+                DiagKind::DuplicateDataVariantDiscriminant,
+                DiagContext::new().with("discriminant", tag_value),
+            );
         }
     }
 
@@ -441,12 +454,11 @@ impl CollectPass<'_, '_, '_> {
         let Some(previous_origin) = seen_variants.insert(tag.into(), origin) else {
             return;
         };
-        self.diag_message_with_previous(
+        self.diag_with_previous(
             origin.span,
             previous_origin.span,
             DiagKind::CollectDuplicateDataVariant,
-            format!("duplicate data variant `{tag}`"),
-            format!("data variant `{tag}` first declared here"),
+            DiagContext::new().with("variant", tag),
         );
     }
 
@@ -493,12 +505,11 @@ impl CollectPass<'_, '_, '_> {
                 HirMemberKind::Let => {
                     let op_name: Box<str> = self.resolve_symbol(member.name.name).into();
                     if let Some(previous_origin) = seen_ops.insert(op_name.clone(), member.origin) {
-                        self.diag_message_with_previous(
+                        self.diag_with_previous(
                             member.origin.span,
                             previous_origin.span,
                             DiagKind::CollectDuplicateEffectOp,
-                            format!("duplicate effect operation `{op_name}`"),
-                            format!("effect operation `{op_name}` first declared here"),
+                            DiagContext::new().with("operation", op_name),
                         );
                     }
                 }
@@ -506,12 +517,11 @@ impl CollectPass<'_, '_, '_> {
                     let law_name = self.resolve_symbol(member.name.name).to_owned();
                     if let Some(previous_origin) = seen_laws.insert(member.name.name, member.origin)
                     {
-                        self.diag_message_with_previous(
+                        self.diag_with_previous(
                             member.origin.span,
                             previous_origin.span,
                             DiagKind::CollectDuplicateEffectLaw,
-                            format!("duplicate effect law `{law_name}`"),
-                            format!("effect law `{law_name}` first declared here"),
+                            DiagContext::new().with("law", law_name),
                         );
                     }
                 }
@@ -553,7 +563,7 @@ impl CollectPass<'_, '_, '_> {
 }
 
 impl CollectPass<'_, '_, '_> {
-    fn collect_class_decl(
+    fn collect_shape_decl(
         &mut self,
         value: HirExprId,
         name: Ident,
@@ -561,34 +571,34 @@ impl CollectPass<'_, '_, '_> {
         constraints: SliceRange<HirConstraint>,
         members: SliceRange<HirMemberDef>,
     ) {
-        if self.class_id(name.name).is_some() {
+        if self.shape_id(name.name).is_some() {
             return;
         }
         let members_vec = self.members(members);
-        self.validate_class_decl_members(&members_vec);
+        self.validate_shape_decl_members(&members_vec);
         let type_param_kinds = self.lower_type_param_kinds(type_params);
         self.push_type_param_kinds(&type_param_kinds);
-        let class_members = self.collect_class_members(&members_vec);
-        let laws = self.collect_class_laws(&members_vec);
-        self.insert_class_id(name.name, value);
+        let shape_members = self.collect_shape_members(&members_vec);
+        let laws = self.collect_shape_laws(&members_vec);
+        self.insert_shape_id(name.name, value);
         let type_params = data_decl_type_names(&type_param_kinds);
         let type_param_kind_tys = data_decl_type_kinds(&type_param_kinds);
         let constraints = self.lower_constraints(constraints);
         self.pop_type_param_kinds();
-        let facts = ClassFacts::new(
+        let facts = ShapeFacts::new(
             surface_key(self.module_key(), self.interner(), name.name),
             name.name,
-            class_members,
+            shape_members,
             laws,
         )
         .with_type_params(type_params)
         .with_type_param_kinds(type_param_kind_tys)
         .with_constraints(constraints);
-        self.insert_class_facts(value, facts.clone());
-        self.insert_class_facts_by_name(name.name, facts);
+        self.insert_shape_facts(value, facts.clone());
+        self.insert_shape_facts_by_name(name.name, facts);
     }
 
-    fn validate_class_decl_members(&mut self, members: &[HirMemberDef]) {
+    fn validate_shape_decl_members(&mut self, members: &[HirMemberDef]) {
         let mut seen_members = HashMap::new();
         let mut seen_laws = HashMap::new();
         for member in members {
@@ -599,22 +609,20 @@ impl CollectPass<'_, '_, '_> {
                         .is_some() =>
                 {
                     let member_name = self.resolve_symbol(member.name.name).to_owned();
-                    self.diag_message(
+                    self.diag_with(
                         member.origin.span,
-                        DiagKind::CollectDuplicateClassMember,
-                        format!("duplicate class member `{member_name}`"),
-                        format!("duplicate class member `{member_name}`"),
+                        DiagKind::CollectDuplicateShapeMember,
+                        DiagContext::new().with("member", member_name),
                     );
                 }
                 HirMemberKind::Law
                     if seen_laws.insert(member.name.name, member.origin).is_some() =>
                 {
                     let law_name = self.resolve_symbol(member.name.name).to_owned();
-                    self.diag_message(
+                    self.diag_with(
                         member.origin.span,
-                        DiagKind::CollectDuplicateClassLaw,
-                        format!("duplicate class law `{law_name}`"),
-                        format!("duplicate class law `{law_name}`"),
+                        DiagKind::CollectDuplicateShapeLaw,
+                        DiagContext::new().with("law", law_name),
                     );
                 }
                 _ => {}
@@ -622,7 +630,7 @@ impl CollectPass<'_, '_, '_> {
         }
     }
 
-    fn collect_class_members(&mut self, members: &[HirMemberDef]) -> Box<[ClassMemberFacts]> {
+    fn collect_shape_members(&mut self, members: &[HirMemberDef]) -> Box<[ShapeMemberFacts]> {
         members
             .iter()
             .filter(|member| member.kind == HirMemberKind::Let)
@@ -631,7 +639,7 @@ impl CollectPass<'_, '_, '_> {
             .into_boxed_slice()
     }
 
-    fn collect_class_laws(&mut self, members: &[HirMemberDef]) -> Box<[LawFacts]> {
+    fn collect_shape_laws(&mut self, members: &[HirMemberDef]) -> Box<[LawFacts]> {
         members
             .iter()
             .filter(|member| member.kind == HirMemberKind::Law)

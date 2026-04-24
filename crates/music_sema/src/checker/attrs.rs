@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
 use music_arena::SliceRange;
+use music_base::diag::DiagContext;
 use music_builtin::{is_builtin_intrinsic_name, is_builtin_intrinsic_symbol, is_builtin_type_name};
 use music_hir::{
     HirAttr, HirAttrArg, HirExprId, HirExprKind, HirOrigin, HirPatKind, HirTyId, HirTyKind,
@@ -86,10 +87,10 @@ impl PassBase<'_, '_, '_> {
             match self.resolve_symbol(name.name) {
                 "align" => self.extract_layout_align_hint(origin, arg.value, hints),
                 "pack" => self.extract_layout_pack_hint(origin, arg.value, hints),
-                key => self.diag_named(
+                key => self.diag_with(
                     name.span,
                     DiagKind::AttrUnknownArg,
-                    format!("unknown attribute argument `{key}`"),
+                    DiagContext::new().with("argument", key),
                 ),
             }
         }
@@ -175,7 +176,7 @@ impl CheckPass<'_, '_, '_> {
         }
     }
 
-    fn validate_intrinsic_attr(&mut self, attr: &HirAttr, origin: HirOrigin, is_foreign: bool) {
+    fn validate_intrinsic_attr(&mut self, attr: &HirAttr, origin: HirOrigin, is_native: bool) {
         if !self.in_intrinsics_module() {
             self.diag(
                 origin.span,
@@ -183,7 +184,7 @@ impl CheckPass<'_, '_, '_> {
                 "",
             );
         }
-        if !is_foreign {
+        if !is_native {
             self.diag(origin.span, DiagKind::AttrIntrinsicRequiresForeignLet, "");
         }
         match self.parse_named_string_arg(attr, "name").as_deref() {
@@ -207,7 +208,7 @@ impl CheckPass<'_, '_, '_> {
 
     fn is_callable_target(&self, inner: HirExprId) -> bool {
         let expr = self.expr(inner);
-        if expr.mods.foreign.is_some() {
+        if expr.mods.native.is_some() {
             return true;
         }
         match expr.kind {
@@ -222,7 +223,7 @@ impl CheckPass<'_, '_, '_> {
 
     fn is_structural_target(&self, inner: HirExprId) -> bool {
         match self.expr(inner).kind {
-            HirExprKind::Data { .. } | HirExprKind::Effect { .. } | HirExprKind::Class { .. } => {
+            HirExprKind::Data { .. } | HirExprKind::Effect { .. } | HirExprKind::Shape { .. } => {
                 true
             }
             HirExprKind::Let { value, .. } => expr_has_structural_target(self, value),
@@ -247,15 +248,37 @@ impl CheckPass<'_, '_, '_> {
         }
     }
 
-    fn validate_hot_cold_attrs(&mut self, origin: HirOrigin, attrs: &[HirAttr], inner: HirExprId) {
+    fn validate_profile_attrs(&mut self, origin: HirOrigin, attrs: &[HirAttr], inner: HirExprId) {
         let mut hot = false;
         let mut cold = false;
         for attr in attrs {
             let path = self.attr_path(attr);
-            if path.as_slice() == ["hot"] {
-                hot = true;
-            } else if path.as_slice() == ["cold"] {
-                cold = true;
+            if path.as_slice() != ["profile"] {
+                continue;
+            }
+            for arg in self.attr_args(attr.args.clone()) {
+                let Some(name) = arg.name else {
+                    self.diag(origin.span, DiagKind::AttrHotColdConflict, "");
+                    continue;
+                };
+                if self.resolve_symbol(name.name) != "level" {
+                    self.diag_unknown_attr_argument(name);
+                    continue;
+                }
+                match self.expr(arg.value).kind {
+                    HirExprKind::Variant { tag, args } => {
+                        if !self.args(args).is_empty() {
+                            self.diag(origin.span, DiagKind::AttrHotColdConflict, "");
+                            continue;
+                        }
+                        match self.resolve_symbol(tag.name) {
+                            "hot" => hot = true,
+                            "cold" => cold = true,
+                            _ => self.diag(origin.span, DiagKind::AttrHotColdConflict, ""),
+                        }
+                    }
+                    _ => self.diag(origin.span, DiagKind::AttrHotColdConflict, ""),
+                }
             }
         }
         if !(hot || cold) {
@@ -269,14 +292,57 @@ impl CheckPass<'_, '_, '_> {
         }
     }
 
-    fn validate_deprecated_attr(&mut self, attr: &HirAttr, origin: HirOrigin) {
+    fn validate_lifecycle_attr(&mut self, attr: &HirAttr, origin: HirOrigin) {
+        for arg in self.attr_args(attr.args.clone()) {
+            let Some(name) = arg.name else {
+                let argument = self.expr_subject(arg.value);
+                self.diag_with(
+                    origin.span,
+                    DiagKind::AttrUnknownArg,
+                    DiagContext::new().with("argument", argument),
+                );
+                continue;
+            };
+            match self.resolve_symbol(name.name) {
+                "since" => {
+                    if !self.attr_value_is_string(&arg) {
+                        self.diag(origin.span, DiagKind::AttrSinceRequiresVersionString, "");
+                    }
+                }
+                "deprecated" => self.validate_deprecated_payload(arg.value, origin),
+                _ => self.diag_unknown_attr_argument(name),
+            }
+        }
+    }
+
+    fn validate_deprecated_payload(&mut self, value: HirExprId, origin: HirOrigin) {
+        let HirExprKind::Record { items } = self.expr(value).kind else {
+            self.diag(origin.span, DiagKind::AttrDeprecatedRequiresStringValue, "");
+            return;
+        };
         let known = self.known();
-        self.validate_string_attr_args(
-            attr,
-            origin,
-            &[known.message_key, known.replace_key, known.version_key],
-            DiagKind::AttrDeprecatedRequiresStringValue,
-        );
+        for field in self.record_items(items) {
+            if field.spread {
+                self.diag(origin.span, DiagKind::AttrDeprecatedRequiresStringValue, "");
+                continue;
+            }
+            let Some(field_name_ident) = field.name else {
+                self.diag(origin.span, DiagKind::AttrDeprecatedRequiresStringValue, "");
+                continue;
+            };
+            let field_name = field_name_ident.name;
+            if ![known.message_key, known.replace_key, known.version_key].contains(&field_name) {
+                self.diag_unknown_attr_argument(field_name_ident);
+                continue;
+            }
+            let arg = HirAttrArg {
+                name: Some(field_name_ident),
+                value: field.value,
+            };
+            if !self.attr_value_is_string(&arg) {
+                self.diag(origin.span, DiagKind::AttrDeprecatedRequiresStringValue, "");
+            }
+        }
     }
 
     fn validate_string_attr_args(
@@ -300,33 +366,11 @@ impl CheckPass<'_, '_, '_> {
 
     fn diag_unknown_attr_argument(&mut self, name: Ident) {
         let argument_name = self.resolve_symbol(name.name).to_owned();
-        self.diag_named(
+        self.diag_with(
             name.span,
             DiagKind::AttrUnknownArg,
-            format!("unknown attribute argument `{argument_name}`"),
+            DiagContext::new().with("argument", argument_name),
         );
-    }
-
-    fn validate_since_attr(&mut self, attr: &HirAttr, origin: HirOrigin) {
-        let known = self.known();
-        let mut found = false;
-        for arg in self.attr_args(attr.args.clone()) {
-            if let Some(name) = arg.name
-                && name.name != known.version_key
-            {
-                self.diag_unknown_attr_argument(name);
-            }
-            if arg.name.map(|ident| ident.name) == Some(known.version_key)
-                && self.attr_value_is_string(&arg)
-            {
-                found = true;
-            } else {
-                self.diag(origin.span, DiagKind::AttrSinceRequiresVersionString, "");
-            }
-        }
-        if !found {
-            self.diag(origin.span, DiagKind::AttrSinceRequiresVersionString, "");
-        }
     }
 
     pub fn validate_expr_attrs(
@@ -337,14 +381,14 @@ impl CheckPass<'_, '_, '_> {
     ) {
         let attrs = self.attrs(attrs);
         let inner_expr = self.expr(inner);
-        let inner_is_foreign = inner_expr.mods.foreign.is_some();
+        let inner_is_native = inner_expr.mods.native.is_some();
 
-        self.validate_hot_cold_attrs(origin, &attrs, inner);
+        self.validate_profile_attrs(origin, &attrs, inner);
 
         for attr in attrs {
             let path = self.attr_path(&attr);
             match path.as_slice() {
-                ["link" | "when"] if !inner_is_foreign => {
+                ["link" | "target"] if !inner_is_native => {
                     self.diag(origin.span, DiagKind::AttrLinkRequiresForeignLet, "");
                 }
                 ["repr" | "layout"] if !self.is_data_target(inner) => {
@@ -363,16 +407,17 @@ impl CheckPass<'_, '_, '_> {
                         );
                     }
                 }
-                ["known"] => self.validate_known_attr(&attr, origin, inner),
-                ["intrinsic"] => self.validate_intrinsic_attr(&attr, origin, inner_is_foreign),
-                ["deprecated"] => self.validate_deprecated_attr(&attr, origin),
-                ["since"] => self.validate_since_attr(&attr, origin),
+                ["musi", "known"] => self.validate_known_attr(&attr, origin, inner),
+                ["musi", "intrinsic"] => {
+                    self.validate_intrinsic_attr(&attr, origin, inner_is_native);
+                }
+                ["lifecycle"] => self.validate_lifecycle_attr(&attr, origin),
                 _ => {}
             }
         }
     }
 
-    pub fn validate_foreign_let(&mut self, expr: HirExprId, abi: &str) {
+    pub fn validate_native_let(&mut self, expr: HirExprId, abi: &str) {
         let origin = self.expr(expr).origin;
         let HirExprKind::Let { params, sig, .. } = self.expr(expr).kind else {
             self.diag(origin.span, DiagKind::AttrForeignRequiresForeignLet, "");
@@ -402,8 +447,8 @@ impl CheckPass<'_, '_, '_> {
                         self.validate_musi_link_attr(&attr, self.expr(expr).origin);
                     }
                 }
-                ["when"] => self.validate_when_attr(&attr, self.expr(expr).origin),
-                ["intrinsic"] => {
+                ["target"] => self.validate_when_attr(&attr, self.expr(expr).origin),
+                ["musi", "intrinsic"] => {
                     self.validate_intrinsic_attr(&attr, self.expr(expr).origin, true);
                 }
                 _ => {}
@@ -440,7 +485,12 @@ impl CheckPass<'_, '_, '_> {
         };
         if !valid {
             let span = self.expr(expr).origin.span;
-            self.diag(span, DiagKind::InvalidFfiType, "");
+            let ty = self.render_ty(ty);
+            self.diag_with(
+                span,
+                DiagKind::InvalidFfiType,
+                DiagContext::new().with("type", ty),
+            );
         }
     }
 

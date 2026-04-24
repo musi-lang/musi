@@ -10,7 +10,7 @@ where
         self.alloc_expr(origin, HirExprKind::Request { expr })
     }
 
-    pub(super) fn lower_handler_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
+    pub(super) fn lower_answer_lit_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let effect_tok = node
             .child_tokens()
@@ -26,7 +26,7 @@ where
             clauses.push(self.lower_handle_clause(clause));
         }
         let clauses = self.store.handle_clauses.alloc_from_iter(clauses);
-        self.alloc_expr(origin, HirExprKind::HandlerLit { effect, clauses })
+        self.alloc_expr(origin, HirExprKind::AnswerLit { effect, clauses })
     }
 
     pub(super) fn lower_handle_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {

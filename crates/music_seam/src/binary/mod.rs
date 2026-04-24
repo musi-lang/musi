@@ -1,11 +1,11 @@
 use crate::descriptor::{
-    ClassDescriptor, ConstantDescriptor, ConstantValue, DataDescriptor, DataVariantDescriptor,
-    EffectDescriptor, EffectOpDescriptor, ExportDescriptor, ExportTarget, ForeignDescriptor,
-    GlobalDescriptor, MetaDescriptor, ProcedureDescriptor, TypeDescriptor,
+    ConstantDescriptor, ConstantValue, DataDescriptor, DataVariantDescriptor, EffectDescriptor,
+    EffectOpDescriptor, ExportDescriptor, ExportTarget, ForeignDescriptor, GlobalDescriptor,
+    MetaDescriptor, ProcedureDescriptor, ShapeDescriptor, TypeDescriptor,
 };
 use crate::{
-    Artifact, BINARY_VERSION, CodeEntry, Instruction, Label, Opcode, Operand, SEAM_MAGIC,
-    SectionTag,
+    Artifact, BINARY_MAJOR_VERSION, BINARY_MINOR_VERSION, CodeEntry, Instruction, Label, Opcode,
+    Operand, SEAM_MAGIC, SectionTag,
 };
 use crate::{AssemblyError, AssemblyResult};
 use music_arena::Idx;
@@ -20,14 +20,15 @@ pub fn encode_binary(artifact: &Artifact) -> AssemblyResult<Vec<u8>> {
     artifact.validate()?;
     let mut out = Vec::new();
     out.extend_from_slice(&SEAM_MAGIC);
-    push_u16(&mut out, BINARY_VERSION);
+    push_u16(&mut out, BINARY_MAJOR_VERSION);
+    push_u16(&mut out, BINARY_MINOR_VERSION);
     encode_strings(&mut out, artifact);
     encode_types(&mut out, artifact);
     encode_constants(&mut out, artifact);
     encode_globals(&mut out, artifact);
     encode_procedures(&mut out, artifact);
     encode_effects(&mut out, artifact);
-    encode_classes(&mut out, artifact);
+    encode_shapes(&mut out, artifact);
     encode_foreigns(&mut out, artifact);
     encode_exports(&mut out, artifact);
     encode_data(&mut out, artifact);
@@ -47,8 +48,10 @@ pub fn decode_binary(bytes: &[u8]) -> AssemblyResult<Artifact> {
     if magic != SEAM_MAGIC {
         return Err(AssemblyError::InvalidBinaryHeader);
     }
-    let version = cursor.read_u16()?;
-    if version != BINARY_VERSION {
+    let major = cursor.read_u16()?;
+    let minor = cursor.read_u16()?;
+    if major != BINARY_MAJOR_VERSION || minor != BINARY_MINOR_VERSION {
+        let version = (u32::from(major) << 16) | u32::from(minor);
         return Err(AssemblyError::UnsupportedBinaryVersion(version));
     }
 
@@ -59,7 +62,7 @@ pub fn decode_binary(bytes: &[u8]) -> AssemblyResult<Artifact> {
     decode_globals(&mut cursor, &mut artifact)?;
     decode_procedures(&mut cursor, &mut artifact)?;
     decode_effects(&mut cursor, &mut artifact)?;
-    decode_classes(&mut cursor, &mut artifact)?;
+    decode_shapes(&mut cursor, &mut artifact)?;
     decode_foreigns(&mut cursor, &mut artifact)?;
     decode_exports(&mut cursor, &mut artifact)?;
     decode_data(&mut cursor, &mut artifact)?;
@@ -70,9 +73,7 @@ pub fn decode_binary(bytes: &[u8]) -> AssemblyResult<Artifact> {
         if next == section_tag_byte(SectionTag::Meta) {
             decode_meta(&mut cursor, &mut artifact)?;
         } else {
-            return Err(AssemblyError::TextParseFailed(
-                "unknown trailing section".into(),
-            ));
+            return Err(AssemblyError::text_parse_source("unknown trailing section"));
         }
     }
     artifact.validate()?;
@@ -197,7 +198,7 @@ fn encode_procedures(out: &mut Vec<u8>, artifact: &Artifact) {
                 }
                 CodeEntry::Instruction(instruction) => {
                     out.push(1);
-                    push_u16(out, instruction.opcode.wire_code());
+                    encode_opcode(out, instruction.opcode);
                     encode_operand(out, &instruction.operand);
                 }
             }
@@ -232,13 +233,13 @@ fn encode_effects(out: &mut Vec<u8>, artifact: &Artifact) {
     }
 }
 
-fn encode_classes(out: &mut Vec<u8>, artifact: &Artifact) {
-    push_section_tag(out, SectionTag::Classes);
+fn encode_shapes(out: &mut Vec<u8>, artifact: &Artifact) {
+    push_section_tag(out, SectionTag::Shapes);
     push_u32(
         out,
-        u32::try_from(artifact.classes.len()).expect("section overflow"),
+        u32::try_from(artifact.shapes.len()).expect("section overflow"),
     );
-    for (_, entry) in artifact.classes.iter() {
+    for (_, entry) in artifact.shapes.iter() {
         push_u32(out, entry.name.raw());
     }
 }
@@ -302,7 +303,7 @@ fn encode_exports(out: &mut Vec<u8>, artifact: &Artifact) {
                 out.push(4);
                 push_u32(out, id.raw());
             }
-            ExportTarget::Class(id) => {
+            ExportTarget::Shape(id) => {
                 out.push(5);
                 push_u32(out, id.raw());
             }
@@ -462,7 +463,7 @@ fn decode_strings(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyR
     for _ in 0..cursor.read_u32()? {
         let bytes = cursor.read_bytes()?;
         let text = String::from_utf8(bytes)
-            .map_err(|err| AssemblyError::TextParseFailed(err.to_string()))?;
+            .map_err(|err| AssemblyError::text_parse_source(err.to_string()))?;
         let _ = artifact.push_string_record(&text);
     }
     Ok(())
@@ -493,17 +494,13 @@ fn decode_constants(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Assembl
                     0 => SyntaxShape::Expr,
                     1 => SyntaxShape::Module,
                     _ => {
-                        return Err(AssemblyError::TextParseFailed(
-                            "unknown syntax shape".into(),
-                        ));
+                        return Err(AssemblyError::text_parse_source("unknown syntax shape"));
                     }
                 },
                 text: cursor.read_idx()?,
             },
             _ => {
-                return Err(AssemblyError::TextParseFailed(
-                    "unknown constant kind".into(),
-                ));
+                return Err(AssemblyError::text_parse_source("unknown constant kind"));
             }
         };
         let _ = artifact
@@ -555,7 +552,7 @@ fn decode_procedures(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Assemb
                     id: cursor.read_u16()?,
                 }),
                 1 => {
-                    let opcode_code = cursor.read_u16()?;
+                    let opcode_code = decode_opcode(cursor)?;
                     let Some(opcode) = Opcode::from_wire_code(opcode_code) else {
                         return Err(AssemblyError::UnknownOpcode(opcode_code));
                     };
@@ -563,9 +560,7 @@ fn decode_procedures(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Assemb
                     CodeEntry::Instruction(Instruction::new(opcode, operand))
                 }
                 _ => {
-                    return Err(AssemblyError::TextParseFailed(
-                        "unknown code entry kind".into(),
-                    ));
+                    return Err(AssemblyError::text_parse_source("unknown code entry kind"));
                 }
             };
             code.push(entry);
@@ -606,12 +601,12 @@ fn decode_effects(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyR
     Ok(())
 }
 
-fn decode_classes(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyResult {
-    require_section(cursor, SectionTag::Classes)?;
+fn decode_shapes(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyResult {
+    require_section(cursor, SectionTag::Shapes)?;
     for _ in 0..cursor.read_u32()? {
         let _ = artifact
-            .classes
-            .alloc(ClassDescriptor::new(cursor.read_idx()?));
+            .shapes
+            .alloc(ShapeDescriptor::new(cursor.read_idx()?));
     }
     Ok(())
 }
@@ -632,8 +627,8 @@ fn decode_foreigns(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Assembly
             0 => None,
             1 => Some(cursor.read_idx()?),
             _ => {
-                return Err(AssemblyError::TextParseFailed(
-                    "invalid foreign link marker".into(),
+                return Err(AssemblyError::text_parse_source(
+                    "invalid foreign link marker",
                 ));
             }
         };
@@ -663,7 +658,7 @@ fn decode_exports(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyR
             2 => ExportTarget::Foreign(Idx::from_raw(target_raw)),
             3 => ExportTarget::Type(Idx::from_raw(target_raw)),
             4 => ExportTarget::Effect(Idx::from_raw(target_raw)),
-            5 => ExportTarget::Class(Idx::from_raw(target_raw)),
+            5 => ExportTarget::Shape(Idx::from_raw(target_raw)),
             _ => return Err(AssemblyError::InvalidBinaryHeader),
         };
         let opaque = cursor.read_u8()? != 0;
@@ -782,8 +777,26 @@ fn decode_operand(cursor: &mut Cursor<'_>) -> AssemblyResult<Operand> {
             }
             Operand::BranchTable(labels.into_boxed_slice())
         }
-        _ => return Err(AssemblyError::TextParseFailed("unknown operand tag".into())),
+        _ => return Err(AssemblyError::text_parse_source("unknown operand tag")),
     })
+}
+
+fn encode_opcode(out: &mut Vec<u8>, opcode: Opcode) {
+    let code = opcode.wire_code();
+    if code <= 0xFE {
+        out.push(u8::try_from(code).expect("core opcode range"));
+        return;
+    }
+    out.push(Opcode::extended_opcode_prefix());
+    out.extend_from_slice(&code.to_le_bytes());
+}
+
+fn decode_opcode(cursor: &mut Cursor<'_>) -> AssemblyResult<u16> {
+    let lead = cursor.read_u8()?;
+    if lead != Opcode::extended_opcode_prefix() {
+        return Ok(u16::from(lead));
+    }
+    cursor.read_u16()
 }
 
 fn push_section_tag(out: &mut Vec<u8>, tag: SectionTag) {
@@ -807,7 +820,7 @@ const fn section_tag_byte(tag: SectionTag) -> u8 {
         SectionTag::Globals => 4,
         SectionTag::Procedures => 5,
         SectionTag::Effects => 6,
-        SectionTag::Classes => 7,
+        SectionTag::Shapes => 7,
         SectionTag::Foreigns => 8,
         SectionTag::Exports => 9,
         SectionTag::Data => 10,
@@ -937,5 +950,5 @@ impl<'bytes> Cursor<'bytes> {
 
 fn read_len(cursor: &mut Cursor<'_>, what: &'static str) -> AssemblyResult<usize> {
     usize::try_from(cursor.read_u32()?)
-        .map_err(|_| AssemblyError::TextParseFailed(format!("{what} does not fit in usize")))
+        .map_err(|_| AssemblyError::text_parse_source(format!("{what} does not fit in usize")))
 }

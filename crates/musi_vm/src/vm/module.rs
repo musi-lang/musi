@@ -1,4 +1,5 @@
 use crate::{VmIndexSpace, VmStackKind};
+use music_seam::ProcedureId;
 use music_seam::descriptor::ExportTarget;
 
 use super::{Value, ValueList, VmError, VmErrorKind, VmResult, VmValueKind};
@@ -20,43 +21,48 @@ impl Vm {
     }
 
     pub(crate) fn initialize_slot(&mut self, slot: usize) -> VmResult {
-        let (spec, state, entry) = {
-            let module = self.module(slot)?;
-            (
-                module.spec.clone(),
-                module.state,
-                module.program.entry_procedure(),
-            )
-        };
-        match state {
-            ModuleState::Initialized => return Ok(()),
-            ModuleState::Initializing => {
-                return Err(VmError::new(VmErrorKind::ModuleInitCycle { spec }));
+        let state = self.module(slot)?.state;
+        if matches!(state, ModuleState::Initialized) {
+            if slot == 0 {
+                self.root_initialized = true;
             }
-            ModuleState::Uninitialized => {}
+            return Ok(());
         }
+        if matches!(state, ModuleState::Initializing) {
+            let spec: Box<str> = self.module(slot)?.spec.as_ref().into();
+            return Err(VmError::new(VmErrorKind::ModuleInitCycle { spec }));
+        }
+        let entry = self.module(slot)?.program.entry_procedure();
 
         self.module_mut(slot)?.state = ModuleState::Initializing;
-        let base_depth = self.frames.len();
-        let result = entry.map_or(Ok(()), |entry| {
-            self.invoke_procedure_in_context(slot, entry, ValueList::new(), base_depth)
-                .map(|_| ())
-        });
+        let result = entry.map_or(Ok(()), |entry| self.initialize_entry(slot, entry));
         match result {
             Ok(()) => {
                 self.module_mut(slot)?.state = ModuleState::Initialized;
+                if slot == 0 {
+                    self.root_initialized = true;
+                }
                 Ok(())
             }
             Err(error) => {
                 self.module_mut(slot)?.state = ModuleState::Uninitialized;
+                if slot == 0 {
+                    self.root_initialized = false;
+                }
                 Err(error)
             }
         }
     }
 
+    fn initialize_entry(&mut self, slot: usize, entry: ProcedureId) -> VmResult {
+        let base_depth = self.frames.len();
+        self.invoke_procedure_in_context(slot, entry, ValueList::new(), base_depth)
+            .map(|_| ())
+    }
+
     pub(crate) fn lookup_export_in_slot(&mut self, slot: usize, name: &str) -> VmResult<Value> {
         self.initialize_slot(slot)?;
-        let module_name = self.module(slot)?.spec.clone();
+        let module_name: Box<str> = self.module(slot)?.spec.as_ref().into();
         if self
             .module(slot)?
             .program
@@ -87,9 +93,17 @@ impl Vm {
         _name: &str,
         target: ExportTarget,
     ) -> VmResult<Value> {
-        let module_name = self.module(slot)?.spec.clone();
+        let module_name: Box<str> = self.module(slot)?.spec.as_ref().into();
         match target {
-            ExportTarget::Procedure(procedure) => Ok(Value::closure(slot, procedure, Vec::new())),
+            ExportTarget::Procedure(procedure) => {
+                let loaded = self.module(slot)?.program.loaded_procedure(procedure)?;
+                Ok(Value::procedure(
+                    slot,
+                    procedure,
+                    loaded.params,
+                    loaded.locals,
+                ))
+            }
             ExportTarget::Global(global) => {
                 let globals = &self.module(slot)?.globals;
                 let raw_slot = usize::try_from(global.raw()).unwrap_or(usize::MAX);
@@ -105,13 +119,13 @@ impl Vm {
             ExportTarget::Foreign(foreign) => Ok(Value::foreign(slot, foreign)),
             ExportTarget::Type(ty) => Ok(Value::Type(ty)),
             ExportTarget::Effect(effect) => Ok(Value::Effect(effect)),
-            ExportTarget::Class(class) => Ok(Value::Class(class)),
+            ExportTarget::Shape(shape) => Ok(Value::Shape(shape)),
         }
     }
 
-    pub(crate) fn expect_module_slot(module: &Value) -> VmResult<usize> {
+    pub(crate) fn expect_module_slot(&self, module: &Value) -> VmResult<usize> {
         match module {
-            Value::Module(module) => Ok(module.slot),
+            Value::Module(module) => Ok(self.heap.module(*module)?.slot),
             _ => Err(VmError::new(VmErrorKind::InvalidValueKind {
                 expected: VmValueKind::Module,
                 found: module.kind(),
@@ -154,14 +168,22 @@ impl Vm {
     }
 
     pub(crate) fn load_dynamic_module(&mut self, spec: &str) -> VmResult<usize> {
-        if let Some(slot) = self.module_slots.get(spec).copied() {
+        if let Some(slot) = self
+            .module_slots
+            .as_ref()
+            .and_then(|slots| slots.get(spec).copied())
+        {
             self.initialize_slot(slot)?;
             return Ok(slot);
         }
         let program = self.loader.load_program(spec)?;
         let slot = self.loaded_modules.len();
-        self.loaded_modules.push(LoadedModule::new(spec, program));
-        let _ = self.module_slots.insert(spec.into(), slot);
+        self.loaded_modules
+            .push(LoadedModule::new(spec.to_owned(), program));
+        let _ = self
+            .module_slots
+            .get_or_insert_with(Default::default)
+            .insert(spec.into(), slot);
         self.initialize_slot(slot)?;
         Ok(slot)
     }

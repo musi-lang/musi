@@ -69,7 +69,7 @@ where
         self.alloc_expr(origin, HirExprKind::ArrayTy { dims, item })
     }
 
-    pub(super) fn lower_handler_ty_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
+    pub(super) fn lower_answer_ty_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let mut exprs = node.child_nodes();
         let effect = self.lower_opt_expr(origin, exprs.next());
@@ -77,7 +77,7 @@ where
         let output = self.lower_opt_expr(origin, exprs.next());
         self.alloc_expr(
             origin,
-            HirExprKind::HandlerTy {
+            HirExprKind::AnswerTy {
                 effect,
                 input,
                 output,

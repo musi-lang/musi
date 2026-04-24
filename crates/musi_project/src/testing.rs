@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use music_module::ModuleKey;
 use music_session::LawSuiteModule;
 
-use crate::{PackageId, Project, ProjectResult};
+use crate::{PackageId, PackageSource, Project, ProjectResult};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ProjectTestTargetKind {
@@ -63,6 +63,7 @@ impl Project {
             .workspace()
             .packages
             .iter()
+            .filter(|(_, package)| matches!(package.source, PackageSource::Workspace))
             .flat_map(|(package_id, package)| {
                 package.module_keys.iter().filter_map(|(module_key, path)| {
                     path.file_name()
@@ -106,9 +107,14 @@ impl Project {
         &self,
         suite: &LawSuiteModule,
     ) -> Option<ProjectTestTarget> {
-        let package = self
-            .package_id_for_module(&suite.source_module_key)?
-            .clone();
+        let package = self.package_id_for_module(&suite.source_module_key)?;
+        if !matches!(
+            self.workspace().packages.get(package)?.source,
+            PackageSource::Workspace
+        ) {
+            return None;
+        }
+        let package = package.clone();
         let path = self.module_path_for_key(&suite.source_module_key)?.clone();
         Some(ProjectTestTarget::synthetic_law_suite(package, suite, path))
     }

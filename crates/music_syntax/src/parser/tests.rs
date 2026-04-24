@@ -64,7 +64,7 @@ mod success {
     }
 
     #[test]
-    fn parses_existential_and_opaque_class_types() {
+    fn parses_existential_and_opaque_capability_types() {
         let parsed = parse(
             Lexer::new(
                 "let writeAny (writer : any Writer) : Int := 0; let writeSome (writer : some Writer) : Int := 0;",
@@ -99,8 +99,20 @@ mod success {
     }
 
     #[test]
-    fn parses_instance_expr() {
-        let parsed = parse(Lexer::new("instance Eq[Int] { };").lex());
+    fn old_surface_words_parse_as_identifiers() {
+        for word in ["class", "instance", "via", "using", "with", "provide"] {
+            let parsed = parse(Lexer::new(&format!("let {word} := 1;")).lex());
+            assert!(
+                parsed.errors().is_empty(),
+                "{word} produced parse errors: {:?}",
+                parsed.errors()
+            );
+        }
+    }
+
+    #[test]
+    fn parses_compound_optional_tokens() {
+        let parsed = parse(Lexer::new("a?.b; a!.b; a ?? b;").lex());
         assert!(
             parsed.errors().is_empty(),
             "unexpected errors: {:?}",
@@ -109,8 +121,22 @@ mod success {
     }
 
     #[test]
-    fn parses_instance_expr_with_target_then_where() {
-        let parsed = parse(Lexer::new("instance Eq[Int] where Int : Show { };").lex());
+    fn parses_mathematical_range_forms() {
+        let parsed = parse(
+            Lexer::new(
+                r"
+                a .. b;
+                a ..< b;
+                a <.. b;
+                a <..< b;
+                a ..;
+                a <..;
+                .. a;
+                ..< a;
+                ",
+            )
+            .lex(),
+        );
         assert!(
             parsed.errors().is_empty(),
             "unexpected errors: {:?}",
@@ -125,18 +151,22 @@ mod success {
 	let x := 1;
 	import "std/io";
 	resume x;
-	request x;
-	handle x using h { x => x; };
+	ask x;
+	handle x answer h;
 	match x (| _ => 0);
-	foreign "c" let puts (msg : CString) : Int;
+	native "c" let puts (msg : CString) : Int;
 	export let y := 2;
 	let Option[T] := data { | Some(T) | None };
 	let Console := effect { let write (text : String) : Unit; };
-	let Eq[T] := class { let (=) (a : T, b : T) : Bool; };
-	instance Eq[Int] { };
+	let Write := shape { let write (text : String) : Unit; };
+	given Write { let write (text : String) : Unit := (); };
+	answer Console { value => value; };
+	answer x;
+	given x;
+	a catch b;
 	quote (x + 1);
 	quote { x; };
-	@link(name := "c") foreign "c" let puts (msg : CString) : Int;
+	@link(name := "c") native "c" let puts (msg : CString) : Int;
 	`hello ${x}`;
 	{ x := 1 };
 	.Some(1);
@@ -146,6 +176,94 @@ mod success {
 	"#,
         );
         assert!(!kinds.is_empty());
+    }
+
+    #[test]
+    fn parses_export_block_as_grouping_sugar() {
+        let parsed = parse(
+            Lexer::new(
+                r"
+            export (
+              let x := 1;
+              let y := 2;
+            );
+        ",
+            )
+            .lex(),
+        );
+        assert!(
+            parsed.errors().is_empty(),
+            "unexpected errors: {:?}",
+            parsed.errors()
+        );
+    }
+
+    #[test]
+    fn parses_import_block_and_bound_tuple_import_block() {
+        let parsed = parse(
+            Lexer::new(
+                r#"
+            import (
+              "std/io";
+              "std/cmp";
+            );
+            let (IO, Cmp) := import (
+              "std/io";
+              "std/cmp";
+            );
+        "#,
+            )
+            .lex(),
+        );
+        assert!(
+            parsed.errors().is_empty(),
+            "unexpected errors: {:?}",
+            parsed.errors()
+        );
+    }
+
+    #[test]
+    fn parses_import_aliasing_through_let_and_of_identifier() {
+        let parsed = parse(Lexer::new(r#"let mod := import "./mod"; let of := 1;"#).lex());
+        assert!(
+            parsed.errors().is_empty(),
+            "unexpected errors: {:?}",
+            parsed.errors()
+        );
+    }
+
+    #[test]
+    fn parses_as_for_pattern_and_type_test_aliases() {
+        let parsed = parse(
+            Lexer::new(
+                r"
+            match value (
+              | .Some(x) as whole => whole
+            );
+            value :? T as refined;
+        ",
+            )
+            .lex(),
+        );
+        assert!(
+            parsed.errors().is_empty(),
+            "unexpected errors: {:?}",
+            parsed.errors()
+        );
+    }
+
+    #[test]
+    fn rejects_binder_position_mut() {
+        assert!(
+            !parse(Lexer::new("let mut x := 1;").lex())
+                .errors()
+                .is_empty()
+        );
+        assert!(
+            !parse(Lexer::new("let f(mut x : Int) : Int := x;").lex())
+                .errors()
+                .is_empty()
+        );
     }
 
     #[test]
@@ -224,8 +342,7 @@ mod success {
 
     #[test]
     fn parses_case_and_handle_with_trailing_pipe() {
-        let parsed =
-            parse(Lexer::new("match x (| _ => 0 |); handle x using h { op(a, b) => a; };").lex());
+        let parsed = parse(Lexer::new("match x (| _ => 0 |); handle x answer h;").lex());
         assert!(
             parsed.errors().is_empty(),
             "unexpected errors: {:?}",
@@ -235,10 +352,7 @@ mod success {
 
     #[test]
     fn parses_new_signature_order_and_array_type_syntax() {
-        let parsed = parse(
-            Lexer::new("let f[T] (xs : []Int) : [2]Int where T : Eq using { Console } := xs;")
-                .lex(),
-        );
+        let parsed = parse(Lexer::new("let f[T] (xs : []Int) : [2]Int where T : Eq := xs;").lex());
         assert!(
             parsed.errors().is_empty(),
             "unexpected errors: {:?}",
@@ -264,14 +378,15 @@ mod success {
     #[test]
     fn parses_handler_type_annotation() {
         let parsed = parse(
-        Lexer::new(
-            r"
+            Lexer::new(
+                r"
             let Console := effect { let readLine () : Int; };
-            let h : using Console (Int -> Int) := using Console { value => value; readLine(k) => resume 41; };
+            let h : answer Console (Int -> Int) := answer Console;
+            handle x answer h;
         ",
-        )
-        .lex(),
-    );
+            )
+            .lex(),
+        );
         assert!(
             parsed.errors().is_empty(),
             "unexpected errors: {:?}",
@@ -305,7 +420,7 @@ mod success {
         let parsed = parse(
             Lexer::new(
                 r#"
-            foreign "c" let clock () : Int;
+            native "c" let clock () : Int;
             let value := unsafe { clock(); };
         "#,
             )
@@ -316,6 +431,26 @@ mod success {
             "unexpected errors: {:?}",
             parsed.errors()
         );
+    }
+
+    #[test]
+    fn parses_pin_expr_inside_unsafe_block() {
+        let parsed = parse(
+            Lexer::new(
+                r"
+            let xs := [1, 2];
+            let value := unsafe { pin xs as pinned in 1; };
+        ",
+            )
+            .lex(),
+        );
+        assert!(
+            parsed.errors().is_empty(),
+            "unexpected errors: {:?}",
+            parsed.errors()
+        );
+        let kinds = parse_kinds("pin xs as pinned in 1;");
+        assert_eq!(kinds, vec![SyntaxNodeKind::PinExpr]);
     }
 
     #[test]
@@ -362,6 +497,16 @@ mod success {
             parsed.errors()
         );
     }
+
+    #[test]
+    fn parses_given_and_answer_prefix_forms() {
+        let parsed = parse(Lexer::new("given x; answer x;").lex());
+        assert!(
+            parsed.errors().is_empty(),
+            "unexpected errors: {:?}",
+            parsed.errors()
+        );
+    }
 }
 
 mod failure {
@@ -399,6 +544,16 @@ mod failure {
                     keyword: crate::TokenKind::KwSome
                 }
             )
+        });
+    }
+
+    #[test]
+    fn rejects_import_as_alias() {
+        assert_has_parse_error(r#"import "./mod" as mod;"#, |kind| {
+            matches!(kind, ParseErrorKind::ExpectedToken { .. })
+        });
+        assert_has_parse_error(r#"let mod := import "./mod" as mod;"#, |kind| {
+            matches!(kind, ParseErrorKind::ExpectedToken { .. })
         });
     }
 
@@ -519,6 +674,13 @@ mod failure {
                     ..
                 }
             )
+        });
+    }
+
+    #[test]
+    fn error_custom_symbolic_infix_is_rejected() {
+        assert_has_parse_error("a == b;", |k| {
+            matches!(k, ParseErrorKind::ExpectedToken { .. })
         });
     }
 }

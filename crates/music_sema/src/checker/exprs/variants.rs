@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use music_arena::SliceRange;
-use music_base::Span;
+use music_base::{Span, diag::DiagContext};
 use music_hir::{HirArg, HirExprId, HirTyId, HirTyKind};
 use music_names::{Ident, Symbol};
 
@@ -43,11 +43,10 @@ impl CheckPass<'_, '_, '_> {
         let tag_name = self.resolve_symbol(tag.name).to_owned();
         let Some(variant) = data_def.variant(&tag_name) else {
             self.check_variant_arg_effects(args, &mut effects);
-            self.diag_message(
+            self.diag_with(
                 tag.span,
                 DiagKind::UnknownDataVariant,
-                format!("unknown data variant `{tag_name}`"),
-                format!("unknown data variant `{tag_name}`"),
+                DiagContext::new().with("variant", tag_name),
             );
             return ExprFacts::new(expected_ty, effects);
         };
@@ -184,11 +183,10 @@ impl CheckPass<'_, '_, '_> {
     fn record_variant_field_name(&mut self, name: Ident, seen: &mut HashSet<Symbol>) {
         if !seen.insert(name.name) {
             let field_name = self.resolve_symbol(name.name).to_owned();
-            self.diag_message(
+            self.diag_with(
                 name.span,
                 DiagKind::DuplicateVariantField,
-                format!("duplicate variant field `{field_name}`"),
-                format!("duplicate variant field `{field_name}`"),
+                DiagContext::new().with("field", field_name),
             );
         }
     }
@@ -209,11 +207,10 @@ impl CheckPass<'_, '_, '_> {
 
     fn unknown_variant_field_ty(&mut self, name: Ident) -> HirTyId {
         let field_name = self.resolve_symbol(name.name).to_owned();
-        self.diag_message(
+        self.diag_with(
             name.span,
             DiagKind::UnknownVariantField,
-            format!("unknown variant field `{field_name}`"),
-            format!("unknown variant field `{field_name}`"),
+            DiagContext::new().with("field", field_name),
         );
         self.builtins().unknown
     }
@@ -227,11 +224,10 @@ impl CheckPass<'_, '_, '_> {
         for field_name in field_names.iter().flatten() {
             let expected_symbol = self.intern(field_name);
             if !seen.contains(&expected_symbol) {
-                self.diag_message(
+                self.diag_with(
                     diag_span,
                     DiagKind::MissingVariantField,
-                    format!("missing variant field `{field_name}`"),
-                    format!("missing variant field `{field_name}`"),
+                    DiagContext::new().with("field", field_name),
                 );
             }
         }
@@ -322,11 +318,10 @@ impl CheckPass<'_, '_, '_> {
 
         match matches.len() {
             0 => {
-                self.diag_message(
+                self.diag_with(
                     tag.span,
                     DiagKind::UnknownDataVariant,
-                    format!("unknown data variant `{tag_name}`"),
-                    format!("unknown data variant `{tag_name}`"),
+                    DiagContext::new().with("variant", tag_name),
                 );
                 None
             }

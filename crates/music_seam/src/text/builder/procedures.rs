@@ -5,8 +5,8 @@ impl TextBuilder {
     pub(crate) fn parse_procedure(&mut self, header: &str, lines: &[&str]) -> AssemblyResult {
         let parts = tokenize(header)?;
         if parts.len() < 4 {
-            return Err(AssemblyError::TextParseFailed(
-                "expected `.procedure $Name [params <count>] locals <count> [export]`".into(),
+            return Err(text_expected_form(
+                ".procedure $Name [params <count>] locals <count> [export]",
             ));
         }
         let name = parse_symbol(&parts[1])?;
@@ -15,17 +15,17 @@ impl TextBuilder {
         if parts.get(idx).map(String::as_str) == Some("params") {
             params = must_get(parts.get(idx + 1), "procedure params")?
                 .parse()
-                .map_err(|_| AssemblyError::TextParseFailed("invalid params count".into()))?;
+                .map_err(|_| text_invalid_operand("params count", parts[3].as_str()))?;
             idx += 2;
         }
         if parts.get(idx).map(String::as_str) != Some("locals") {
-            return Err(AssemblyError::TextParseFailed(
-                "expected `.procedure $Name [params <count>] locals <count> [export]`".into(),
+            return Err(text_expected_form(
+                ".procedure $Name [params <count>] locals <count> [export]",
             ));
         }
         let locals = must_get(parts.get(idx + 1), "locals count")?
             .parse()
-            .map_err(|_| AssemblyError::TextParseFailed("invalid locals count".into()))?;
+            .map_err(|_| text_invalid_operand("locals count", parts[idx + 1].as_str()))?;
         let export = parts.iter().skip(idx + 2).any(|part| part == "export");
         let hot = parts.iter().skip(idx + 2).any(|part| part == "hot");
         let cold = parts.iter().skip(idx + 2).any(|part| part == "cold");
@@ -74,12 +74,10 @@ impl TextBuilder {
     ) -> AssemblyResult<Instruction> {
         let parts = tokenize(line)?;
         let Some(opcode_text) = parts.first() else {
-            return Err(AssemblyError::TextParseFailed("empty instruction".into()));
+            return Err(text_missing_operand("opcode"));
         };
         let Some(opcode) = Opcode::from_mnemonic(opcode_text) else {
-            return Err(AssemblyError::TextParseFailed(format!(
-                "unknown opcode {opcode_text}"
-            )));
+            return Err(text_unknown_opcode(opcode_text));
         };
         let operand = self.parse_operand(opcode.operand_shape(), &parts, labels, label_ids)?;
         Ok(Instruction::new(opcode, operand))

@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
 use music_arena::SliceRange;
+use music_base::diag::DiagContext;
 use music_hir::{HirExprId, HirExprKind, HirHandleClause, HirOrigin, HirTyId, HirTyKind};
 use music_names::{Ident, Symbol};
 
@@ -38,7 +39,7 @@ impl CheckPass<'_, '_, '_> {
         handler: HirExprId,
     ) -> ExprFacts {
         let handled_facts = check_expr(self, expr);
-        if let HirExprKind::HandlerLit { effect, clauses } = self.expr(handler).kind {
+        if let HirExprKind::AnswerLit { effect, clauses } = self.expr(handler).kind {
             let literal_facts = self.check_handler_literal_expr(
                 self.expr(handler).origin,
                 effect,
@@ -65,11 +66,12 @@ impl CheckPass<'_, '_, '_> {
         else {
             let found = self.render_ty(checked_handler.ty);
             let handler_span = self.expr(handler).origin.span;
-            self.diag_message(
+            self.diag_with(
                 handler_span,
                 DiagKind::InvalidCallTarget,
-                format!("handler expression lacks handler type `{found}`"),
-                format!("handler expression has type `{found}` here"),
+                DiagContext::new()
+                    .with("target", "handler expression")
+                    .with("found", found),
             );
             let mut effects = handled_facts.effects;
             effects.union_with(&checked_handler.effects);
@@ -112,11 +114,10 @@ impl CheckPass<'_, '_, '_> {
     ) -> ExprFacts {
         let effect_name: Box<str> = self.resolve_symbol(effect.name).into();
         let Some(effect_def) = self.effect_def(&effect_name).cloned() else {
-            self.diag_message(
+            self.diag_with(
                 origin.span,
                 DiagKind::UnknownEffect,
-                format!("unknown effect `{effect_name}`"),
-                format!("unknown effect `{effect_name}`"),
+                DiagContext::new().with("effect", effect_name),
             );
             return ExprFacts::new(self.builtins().unknown, EffectRow::empty());
         };
@@ -212,11 +213,10 @@ impl CheckPass<'_, '_, '_> {
         seen_ops: &mut BTreeSet<Box<str>>,
     ) {
         if !seen_ops.insert(clause_name.into()) {
-            self.diag_message(
+            self.diag_with(
                 origin.span,
                 DiagKind::DuplicateHandlerClause,
-                format!("duplicate handler clause `{clause_name}`"),
-                format!("duplicate handler clause `{clause_name}`"),
+                DiagContext::new().with("clause", clause_name),
             );
         }
     }
@@ -229,11 +229,10 @@ impl CheckPass<'_, '_, '_> {
     ) -> Option<EffectOpDef> {
         let op_def = effect.op(clause_name).cloned();
         if op_def.is_none() {
-            self.diag_message(
+            self.diag_with(
                 origin.span,
                 DiagKind::UnknownEffectOp,
-                format!("unknown effect operation `{clause_name}`"),
-                format!("unknown effect operation `{clause_name}`"),
+                DiagContext::new().with("operation", clause_name),
             );
         }
         op_def
@@ -316,7 +315,11 @@ impl CheckPass<'_, '_, '_> {
         }
         for (op, _) in effect.ops() {
             if !seen_ops.contains(op) {
-                self.diag(origin.span, DiagKind::HandlerMissingOperationClause, "");
+                self.diag_with(
+                    origin.span,
+                    DiagKind::HandlerMissingOperationClause,
+                    DiagContext::new().with("operation", op),
+                );
             }
         }
     }

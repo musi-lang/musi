@@ -16,6 +16,7 @@ pub struct Entry {
     pub code: u16,
     pub message: String,
     pub primary: String,
+    pub secondary: Option<String>,
     pub help: Option<String>,
 }
 

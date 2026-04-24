@@ -8,6 +8,8 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use musi_project::ProjectDiagKind;
+use music_base::diag::DiagContext;
 use serde_json::Value;
 
 static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(0);
@@ -83,6 +85,10 @@ fn golden_json(text: &str) -> Value {
     serde_json::from_str(text).expect("golden JSON should parse")
 }
 
+fn diag_code(kind: ProjectDiagKind) -> String {
+    format!("MS{:04}", kind.code().raw())
+}
+
 fn normalize_project_paths(mut payload: Value) -> Value {
     payload["package_root"] = Value::String("<package-root>".into());
     payload["manifest"] = Value::String("<manifest>".into());
@@ -125,13 +131,13 @@ mod success {
         assert_success(&output);
         assert!(temp.path().join("sample/musi.json").exists());
         assert!(temp.path().join("sample/index.ms").exists());
-        assert!(temp.path().join("sample/add.test.ms").exists());
+        assert!(temp.path().join("sample/__tests__/add.test.ms").exists());
         assert!(temp.path().join("sample/.gitignore").exists());
         let manifest = fs::read_to_string(temp.path().join("sample/musi.json"))
             .expect("manifest should be readable");
         let index = fs::read_to_string(temp.path().join("sample/index.ms"))
             .expect("index should be readable");
-        let test = fs::read_to_string(temp.path().join("sample/add.test.ms"))
+        let test = fs::read_to_string(temp.path().join("sample/__tests__/add.test.ms"))
             .expect("test should be readable");
         assert!(manifest.contains("\"name\""));
         assert!(manifest.contains("sample"));
@@ -156,7 +162,7 @@ mod success {
         assert_success(&output);
         assert!(temp.path().join("musi.json").exists());
         assert!(temp.path().join("index.ms").exists());
-        assert!(temp.path().join("add.test.ms").exists());
+        assert!(temp.path().join("__tests__/add.test.ms").exists());
     }
 
     #[test]
@@ -298,6 +304,68 @@ export let test () :=
     }
 
     #[test]
+    fn check_does_not_create_package_target_dir() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"entry\": \"index.ms\"\n}\n",
+        );
+        write_file(temp.path(), "index.ms", "let value := 1;\n");
+
+        let output = run_musi(&["check"], temp.path());
+
+        assert_success(&output);
+        assert!(!temp.path().join("target").exists());
+    }
+
+    #[test]
+    fn test_does_not_create_package_target_dir() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"entry\": \"index.ms\"\n}\n",
+        );
+        write_file(temp.path(), "index.ms", "let value := 1;\n");
+        write_file(
+            temp.path(),
+            "index.test.ms",
+            r#"let Testing := import "@std/testing";
+
+export let test () :=
+  (
+    Testing.describe("target");
+    Testing.it("passes", Testing.toBe(1, 1));
+    Testing.endDescribe()
+  );
+"#,
+        );
+
+        let output = run_musi(&["test"], temp.path());
+
+        assert_success(&output);
+        assert!(!temp.path().join("target").exists());
+    }
+
+    #[test]
+    fn build_default_writes_entry_artifact_without_target_dir() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"entry\": \"index.ms\"\n}\n",
+        );
+        write_file(temp.path(), "index.ms", "let value := 1;\n");
+
+        let output = run_musi(&["build"], temp.path());
+
+        assert_success(&output);
+        assert!(temp.path().join("index.seam").exists());
+        assert!(!temp.path().join("target").exists());
+    }
+
+    #[test]
     fn test_captures_passing_module_output() {
         let temp = TempDir::new();
         write_file(
@@ -314,14 +382,15 @@ export let test () :=
             temp.path(),
             "io.test.ms",
             r#"let Testing := import "@std/testing";
-let Runtime := import "musi:runtime";
+let Io := import "musi:io";
+let Log := import "musi:log";
 
 export let test () :=
   (
     Testing.describe("io");
-    Runtime.ioPrintLine("hidden stdout");
-    Runtime.ioPrintErrorLine("hidden stderr");
-    Runtime.logWrite(40, "hidden log");
+    Io.printLine("hidden stdout");
+    Io.printErrorLine("hidden stderr");
+    Log.write(40, "hidden log");
     Testing.it("passes", Testing.toBe(1, 1));
     Testing.endDescribe()
   );
@@ -379,7 +448,7 @@ export let test () :=
             "musi.json",
             "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"fmt\": { \"useTabs\": true, \"indentWidth\": 8 }\n}\n",
         );
-        write_file(temp.path(), "index.ms", "export let answer : Int := 1;");
+        write_file(temp.path(), "index.ms", "export let result : Int := 1;");
 
         let manifest_tabs = run_musi_with_input(
             &["fmt", "--ext", "ms", "-"],
@@ -420,7 +489,7 @@ export let test () :=
             "musi.json",
             "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"fmt\": { \"profile\": \"expanded\", \"matchArmIndent\": \"pipeAligned\" }\n}\n",
         );
-        write_file(temp.path(), "index.ms", "export let answer : Int := 1;");
+        write_file(temp.path(), "index.ms", "export let result : Int := 1;");
         let source = "export let describe (target : Ordering) : String := match target(| .Less => \"less\" | .GreaterThanEverything => \"greater\" | _ => \"same\");";
 
         let output = run_musi_with_input(&["fmt", "--ext", "ms", "-"], temp.path(), source);
@@ -440,7 +509,7 @@ export let test () :=
             "musi.json",
             "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"fmt\": { \"profile\": \"expanded\" }\n}\n",
         );
-        write_file(temp.path(), "index.ms", "export let answer : Int := 1;");
+        write_file(temp.path(), "index.ms", "export let result : Int := 1;");
         let source = "export let describe (target : Ordering) : String := match target(| .Less => \"less\" | .GreaterThanEverything => \"greater\" | _ => \"same\");";
 
         let output = run_musi_with_input(
@@ -673,6 +742,60 @@ export let test () :=
     }
 
     #[test]
+    fn test_package_directory_target_runs_that_package_tests() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"workspace\": { \"members\": [\"packages/std\"] }\n}\n",
+        );
+        write_file(
+            temp.path(),
+            "packages/std/musi.json",
+            "{\n  \"name\": \"@std\",\n  \"version\": \"0.1.0\"\n}\n",
+        );
+        write_file(temp.path(), "packages/std/index.ms", "let value := 1;\n");
+        write_file(
+            temp.path(),
+            "packages/std/__tests__/std.test.ms",
+            "export let test () := ();\n",
+        );
+
+        let output = run_musi(&["test", "packages/std"], temp.path());
+
+        assert_success(&output);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("✓ __tests__/std.test.ms (0)"));
+    }
+
+    #[test]
+    fn test_package_file_target_runs_that_test_module() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"workspace\": { \"members\": [\"packages/std\"] }\n}\n",
+        );
+        write_file(
+            temp.path(),
+            "packages/std/musi.json",
+            "{\n  \"name\": \"@std\",\n  \"version\": \"0.1.0\"\n}\n",
+        );
+        write_file(temp.path(), "packages/std/index.ms", "let value := 1;\n");
+        write_file(
+            temp.path(),
+            "packages/std/__tests__/std.test.ms",
+            "export let test () := ();\n",
+        );
+
+        let output = run_musi(&["test", "packages/std/__tests__/std.test.ms"], temp.path());
+
+        assert_success(&output);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("✓ __tests__/std.test.ms (0)"));
+    }
+
+    #[test]
     fn test_explicit_workspace_root_runs_root_and_member_tests_by_default() {
         let temp = TempDir::new();
         write_file(
@@ -872,6 +995,18 @@ mod failure {
     }
 
     #[test]
+    fn fmt_rejects_musi_extension_override() {
+        let temp = TempDir::new();
+
+        let output = run_musi_with_input(&["fmt", "--ext", "musi", "-"], temp.path(), "let x:=1;");
+
+        assert!(!output.status.success());
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("unsupported formatter extension")
+        );
+    }
+
+    #[test]
     fn json_check_manifest_failure_writes_only_json_to_stdout() {
         let temp = TempDir::new();
         write_file(temp.path(), "musi.json", "{ invalid json\n");
@@ -883,7 +1018,10 @@ mod failure {
         let payload = parse_json(&output.stdout);
         assert_eq!(payload["status"], "error");
         assert_eq!(payload["diagnostics"][0]["phase"], "project");
-        assert_eq!(payload["diagnostics"][0]["code"], "MS3604");
+        assert_eq!(
+            payload["diagnostics"][0]["code"],
+            diag_code(ProjectDiagKind::InvalidManifestJson)
+        );
         assert!(payload["diagnostics"][0]["range"].is_object());
     }
 
@@ -919,16 +1057,27 @@ mod failure {
         let payload = parse_json(&output.stdout);
         assert_eq!(payload["status"], "error");
         assert_eq!(payload["diagnostics"][0]["phase"], "project");
-        assert_eq!(payload["diagnostics"][0]["code"], "MS3610");
+        assert_eq!(
+            payload["diagnostics"][0]["code"],
+            diag_code(ProjectDiagKind::ManifestPackageNameMissing)
+        );
+        let manifest_path = temp
+            .path()
+            .join("musi.json")
+            .canonicalize()
+            .expect("manifest path should canonicalize");
+        let context = DiagContext::new().with("path", manifest_path.display());
         assert_eq!(
             payload["diagnostics"][0]["message"],
-            "missing root package entry"
+            ProjectDiagKind::ManifestPackageNameMissing.message_with(&context)
         );
-        assert!(
-            !payload["diagnostics"][0]["message"]
-                .as_str()
-                .expect("project message should be string")
-                .contains("manifest validation failed")
+        let fallback_context = DiagContext::new().with(
+            "message",
+            ProjectDiagKind::ManifestPackageNameMissing.message_with(&context),
+        );
+        assert_ne!(
+            payload["diagnostics"][0]["message"],
+            ProjectDiagKind::ManifestValidationFailed.message_with(&fallback_context)
         );
         assert!(payload["diagnostics"][0]["range"].is_object());
     }
@@ -944,7 +1093,7 @@ mod failure {
         write_file(
             temp.path(),
             "index.ms",
-            "let Missing := import \"missing\";\nexport let answer : Int := 42;\n",
+            "let Missing := import \"missing\";\nexport let result : Int := 42;\n",
         );
 
         let output = run_musi(&["check", "--diagnostics-format", "json"], temp.path());
@@ -953,10 +1102,14 @@ mod failure {
         assert!(String::from_utf8_lossy(&output.stderr).is_empty());
         let payload = parse_json(&output.stdout);
         assert_eq!(payload["diagnostics"][0]["phase"], "project");
-        assert_eq!(payload["diagnostics"][0]["code"], "MS3615");
+        assert_eq!(
+            payload["diagnostics"][0]["code"],
+            diag_code(ProjectDiagKind::SourceImportUnresolved)
+        );
+        let context = DiagContext::new().with("spec", "missing");
         assert_eq!(
             payload["diagnostics"][0]["message"],
-            "unresolved import `missing`"
+            ProjectDiagKind::SourceImportUnresolved.message_with(&context)
         );
         assert!(payload["diagnostics"][0]["file"].as_str().is_some());
         assert!(payload["diagnostics"][0]["range"].is_object());
@@ -984,7 +1137,7 @@ mod e2e {
         let test_output = run_musi(&["test"], &temp.path().join("sample"));
         assert_success(&test_output);
         let stdout = String::from_utf8_lossy(&test_output.stdout);
-        assert!(stdout.contains("✓ add.test.ms (1)"));
+        assert!(stdout.contains("✓ __tests__/add.test.ms (1)"));
         assert!(stdout.contains("adds values"));
         assert!(!stdout.contains("@@std"));
     }

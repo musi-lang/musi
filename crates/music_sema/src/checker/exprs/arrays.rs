@@ -1,5 +1,6 @@
 use music_arena::SliceRange;
 use music_base::Span;
+use music_base::diag::DiagContext;
 use music_hir::{HirArrayItem, HirDim, HirExprId, HirOrigin, HirTyId, HirTyKind};
 
 use crate::api::{ConstraintKind, ExprFacts};
@@ -24,24 +25,33 @@ impl CheckPass<'_, '_, '_> {
         {
             let dims = self.dims(dims);
             if !dims.is_empty() && dims.len() != arg_count {
-                self.diag(
+                self.diag_with(
                     origin.span,
                     DiagKind::InvalidIndexArgCount,
-                    "index arg count does not match array dimensions",
+                    DiagContext::new()
+                        .with("expected", dims.len())
+                        .with("found", arg_count),
                 );
             }
             item
         } else if let HirTyKind::Seq { item } = self.ty(peel_mut_ty(self, base_facts.ty)).kind {
             if arg_count != 1 {
-                self.diag(
+                self.diag_with(
                     origin.span,
                     DiagKind::InvalidIndexArgCount,
-                    "index expression requires exactly one argument here",
+                    DiagContext::new()
+                        .with("expected", 1)
+                        .with("found", arg_count),
                 );
             }
             item
         } else {
-            self.diag(origin.span, DiagKind::InvalidIndexTarget, "");
+            let target = self.render_ty(base_facts.ty);
+            self.diag_with(
+                origin.span,
+                DiagKind::InvalidIndexTarget,
+                DiagContext::new().with("target", target),
+            );
             builtins.unknown
         };
         ExprFacts::new(ty, effects)
@@ -145,23 +155,11 @@ impl CheckPass<'_, '_, '_> {
                     known_len,
                 );
             }
-            HirTyKind::Seq { item }
-            | HirTyKind::Range { bound: item }
-            | HirTyKind::ClosedRange { bound: item }
-            | HirTyKind::PartialRangeFrom { bound: item }
-            | HirTyKind::PartialRangeUpTo { bound: item }
-            | HirTyKind::PartialRangeThru { bound: item } => {
+            HirTyKind::Seq { item } | HirTyKind::Range { bound: item } => {
                 *has_runtime_spread = true;
                 self.merge_array_item_ty(spread_origin, item_ty, item);
-                if matches!(
-                    self.ty(spread_ty).kind,
-                    HirTyKind::Range { .. }
-                        | HirTyKind::ClosedRange { .. }
-                        | HirTyKind::PartialRangeFrom { .. }
-                        | HirTyKind::PartialRangeUpTo { .. }
-                        | HirTyKind::PartialRangeThru { .. }
-                ) {
-                    self.resolve_rangeable_evidence(array_item.expr, spread_origin, item);
+                if matches!(self.ty(spread_ty).kind, HirTyKind::Range { .. }) {
+                    self.resolve_rangeable_answers(array_item.expr, spread_origin, item);
                 }
             }
             _ => self.diag(
@@ -207,7 +205,7 @@ impl CheckPass<'_, '_, '_> {
         }
     }
 
-    pub(super) fn resolve_rangeable_evidence(
+    pub(super) fn resolve_rangeable_answers(
         &mut self,
         expr_id: HirExprId,
         origin: HirOrigin,
@@ -219,14 +217,14 @@ impl CheckPass<'_, '_, '_> {
             kind: ConstraintKind::Implements,
             subject: item_ty,
             value: rangeable,
-            class_key: self
-                .class_facts_by_name(rangeable_symbol)
+            shape_key: self
+                .shape_facts_by_name(rangeable_symbol)
                 .map(|facts| facts.key.clone()),
         };
-        if let Some(evidence) = self.resolve_obligations_to_evidence(origin, &[obligation])
-            && !evidence.is_empty()
+        if let Some(answers) = self.resolve_obligations_to_answers(origin, &[obligation])
+            && !answers.is_empty()
         {
-            self.set_expr_evidence(expr_id, evidence);
+            self.set_expr_constraint_answers(expr_id, answers);
         }
     }
 
@@ -314,13 +312,26 @@ impl CheckPass<'_, '_, '_> {
             |array_item| self.expr(array_item.expr).origin.span,
         );
         if has_runtime_spread {
-            self.diag(
+            let spread = items
+                .iter()
+                .find(|array_item| array_item.spread)
+                .map_or_else(
+                    || "runtime spread".to_owned(),
+                    |array_item| self.expr_subject(array_item.expr),
+                );
+            self.diag_with(
                 span,
                 DiagKind::ArrayLiteralLengthUnknownFromRuntimeSpread,
-                "",
+                DiagContext::new().with("spread", spread),
             );
         } else if expected_len != known_len {
-            self.diag(span, DiagKind::ArrayLiteralLengthMismatch, "");
+            self.diag_with(
+                span,
+                DiagKind::ArrayLiteralLengthMismatch,
+                DiagContext::new()
+                    .with("expected", expected_len)
+                    .with("found", known_len),
+            );
         }
     }
 
@@ -333,10 +344,12 @@ impl CheckPass<'_, '_, '_> {
         let builtins = self.builtins();
         let index_exprs = self.expr_ids(args);
         if index_exprs.is_empty() {
-            self.diag(
+            self.diag_with(
                 origin.span,
                 DiagKind::InvalidIndexArgCount,
-                "index expression requires at least one argument",
+                DiagContext::new()
+                    .with("expected", "at least 1")
+                    .with("found", 0),
             );
         }
         for index_expr in &index_exprs {

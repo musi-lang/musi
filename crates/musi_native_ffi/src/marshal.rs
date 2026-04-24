@@ -2,7 +2,9 @@ use std::ffi::{CStr, CString, c_char, c_uint, c_void};
 use std::mem::MaybeUninit;
 use std::ptr::{from_mut, null, null_mut};
 
-use musi_vm::{ForeignCall, Value, VmError, VmErrorKind, VmResult};
+use musi_vm::{
+    ForeignCall, Value, VmError, VmErrorKind, VmHostCallContext, VmHostContext, VmResult,
+};
 use music_seam::TypeId;
 
 use crate::abi::{NativeAbiSignature, NativeAbiType};
@@ -11,7 +13,9 @@ use crate::ffi::{
     read_u8, usize_to_mut_ptr, write_bytes,
 };
 use crate::loader::resolve_symbol;
-use crate::{invalid_arg_type, native_abi_unsupported, native_arg_invalid, native_result_invalid};
+use crate::{invalid_arg_type, native_abi_issue, native_arg_issue, native_result_issue};
+
+type StructMarshalContext<'call, 'vm> = VmHostCallContext<'call, 'vm>;
 
 enum ArgValue {
     Bool(u8),
@@ -53,11 +57,12 @@ enum ResultValue {
     Struct(Vec<u8>),
 }
 
-struct FieldWriteCtx<'a> {
+struct FieldWriteCtx<'a, 'h> {
     foreign: &'a ForeignCall,
     arg_index: usize,
     out: &'a mut [u8],
     strings: &'a mut Vec<CString>,
+    vm: &'a mut VmHostContext<'h>,
 }
 
 impl ArgValue {
@@ -110,7 +115,11 @@ impl ResultValue {
 ///
 /// Returns [`VmError`] when symbol resolution, ABI preparation, argument marshalling, the native
 /// call itself, or result unmarshalling fails.
-pub fn call_foreign(foreign: &ForeignCall, args: &[Value]) -> VmResult<Value> {
+pub fn call_foreign(
+    ctx: StructMarshalContext<'_, '_>,
+    foreign: &ForeignCall,
+    args: &[Value],
+) -> VmResult<Value> {
     let mut signature = NativeAbiSignature::build(foreign)?;
     if args.len() != signature.arg_tys.len() {
         return Err(VmError::new(VmErrorKind::CallArityMismatch {
@@ -126,7 +135,7 @@ pub fn call_foreign(foreign: &ForeignCall, args: &[Value]) -> VmResult<Value> {
         .zip(args.iter())
         .enumerate()
         .map(|(index, (ty, value))| {
-            marshal_arg_value(foreign, index, value, ty, &signature.arg_ffi[index])
+            marshal_arg_value(ctx, foreign, index, value, ty, &signature.arg_ffi[index])
         })
         .collect::<VmResult<Vec<_>>>()?;
     let mut ffi_args = arg_values
@@ -141,9 +150,8 @@ pub fn call_foreign(foreign: &ForeignCall, args: &[Value]) -> VmResult<Value> {
         .map(FfiTypeRef::as_mut_ptr)
         .collect::<Vec<_>>();
     let result_type_ptr = signature.result_ffi.as_mut_ptr();
-    let arg_count = c_uint::try_from(arg_type_ptrs.len()).map_err(|_| {
-        native_abi_unsupported(foreign, "native FFI argument count overflow".into())
-    })?;
+    let arg_count = c_uint::try_from(arg_type_ptrs.len())
+        .map_err(|_| native_abi_issue(foreign, "native FFI argument count overflow"))?;
     let prep_status = {
         // SAFETY: `cif`, `result_type_ptr`, and the arg type array all outlive the call.
         unsafe {
@@ -157,13 +165,12 @@ pub fn call_foreign(foreign: &ForeignCall, args: &[Value]) -> VmResult<Value> {
         }
     };
     if prep_status != FFI_OK {
-        return Err(native_abi_unsupported(
+        return Err(native_abi_issue(
             foreign,
             format!(
                 "`ffi_prep_cif` failed with status `{prep_status}` for ABI `{}`",
                 default_ffi_abi()
-            )
-            .into(),
+            ),
         ));
     }
     let mut cif = {
@@ -183,6 +190,7 @@ pub fn call_foreign(foreign: &ForeignCall, args: &[Value]) -> VmResult<Value> {
         }
     }
     unmarshal_result_value(
+        ctx,
         foreign,
         &signature.result_ty,
         &signature.result_ffi,
@@ -191,6 +199,7 @@ pub fn call_foreign(foreign: &ForeignCall, args: &[Value]) -> VmResult<Value> {
 }
 
 fn extract_wrapper_value(
+    ctx: &VmHostContext<'_>,
     foreign: &ForeignCall,
     index: usize,
     value: &Value,
@@ -199,32 +208,32 @@ fn extract_wrapper_value(
     let wrapped_ty = match ty {
         NativeAbiType::Transparent { ty, .. } => *ty,
         _ => {
-            return Err(native_arg_invalid(
+            return Err(native_arg_issue(
                 foreign,
                 index,
-                "transparent wrapper extraction requires transparent ABI type".into(),
+                "transparent wrapper extraction needs transparent ABI type",
             ));
         }
     };
-    let Some(data) = value.as_record() else {
-        return Err(native_arg_invalid(
+    let Some(data) = ctx.record(value) else {
+        return Err(native_arg_issue(
             foreign,
             index,
-            "transparent argument is not data".into(),
+            "transparent argument is not data",
         ));
     };
     if data.ty() != wrapped_ty || data.tag() != 0 || data.len() != 1 {
-        return Err(native_arg_invalid(
+        return Err(native_arg_issue(
             foreign,
             index,
-            "transparent argument shape mismatch".into(),
+            "transparent argument shape mismatch",
         ));
     }
     let Some(inner) = data.get(0).cloned() else {
-        return Err(native_arg_invalid(
+        return Err(native_arg_issue(
             foreign,
             index,
-            "transparent argument field missing".into(),
+            "transparent argument field missing",
         ));
     };
     Ok((inner, wrapped_ty))
@@ -238,6 +247,7 @@ fn repr_c_fields(ty: &NativeAbiType) -> &[NativeAbiType] {
 }
 
 fn marshal_arg_value(
+    ctx: &mut VmHostContext<'_>,
     foreign: &ForeignCall,
     index: usize,
     value: &Value,
@@ -249,7 +259,7 @@ fn marshal_arg_value(
             bytes: Vec::new(),
             strings: Vec::new(),
         }),
-        NativeAbiType::Bool { .. } => bool_flag(value).map_or_else(
+        NativeAbiType::Bool { .. } => ctx.bool_flag(value).map_or_else(
             || invalid_arg_type(foreign, index, "Bool", value),
             |flag| Ok(ArgValue::Bool(u8::from(flag))),
         ),
@@ -261,30 +271,26 @@ fn marshal_arg_value(
             Value::Float(number) => Ok(ArgValue::F64(*number)),
             other => invalid_arg_type(foreign, index, "Float", other),
         },
-        NativeAbiType::CString => match value {
-            Value::String(text) => {
-                let storage = CString::new(text.as_ref()).map_err(|_| {
-                    native_arg_invalid(
-                        foreign,
-                        index,
-                        "`CString` argument contains interior NULL".into(),
-                    )
+        NativeAbiType::CString => match ctx.string(value) {
+            Some(text) => {
+                let storage = CString::new(text.as_str()).map_err(|_| {
+                    native_arg_issue(foreign, index, "`CString` argument contains interior NULL")
                 })?;
                 let pointer = storage.as_ptr().cast_mut();
                 Ok(ArgValue::CString { storage, pointer })
             }
-            other => invalid_arg_type(foreign, index, "CString", other),
+            None => invalid_arg_type(foreign, index, "CString", value),
         },
         NativeAbiType::CPtr => match value {
             Value::CPtr(address) => Ok(ArgValue::Pointer(usize_to_mut_ptr(*address))),
             other => invalid_arg_type(foreign, index, "CPtr", other),
         },
         NativeAbiType::Transparent { inner, .. } => {
-            let (inner_value, _) = extract_wrapper_value(foreign, index, value, ty)?;
-            marshal_arg_value(foreign, index, &inner_value, inner, ffi)
+            let (inner_value, _) = extract_wrapper_value(ctx, foreign, index, value, ty)?;
+            marshal_arg_value(ctx, foreign, index, &inner_value, inner, ffi)
         }
         NativeAbiType::ReprCProduct { fields, .. } => {
-            let (bytes, strings) = marshal_record_bytes(foreign, index, value, fields, ffi)?;
+            let (bytes, strings) = marshal_record_bytes(ctx, foreign, index, value, fields, ffi)?;
             Ok(ArgValue::Struct { bytes, strings })
         }
     }
@@ -337,19 +343,14 @@ fn signed_arg_number(foreign: &ForeignCall, index: usize, value: &Value) -> VmRe
 fn unsigned_arg_number(foreign: &ForeignCall, index: usize, value: &Value) -> VmResult<u64> {
     match value {
         Value::Nat(number) => Ok(*number),
-        Value::Int(number) => u64::try_from(*number).map_err(|_| {
-            native_arg_invalid(foreign, index, "unsigned argument is negative".into())
-        }),
+        Value::Int(number) => u64::try_from(*number)
+            .map_err(|_| native_arg_issue(foreign, index, "unsigned argument is negative")),
         other => invalid_arg_type(foreign, index, "Nat", other),
     }
 }
 
 fn int_arg_out_of_range(foreign: &ForeignCall, index: usize, ty: &str) -> VmError {
-    native_arg_invalid(
-        foreign,
-        index,
-        format!("argument out of range for `{ty}`").into(),
-    )
+    native_arg_issue(foreign, index, format!("argument out of range for `{ty}`"))
 }
 
 fn f32_from_f64(value: f64) -> f32 {
@@ -362,56 +363,56 @@ fn f32_from_f64(value: f64) -> f32 {
     })
 }
 
-fn bool_flag(value: &Value) -> Option<bool> {
-    let record = value.as_record()?;
-    (record.is_empty() && (record.tag() == 0 || record.tag() == 1)).then_some(record.tag() != 0)
-}
-
 fn marshal_record_bytes(
+    ctx: &mut VmHostContext<'_>,
     foreign: &ForeignCall,
     index: usize,
     value: &Value,
     fields: &[NativeAbiType],
     ffi: &FfiTypeRef,
 ) -> VmResult<(Vec<u8>, Vec<CString>)> {
-    let Some(data) = value.as_record() else {
-        return Err(native_arg_invalid(
+    let Some(data) = ctx.record(value) else {
+        return Err(native_arg_issue(
             foreign,
             index,
-            format!("expected `record data`, found `{:?}`", value.kind()).into(),
+            format!("expected `record data`, found `{:?}`", value.kind()),
         ));
     };
     if data.tag() != 0 {
-        return Err(native_arg_invalid(
+        return Err(native_arg_issue(
             foreign,
             index,
-            "`@repr(\"c\")` product argument has non-zero tag".into(),
+            "`@repr(\"c\")` product argument has non-zero tag",
         ));
     }
     if data.len() != fields.len() {
-        return Err(native_arg_invalid(
+        return Err(native_arg_issue(
             foreign,
             index,
-            "`@repr(\"c\")` product argument field count mismatch".into(),
+            "`@repr(\"c\")` product argument field count mismatch",
         ));
     }
+    let field_values = (0..fields.len())
+        .map(|field_index| {
+            data.get(field_index).cloned().ok_or_else(|| {
+                native_arg_issue(
+                    foreign,
+                    index,
+                    "`@repr(\"c\")` product argument field missing",
+                )
+            })
+        })
+        .collect::<VmResult<Vec<_>>>()?;
     let size = ffi.struct_size().unwrap_or(0);
     let mut bytes = vec![0_u8; size];
     let mut strings = Vec::<CString>::new();
     let offsets = ffi.struct_offsets().unwrap_or(&[]);
     for (field_index, field_ty) in fields.iter().enumerate() {
         let Some(offset) = offsets.get(field_index).copied() else {
-            return Err(native_arg_invalid(
+            return Err(native_arg_issue(
                 foreign,
                 index,
-                "`@repr(\"c\")` product argument offset missing".into(),
-            ));
-        };
-        let Some(field_value) = data.get(field_index) else {
-            return Err(native_arg_invalid(
-                foreign,
-                index,
-                "`@repr(\"c\")` product argument field missing".into(),
+                "`@repr(\"c\")` product argument offset missing",
             ));
         };
         let mut write_ctx = FieldWriteCtx {
@@ -419,10 +420,11 @@ fn marshal_record_bytes(
             arg_index: index,
             out: &mut bytes,
             strings: &mut strings,
+            vm: ctx,
         };
         write_field_bytes(
             &mut write_ctx,
-            field_value,
+            &field_values[field_index],
             field_ty,
             ffi_child(ffi, field_index),
             offset,
@@ -432,7 +434,7 @@ fn marshal_record_bytes(
 }
 
 fn write_field_bytes(
-    ctx: &mut FieldWriteCtx<'_>,
+    ctx: &mut FieldWriteCtx<'_, '_>,
     value: &Value,
     ty: &NativeAbiType,
     ffi: Option<&FfiTypeRef>,
@@ -440,12 +442,12 @@ fn write_field_bytes(
 ) -> VmResult<()> {
     match ty {
         NativeAbiType::Unit => Ok(()),
-        NativeAbiType::Bool { .. } => bool_flag(value).map_or_else(
+        NativeAbiType::Bool { .. } => ctx.vm.bool_flag(value).map_or_else(
             || {
-                Err(native_arg_invalid(
+                Err(native_arg_issue(
                     ctx.foreign,
                     ctx.arg_index,
-                    format!("expected type `Bool`, found `{:?}`", value.kind()).into(),
+                    format!("expected type `Bool`, found `{:?}`", value.kind()),
                 ))
             },
             |flag| write_bytes(ctx.out, offset, &[u8::from(flag)]),
@@ -459,53 +461,60 @@ fn write_field_bytes(
                 write_bytes(ctx.out, offset, &f32_from_f64(*number).to_ne_bytes())
             }
             Value::Float(number) => write_bytes(ctx.out, offset, &number.to_ne_bytes()),
-            other => Err(native_arg_invalid(
+            other => Err(native_arg_issue(
                 ctx.foreign,
                 ctx.arg_index,
-                format!("expected type `Float`, found `{:?}`", other.kind()).into(),
+                format!("expected type `Float`, found `{:?}`", other.kind()),
             )),
         },
-        NativeAbiType::CString => match value {
-            Value::String(text) => {
-                let c_string = CString::new(text.as_ref()).map_err(|_| {
-                    native_arg_invalid(
+        NativeAbiType::CString => match ctx.vm.string(value) {
+            Some(text) => {
+                let c_string = CString::new(text.as_str()).map_err(|_| {
+                    native_arg_issue(
                         ctx.foreign,
                         ctx.arg_index,
-                        "`CString` argument contains interior NULL".into(),
+                        "`CString` argument contains interior NULL",
                     )
                 })?;
                 let pointer = c_string.as_ptr().addr();
                 ctx.strings.push(c_string);
                 write_bytes(ctx.out, offset, &pointer.to_ne_bytes())
             }
-            other => Err(native_arg_invalid(
+            None => Err(native_arg_issue(
                 ctx.foreign,
                 ctx.arg_index,
-                format!("expected type `CString`, found `{:?}`", other.kind()).into(),
+                format!("expected type `CString`, found `{:?}`", value.kind()),
             )),
         },
         NativeAbiType::CPtr => match value {
             Value::CPtr(address) => write_bytes(ctx.out, offset, &address.to_ne_bytes()),
-            other => Err(native_arg_invalid(
+            other => Err(native_arg_issue(
                 ctx.foreign,
                 ctx.arg_index,
-                format!("expected type `CPtr`, found `{:?}`", other.kind()).into(),
+                format!("expected type `CPtr`, found `{:?}`", other.kind()),
             )),
         },
         NativeAbiType::Transparent { inner, .. } => {
-            let (inner_value, _) = extract_wrapper_value(ctx.foreign, ctx.arg_index, value, ty)?;
+            let (inner_value, _) =
+                extract_wrapper_value(ctx.vm, ctx.foreign, ctx.arg_index, value, ty)?;
             write_field_bytes(ctx, &inner_value, inner, ffi, offset)
         }
         NativeAbiType::ReprCProduct { .. } => {
             let Some(ffi) = ffi else {
-                return Err(native_arg_invalid(
+                return Err(native_arg_issue(
                     ctx.foreign,
                     ctx.arg_index,
-                    "nested `@repr(\"c\")` product FFI metadata missing".into(),
+                    "nested `@repr(\"c\")` product FFI metadata missing",
                 ));
             };
-            let (nested, nested_strings) =
-                marshal_record_bytes(ctx.foreign, ctx.arg_index, value, repr_c_fields(ty), ffi)?;
+            let (nested, nested_strings) = marshal_record_bytes(
+                ctx.vm,
+                ctx.foreign,
+                ctx.arg_index,
+                value,
+                repr_c_fields(ty),
+                ffi,
+            )?;
             ctx.strings.extend(nested_strings);
             write_bytes(ctx.out, offset, &nested)
         }
@@ -537,6 +546,7 @@ fn alloc_result_value(ty: &NativeAbiType, ffi: &FfiTypeRef) -> ResultValue {
 }
 
 fn unmarshal_result_value(
+    ctx: VmHostCallContext<'_, '_>,
     foreign: &ForeignCall,
     ty: &NativeAbiType,
     ffi: &FfiTypeRef,
@@ -545,7 +555,7 @@ fn unmarshal_result_value(
     match (ty, value) {
         (NativeAbiType::Unit, ResultValue::Unit) => Ok(Value::Unit),
         (NativeAbiType::Bool { ty }, ResultValue::Bool(flag)) => {
-            Ok(Value::data(*ty, i64::from(flag != 0), []))
+            ctx.alloc_data(*ty, i64::from(flag != 0), [])
         }
         (NativeAbiType::Int { signed: true, .. }, ResultValue::I8(number)) => {
             Ok(Value::Int(i64::from(number)))
@@ -578,26 +588,23 @@ fn unmarshal_result_value(
         (NativeAbiType::CPtr, ResultValue::Pointer(pointer)) => Ok(Value::CPtr(pointer.addr())),
         (NativeAbiType::CString, ResultValue::Pointer(pointer)) => {
             if pointer.is_null() {
-                return Err(native_result_invalid(
-                    foreign,
-                    "`CString` result was null".into(),
-                ));
+                return Err(native_result_issue(foreign, "`CString` result was null"));
             }
             let c_text = {
                 // SAFETY: native code returned a non-null C string pointer for this result.
                 unsafe { CStr::from_ptr(pointer.cast()) }
             };
             let text = c_text.to_str().map_err(|error| {
-                native_result_invalid(
+                native_result_issue(
                     foreign,
-                    format!("`CString` result is not UTF-8 (`{error}`)").into(),
+                    format!("`CString` result is not UTF-8 (`{error}`)"),
                 )
             })?;
-            Ok(Value::string(text))
+            ctx.alloc_string(text)
         }
         (NativeAbiType::Transparent { ty, inner }, result) => {
-            let inner_value = unmarshal_result_value(foreign, inner, ffi, result)?;
-            Ok(Value::data(*ty, 0, [inner_value]))
+            let inner_value = unmarshal_result_value(ctx, foreign, inner, ffi, result)?;
+            ctx.alloc_data(*ty, 0, [inner_value])
         }
         (NativeAbiType::ReprCProduct { ty, fields, .. }, ResultValue::Struct(bytes)) => {
             let offsets = ffi.struct_offsets().unwrap_or(&[]);
@@ -606,24 +613,32 @@ fn unmarshal_result_value(
                 .enumerate()
                 .map(|(index, field_ty)| {
                     let Some(offset) = offsets.get(index).copied() else {
-                        return Err(native_result_invalid(
+                        return Err(native_result_issue(
                             foreign,
-                            "`@repr(\"c\")` result offset missing".into(),
+                            "`@repr(\"c\")` result offset missing",
                         ));
                     };
-                    read_field_value(foreign, field_ty, ffi_child(ffi, index), &bytes, offset)
+                    read_field_value(
+                        ctx,
+                        foreign,
+                        field_ty,
+                        ffi_child(ffi, index),
+                        &bytes,
+                        offset,
+                    )
                 })
                 .collect::<VmResult<Vec<_>>>()?;
-            Ok(Value::data(*ty, 0, values))
+            ctx.alloc_data(*ty, 0, values)
         }
-        _ => Err(native_result_invalid(
+        _ => Err(native_result_issue(
             foreign,
-            "`@repr(\"c\")` result storage shape mismatch".into(),
+            "`@repr(\"c\")` result storage shape mismatch",
         )),
     }
 }
 
 fn read_field_value(
+    ctx: VmHostCallContext<'_, '_>,
     foreign: &ForeignCall,
     ty: &NativeAbiType,
     ffi: Option<&FfiTypeRef>,
@@ -632,11 +647,9 @@ fn read_field_value(
 ) -> VmResult<Value> {
     match ty {
         NativeAbiType::Unit => Ok(Value::Unit),
-        NativeAbiType::Bool { ty } => Ok(Value::data(
-            *ty,
-            i64::from(read_u8(bytes, offset)? != 0),
-            [],
-        )),
+        NativeAbiType::Bool { ty } => {
+            ctx.alloc_data(*ty, i64::from(read_u8(bytes, offset)? != 0), [])
+        }
         NativeAbiType::Int { signed, bits } => read_int_field(bytes, offset, *signed, *bits),
         NativeAbiType::Float { bits: 32 } => Ok(Value::Float(f64::from(f32::from_ne_bytes(
             read_array(bytes, offset)?,
@@ -647,35 +660,32 @@ fn read_field_value(
         NativeAbiType::CString => {
             let ptr = usize::from_ne_bytes(read_array(bytes, offset)?);
             if ptr == 0 {
-                return Err(native_result_invalid(
-                    foreign,
-                    "`CString` result was null".into(),
-                ));
+                return Err(native_result_issue(foreign, "`CString` result was null"));
             }
             let c_text = {
                 // SAFETY: native code wrote a non-null C string pointer into the repr(c) field.
                 unsafe { CStr::from_ptr(null::<c_void>().with_addr(ptr).cast()) }
             };
             let text = c_text.to_str().map_err(|error| {
-                native_result_invalid(
+                native_result_issue(
                     foreign,
-                    format!("`CString` result is not UTF-8 (`{error}`)").into(),
+                    format!("`CString` result is not UTF-8 (`{error}`)"),
                 )
             })?;
-            Ok(Value::string(text))
+            ctx.alloc_string(text)
         }
         NativeAbiType::CPtr => Ok(Value::CPtr(usize::from_ne_bytes(read_array(
             bytes, offset,
         )?))),
         NativeAbiType::Transparent { ty, inner } => {
-            let inner_value = read_field_value(foreign, inner, ffi, bytes, offset)?;
-            Ok(Value::data(*ty, 0, [inner_value]))
+            let inner_value = read_field_value(ctx, foreign, inner, ffi, bytes, offset)?;
+            ctx.alloc_data(*ty, 0, [inner_value])
         }
         NativeAbiType::ReprCProduct { ty, fields, .. } => {
             let Some(ffi) = ffi else {
-                return Err(native_result_invalid(
+                return Err(native_result_issue(
                     foreign,
-                    "`@repr(\"c\")` result foreign function interface metadata missing".into(),
+                    "`@repr(\"c\")` result foreign function interface metadata missing",
                 ));
             };
             let offsets = ffi.struct_offsets().unwrap_or(&[]);
@@ -684,12 +694,13 @@ fn read_field_value(
                 .enumerate()
                 .map(|(index, field_ty)| {
                     let Some(field_offset) = offsets.get(index).copied() else {
-                        return Err(native_result_invalid(
+                        return Err(native_result_issue(
                             foreign,
-                            "`@repr(\"c\")` result offset missing".into(),
+                            "`@repr(\"c\")` result offset missing",
                         ));
                     };
                     read_field_value(
+                        ctx,
                         foreign,
                         field_ty,
                         ffi_child(ffi, index),
@@ -698,7 +709,7 @@ fn read_field_value(
                     )
                 })
                 .collect::<VmResult<Vec<_>>>()?;
-            Ok(Value::data(*ty, 0, values))
+            ctx.alloc_data(*ty, 0, values)
         }
     }
 }

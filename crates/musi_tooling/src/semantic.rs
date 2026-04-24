@@ -12,7 +12,7 @@ use music_syntax::{
 };
 
 use crate::{
-    analysis::{ToolMemberClass, ToolRange, member_class, tool_range},
+    analysis::{ToolMemberShape, ToolRange, member_class, tool_range},
     analysis_support::analysis_session,
 };
 
@@ -262,7 +262,10 @@ fn collect_typed_context_tokens(
         match child {
             SyntaxElement::Token(token) => match token.kind() {
                 TokenKind::Colon | TokenKind::LtColon | TokenKind::TildeEq => after_colon = true,
-                TokenKind::ColonEq | TokenKind::EqGt | TokenKind::KwWhere | TokenKind::KwUsing => {
+                TokenKind::ColonEq
+                | TokenKind::EqGt
+                | TokenKind::KwWhere
+                | TokenKind::KwRequire => {
                     after_colon = false;
                 }
                 _ => {}
@@ -556,10 +559,7 @@ fn is_builtin_type_name(text: &str) -> bool {
             | "String"
             | "Rune"
             | "Range"
-            | "ClosedRange"
-            | "PartialRangeFrom"
-            | "PartialRangeUpTo"
-            | "PartialRangeThru"
+            | "Pin"
             | "CString"
             | "CPtr"
             | "Rangeable"
@@ -668,7 +668,9 @@ fn binding_token_kind(
         | NameBindingKind::HandleClauseResult => ToolSemanticTokenKind::Parameter,
         NameBindingKind::TypeParam => ToolSemanticTokenKind::TypeParameter,
         NameBindingKind::Prelude
+        | NameBindingKind::Import
         | NameBindingKind::Let
+        | NameBindingKind::Pin
         | NameBindingKind::AttachedMethod
         | NameBindingKind::PatternBind => sema
             .and_then(|module| {
@@ -678,7 +680,6 @@ fn binding_token_kind(
             })
             .map_or(ToolSemanticTokenKind::Variable, |ty| match ty {
                 HirTyKind::Arrow { .. } | HirTyKind::Pi { .. } => ToolSemanticTokenKind::Function,
-                HirTyKind::Module => ToolSemanticTokenKind::Namespace,
                 HirTyKind::Type => ToolSemanticTokenKind::Type,
                 _ => ToolSemanticTokenKind::Variable,
             }),
@@ -687,11 +688,10 @@ fn binding_token_kind(
 
 fn member_token_kind(sema: &SemaModule, fact: &ExprMemberFact) -> ToolSemanticTokenKind {
     match member_class(sema, fact) {
-        ToolMemberClass::Function => ToolSemanticTokenKind::Function,
-        ToolMemberClass::Procedure => ToolSemanticTokenKind::Procedure,
-        ToolMemberClass::Property => ToolSemanticTokenKind::Property,
-        ToolMemberClass::Type => ToolSemanticTokenKind::Type,
-        ToolMemberClass::Namespace => ToolSemanticTokenKind::Namespace,
+        ToolMemberShape::Function => ToolSemanticTokenKind::Function,
+        ToolMemberShape::Procedure => ToolSemanticTokenKind::Procedure,
+        ToolMemberShape::Property => ToolSemanticTokenKind::Property,
+        ToolMemberShape::Type => ToolSemanticTokenKind::Type,
     }
 }
 

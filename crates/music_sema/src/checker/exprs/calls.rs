@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use music_arena::SliceRange;
+use music_base::diag::DiagContext;
 use music_hir::{HirArg, HirDim, HirExprId, HirExprKind, HirOrigin, HirTyId, HirTyKind};
 use music_names::{Ident, NameBindingId, Symbol};
 
@@ -8,7 +9,9 @@ use crate::api::{ConstraintKind, ExprFacts, ExprMemberKind};
 use crate::effects::EffectRow;
 
 use super::super::const_eval::try_comptime_value;
-use super::super::decls::{call_effects_for_expr, module_export_for_expr, module_target_for_expr};
+use super::super::decls::{
+    call_effects_for_expr, import_record_export_for_expr, import_record_target_for_expr,
+};
 use super::super::schemes::{BindingScheme, ConstraintObligation};
 use super::super::{CheckPass, DiagKind};
 use super::{check_expr, peel_mut_ty};
@@ -119,8 +122,12 @@ impl CallArgChecker<'_, '_, '_, '_, '_, '_> {
         named_seen: &mut HashSet<Symbol>,
     ) {
         if !named_seen.insert(name.name) {
-            self.ctx
-                .diag(name.span, DiagKind::CallNamedArgumentDuplicate, "");
+            let argument = self.ctx.resolve_symbol(name.name).to_owned();
+            self.ctx.diag_with(
+                name.span,
+                DiagKind::CallNamedArgumentDuplicate,
+                DiagContext::new().with("argument", argument),
+            );
         }
         let Some(expected_index) = self.named_arg_index(name, param_names) else {
             self.ctx
@@ -147,11 +154,10 @@ impl CallArgChecker<'_, '_, '_, '_, '_, '_> {
         let index = param_names.iter().position(|param| *param == name.name);
         if index.is_none() {
             let argument_name = self.ctx.resolve_symbol(name.name).to_owned();
-            self.ctx.diag_message(
+            self.ctx.diag_with(
                 name.span,
                 DiagKind::CallNamedArgumentUnknown,
-                format!("unknown named call argument `{argument_name}`"),
-                format!("unknown named call argument `{argument_name}`"),
+                DiagContext::new().with("argument", argument_name),
             );
         }
         index
@@ -227,11 +233,7 @@ impl CallArgChecker<'_, '_, '_, '_, '_, '_> {
                     .unwrap_or(builtins.unknown);
                 self.ctx.type_mismatch(origin, expected, seq_item);
             }
-            HirTyKind::Range { bound: range_item }
-            | HirTyKind::ClosedRange { bound: range_item }
-            | HirTyKind::PartialRangeFrom { bound: range_item }
-            | HirTyKind::PartialRangeUpTo { bound: range_item }
-            | HirTyKind::PartialRangeThru { bound: range_item } => {
+            HirTyKind::Range { bound: range_item } => {
                 self.has_runtime_spread = true;
                 let expected = params
                     .get(self.param_index)
@@ -244,17 +246,17 @@ impl CallArgChecker<'_, '_, '_, '_, '_, '_> {
                     kind: ConstraintKind::Implements,
                     subject: range_item,
                     value: rangeable,
-                    class_key: self
+                    shape_key: self
                         .ctx
-                        .class_facts_by_name(rangeable_symbol)
+                        .shape_facts_by_name(rangeable_symbol)
                         .map(|facts| facts.key.clone()),
                 };
-                if let Some(evidence) = self
+                if let Some(answers) = self
                     .ctx
-                    .resolve_obligations_to_evidence(origin, &[obligation])
-                    && !evidence.is_empty()
+                    .resolve_obligations_to_answers(origin, &[obligation])
+                    && !answers.is_empty()
                 {
-                    self.ctx.set_expr_evidence(spread_expr, evidence);
+                    self.ctx.set_expr_constraint_answers(spread_expr, answers);
                 }
             }
             _ => self.ctx.diag(
@@ -356,22 +358,21 @@ impl CheckPass<'_, '_, '_> {
             self.call_arity_mismatch(origin, callee, params.len(), args_vec.len());
         }
 
-        if let Some(class_ret) = self.resolve_class_member_call_evidence(origin, callee, &args_vec)
-        {
-            ret = class_ret;
+        if let Some(shape_ret) = self.resolve_shape_member_call_answers(origin, callee, &args_vec) {
+            ret = shape_ret;
         }
         self.merge_call_effects(origin, callee, &mut effects);
         ExprFacts::new(ret, effects)
     }
 
-    fn resolve_class_member_call_evidence(
+    fn resolve_shape_member_call_answers(
         &mut self,
         origin: HirOrigin,
         callee: HirExprId,
         args: &[HirArg],
     ) -> Option<HirTyId> {
         let fact = self.expr_member_fact(callee)?;
-        if fact.kind != ExprMemberKind::ClassMember {
+        if fact.kind != ExprMemberKind::ShapeMember {
             return None;
         }
         let HirExprKind::Field { base, .. } = self.expr(callee).kind else {
@@ -380,28 +381,28 @@ impl CheckPass<'_, '_, '_> {
         let HirExprKind::Name { name } = self.expr(base).kind else {
             return None;
         };
-        let class_name = name.name;
-        let class = self.class_facts_by_name(class_name)?.clone();
+        let shape_name = name.name;
+        let shape = self.shape_facts_by_name(shape_name)?.clone();
         let member = fact
             .index
-            .and_then(|index| class.members.get(usize::from(index)))
+            .and_then(|index| shape.members.get(usize::from(index)))
             .cloned()?;
         let mut subst = HashMap::new();
         for (member_param, arg) in member.params.iter().copied().zip(args.iter()) {
             let arg_ty = check_expr(self, arg.expr).ty;
-            if !self.unify_ty_for_type_params(&class.type_params, member_param, arg_ty, &mut subst)
+            if !self.unify_ty_for_type_params(&shape.type_params, member_param, arg_ty, &mut subst)
             {
                 let expected = self.substitute_ty(member_param, &subst);
                 let arg_origin = self.expr(arg.expr).origin;
                 self.type_mismatch(arg_origin, expected, arg_ty);
             }
         }
-        let subject = class
+        let subject = shape
             .type_params
             .first()
             .and_then(|param| subst.get(param).copied())
             .unwrap_or_else(|| {
-                let Some(name) = class.type_params.first().copied() else {
+                let Some(name) = shape.type_params.first().copied() else {
                     return self.builtins().unknown;
                 };
                 self.alloc_ty(HirTyKind::Named {
@@ -412,20 +413,20 @@ impl CheckPass<'_, '_, '_> {
         if subject == self.builtins().unknown {
             return Some(self.substitute_ty(member.result, &subst));
         }
-        let class_ty = self.alloc_ty(HirTyKind::Named {
-            name: class_name,
+        let shape_ty = self.alloc_ty(HirTyKind::Named {
+            name: shape_name,
             args: SliceRange::EMPTY,
         });
         let obligation = ConstraintObligation {
             kind: ConstraintKind::Implements,
             subject,
-            value: class_ty,
-            class_key: Some(class.key),
+            value: shape_ty,
+            shape_key: Some(shape.key),
         };
-        if let Some(evidence) = self.resolve_obligations_to_evidence(origin, &[obligation])
-            && !evidence.is_empty()
+        if let Some(answers) = self.resolve_obligations_to_answers(origin, &[obligation])
+            && !answers.is_empty()
         {
-            self.set_expr_evidence(callee, evidence);
+            self.set_expr_constraint_answers(callee, answers);
         }
         Some(self.substitute_ty(member.result, &subst))
     }
@@ -453,11 +454,12 @@ impl CheckPass<'_, '_, '_> {
         let subject = self.expr_subject(callee);
         let found = self.render_ty(found);
         let origin = self.expr(callee).origin;
-        self.diag_message(
+        self.diag_with(
             origin.span,
             DiagKind::InvalidCallTarget,
-            format!("callee `{subject}` lacks callable type `{found}`"),
-            format!("callee `{subject}` has type `{found}` here"),
+            DiagContext::new()
+                .with("target", subject)
+                .with("found", found),
         );
     }
 
@@ -469,11 +471,13 @@ impl CheckPass<'_, '_, '_> {
         found: usize,
     ) {
         let subject = self.expr_subject(callee);
-        self.diag_message(
+        self.diag_with(
             origin.span,
             DiagKind::CallArityMismatch,
-            format!("call `{subject}` expected `{expected}` arguments, found `{found}`"),
-            format!("call `{subject}` has `{found}` arguments here"),
+            DiagContext::new()
+                .with("callee", subject)
+                .with("expected", expected)
+                .with("found", found),
         );
     }
 
@@ -519,17 +523,22 @@ impl CheckPass<'_, '_, '_> {
             self.instantiate_pi_ty(origin, callee_facts.ty, &args)
         };
         let Some(instantiated) = instantiated else {
-            self.diag(origin.span, DiagKind::InvalidTypeApplication, "");
+            let target = self.expr_subject(callee);
+            self.diag_with(
+                origin.span,
+                DiagKind::InvalidTypeApplication,
+                DiagContext::new().with("target", target),
+            );
             return ExprFacts::new(builtins.unknown, effectful_eval);
         };
-        if let Some(target) = module_target_for_expr(self, callee) {
-            self.set_expr_module_target(expr_id, target);
+        if let Some(target) = import_record_target_for_expr(self, callee) {
+            self.set_expr_import_record_target(expr_id, target);
         }
-        if let Some(evidence) =
-            self.resolve_obligations_to_evidence(origin, &instantiated.obligations)
-            && !evidence.is_empty()
+        if let Some(answers) =
+            self.resolve_obligations_to_answers(origin, &instantiated.obligations)
+            && !answers.is_empty()
         {
-            self.set_expr_evidence(expr_id, evidence);
+            self.set_expr_constraint_answers(expr_id, answers);
         }
         self.set_expr_callable_effects(expr_id, instantiated.effects.clone());
         ExprFacts::new(instantiated.ty, effectful_eval)
@@ -581,7 +590,7 @@ impl CheckPass<'_, '_, '_> {
             return;
         }
         let instantiated = self.instantiate_monomorphic_scheme(&scheme);
-        let _ = self.resolve_obligations_to_evidence(origin, &instantiated.obligations);
+        let _ = self.resolve_obligations_to_answers(origin, &instantiated.obligations);
         effects.union_with(&instantiated.effects);
     }
 
@@ -598,7 +607,7 @@ impl CheckPass<'_, '_, '_> {
                 .and_then(|binding| self.binding_scheme(binding).cloned()),
             HirExprKind::Field { base, name, .. } => {
                 self.std_ffi_ptr_field_scheme(base, name).or_else(|| {
-                    module_export_for_expr(self, base, name)
+                    import_record_export_for_expr(self, base, name)
                         .map(|(surface, export)| self.scheme_from_export(&surface, &export))
                 })
             }
@@ -625,7 +634,7 @@ impl CheckPass<'_, '_, '_> {
         if self.resolve_symbol(ptr_name.name) != "ptr" {
             return None;
         }
-        let (surface, _) = module_export_for_expr(self, module_expr, ptr_name)?;
+        let (surface, _) = import_record_export_for_expr(self, module_expr, ptr_name)?;
         if !is_std_ffi_module(surface.module_key().as_str()) {
             return None;
         }
@@ -711,5 +720,5 @@ impl CheckPass<'_, '_, '_> {
 }
 
 fn is_std_ffi_module(module_key: &str) -> bool {
-    module_key == "@std/ffi" || module_key.ends_with("ffi/index.ms")
+    module_key == "@std/ffi" || module_key.ends_with("ffi.ms")
 }

@@ -26,17 +26,21 @@ fn lower_assign_target(
         HirExprKind::Name { name } => Ok(IrAssignTarget::Binding {
             binding: use_binding_id(sema, *name),
             name: interner.resolve(name.name).into(),
-            module_target: sema.expr_module_target(expr).cloned(),
+            import_record_target: sema.expr_import_record_target(expr).cloned(),
         }),
         HirExprKind::Index { base, args } => {
             let IrExprKind::Index { base, indices } = lower_index_expr(ctx, *base, *args) else {
-                return Err("unsupported assignment target".into());
+                return Err(super::lower_errors::lowering_error(
+                    "unsupported assignment target",
+                ));
             };
             Ok(IrAssignTarget::Index { base, indices })
         }
         HirExprKind::Field { base, name, .. } => {
             let Some(base_ty) = sema.try_expr_ty(*base) else {
-                return Err("assignment field base type missing".into());
+                return Err(super::lower_errors::lowering_error(
+                    "assignment field base type missing",
+                ));
             };
             let record_ty = match sema.ty(base_ty).kind {
                 HirTyKind::Mut { inner } => inner,
@@ -46,7 +50,9 @@ fn lower_assign_target(
                 record_layout_for_ty(sema, record_ty, interner)
             {
                 let Some(index) = indices.get(interner.resolve(name.name)).copied() else {
-                    return Err("unsupported assignment target".into());
+                    return Err(super::lower_errors::lowering_error(
+                        "unsupported assignment target",
+                    ));
                 };
                 return Ok(IrAssignTarget::RecordField {
                     base: Box::new(lower_expr(ctx, *base)),
@@ -54,19 +60,23 @@ fn lower_assign_target(
                 });
             }
 
-            let Some(module_target) = sema
-                .expr_module_target(expr)
+            let Some(import_record_target) = sema
+                .expr_import_record_target(expr)
                 .cloned()
-                .or_else(|| sema.expr_module_target(*base).cloned())
+                .or_else(|| sema.expr_import_record_target(*base).cloned())
             else {
-                return Err("unsupported assignment target".into());
+                return Err(super::lower_errors::lowering_error(
+                    "unsupported assignment target",
+                ));
             };
             Ok(IrAssignTarget::Binding {
                 binding: None,
                 name: interner.resolve(name.name).into(),
-                module_target: Some(module_target),
+                import_record_target: Some(import_record_target),
             })
         }
-        _ => Err("unsupported assignment target".into()),
+        _ => Err(super::lower_errors::lowering_error(
+            "unsupported assignment target",
+        )),
     }
 }

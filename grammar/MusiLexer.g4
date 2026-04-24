@@ -7,42 +7,42 @@ lexer grammar MusiLexer;
 
 // ----------------------------------------------------------------------------- Lexer
 
-// Keywords.
+// Keywords. Form keywords construct syntax forms; they are never callable identifiers. For example,
+// `import("a")` is an import form, not a call to a value named `import`.
 KW_AND: 'and';
 KW_AS: 'as';
+KW_ASK: 'ask';
 KW_ANY: 'any';
+KW_ANSWER: 'answer';
+KW_CATCH: 'catch';
 KW_MATCH: 'match';
-KW_CLASS: 'class';
+KW_NATIVE: 'native';
 KW_COMPTIME: 'comptime';
 KW_DATA: 'data';
 KW_EFFECT: 'effect';
 KW_EXPORT: 'export';
-KW_FOREIGN: 'foreign';
+KW_GIVEN: 'given';
+KW_LAW: 'law';
 KW_PARTIAL: 'partial';
-KW_FORALL: 'forall';
 KW_HANDLE: 'handle';
 KW_IF: 'if';
 KW_IMPORT: 'import';
 KW_IN: 'in';
-KW_INFIX: 'infix';
-KW_INFIXL: 'infixl';
-KW_INFIXR: 'infixr';
-KW_INSTANCE: 'instance';
-KW_LAW: 'law';
+KW_KNOWN: 'known';
 KW_LET: 'let';
 KW_MUT: 'mut';
 KW_REC: 'rec';
 KW_NOT: 'not';
-KW_OPAQUE: 'opaque';
 KW_OR: 'or';
-KW_REQUEST: 'request';
+KW_REQUIRE: 'require';
 KW_QUOTE: 'quote';
 KW_RESUME: 'resume';
+KW_SHAPE: 'shape';
+KW_PIN: 'pin';
 KW_UNSAFE: 'unsafe';
 KW_SHL: 'shl';
 KW_SHR: 'shr';
 KW_SOME: 'some';
-KW_USING: 'using';
 KW_WHERE: 'where';
 KW_XOR: 'xor';
 
@@ -51,11 +51,18 @@ COLON_EQ: ':=';
 COLON_QUESTION_GT: ':?>';
 DOT_DOT_DOT: '...';
 DOT_LBRACKET: '.[';
+// `.(` selects first-class operator members such as `Eq.(=)` or `x?.(+)`.
+DOT_LPAREN: '.(';
+QUESTION_DOT: '?.';
+BANG_DOT: '!.';
+QUESTION_QUESTION: '??';
 EQ_GT: '=>';
 MINUS_GT: '->';
 SLASH_EQ: '/=';
 LT_EQ: '<=';
 LT_COLON: '<:';
+LT_DOT_DOT_LT: '<..<';
+LT_DOT_DOT: '<..';
 GT_EQ: '>=';
 PIPE_GT: '|>';
 TILDE_GT: '~>';
@@ -93,15 +100,17 @@ UNDERSCORE: '_';
 
 // Literals.
 FLOAT_LIT:
-	DEC_DIGITS '.' DEC_DIGITS EXP_PART?
-	| '.' DEC_DIGITS EXP_PART?
-	| DEC_DIGITS EXP_PART;
+	DEC_DIGITS '.' DEC_DIGITS EXP_PART? FLOAT_SUFFIX?
+	| '.' DEC_DIGITS EXP_PART? FLOAT_SUFFIX?
+	| DEC_DIGITS EXP_PART FLOAT_SUFFIX?;
 
 INT_LIT:
-	'0x' HEX_DIGITS
-	| '0o' OCT_DIGITS
-	| '0b' BIN_DIGITS
-	| DEC_DIGITS;
+	(
+		'0x' HEX_DIGITS
+		| '0o' OCT_DIGITS
+		| '0b' BIN_DIGITS
+		| DEC_DIGITS
+	) INT_SUFFIX?;
 
 STRING_LIT: '"' (ESC_SEQ | ~["\\\r\n])* '"';
 
@@ -159,39 +168,38 @@ INTERP_LBRACE: '{' -> type(LBRACE), pushMode(INTERP_NESTED);
 // Keywords.
 I_KW_AND: 'and' -> type(KW_AND);
 I_KW_AS: 'as' -> type(KW_AS);
+I_KW_ASK: 'ask' -> type(KW_ASK);
 I_KW_ANY: 'any' -> type(KW_ANY);
+I_KW_ANSWER: 'answer' -> type(KW_ANSWER);
+I_KW_CATCH: 'catch' -> type(KW_CATCH);
 I_KW_MATCH: 'match' -> type(KW_MATCH);
-I_KW_CLASS: 'class' -> type(KW_CLASS);
+I_KW_NATIVE: 'native' -> type(KW_NATIVE);
 I_KW_COMPTIME: 'comptime' -> type(KW_COMPTIME);
 I_KW_DATA: 'data' -> type(KW_DATA);
 I_KW_EFFECT: 'effect' -> type(KW_EFFECT);
 I_KW_EXPORT: 'export' -> type(KW_EXPORT);
-I_KW_FOREIGN: 'foreign' -> type(KW_FOREIGN);
+I_KW_GIVEN: 'given' -> type(KW_GIVEN);
+I_KW_LAW: 'law' -> type(KW_LAW);
 I_KW_PARTIAL: 'partial' -> type(KW_PARTIAL);
-I_KW_FORALL: 'forall' -> type(KW_FORALL);
 I_KW_HANDLE: 'handle' -> type(KW_HANDLE);
 I_KW_IF: 'if' -> type(KW_IF);
 I_KW_IMPORT: 'import' -> type(KW_IMPORT);
 I_KW_IN: 'in' -> type(KW_IN);
-I_KW_INFIX: 'infix' -> type(KW_INFIX);
-I_KW_INFIXL: 'infixl' -> type(KW_INFIXL);
-I_KW_INFIXR: 'infixr' -> type(KW_INFIXR);
-I_KW_INSTANCE: 'instance' -> type(KW_INSTANCE);
-I_KW_LAW: 'law' -> type(KW_LAW);
+I_KW_KNOWN: 'known' -> type(KW_KNOWN);
 I_KW_LET: 'let' -> type(KW_LET);
 I_KW_MUT: 'mut' -> type(KW_MUT);
 I_KW_REC: 'rec' -> type(KW_REC);
 I_KW_NOT: 'not' -> type(KW_NOT);
-I_KW_OPAQUE: 'opaque' -> type(KW_OPAQUE);
 I_KW_OR: 'or' -> type(KW_OR);
-I_KW_REQUEST: 'request' -> type(KW_REQUEST);
+I_KW_REQUIRE: 'require' -> type(KW_REQUIRE);
 I_KW_QUOTE: 'quote' -> type(KW_QUOTE);
 I_KW_RESUME: 'resume' -> type(KW_RESUME);
+I_KW_SHAPE: 'shape' -> type(KW_SHAPE);
+I_KW_PIN: 'pin' -> type(KW_PIN);
 I_KW_UNSAFE: 'unsafe' -> type(KW_UNSAFE);
 I_KW_SHL: 'shl' -> type(KW_SHL);
 I_KW_SHR: 'shr' -> type(KW_SHR);
 I_KW_SOME: 'some' -> type(KW_SOME);
-I_KW_USING: 'using' -> type(KW_USING);
 I_KW_WHERE: 'where' -> type(KW_WHERE);
 I_KW_XOR: 'xor' -> type(KW_XOR);
 
@@ -200,11 +208,17 @@ I_COLON_EQ: ':=' -> type(COLON_EQ);
 I_COLON_QUESTION_GT: ':?>' -> type(COLON_QUESTION_GT);
 I_DOT_DOT_DOT: '...' -> type(DOT_DOT_DOT);
 I_DOT_LBRACKET: '.[' -> type(DOT_LBRACKET);
+I_DOT_LPAREN: '.(' -> type(DOT_LPAREN);
+I_QUESTION_DOT: '?.' -> type(QUESTION_DOT);
+I_BANG_DOT: '!.' -> type(BANG_DOT);
+I_QUESTION_QUESTION: '??' -> type(QUESTION_QUESTION);
 I_EQ_GT: '=>' -> type(EQ_GT);
 I_MINUS_GT: '->' -> type(MINUS_GT);
 I_SLASH_EQ: '/=' -> type(SLASH_EQ);
 I_LT_EQ: '<=' -> type(LT_EQ);
 I_LT_COLON: '<:' -> type(LT_COLON);
+I_LT_DOT_DOT_LT: '<..<' -> type(LT_DOT_DOT_LT);
+I_LT_DOT_DOT: '<..' -> type(LT_DOT_DOT);
 I_GT_EQ: '>=' -> type(GT_EQ);
 I_PIPE_GT: '|>' -> type(PIPE_GT);
 I_TILDE_GT: '~>' -> type(TILDE_GT);
@@ -241,9 +255,9 @@ I_UNDERSCORE: '_' -> type(UNDERSCORE);
 // Literals.
 I_FLOAT_LIT:
 	(
-		DEC_DIGITS '.' DEC_DIGITS EXP_PART?
-		| '.' DEC_DIGITS EXP_PART?
-		| DEC_DIGITS EXP_PART
+		DEC_DIGITS '.' DEC_DIGITS EXP_PART? FLOAT_SUFFIX?
+		| '.' DEC_DIGITS EXP_PART? FLOAT_SUFFIX?
+		| DEC_DIGITS EXP_PART FLOAT_SUFFIX?
 	) -> type(FLOAT_LIT);
 
 I_INT_LIT:
@@ -252,7 +266,7 @@ I_INT_LIT:
 		| '0o' OCT_DIGITS
 		| '0b' BIN_DIGITS
 		| DEC_DIGITS
-	) -> type(INT_LIT);
+	) INT_SUFFIX? -> type(INT_LIT);
 
 I_STRING_LIT:
 	'"' (ESC_SEQ | ~["\\\r\n])* '"' -> type(STRING_LIT);
@@ -305,39 +319,38 @@ N_INTERP_RBRACE: '}' -> type(RBRACE), popMode;
 // Keywords.
 N_KW_AND: 'and' -> type(KW_AND);
 N_KW_AS: 'as' -> type(KW_AS);
+N_KW_ASK: 'ask' -> type(KW_ASK);
 N_KW_ANY: 'any' -> type(KW_ANY);
+N_KW_ANSWER: 'answer' -> type(KW_ANSWER);
+N_KW_CATCH: 'catch' -> type(KW_CATCH);
 N_KW_MATCH: 'match' -> type(KW_MATCH);
-N_KW_CLASS: 'class' -> type(KW_CLASS);
+N_KW_NATIVE: 'native' -> type(KW_NATIVE);
 N_KW_COMPTIME: 'comptime' -> type(KW_COMPTIME);
 N_KW_DATA: 'data' -> type(KW_DATA);
 N_KW_EFFECT: 'effect' -> type(KW_EFFECT);
 N_KW_EXPORT: 'export' -> type(KW_EXPORT);
-N_KW_FOREIGN: 'foreign' -> type(KW_FOREIGN);
+N_KW_GIVEN: 'given' -> type(KW_GIVEN);
+N_KW_LAW: 'law' -> type(KW_LAW);
 N_KW_PARTIAL: 'partial' -> type(KW_PARTIAL);
-N_KW_FORALL: 'forall' -> type(KW_FORALL);
 N_KW_HANDLE: 'handle' -> type(KW_HANDLE);
 N_KW_IF: 'if' -> type(KW_IF);
 N_KW_IMPORT: 'import' -> type(KW_IMPORT);
 N_KW_IN: 'in' -> type(KW_IN);
-N_KW_INFIX: 'infix' -> type(KW_INFIX);
-N_KW_INFIXL: 'infixl' -> type(KW_INFIXL);
-N_KW_INFIXR: 'infixr' -> type(KW_INFIXR);
-N_KW_INSTANCE: 'instance' -> type(KW_INSTANCE);
-N_KW_LAW: 'law' -> type(KW_LAW);
+N_KW_KNOWN: 'known' -> type(KW_KNOWN);
 N_KW_LET: 'let' -> type(KW_LET);
 N_KW_MUT: 'mut' -> type(KW_MUT);
 N_KW_REC: 'rec' -> type(KW_REC);
 N_KW_NOT: 'not' -> type(KW_NOT);
-N_KW_OPAQUE: 'opaque' -> type(KW_OPAQUE);
 N_KW_OR: 'or' -> type(KW_OR);
-N_KW_REQUEST: 'request' -> type(KW_REQUEST);
+N_KW_REQUIRE: 'require' -> type(KW_REQUIRE);
 N_KW_QUOTE: 'quote' -> type(KW_QUOTE);
 N_KW_RESUME: 'resume' -> type(KW_RESUME);
+N_KW_SHAPE: 'shape' -> type(KW_SHAPE);
+N_KW_PIN: 'pin' -> type(KW_PIN);
 N_KW_UNSAFE: 'unsafe' -> type(KW_UNSAFE);
 N_KW_SHL: 'shl' -> type(KW_SHL);
 N_KW_SHR: 'shr' -> type(KW_SHR);
 N_KW_SOME: 'some' -> type(KW_SOME);
-N_KW_USING: 'using' -> type(KW_USING);
 N_KW_WHERE: 'where' -> type(KW_WHERE);
 N_KW_XOR: 'xor' -> type(KW_XOR);
 
@@ -346,6 +359,10 @@ N_COLON_EQ: ':=' -> type(COLON_EQ);
 N_COLON_QUESTION_GT: ':?>' -> type(COLON_QUESTION_GT);
 N_DOT_DOT_DOT: '...' -> type(DOT_DOT_DOT);
 N_DOT_LBRACKET: '.[' -> type(DOT_LBRACKET);
+N_DOT_LPAREN: '.(' -> type(DOT_LPAREN);
+N_QUESTION_DOT: '?.' -> type(QUESTION_DOT);
+N_BANG_DOT: '!.' -> type(BANG_DOT);
+N_QUESTION_QUESTION: '??' -> type(QUESTION_QUESTION);
 N_EQ_GT: '=>' -> type(EQ_GT);
 N_MINUS_GT: '->' -> type(MINUS_GT);
 N_SLASH_EQ: '/=' -> type(SLASH_EQ);
@@ -387,9 +404,9 @@ N_UNDERSCORE: '_' -> type(UNDERSCORE);
 // Literals.
 N_FLOAT_LIT:
 	(
-		DEC_DIGITS '.' DEC_DIGITS EXP_PART?
-		| '.' DEC_DIGITS EXP_PART?
-		| DEC_DIGITS EXP_PART
+		DEC_DIGITS '.' DEC_DIGITS EXP_PART? FLOAT_SUFFIX?
+		| '.' DEC_DIGITS EXP_PART? FLOAT_SUFFIX?
+		| DEC_DIGITS EXP_PART FLOAT_SUFFIX?
 	) -> type(FLOAT_LIT);
 
 N_INT_LIT:
@@ -398,7 +415,7 @@ N_INT_LIT:
 		| '0o' OCT_DIGITS
 		| '0b' BIN_DIGITS
 		| DEC_DIGITS
-	) -> type(INT_LIT);
+	) INT_SUFFIX? -> type(INT_LIT);
 
 N_STRING_LIT:
 	'"' (ESC_SEQ | ~["\\\r\n])* '"' -> type(STRING_LIT);
@@ -447,6 +464,20 @@ fragment OCT_DIGITS: [0-7] ([0-7] | '_' [0-7])*;
 fragment BIN_DIGITS: [01] ([01] | '_' [01])*;
 
 fragment EXP_PART: [eE] [+-]? DEC_DIGITS;
+
+fragment INT_SUFFIX:
+	'i8'
+	| 'i16'
+	| 'i32'
+	| 'i64'
+	| 'n8'
+	| 'n16'
+	| 'n32'
+	| 'n64'
+	| 'i'
+	| 'n';
+
+fragment FLOAT_SUFFIX: 'f32' | 'f64' | 'f';
 
 fragment ESC_SEQ:
 	'\\\\' (

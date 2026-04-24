@@ -8,12 +8,14 @@ use music_names::{Ident, NameBindingId, Symbol};
 use super::super::CheckPass;
 use super::super::DiagKind;
 use super::super::const_eval::try_comptime_value;
-use super::super::decls::check_foreign_let;
+use super::super::decls::check_native_let;
 use super::super::exprs::check_expr;
 use super::super::pats::{bind_pat, bound_name_from_pat, pat_is_irrefutable};
 use super::super::schemes::BindingScheme;
 use super::effects::require_declared_effects;
-use super::imports::{bind_module_pattern, bind_structural_alias, module_target_for_expr};
+use super::imports::{
+    bind_import_record_pattern, bind_structural_alias, import_record_target_for_expr,
+};
 use crate::api::{ConstraintFacts, ExprFacts};
 use crate::effects::EffectRow;
 
@@ -138,7 +140,7 @@ impl CheckPass<'_, '_, '_> {
         &mut self,
         origin: HirOrigin,
         pat: HirPatId,
-        value: HirExprId,
+        _value: HirExprId,
         value_ty: HirTyId,
     ) {
         if !pat_is_irrefutable(self, pat) {
@@ -148,21 +150,8 @@ impl CheckPass<'_, '_, '_> {
                 "",
             );
         }
-        if matches!(self.ty(value_ty).kind, HirTyKind::Module)
-            && matches!(self.pat(pat).kind, HirPatKind::Record { .. })
-            && module_target_for_expr(self, value).is_none()
-        {
-            self.diag(
-                origin.span,
-                DiagKind::ModuleDestructuringRequiresStaticModule,
-                "",
-            );
-        }
         if matches!(self.pat(pat).kind, HirPatKind::Record { .. })
-            && !matches!(
-                self.ty(value_ty).kind,
-                HirTyKind::Record { .. } | HirTyKind::Module
-            )
+            && !matches!(self.ty(value_ty).kind, HirTyKind::Record { .. })
         {
             self.diag(
                 origin.span,
@@ -195,12 +184,12 @@ impl CheckPass<'_, '_, '_> {
         self.insert_binding_type(binding, value_ty);
         self.insert_binding_effects(binding, effects);
         let evidence_keys = self
-            .evidence_scope_for_constraints(&scheme.constraints)
+            .answer_scope_for_constraints(&scheme.constraints)
             .into_keys()
             .collect::<Vec<_>>()
             .into_boxed_slice();
         self.insert_binding_scheme(binding, scheme);
-        self.set_binding_evidence_keys(binding, evidence_keys);
+        self.set_binding_constraint_keys(binding, evidence_keys);
     }
 
     fn check_callable_let_binding(
@@ -214,8 +203,8 @@ impl CheckPass<'_, '_, '_> {
     ) -> (HirTyId, EffectRow) {
         let mut callable_effects =
             effects.map_or(EffectRow::empty(), |set| self.lower_effect_row(set));
-        let evidence_scope = self.evidence_scope_for_constraints(constraints);
-        self.push_evidence_scope(evidence_scope);
+        let answer_scope = self.answer_scope_for_constraints(constraints);
+        self.push_answer_scope(answer_scope);
         if let Some(expected) = declared_ty {
             self.push_expected_ty(expected);
         }
@@ -223,7 +212,7 @@ impl CheckPass<'_, '_, '_> {
         if declared_ty.is_some() {
             let _ = self.pop_expected_ty();
         }
-        let _ = self.pop_evidence_scope();
+        let _ = self.pop_answer_scope();
         if effects.is_none() {
             callable_effects = body_facts.effects.clone();
         } else {
@@ -309,28 +298,28 @@ impl CheckPass<'_, '_, '_> {
             HirExprKind::Effect { members } => {
                 self.check_bound_effect(value, name, members.clone())
             }
-            HirExprKind::Class {
+            HirExprKind::Shape {
                 constraints,
                 members,
-            } => self.check_bound_class(
+            } => self.check_bound_shape(
                 value,
                 name,
                 type_params,
                 constraints.clone(),
                 members.clone(),
             ),
-            HirExprKind::Instance {
+            HirExprKind::Given {
                 type_params,
                 constraints,
-                class,
+                capability,
                 members,
             } => {
-                let _ = self.check_instance_expr(
+                let _ = self.check_given_expr(
                     value,
                     origin,
                     *type_params,
                     constraints.clone(),
-                    *class,
+                    *capability,
                     members,
                 );
                 ExprFacts::new(builtins.unit, EffectRow::empty())
@@ -503,7 +492,7 @@ impl CheckPass<'_, '_, '_> {
             sig,
             value,
         } = input;
-        if expr_mods.partial && expr_mods.foreign.is_some() {
+        if expr_mods.partial && expr_mods.native.is_some() {
             self.diag(origin.span, DiagKind::PartialForeignConflict, "");
         }
         let bound_name = bound_name_from_pat(self, pat);
@@ -547,8 +536,8 @@ impl CheckPass<'_, '_, '_> {
     }
 
     fn check_let_final_ty(&mut self, input: LetFinalTyInput<'_>) -> HirTyId {
-        if input.is_module_stmt && input.expr_mods.foreign.is_some() {
-            return check_foreign_let(
+        if input.is_module_stmt && input.expr_mods.native.is_some() {
+            return check_native_let(
                 self,
                 input.expr_id,
                 input.type_params,
@@ -598,14 +587,15 @@ impl CheckPass<'_, '_, '_> {
         binding: Option<NameBindingId>,
         bound_name: Option<Ident>,
     ) {
-        if !bind_module_pattern(self, pat, value) {
+        if !bind_import_record_pattern(self, pat, value) {
             bind_pat(self, pat, final_ty);
         }
         if let Some(binding) = binding
-            && let Some(target) = module_target_for_expr(self, value)
+            && let Some(target) = import_record_target_for_expr(self, value)
         {
-            self.insert_binding_module_target(binding, target);
+            self.insert_binding_import_record_target(binding, target);
         }
+        self.bind_tuple_import_targets(pat, value);
         if let Some(binding) = binding
             && let Some(name) = bound_name
         {
@@ -613,6 +603,31 @@ impl CheckPass<'_, '_, '_> {
         }
         if let Some(name) = bound_name {
             bind_structural_alias(self, name, value);
+        }
+    }
+
+    fn bind_tuple_import_targets(&mut self, pat: HirPatId, value: HirExprId) {
+        let HirPatKind::Tuple { items: pat_items } = self.pat(pat).kind else {
+            return;
+        };
+        let HirExprKind::Tuple { items: value_items } = self.expr(value).kind else {
+            return;
+        };
+        let pat_items = self.pat_ids(pat_items);
+        let value_items = self.expr_ids(value_items);
+        if pat_items.len() != value_items.len() {
+            return;
+        }
+        for (pat_item, value_item) in pat_items.into_iter().zip(value_items) {
+            let HirPatKind::Bind { name } = self.pat(pat_item).kind else {
+                continue;
+            };
+            let Some(binding) = self.binding_id_for_decl(name) else {
+                continue;
+            };
+            if let Some(target) = import_record_target_for_expr(self, value_item) {
+                self.insert_binding_import_record_target(binding, target);
+            }
         }
     }
 
@@ -637,6 +652,6 @@ fn is_explicit_comptime_expr(ctx: &CheckPass<'_, '_, '_>, expr: HirExprId) -> bo
 }
 
 fn is_std_ffi_unsafe_public_pointer_op(module_key: &str, name: &str) -> bool {
-    (module_key == "@std/ffi" || module_key.ends_with("ffi/index.ms"))
+    (module_key == "@std/ffi" || module_key.ends_with("ffi.ms"))
         && matches!(name, "offset" | "read" | "write")
 }

@@ -2,14 +2,129 @@ use std::ffi::OsStr;
 use std::path::{Component, Path, PathBuf};
 
 use async_lsp::lsp_types::{
-    Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, InlayHint, InlayHintKind,
-    InlayHintLabel, InlayHintTooltip, Location, NumberOrString, Position, Range, SemanticToken,
-    SemanticTokenModifier, SemanticTokenType, SemanticTokensLegend, Url,
+    CompletionItem, CompletionItemKind, CompletionTextEdit, Diagnostic,
+    DiagnosticRelatedInformation, DiagnosticSeverity, DocumentSymbol, Documentation, InlayHint,
+    InlayHintKind, InlayHintLabel, InlayHintTooltip, Location, NumberOrString, Position, Range,
+    SemanticToken, SemanticTokenModifier, SemanticTokenType, SemanticTokensLegend,
+    SymbolInformation, SymbolKind, TextEdit, Url, WorkspaceEdit,
 };
 use musi_tooling::{
-    CliDiagnostic, CliDiagnosticLabel, CliDiagnosticRange, ToolInlayHint, ToolInlayHintKind,
-    ToolPosition, ToolRange, ToolSemanticModifier, ToolSemanticToken, ToolSemanticTokenKind,
+    CliDiagnostic, CliDiagnosticLabel, CliDiagnosticRange, ToolCompletion, ToolCompletionKind,
+    ToolDocumentSymbol, ToolInlayHint, ToolInlayHintKind, ToolLocation, ToolPosition, ToolRange,
+    ToolSemanticModifier, ToolSemanticToken, ToolSemanticTokenKind, ToolSymbolKind,
+    ToolWorkspaceEdit, ToolWorkspaceSymbol,
 };
+
+pub(super) fn to_lsp_completion(completion: ToolCompletion) -> CompletionItem {
+    let text = completion
+        .insert_text
+        .clone()
+        .unwrap_or_else(|| completion.label.clone());
+    CompletionItem {
+        label: completion.label,
+        kind: Some(to_completion_item_kind(completion.kind)),
+        detail: completion.detail,
+        documentation: completion.documentation.map(Documentation::String),
+        sort_text: completion.sort_text,
+        filter_text: completion.filter_text,
+        text_edit: Some(CompletionTextEdit::Edit(TextEdit::new(
+            to_tool_range(&completion.replace_range),
+            text,
+        ))),
+        ..CompletionItem::default()
+    }
+}
+
+pub(super) fn to_lsp_location(location: ToolLocation) -> Option<Location> {
+    Some(Location {
+        uri: Url::from_file_path(location.path).ok()?,
+        range: to_tool_range(&location.range),
+    })
+}
+
+pub(super) fn to_lsp_document_symbol(symbol: ToolDocumentSymbol) -> DocumentSymbol {
+    #[allow(deprecated)]
+    DocumentSymbol {
+        name: symbol.name,
+        detail: None,
+        kind: to_symbol_kind(symbol.kind),
+        tags: None,
+        deprecated: None,
+        range: to_tool_range(&symbol.range),
+        selection_range: to_tool_range(&symbol.selection_range),
+        children: (!symbol.children.is_empty()).then(|| {
+            symbol
+                .children
+                .into_iter()
+                .map(to_lsp_document_symbol)
+                .collect()
+        }),
+    }
+}
+
+pub(super) fn to_lsp_symbol_information(symbol: ToolWorkspaceSymbol) -> Option<SymbolInformation> {
+    #[allow(deprecated)]
+    Some(SymbolInformation {
+        name: symbol.name,
+        kind: to_symbol_kind(symbol.kind),
+        tags: None,
+        deprecated: None,
+        location: to_lsp_location(symbol.location)?,
+        container_name: None,
+    })
+}
+
+pub(super) fn to_lsp_workspace_edit(edit: ToolWorkspaceEdit) -> WorkspaceEdit {
+    let changes = edit
+        .changes
+        .into_iter()
+        .filter_map(|(path, edits)| {
+            let uri = Url::from_file_path(path).ok()?;
+            Some((
+                uri,
+                edits
+                    .into_iter()
+                    .map(|edit| TextEdit::new(to_tool_range(&edit.range), edit.new_text))
+                    .collect(),
+            ))
+        })
+        .collect();
+    WorkspaceEdit {
+        changes: Some(changes),
+        document_changes: None,
+        change_annotations: None,
+    }
+}
+
+const fn to_completion_item_kind(kind: ToolCompletionKind) -> CompletionItemKind {
+    match kind {
+        ToolCompletionKind::Keyword => CompletionItemKind::KEYWORD,
+        ToolCompletionKind::Function | ToolCompletionKind::Procedure => {
+            CompletionItemKind::FUNCTION
+        }
+        ToolCompletionKind::Variable | ToolCompletionKind::Parameter => {
+            CompletionItemKind::VARIABLE
+        }
+        ToolCompletionKind::TypeParameter => CompletionItemKind::TYPE_PARAMETER,
+        ToolCompletionKind::Type => CompletionItemKind::CLASS,
+        ToolCompletionKind::Module => CompletionItemKind::MODULE,
+        ToolCompletionKind::Property => CompletionItemKind::PROPERTY,
+        ToolCompletionKind::EnumMember => CompletionItemKind::ENUM_MEMBER,
+    }
+}
+
+const fn to_symbol_kind(kind: ToolSymbolKind) -> SymbolKind {
+    match kind {
+        ToolSymbolKind::Function | ToolSymbolKind::Procedure => SymbolKind::FUNCTION,
+        ToolSymbolKind::Variable | ToolSymbolKind::Parameter => SymbolKind::VARIABLE,
+        ToolSymbolKind::TypeParameter => SymbolKind::TYPE_PARAMETER,
+        ToolSymbolKind::Type => SymbolKind::STRUCT,
+        ToolSymbolKind::Namespace => SymbolKind::NAMESPACE,
+        ToolSymbolKind::Alias => SymbolKind::CONSTANT,
+        ToolSymbolKind::Property => SymbolKind::PROPERTY,
+        ToolSymbolKind::EnumMember => SymbolKind::ENUM_MEMBER,
+    }
+}
 
 pub(super) fn semantic_tokens_legend() -> SemanticTokensLegend {
     SemanticTokensLegend {

@@ -30,9 +30,9 @@ pub fn build_module_surface(
         .into_boxed_slice();
     let exported_values = collector.collect_exported_values(typing, decls);
     let exported_data = collector.collect_exported_data(decls);
-    let exported_classes = collector.collect_exported_classes(decls);
+    let exported_shapes = collector.collect_exported_shapes(decls);
     let exported_effects = collector.collect_exported_effects(decls);
-    let exported_instances = collector.collect_exported_instances(decls);
+    let exported_givens = collector.collect_exported_givens(decls);
 
     ModuleSurface::from_collected(
         module.resolved.module_key.clone(),
@@ -41,9 +41,9 @@ pub fn build_module_surface(
         (
             exported_values,
             exported_data,
-            exported_classes,
+            exported_shapes,
             exported_effects,
-            exported_instances,
+            exported_givens,
         ),
     )
 }

@@ -9,15 +9,20 @@ use music_base::diag::{CatalogDiagnostic, DiagContext};
 use crate::SeamDiagKind;
 use crate::diag::artifact_error_kind;
 
+use crate::Opcode;
 use crate::descriptor::{
-    ClassDescriptor, ConstantDescriptor, ConstantValue, DataDescriptor, EffectDescriptor,
-    ExportDescriptor, ExportTarget, ForeignDescriptor, GlobalDescriptor, MetaDescriptor,
-    ProcedureDescriptor, TypeDescriptor,
+    ConstantDescriptor, ConstantValue, DataDescriptor, EffectDescriptor, ExportDescriptor,
+    ExportTarget, ForeignDescriptor, GlobalDescriptor, MetaDescriptor, ProcedureDescriptor,
+    ShapeDescriptor, TypeDescriptor,
 };
 use crate::instruction::{CodeEntry, Instruction, Label, LabelId, Operand, OperandShape};
 
 pub const SEAM_MAGIC: [u8; 4] = *b"SEAM";
-pub const BINARY_VERSION: u16 = 10;
+const BINARY_MAJOR_VERSION_U32: u32 = 13;
+const BINARY_MINOR_VERSION_U32: u32 = 0;
+pub const BINARY_MAJOR_VERSION: u16 = 13;
+pub const BINARY_MINOR_VERSION: u16 = 0;
+pub const BINARY_VERSION: u32 = (BINARY_MAJOR_VERSION_U32 << 16) | BINARY_MINOR_VERSION_U32;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
@@ -28,7 +33,7 @@ pub enum SectionTag {
     Globals = 4,
     Procedures = 5,
     Effects = 6,
-    Classes = 7,
+    Shapes = 7,
     Foreigns = 8,
     Exports = 9,
     Data = 10,
@@ -127,7 +132,7 @@ pub type ConstantId = Idx<ConstantDescriptor>;
 pub type GlobalId = Idx<GlobalDescriptor>;
 pub type ProcedureId = Idx<ProcedureDescriptor>;
 pub type EffectId = Idx<EffectDescriptor>;
-pub type ClassId = Idx<ClassDescriptor>;
+pub type ShapeId = Idx<ShapeDescriptor>;
 pub type ForeignId = Idx<ForeignDescriptor>;
 pub type ExportId = Idx<ExportDescriptor>;
 pub type DataId = Idx<DataDescriptor>;
@@ -141,7 +146,7 @@ pub struct Artifact {
     pub globals: Table<GlobalDescriptor>,
     pub procedures: Table<ProcedureDescriptor>,
     pub effects: Table<EffectDescriptor>,
-    pub classes: Table<ClassDescriptor>,
+    pub shapes: Table<ShapeDescriptor>,
     pub foreigns: Table<ForeignDescriptor>,
     pub exports: Table<ExportDescriptor>,
     pub data: Table<DataDescriptor>,
@@ -254,7 +259,7 @@ impl Artifact {
         self.validate_constants()?;
         self.validate_globals()?;
         self.validate_effects()?;
-        self.validate_classes()?;
+        self.validate_shapes()?;
         self.validate_foreigns()?;
         self.validate_data()?;
         self.validate_exports()?;
@@ -298,7 +303,7 @@ impl Artifact {
         procedure: &ProcedureDescriptor,
         instruction: &Instruction,
     ) -> Result<(), ArtifactError> {
-        if !operand_matches_shape(&instruction.operand, instruction.opcode.operand_shape()) {
+        if !operand_matches_opcode(&instruction.operand, instruction.opcode) {
             return Err(ArtifactError::OperandShapeMismatch {
                 opcode: instruction.opcode.mnemonic(),
             });
@@ -339,7 +344,7 @@ impl Artifact {
             }
             Operand::Effect { effect, op } => {
                 let effect = self.effects.get(*effect);
-                let op_index = usize::from(*op);
+                let op_index = usize::from(*op & 0x7FFF);
                 if effect.ops.get(op_index).is_none() {
                     return Err(ArtifactError::InvalidEffectOp);
                 }
@@ -406,8 +411,8 @@ impl Artifact {
         Ok(())
     }
 
-    fn validate_classes(&self) -> Result<(), ArtifactError> {
-        for (_, descriptor) in self.classes.iter() {
+    fn validate_shapes(&self) -> Result<(), ArtifactError> {
+        for (_, descriptor) in self.shapes.iter() {
             self.require_string(descriptor.name)?;
         }
         Ok(())
@@ -460,7 +465,7 @@ impl Artifact {
             ExportTarget::Foreign(foreign) => self.require_foreign(foreign),
             ExportTarget::Type(ty) => self.require_type(ty),
             ExportTarget::Effect(effect) => self.require_effect(effect),
-            ExportTarget::Class(class) => self.require_class(class),
+            ExportTarget::Shape(shape) => self.require_shape(shape),
         }
     }
 
@@ -547,12 +552,12 @@ impl Artifact {
         Ok(())
     }
 
-    fn require_class(&self, id: ClassId) -> Result<(), ArtifactError> {
+    fn require_shape(&self, id: ShapeId) -> Result<(), ArtifactError> {
         let _ = self
-            .classes
+            .shapes
             .as_slice()
             .get(usize::try_from(id.raw()).unwrap_or(usize::MAX))
-            .ok_or(ArtifactError::InvalidReference { table: "classes" })?;
+            .ok_or(ArtifactError::InvalidReference { table: "shapes" })?;
         Ok(())
     }
 }
@@ -598,4 +603,17 @@ const fn operand_matches_shape(operand: &Operand, shape: OperandShape) -> bool {
             | (Operand::TypeLen { .. }, OperandShape::TypeLen)
             | (Operand::BranchTable(_), OperandShape::BranchTable)
     )
+}
+
+fn operand_matches_opcode(operand: &Operand, opcode: Opcode) -> bool {
+    match opcode {
+        Opcode::CallInd => matches!(operand, Operand::None | Operand::I16(_)),
+        Opcode::Call => true,
+        Opcode::LdFld => matches!(operand, Operand::None | Operand::I16(_) | Operand::Type(_)),
+        Opcode::StFld => matches!(operand, Operand::None | Operand::I16(_) | Operand::Type(_)),
+        Opcode::LdElem | Opcode::StElem => {
+            matches!(operand, Operand::None | Operand::I16(_) | Operand::Type(_))
+        }
+        _ => operand_matches_shape(operand, opcode.operand_shape()),
+    }
 }

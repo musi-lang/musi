@@ -33,7 +33,7 @@ pub fn format_text(artifact: &Artifact) -> String {
     format_data(&mut out, artifact);
     format_constants(&mut out, artifact);
     format_effects(&mut out, artifact);
-    format_classes(&mut out, artifact);
+    format_shapes(&mut out, artifact);
     format_foreigns(&mut out, artifact);
     format_globals(&mut out, artifact);
     format_exports(&mut out, artifact);
@@ -47,16 +47,16 @@ pub fn format_text(artifact: &Artifact) -> String {
 pub fn format_hil_projection(artifact: &Artifact) -> String {
     let mut out = String::new();
 
-    out.push_str("module @seam.projection {\n");
+    out.push_str("module seam.projection {\n");
     for (_, descriptor) in artifact.types.iter() {
-        out.push_str("  type @");
+        out.push_str("  type ");
         out.push_str(artifact.string_text(descriptor.name));
         out.push_str(" = ");
         push_quoted(&mut out, artifact.string_text(descriptor.term));
         out.push('\n');
     }
     for (_, descriptor) in artifact.data.iter() {
-        out.push_str("  data @");
+        out.push_str("  data ");
         out.push_str(artifact.string_text(descriptor.name));
         out.push_str(" {\n");
         for variant in &descriptor.variants {
@@ -74,7 +74,7 @@ pub fn format_hil_projection(artifact: &Artifact) -> String {
         out.push_str("  }\n");
     }
     for (_, procedure) in artifact.procedures.iter() {
-        out.push_str("  fn @");
+        out.push_str("  fn ");
         out.push_str(artifact.string_text(procedure.name));
         out.push('(');
         for index in 0..procedure.params {
@@ -222,9 +222,9 @@ fn format_effects(out: &mut String, artifact: &Artifact) {
     }
 }
 
-fn format_classes(out: &mut String, artifact: &Artifact) {
-    for (_, descriptor) in artifact.classes.iter() {
-        out.push_str(".class ");
+fn format_shapes(out: &mut String, artifact: &Artifact) {
+    for (_, descriptor) in artifact.shapes.iter() {
+        out.push_str(".capability ");
         push_symbol_ref(out, artifact.string_text(descriptor.name));
         out.push('\n');
     }
@@ -285,7 +285,7 @@ fn format_procedures(out: &mut String, artifact: &Artifact) {
 
 fn format_foreigns(out: &mut String, artifact: &Artifact) {
     for (_, descriptor) in artifact.foreigns.iter() {
-        out.push_str(".foreign ");
+        out.push_str(".native ");
         push_symbol_ref(out, artifact.string_text(descriptor.name));
         for ty in &descriptor.param_tys {
             out.push_str(" param ");
@@ -340,10 +340,10 @@ fn format_exports(out: &mut String, artifact: &Artifact) {
         match descriptor.target {
             ExportTarget::Procedure(_) => out.push_str("procedure"),
             ExportTarget::Global(_) => out.push_str("global"),
-            ExportTarget::Foreign(_) => out.push_str("foreign"),
+            ExportTarget::Foreign(_) => out.push_str("native"),
             ExportTarget::Type(_) => out.push_str("type"),
             ExportTarget::Effect(_) => out.push_str("effect"),
-            ExportTarget::Class(_) => out.push_str("class"),
+            ExportTarget::Shape(_) => out.push_str("capability"),
         }
         if descriptor.opaque {
             out.push_str(" opaque");

@@ -3,7 +3,10 @@ use std::collections::{BTreeSet, HashMap};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::slice::from_ref;
 
-use music_base::{SourceId, Span, diag::Diag};
+use music_base::{
+    SourceId, Span,
+    diag::{Diag, DiagContext},
+};
 use music_ir::{
     DefinitionKey, IrArg, IrAssignTarget, IrBinaryOp, IrCasePattern, IrCaseRecordField,
     IrEffectDef, IrExpr, IrExprKind, IrHandleOp, IrLit, IrMatchArm, IrModule, IrModuleInitPart,
@@ -12,13 +15,13 @@ use music_ir::{
 use music_module::ModuleKey;
 use music_names::NameBindingId;
 use music_seam::descriptor::{
-    ClassDescriptor, ConstantDescriptor, ConstantValue, DataDescriptor, EffectDescriptor,
-    EffectOpDescriptor, ExportDescriptor, ExportTarget, ForeignDescriptor, GlobalDescriptor,
-    MetaDescriptor, ProcedureDescriptor, TypeDescriptor,
+    ConstantDescriptor, ConstantValue, DataDescriptor, EffectDescriptor, EffectOpDescriptor,
+    ExportDescriptor, ExportTarget, ForeignDescriptor, GlobalDescriptor, MetaDescriptor,
+    ProcedureDescriptor, TypeDescriptor,
 };
 use music_seam::{
-    Artifact, ClassId, CodeEntry, EffectId, ForeignId, GlobalId, Instruction, Label, Opcode,
-    Operand, ProcedureId, StringId, TypeId,
+    Artifact, CodeEntry, EffectId, ForeignId, GlobalId, Instruction, Label, Opcode, Operand,
+    ProcedureId, ShapeId, StringId, TypeId,
 };
 
 use crate::api::{EmitDiagList, EmitOptions, EmittedBinding, EmittedModule, EmittedProgram};
@@ -69,7 +72,7 @@ struct ModuleLayout {
     global_init_procedures: HashMap<Box<str>, ProcedureId>,
     types: TypeTable,
     effects: EffectTable,
-    classes: HashMap<DefinitionKey, ClassId>,
+    shapes: HashMap<DefinitionKey, ShapeId>,
 }
 
 #[derive(Debug, Default)]
@@ -589,7 +592,7 @@ fn build_param_locals(params: &[IrParam]) -> (LocalSlots, SyntheticLocalSlots) {
 
 fn emit_zero(emitter: &mut ProcedureEmitter<'_, '_>) {
     emitter.code.push(CodeEntry::Instruction(Instruction::new(
-        Opcode::LdSmi,
+        Opcode::LdCI4,
         Operand::I16(0),
     )));
 }
@@ -636,7 +639,7 @@ fn qualified_name(module: &ModuleKey, local: &str) -> Box<str> {
     format!("{}::{local}", module.as_str()).into()
 }
 
-fn handler_type_name(effect: &DefinitionKey) -> Box<str> {
+fn answer_type_name(effect: &DefinitionKey) -> Box<str> {
     let base = qualified_name(&effect.module, &effect.name);
-    format!("{base}::handler").into()
+    format!("{base}::answer").into()
 }

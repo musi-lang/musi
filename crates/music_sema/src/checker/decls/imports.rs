@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
-use music_hir::{HirExprId, HirExprKind, HirPatId, HirPatKind, HirTyId};
+use music_base::diag::DiagContext;
+use music_hir::{HirExprId, HirExprKind, HirPatId, HirPatKind, HirTyField, HirTyId, HirTyKind};
 use music_module::ModuleKey;
 use music_names::{Ident, NameBindingId, Symbol};
 
@@ -8,16 +9,17 @@ use super::super::pats::{bind_pat, bound_name_from_pat};
 use super::super::surface::import_surface_ty;
 use super::super::{CheckPass, DataDef, DataVariantDef, DiagKind, EffectDef, EffectOpDef};
 use crate::api::{
-    ClassFacts, ClassMemberFacts, ConstraintFacts, ConstraintSurface, ExportedValue, LawFacts,
-    LawParamFacts, LawSurface, ModuleSurface, PatFacts,
+    ConstraintFacts, ConstraintSurface, ExportedValue, LawFacts, LawParamFacts, LawSurface,
+    ModuleSurface, PatFacts, ShapeFacts, ShapeMemberFacts,
 };
-use crate::api::{ClassSurface, DataSurface, EffectSurface, ExprFacts};
+use crate::api::{DataSurface, EffectSurface, ExprFacts, ShapeSurface};
 
-type ModuleTargetCtx<'a, 'ctx, 'interner, 'env> = &'a CheckPass<'ctx, 'interner, 'env>;
-type ModuleExportCtx<'a, 'ctx, 'interner, 'env> = &'a CheckPass<'ctx, 'interner, 'env>;
+type ImportRecordTargetCtx<'a, 'ctx, 'interner, 'env> = &'a CheckPass<'ctx, 'interner, 'env>;
+type ImportRecordExportCtx<'a, 'ctx, 'interner, 'env> = &'a CheckPass<'ctx, 'interner, 'env>;
 type StructuralTargetCtx<'a, 'ctx, 'interner, 'env> = &'a CheckPass<'ctx, 'interner, 'env>;
-type ModulePatternCtx<'a, 'ctx, 'interner, 'env> = &'a mut CheckPass<'ctx, 'interner, 'env>;
+type ImportRecordPatternCtx<'a, 'ctx, 'interner, 'env> = &'a mut CheckPass<'ctx, 'interner, 'env>;
 type StructuralAliasCtx<'a, 'ctx, 'interner, 'env> = &'a mut CheckPass<'ctx, 'interner, 'env>;
+type ImportBindingSeedCtx<'a, 'ctx, 'interner, 'env> = &'a mut CheckPass<'ctx, 'interner, 'env>;
 type PreludeSeedCtx<'a, 'ctx, 'interner, 'env> = &'a mut CheckPass<'ctx, 'interner, 'env>;
 
 impl CheckPass<'_, '_, '_> {
@@ -30,42 +32,46 @@ impl CheckPass<'_, '_, '_> {
         let arg_facts = super::super::exprs::check_expr(self, arg);
         let origin = self.expr(arg).origin;
         self.type_mismatch(origin, builtins.string_, arg_facts.ty);
-        if let Some(target) = self.static_import_target(self.expr(expr_id).origin.span) {
-            self.set_expr_module_target(expr_id, target);
-        }
-        ExprFacts::new(builtins.module, arg_facts.effects)
+        let ty = if let Some(target) = self.static_import_target(self.expr(expr_id).origin.span) {
+            self.set_expr_import_record_target(expr_id, target.clone());
+            self.import_record_ty_for_target(&target)
+                .unwrap_or(builtins.unknown)
+        } else {
+            self.runtime_import_result_ty()
+        };
+        ExprFacts::new(ty, arg_facts.effects)
     }
 }
 
-pub(in super::super) fn module_target_for_expr(
-    ctx: ModuleTargetCtx<'_, '_, '_, '_>,
+pub(in super::super) fn import_record_target_for_expr(
+    ctx: ImportRecordTargetCtx<'_, '_, '_, '_>,
     expr: HirExprId,
 ) -> Option<ModuleKey> {
-    if let Some(target) = ctx.expr_module_target(expr) {
+    if let Some(target) = ctx.expr_import_record_target(expr) {
         return Some(target.clone());
     }
     match ctx.expr(expr).kind {
         HirExprKind::Name { name } => ctx
             .binding_id_for_use(name)
-            .and_then(|binding| ctx.binding_module_target(binding).cloned()),
+            .and_then(|binding| ctx.binding_import_record_target(binding).cloned()),
         HirExprKind::Field { base, name, .. } => {
-            let target = module_target_for_expr(ctx, base)?;
+            let target = import_record_target_for_expr(ctx, base)?;
             let env = ctx.sema_env()?;
             let surface = env.module_surface(&target)?;
             surface
                 .exported_value(ctx.resolve_symbol(name.name))
-                .and_then(|export| export.module_target.clone())
+                .and_then(|export| export.import_record_target.clone())
         }
         _ => None,
     }
 }
 
-pub(in super::super) fn module_export_for_expr(
-    ctx: ModuleExportCtx<'_, '_, '_, '_>,
+pub(in super::super) fn import_record_export_for_expr(
+    ctx: ImportRecordExportCtx<'_, '_, '_, '_>,
     expr: HirExprId,
     name: Ident,
 ) -> Option<(ModuleSurface, ExportedValue)> {
-    let target = module_target_for_expr(ctx, expr)?;
+    let target = import_record_target_for_expr(ctx, expr)?;
     let env = ctx.sema_env()?;
     let surface = env.module_surface(&target)?;
     let export = surface
@@ -81,12 +87,12 @@ pub(in super::super) fn expr_has_structural_target(
     ctx.expr_has_structural_target_impl(expr)
 }
 
-pub(super) fn bind_module_pattern(
-    ctx: ModulePatternCtx<'_, '_, '_, '_>,
+pub(super) fn bind_import_record_pattern(
+    ctx: ImportRecordPatternCtx<'_, '_, '_, '_>,
     pat: HirPatId,
     value: HirExprId,
 ) -> bool {
-    ctx.bind_module_pattern_impl(pat, value)
+    ctx.bind_import_record_pattern_impl(pat, value)
 }
 
 pub(in super::super) fn bind_structural_alias(
@@ -104,10 +110,47 @@ pub(in super::super) fn seed_prelude_bindings(
     ctx.seed_prelude_bindings_impl(surface);
 }
 
+pub(in super::super) fn seed_import_bindings(ctx: ImportBindingSeedCtx<'_, '_, '_, '_>) {
+    ctx.seed_import_bindings_impl();
+}
+
 impl CheckPass<'_, '_, '_> {
+    fn import_record_ty_for_target(&mut self, target: &ModuleKey) -> Option<HirTyId> {
+        let env = self.sema_env()?;
+        let surface = env.module_surface(target)?;
+        Some(self.import_record_ty(&surface))
+    }
+
+    fn import_record_ty(&mut self, surface: &ModuleSurface) -> HirTyId {
+        let fields = surface
+            .exported_values()
+            .iter()
+            .map(|export| {
+                let name = self.intern(export.name.as_ref());
+                let ty = import_surface_ty(self, surface, export.ty);
+                HirTyField::new(name, ty)
+            })
+            .collect::<Vec<_>>();
+        let fields = self.alloc_ty_fields(fields);
+        self.alloc_ty(HirTyKind::Record { fields })
+    }
+
+    fn runtime_import_result_ty(&mut self) -> HirTyId {
+        let result = self.intern("Result");
+        let import_error = self.intern("ImportError");
+        let empty_args = self.alloc_ty_list(Vec::<HirTyId>::new());
+        let import_error = self.alloc_ty(HirTyKind::Named {
+            name: import_error,
+            args: empty_args,
+        });
+        let any_ty = self.builtins().any;
+        let args = self.alloc_ty_list([any_ty, import_error]);
+        self.alloc_ty(HirTyKind::Named { name: result, args })
+    }
+
     fn expr_has_structural_target_impl(&self, expr: HirExprId) -> bool {
         match self.expr(expr).kind {
-            HirExprKind::Data { .. } | HirExprKind::Effect { .. } | HirExprKind::Class { .. } => {
+            HirExprKind::Data { .. } | HirExprKind::Effect { .. } | HirExprKind::Shape { .. } => {
                 true
             }
             HirExprKind::Let { value, .. } => self.expr_has_structural_target_impl(value),
@@ -115,15 +158,36 @@ impl CheckPass<'_, '_, '_> {
                 let text = self.resolve_symbol(name.name);
                 self.data_def(text).is_some()
                     || self.effect_def(text).is_some()
-                    || self.class_facts_by_name(name.name).is_some()
+                    || self.shape_facts_by_name(name.name).is_some()
             }
-            HirExprKind::Field { base, name, .. } => module_export_for_expr(self, base, name)
-                .is_some_and(|(_, export)| {
+            HirExprKind::Field { base, name, .. } => {
+                import_record_export_for_expr(self, base, name).is_some_and(|(_, export)| {
                     export.data_key.is_some()
                         || export.effect_key.is_some()
-                        || export.class_key.is_some()
-                }),
+                        || export.shape_key.is_some()
+                })
+            }
             _ => false,
+        }
+    }
+
+    fn seed_import_bindings_impl(&mut self) {
+        let import_bindings = self.import_bindings();
+        for binding in import_bindings {
+            let Some(env) = self.sema_env() else {
+                continue;
+            };
+            let Some(surface) = env.module_surface(&binding.from) else {
+                continue;
+            };
+            let name = self.resolve_symbol(binding.name).to_owned();
+            let Some(export) = surface.exported_value(&name).cloned() else {
+                continue;
+            };
+            self.import_exported_value_binding_at(binding.binding, &surface, &export);
+            if let Some(target) = export.import_record_target.clone() {
+                self.insert_binding_import_record_target(binding.binding, target);
+            }
         }
     }
 
@@ -135,13 +199,13 @@ impl CheckPass<'_, '_, '_> {
                 continue;
             };
             self.import_exported_value_binding_at(binding, surface, &export);
-            if let Some(target) = export.module_target.clone() {
-                self.insert_binding_module_target(binding, target);
+            if let Some(target) = export.import_record_target.clone() {
+                self.insert_binding_import_record_target(binding, target);
             }
-            if let Some(class_key) = export.class_key.as_ref()
-                && let Some(class) = surface.exported_class(class_key)
+            if let Some(shape_key) = export.shape_key.as_ref()
+                && let Some(shape) = surface.exported_shape(shape_key)
             {
-                self.import_class_alias_as(symbol, surface, class, export.opaque);
+                self.import_shape_alias_as(symbol, surface, shape, export.opaque);
             }
             if let Some(effect_key) = export.effect_key.as_ref()
                 && let Some(effect) = surface.exported_effect(effect_key)
@@ -156,8 +220,8 @@ impl CheckPass<'_, '_, '_> {
         }
     }
 
-    fn bind_module_pattern_impl(&mut self, pat: HirPatId, value: HirExprId) -> bool {
-        let Some(target) = module_target_for_expr(self, value) else {
+    fn bind_import_record_pattern_impl(&mut self, pat: HirPatId, value: HirExprId) -> bool {
+        let Some(target) = import_record_target_for_expr(self, value) else {
             return false;
         };
         let Some(env) = self.sema_env() else {
@@ -169,19 +233,18 @@ impl CheckPass<'_, '_, '_> {
         let HirPatKind::Record { fields } = self.pat(pat).kind else {
             return false;
         };
-        let module_ty = self.builtins().module;
-        self.set_pat_facts(pat, PatFacts::new(module_ty));
+        let record_ty = self.import_record_ty(&surface);
+        self.set_pat_facts(pat, PatFacts::new(record_ty));
         for field in self.record_pat_fields(fields) {
             let Some(export) = surface
                 .exported_value(self.resolve_symbol(field.name.name))
                 .cloned()
             else {
                 let export_name = self.resolve_symbol(field.name.name).to_owned();
-                self.diag_message(
+                self.diag_with(
                     field.name.span,
                     DiagKind::UnknownExport,
-                    format!("unknown export `{export_name}`"),
-                    format!("unknown export `{export_name}`"),
+                    DiagContext::new().with("name", export_name),
                 );
                 continue;
             };
@@ -204,7 +267,8 @@ impl CheckPass<'_, '_, '_> {
             HirExprKind::Field {
                 base, name: field, ..
             } => {
-                let Some((surface, export)) = module_export_for_expr(self, base, field) else {
+                let Some((surface, export)) = import_record_export_for_expr(self, base, field)
+                else {
                     return;
                 };
                 self.bind_imported_module_member(alias, &surface, &export);
@@ -218,8 +282,8 @@ impl CheckPass<'_, '_, '_> {
                 if let Some(effect) = self.effect_def(source_text.as_ref()).cloned() {
                     self.insert_effect_def(alias_text, effect);
                 }
-                if let Some(facts) = self.class_facts_by_name(name.name).cloned() {
-                    self.insert_class_facts_by_name(alias.name, facts);
+                if let Some(facts) = self.shape_facts_by_name(name.name).cloned() {
+                    self.insert_shape_facts_by_name(alias.name, facts);
                 }
             }
             _ => {}
@@ -234,14 +298,14 @@ impl CheckPass<'_, '_, '_> {
     ) {
         self.import_exported_value_binding(alias, surface, export);
         if let Some(binding) = self.binding_id_for_decl(alias)
-            && let Some(target) = export.module_target.clone()
+            && let Some(target) = export.import_record_target.clone()
         {
-            self.insert_binding_module_target(binding, target);
+            self.insert_binding_import_record_target(binding, target);
         }
-        if let Some(class_key) = export.class_key.as_ref()
-            && let Some(class) = surface.exported_class(class_key)
+        if let Some(shape_key) = export.shape_key.as_ref()
+            && let Some(shape) = surface.exported_shape(shape_key)
         {
-            self.import_class_alias(alias, surface, class, export.opaque);
+            self.import_shape_alias(alias, surface, shape, export.opaque);
         }
         if let Some(effect_key) = export.effect_key.as_ref()
             && let Some(effect) = surface.exported_effect(effect_key)
@@ -255,46 +319,46 @@ impl CheckPass<'_, '_, '_> {
         }
     }
 
-    fn import_class_alias(
+    fn import_shape_alias(
         &mut self,
         alias: Ident,
         module_surface: &ModuleSurface,
-        surface: &ClassSurface,
+        surface: &ShapeSurface,
         is_opaque: bool,
     ) {
-        self.import_class_alias_as(alias.name, module_surface, surface, is_opaque);
+        self.import_shape_alias_as(alias.name, module_surface, surface, is_opaque);
     }
 
-    fn import_class_alias_as(
+    fn import_shape_alias_as(
         &mut self,
         alias_name: Symbol,
         module_surface: &ModuleSurface,
-        surface: &ClassSurface,
+        surface: &ShapeSurface,
         is_opaque: bool,
     ) {
         if is_opaque {
-            self.mark_sealed_class(surface.key.clone());
+            self.mark_sealed_shape(surface.key.clone());
         }
-        let members = self.import_class_members(module_surface, surface);
-        let laws = self.import_class_laws(module_surface, surface);
-        let constraints = self.import_class_constraints(module_surface, surface);
-        let facts = ClassFacts::new(surface.key.clone(), alias_name, members, laws)
-            .with_type_params(self.import_class_type_params(surface))
-            .with_type_param_kinds(self.import_class_type_param_kinds(module_surface, surface))
+        let members = self.import_shape_members(module_surface, surface);
+        let laws = self.import_shape_laws(module_surface, surface);
+        let constraints = self.import_shape_constraints(module_surface, surface);
+        let facts = ShapeFacts::new(surface.key.clone(), alias_name, members, laws)
+            .with_type_params(self.import_shape_type_params(surface))
+            .with_type_param_kinds(self.import_shape_type_param_kinds(module_surface, surface))
             .with_constraints(constraints);
-        self.insert_class_facts_by_name(alias_name, facts);
+        self.insert_shape_facts_by_name(alias_name, facts);
     }
 
-    fn import_class_members(
+    fn import_shape_members(
         &mut self,
         module_surface: &ModuleSurface,
-        surface: &ClassSurface,
-    ) -> Box<[ClassMemberFacts]> {
+        surface: &ShapeSurface,
+    ) -> Box<[ShapeMemberFacts]> {
         surface
             .members
             .iter()
             .map(|member| {
-                ClassMemberFacts::new(
+                ShapeMemberFacts::new(
                     self.intern(&member.name),
                     member
                         .params
@@ -310,20 +374,20 @@ impl CheckPass<'_, '_, '_> {
             .into_boxed_slice()
     }
 
-    fn import_class_laws(
+    fn import_shape_laws(
         &mut self,
         module_surface: &ModuleSurface,
-        surface: &ClassSurface,
+        surface: &ShapeSurface,
     ) -> Box<[LawFacts]> {
         surface
             .laws
             .iter()
-            .map(|law| self.import_class_law(module_surface, law))
+            .map(|law| self.import_shape_law(module_surface, law))
             .collect::<Vec<_>>()
             .into_boxed_slice()
     }
 
-    fn import_class_law(&mut self, module_surface: &ModuleSurface, law: &LawSurface) -> LawFacts {
+    fn import_shape_law(&mut self, module_surface: &ModuleSurface, law: &LawSurface) -> LawFacts {
         LawFacts::new(
             self.intern(&law.name),
             law.params
@@ -339,20 +403,20 @@ impl CheckPass<'_, '_, '_> {
         )
     }
 
-    fn import_class_constraints(
+    fn import_shape_constraints(
         &mut self,
         module_surface: &ModuleSurface,
-        surface: &ClassSurface,
+        surface: &ShapeSurface,
     ) -> Box<[ConstraintFacts]> {
         surface
             .constraints
             .iter()
-            .map(|constraint| self.import_class_constraint(module_surface, constraint))
+            .map(|constraint| self.import_shape_constraint(module_surface, constraint))
             .collect::<Vec<_>>()
             .into_boxed_slice()
     }
 
-    fn import_class_constraint(
+    fn import_shape_constraint(
         &mut self,
         module_surface: &ModuleSurface,
         constraint: &ConstraintSurface,
@@ -362,14 +426,14 @@ impl CheckPass<'_, '_, '_> {
             constraint.kind,
             import_surface_ty(self, module_surface, constraint.value),
         );
-        if let Some(class_key) = constraint.class_key.clone() {
-            lowered.with_class_key(class_key)
+        if let Some(shape_key) = constraint.shape_key.clone() {
+            lowered.with_shape_key(shape_key)
         } else {
             lowered
         }
     }
 
-    fn import_class_type_params(&mut self, surface: &ClassSurface) -> Box<[Symbol]> {
+    fn import_shape_type_params(&mut self, surface: &ShapeSurface) -> Box<[Symbol]> {
         surface
             .type_params
             .iter()
@@ -378,10 +442,10 @@ impl CheckPass<'_, '_, '_> {
             .into_boxed_slice()
     }
 
-    fn import_class_type_param_kinds(
+    fn import_shape_type_param_kinds(
         &mut self,
         module_surface: &ModuleSurface,
-        surface: &ClassSurface,
+        surface: &ShapeSurface,
     ) -> Box<[HirTyId]> {
         surface
             .type_param_kinds
@@ -570,7 +634,7 @@ impl CheckPass<'_, '_, '_> {
         );
         let method_name = self.intern(export.name.as_ref());
         let evidence_keys = self
-            .evidence_scope_for_constraints(&scheme.constraints)
+            .answer_scope_for_constraints(&scheme.constraints)
             .into_keys()
             .collect::<Vec<_>>()
             .into_boxed_slice();
@@ -584,6 +648,6 @@ impl CheckPass<'_, '_, '_> {
         if let Some(comptime_value) = export.comptime_value.clone() {
             self.insert_binding_comptime_value(binding, comptime_value);
         }
-        self.set_binding_evidence_keys(binding, evidence_keys);
+        self.set_binding_constraint_keys(binding, evidence_keys);
     }
 }

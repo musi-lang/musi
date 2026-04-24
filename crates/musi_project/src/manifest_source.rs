@@ -1,10 +1,11 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use music_base::SourceId;
 use music_base::Span;
-use music_base::diag::{Diag, DiagCode, OwnedSourceDiag};
+use music_base::diag::{Diag, DiagContext, OwnedSourceDiag};
 
+use crate::ProjectDiagKind;
 use crate::errors::ProjectError;
 
 type ManifestSpanMap = BTreeMap<String, Span>;
@@ -42,6 +43,11 @@ impl ManifestSource {
     }
 
     #[must_use]
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    #[must_use]
     pub fn key_span(&self, pointer: &str) -> Option<Span> {
         self.key_spans.get(pointer).copied()
     }
@@ -64,22 +70,25 @@ impl ManifestSource {
     pub fn parse_error(&self, error: &serde_json::Error) -> ProjectError {
         let offset = offset_for_error(&self.text, error.line(), error.column());
         let span = span_at_offset(&self.text, offset);
-        self.error(
-            DiagCode::new(3604),
-            "invalid manifest JSON",
+        self.catalog_error(
+            ProjectDiagKind::InvalidManifestJson,
+            DiagContext::new()
+                .with("path", self.path.display())
+                .with("source", json_error_text(error)),
             span,
-            "JSON parse error",
         )
     }
 
-    pub fn error(
+    pub fn catalog_error(
         &self,
-        code: DiagCode,
-        message: impl Into<String>,
+        kind: ProjectDiagKind,
+        context: DiagContext,
         span: Span,
-        label: impl Into<String>,
     ) -> ProjectError {
-        let diag = Diag::error(message.into()).with_code(code).with_label(
+        let message = kind.message_with(&context);
+        let label = kind.label_with(&context);
+        drop(context);
+        let diag = Diag::error(message).with_code(kind.code()).with_label(
             span,
             SourceId::from_raw(0),
             label,
@@ -91,16 +100,18 @@ impl ManifestSource {
         )))
     }
 
-    pub fn error_with_hint(
+    pub fn catalog_error_with_hint(
         &self,
-        code: DiagCode,
-        message: impl Into<String>,
+        kind: ProjectDiagKind,
+        context: DiagContext,
         span: Span,
-        label: impl Into<String>,
         hint: impl Into<String>,
     ) -> ProjectError {
-        let diag = Diag::error(message.into())
-            .with_code(code)
+        let message = kind.message_with(&context);
+        let label = kind.label_with(&context);
+        drop(context);
+        let diag = Diag::error(message)
+            .with_code(kind.code())
             .with_label(span, SourceId::from_raw(0), label)
             .with_hint(hint.into());
         ProjectError::SourceDiagnostic(Box::new(OwnedSourceDiag::new(
@@ -339,4 +350,12 @@ fn span_at_offset(text: &str, offset: usize) -> Span {
         end = start;
     }
     Span::new(start, end.min(text_len))
+}
+
+fn json_error_text(error: &serde_json::Error) -> String {
+    error
+        .to_string()
+        .replace(" a ", " ")
+        .replace(" an ", " ")
+        .replace(" the ", " ")
 }

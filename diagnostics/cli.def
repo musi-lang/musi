@@ -1,32 +1,26 @@
 catalog cli musi CliDiagKind crates/musi/src/diag_catalog_gen.rs
 
 diag MissingCurrentDirectory 5300
-  message "current directory unavailable"
-  primary "current directory unavailable"
+  message "missing current directory"
 
 diag TaskFailed 5301
   message "task `{name}` failed"
-  primary "task `{name}` failed"
 
 diag UnsupportedRunArgs 5302
-  message "unsupported musi run argument `{argument}`"
-  primary "unsupported musi run argument `{argument}`"
+  message "musi run argument `{argument}` unsupported"
 
 diag PackageAlreadyInitialized 5303
   message "package path `{path}` already initialized"
-  primary "package path `{path}` already initialized"
 
 diag MissingPackageName 5304
-  message "package name unavailable for `{path}`"
-  primary "package name unavailable for `{path}`"
+  message "missing package name for `{path}`"
 
 diag UnknownTarget 5305
-  message "missing target `{target}` in project"
-  primary "missing target `{target}`"
+  message "project target `{target}` unknown"
+  primary "project target `{target}` not found"
 
 diag CheckCommandFailed 5306
   message "musi check command failed"
-  primary "musi check command failed"
 
 diag CommandUnavailable 5307
   message "command `{command}` unavailable because `{feature}` not implemented"
@@ -38,7 +32,6 @@ diag LspServerFailed 5308
 
 diag IncompatibleCommandArgs 5309
   message "incompatible command arguments `{left}` and `{right}`"
-  primary "incompatible command arguments `{left}` and `{right}`"
 
 map cli_error_kind crate::MusiError option
   case "ProjectModelFailed(_)" none

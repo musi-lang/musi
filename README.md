@@ -19,7 +19,7 @@ Core surface:
 - `musi:...` is compiler-owned foundation and runtime capability space.
 - `@std/<family>` is the first-party standard library surface.
 - `@std` re-exports stdlib families from its root module.
-- `*.test.ms` files export `test`; `musi test` runs them.
+- `*.test.ms` files export `test`; `musi test` finds them recursively, including under `__tests__/`.
 
 ## Install
 
@@ -105,7 +105,7 @@ musi test
 hello/
   musi.json
   index.ms
-  add.test.ms
+  __tests__/add.test.ms
   .gitignore
 ```
 
@@ -164,13 +164,17 @@ Root import also works:
 let std := import "@std";
 let option := std.option;
 let testing := std.testing;
+let os := std.os;
 ```
 
-Foundation and runtime stay separate from stdlib:
+The root module is a barrel: focused aliases stay available without adding extra grouping files.
+
+Foundation host modules stay separate from stdlib:
 
 ```musi
 let Core := import "musi:core";
-let Runtime := import "musi:runtime";
+let Io := import "musi:io";
+let Fs := import "musi:fs";
 ```
 
 Reach for `@std` first in ordinary application code. Reach for `musi:*` only when you are working at language, runtime, or integration boundaries.
@@ -183,6 +187,7 @@ Key repo areas:
 - `packages/` — first-party Musi packages, including `@std`
 - `diagnostics/` — diagnostic fixtures and renderer references
 - `docs/reference/` — compiler, runtime, diagnostics, and language coverage references
+- `docs/reference/performance.md` — VM/runtime benchmark tracking across CLR, JVM, and SEAM
 - `docs/where/` — workspace and ownership maps
 - `grammar/` — grammar sources
 
@@ -191,6 +196,7 @@ Good entry points:
 - `docs/where/workspace-map.md`
 - `docs/reference/public-api.md`
 - `docs/reference/language-feature-coverage.md`
+- `docs/reference/performance.md`
 - `docs/reference/diagnostics.md`
 - `grammar/MusiParser.g4`
 - `grammar/MusiLexer.g4`

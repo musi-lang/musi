@@ -89,15 +89,20 @@ not-backtick-or-backslash          = %x00-5B
 ; 1. Terminals
 ; ---------------------------------------------------------------------------
 ; --- Keywords (case-sensitive; encoded as %x sequences) ---
+; Form keywords construct syntax forms; they are never callable identifiers.
 kw-and      = %x61.6E.64
+
+kw-answer   = %x61.6E.73.77.65.72
 
 kw-as       = %x61.73
 
+kw-ask      = %x61.73.6B
+
 kw-any      = %x61.6E.79
 
-kw-match    = %x6D.61.74.63.68
+kw-catch    = %x63.61.74.63.68
 
-kw-class    = %x63.6C.61.73.73
+kw-match    = %x6D.61.74.63.68
 
 kw-comptime = %x63.6F.6D.70.74.69.6D.65
 
@@ -107,11 +112,11 @@ kw-effect   = %x65.66.66.65.63.74
 
 kw-export   = %x65.78.70.6F.72.74
 
-kw-foreign  = %x66.6F.72.65.69.67.6E
+kw-given    = %x67.69.76.65.6E
+
+kw-native   = %x6E.61.74.69.76.65
 
 kw-partial  = %x70.61.72.74.69.61.6C
-
-kw-forall   = %x66.6F.72.61.6C.6C
 
 kw-handle   = %x68.61.6E.64.6C.65
 
@@ -121,13 +126,7 @@ kw-import   = %x69.6D.70.6F.72.74
 
 kw-in       = %x69.6E
 
-kw-infix    = %x69.6E.66.69.78
-
-kw-infixl   = %x69.6E.66.69.78.6C
-
-kw-infixr   = %x69.6E.66.69.78.72
-
-kw-instance = %x69.6E.73.74.61.6E.63.65
+kw-known    = %x6B.6E.6F.77.6E
 
 kw-law      = %x6C.61.77
 
@@ -139,17 +138,19 @@ kw-rec      = %x72.65.63
 
 kw-not      = %x6E.6F.74
 
-kw-opaque   = %x6F.70.61.71.75.65
-
 kw-or       = %x6F.72
 
-kw-request  = %x72.65.71.75.65.73.74
+kw-require  = %x72.65.71.75.69.72.65
+
+kw-pin      = %x70.69.6E
 
 kw-unsafe   = %x75.6E.73.61.66.65
 
 kw-quote    = %x71.75.6F.74.65
 
 kw-resume   = %x72.65.73.75.6D.65
+
+kw-shape    = %x73.68.61.70.65
 
 kw-shl      = %x73.68.6C
 
@@ -158,8 +159,6 @@ kw-shr      = %x73.68.72
 kw-some     = %x73.6F.6D.65
 
 kw-where    = %x77.68.65.72.65
-
-kw-using    = %x75.73.69.6E.67
 
 kw-xor      = %x78.6F.72
 ; --- Fixed multi-octet tokens ---
@@ -171,6 +170,14 @@ dot-dot-dot       = "..."
 
 dot-lbracket      = ".["
 
+dot-lparen        = ".("
+
+question-dot      = "?."
+
+bang-dot          = "!."
+
+question-question = "??"
+
 eq-gt             = "=>"
 
 minus-gt          = "->"
@@ -180,6 +187,14 @@ slash-eq          = "/="
 lt-eq             = "<="
 
 lt-colon          = "<:"
+
+lt-dot-dot-lt     = "<..<"
+
+lt-dot-dot        = "<.."
+
+dot-dot-lt        = "..<"
+
+dot-dot           = ".."
 
 gt-eq             = ">="
 
@@ -330,58 +345,78 @@ op-single   = plus
               / slash
               / percent
               / eq
+              / slash-eq
               / lt
+              / lt-eq
               / gt
+              / gt-eq
 
-op-ident    = lparen (symbolic-op / op-single) rparen
+word-op     = kw-and
+              / kw-catch
+              / kw-in
+              / kw-not
+              / kw-or
+              / kw-shl
+              / kw-shr
+              / kw-xor
+
+op-name     = op-single
+              / symbolic-op
+              / word-op
+
+op-ident    = lparen op-name rparen
 ; --- Trivia (skipped) ---
-newline           = lf
+newline                  = lf
 
-ws                = 1*(sp / htab / cr)
+ws                       = 1*(sp / htab / cr)
 
-line-module-doc-comment = "--!" *(not-cr-or-lf)
+line-module-doc-comment  = "--!" *(not-cr-or-lf)
 
-line-doc-comment        = "---" *(not-cr-or-lf)
+line-doc-comment         = "---" *(not-cr-or-lf)
 
-line-comment            = "--" *(not-cr-or-lf)
+line-comment             = "--" *(not-cr-or-lf)
 
-block-open              = "/-"
+block-open               = "/-"
 
-block-doc-open          = "/--"
+block-doc-open           = "/--"
 
-block-module-doc-open   = "/-!"
+block-module-doc-open    = "/-!"
 
-block-close             = "-/"
+block-close              = "-/"
 
-block-content           = *(block-comment / block-doc-comment / block-module-doc-comment / not-block-delim)
+block-content            = *(block-comment / block-doc-comment /
+                           block-module-doc-comment / not-block-delim)
 
-not-block-delim         = not-slash / (slash not-minus) / (minus not-slash)
+not-block-delim          = not-slash
+                           / (slash not-minus)
+                           / (minus not-slash)
 
 block-module-doc-comment = block-module-doc-open block-content block-close
 
-block-doc-comment       = block-doc-open block-content block-close
+block-doc-comment        = block-doc-open block-content block-close
 
-block-comment           = block-open block-content block-close
+block-comment            = block-open block-content block-close
 
-trivia                  = ws
-                          / newline
-                          / line-module-doc-comment
-                          / line-doc-comment
-                          / line-comment
-                          / block-module-doc-comment
-                          / block-doc-comment
-                          / block-comment
+trivia                   = ws
+                           / newline
+                           / line-module-doc-comment
+                           / line-doc-comment
+                           / line-comment
+                           / block-module-doc-comment
+                           / block-doc-comment
+                           / block-comment
 ; ---------------------------------------------------------------------------
 ; 2. Parser grammar (over the token stream, trivia-skipped)
 ; ---------------------------------------------------------------------------
-root        = *(root-stmt)
+root      = *(root-stmt)
 
-root-stmt   = fixity-decl
-              / stmt
+root-stmt = declaration semicolon
+            / stmt
+; Bodyless `let` declarations require semantic permission such as `@axiom`.
+declaration = law-decl
+              / fn-decl
 
 stmt        = expr semicolon
-
-fixity-decl = (kw-infixl / kw-infixr / kw-infix) int-lit op-ident semicolon
 ; --- Expressions (semantic precedence; parse as flat infix chain) ---
 expr             = infix-expr
 
@@ -390,7 +425,9 @@ infix-op         = colon-eq
                    / minus-gt
                    / tilde-gt
                    / tilde-eq
+                   / question-question
                    / kw-or
+                   / kw-catch
                    / kw-xor
                    / kw-and
                    / eq
@@ -399,6 +436,10 @@ infix-op         = colon-eq
                    / gt
                    / lt-eq
                    / gt-eq
+                   / lt-dot-dot
+                   / lt-dot-dot-lt
+                   / dot-dot
+                   / dot-dot-lt
                    / kw-in
                    / kw-shl
                    / kw-shr
@@ -407,16 +448,18 @@ infix-op         = colon-eq
                    / star
                    / slash
                    / percent
-                   / symbolic-op
 
 infix-expr       = prefix-expr *(infix-op prefix-expr)
 
 prefix-op        = minus
                    / kw-any
                    / kw-comptime
+                   / kw-known
                    / kw-not
                    / kw-mut
                    / kw-some
+                   / dot-dot
+                   / dot-dot-lt
 
 prefix-expr      = prefix-op prefix-expr
                    / postfix-expr
@@ -425,32 +468,40 @@ postfix-expr     = atom *(postfix-op)
 
 postfix-op       = call-op
                    / bracket-apply-op
-                   / index-op
-                   / field-access-op
+                   / access-op
+                   / dot-dot
+                   / lt-dot-dot
                    / type-test-op
                    / type-cast-op
 
 call-op          = lparen [arg-list] rparen
 
 bracket-apply-op = lbracket [expr-list] rbracket
+; `?.[` and `?.(` are parsed as the optional access edge plus a selector, not as
+; separate lexer tokens. Plain operator selection uses `.` plus `(` as `dot-lparen`.
+access-op       = dot field-target
+                  / dot-lbracket [expr-list] rbracket
+                  / dot-lparen op-name rparen
+                  / question-dot access-selector
+                  / bang-dot access-selector
 
-index-op         = dot-lbracket [expr-list] rbracket
+access-selector = field-target
+                  / lbracket [expr-list] rbracket
+                  / lparen op-name rparen
+; `as` aliases an already matched/refined value. It is not import/type/module
+; alias syntax.
+type-test-op = colon-question expr [kw-as ident]
 
-field-access-op  = dot field-target
+type-cast-op = colon-question-gt expr
 
-type-test-op     = colon-question expr [kw-as ident]
-
-type-cast-op     = colon-question-gt expr
-
-field-target     = ident
-                   / int-lit
+field-target = ident
+               / int-lit
 ; --- Atoms ---
 atom                  = literal
                         / template-lit
                         / splice
                         / ident
                         / op-ident
-                        / pi-expr
                         / lambda-expr
                         / paren-expr
                         / array-expr
@@ -462,16 +513,15 @@ atom                  = literal
                         / import-expr
                         / data-expr
                         / effect-expr
-                        / class-expr
-                        / instance-expr
-                        / request-expr
+                        / shape-expr
+                        / given-expr
+                        / ask-expr
+                        / answer-lit-expr
                         / unsafe-expr
+                        / pin-expr
                         / handle-expr
                         / quote-expr
                         / with-mods-expr
-
-pi-expr               = kw-forall lparen ident colon expr rparen (minus-gt /
-                        tilde-gt) expr
 
 lambda-expr           = bslash params [colon expr] eq-gt expr
 
@@ -515,20 +565,27 @@ variant-arg           = ident colon-eq expr
 
 resume-expr           = kw-resume [expr]
 
-import-expr           = kw-import expr
+import-expr           = kw-import ((lparen [import-block-items] rparen) / expr)
+
+import-block-items    = expr *(semicolon expr) [semicolon]
 
 let-modifier          = kw-rec
 
 let-expr              = kw-let [let-modifier] let-head [bracket-params] [params]
-                        [type-annot] [where-clause] [using-clause] colon-eq expr
+                        [type-annot] [where-clause] [require-clause] colon-eq
+                        expr
 
-let-head              = receiver-method-head / pattern
+let-head              = receiver-method-head
+                        / pattern
+
 receiver-method-head  = lparen ident type-annot rparen dot ident
 
-bracket-params        = lbracket bracket-param *(comma bracket-param) [comma] rbracket
+bracket-params        = lbracket bracket-param *(comma bracket-param) [comma]
+                        rbracket
+
 bracket-param         = ident [type-annot]
 
-using-clause          = kw-using effect-set
+require-clause        = kw-require effect-set
 
 data-expr             = kw-data lbrace data-body rbrace
 
@@ -539,7 +596,8 @@ data-body             = variant-list
 
 variant-list          = [pipe] variant *(pipe variant) [pipe]
 
-variant               = [attrs] ident [variant-payload-defs] [minus-gt expr] [colon-eq expr]
+variant               = [attrs] ident [variant-payload-defs] [minus-gt expr]
+                        [colon-eq expr]
 
 variant-payload-defs  = lparen variant-payload-def *(comma variant-payload-def)
                         [comma] rparen
@@ -552,68 +610,74 @@ rec-def-fields        = [semicolon] rec-def-field *(semicolon rec-def-field)
 
 rec-def-field         = ident colon expr [colon-eq expr]
 
-effect-expr           = kw-effect lbrace [effect-member *(semicolon
-                        effect-member)] [semicolon] rbrace
+effect-expr           = kw-effect lbrace structural-members rbrace
 
 effect-member         = fn-decl
-                        / law-decl
 
-class-expr            = kw-class [where-clause] lbrace *(class-member) rbrace
+shape-expr            = kw-shape [where-clause] lbrace structural-members rbrace
 
-class-member          = (fn-decl / law-decl) [semicolon]
+given-expr            = kw-given [bracket-params] expr [where-clause] lbrace
+                        structural-members rbrace
 
-instance-expr         = kw-instance [bracket-params] expr [where-clause]
-                        instance-body
-
-request-expr          = kw-request expr
+ask-expr              = kw-ask expr
 
 unsafe-expr           = kw-unsafe lbrace *stmt rbrace
 
-handle-expr           = kw-handle expr (handler-expr / (kw-using prefix-expr))
+pin-expr              = kw-pin expr kw-as ident kw-in expr
 
-handler-expr          = kw-using ident lbrace *(handle-clause [semicolon])
+answer-lit-expr       = kw-answer prefix-expr lbrace structural-fn-members
                         rbrace
 
-handle-clause         = ident eq-gt expr
-                        / ident lparen [ident-list] rparen eq-gt expr
+handle-expr           = kw-handle expr kw-answer prefix-expr
 
-foreign-let-group     = lparen 1*(kw-let foreign-binding semicolon) rparen
+native-let-group      = lparen 1*(kw-let native-binding semicolon) rparen
+; `quote` creates hygienic syntax objects. Splices use `#` and are valid only
+; under quote.
+quote-expr      = kw-quote (lparen expr rparen / lbrace *(stmt) rbrace)
 
-quote-expr            = kw-quote (lparen expr rparen / lbrace *(stmt) rbrace)
+splice          = hash ident
+                  / hash lparen expr rparen
+                  / hash lbracket [expr-list] rbracket
 
-splice                = hash ident
-                        / hash lparen expr rparen
-                        / hash lbracket [expr-list] rbracket
-
-with-attrs-expr       = with-mods-expr
+with-attrs-expr = with-mods-expr
 ; `export` is a modifier that applies to an expression (like attributes), not an
 ; expression form itself.
-export-mod      = kw-export [kw-opaque]
+export-mod     = kw-export [kw-native [string-lit]]
 
-foreign-mod     = kw-foreign [string-lit]
-partial-mod     = kw-partial
+native-mod     = kw-native [string-lit]
 
-modifier        = attr
-                  / export-mod
-                  / foreign-mod
-                  / partial-mod
+partial-mod    = kw-partial
 
-with-mods-expr  = 1*modifier (expr / foreign-let-group / let-expr)
+modifier       = attr
+                 / export-mod
+                 / native-mod
+                 / partial-mod
 
-let-rest        = [let-modifier] pattern [bracket-params] [params] [type-annot]
-                  [where-clause] [using-clause] [colon-eq expr]
+with-mods-expr = 1*modifier (expr / native-let-group / let-expr)
 
-instance-body   = lbrace *(class-member) rbrace
+let-rest       = [let-modifier] pattern [bracket-params] [params] [type-annot]
+                 [where-clause] [require-clause] [colon-eq expr]
 
-foreign-binding = [attrs] ident [bracket-params] [params] [where-clause] [colon
-                  expr]
+native-binding = [attrs] ident [bracket-params] [params] [where-clause] [colon
+                 expr]
 
-fn-decl         = kw-let op-or-ident [params] [type-annot] [colon-eq expr]
+fn-decl        = [attrs] kw-let op-or-ident [bracket-params] [params]
+                 [type-annot] [colon-eq expr]
 
-law-decl        = kw-law ident [params] colon-eq expr
+op-or-ident    = ident
+                 / op-ident
 
-op-or-ident     = ident
-                  / op-ident
+law-decl       = [attrs] kw-law op-or-ident [bracket-params] params colon-eq
+                 expr
+; Structural member lists accept leading and trailing separators, matching `{ ; x; }`.
+structural-members    = *(semicolon) [structural-member *(1*semicolon
+                        structural-member) *(semicolon)]
+
+structural-member     = fn-decl
+                        / law-decl
+
+structural-fn-members = *(semicolon) [fn-decl *(1*semicolon fn-decl)
+                        *(semicolon)]
 ; --- Unified annotation / constraint helpers ---
 type-annot     = colon expr
 
@@ -634,28 +698,28 @@ constraint     = ident lt-colon expr
                  / ident colon expr
                  / ident tilde-eq expr
 ; --- Patterns ---
-pattern         = pattern-as *(kw-or pattern-as)
+pattern = pattern-as *(kw-or pattern-as)
+; Pattern `as` binds the matched value under an additional name.
+pattern-as           = pattern-primary [kw-as ident]
 
-pattern-as      = pattern-primary [kw-as ident]
-
-pattern-primary = underscore
-                  / literal
-                  / ident
-                  / dot ident [lparen [variant-pat-arg-list] rparen]
-                  / lbrace [rec-pat-fields] rbrace
-                  / lparen [pat-list] rparen
-                  / lbracket [pat-list] rbracket
+pattern-primary      = underscore
+                       / literal
+                       / ident
+                       / dot ident [lparen [variant-pat-arg-list] rparen]
+                       / lbrace [rec-pat-fields] rbrace
+                       / lparen [pat-list] rparen
+                       / lbracket [pat-list] rbracket
 
 variant-pat-arg-list = variant-pat-arg *(comma variant-pat-arg) [comma]
 
 variant-pat-arg      = ident colon-eq pattern
                        / pattern
 
-rec-pat-fields  = rec-pat-field *(comma rec-pat-field)
+rec-pat-fields       = rec-pat-field *(comma rec-pat-field)
 
-rec-pat-field   = ident [colon pattern]
+rec-pat-field        = ident [colon pattern]
 
-pat-list        = pattern *(comma pattern)
+pat-list             = pattern *(comma pattern)
 ; --- Attributes ---
 attrs              = 1*(attr)
 

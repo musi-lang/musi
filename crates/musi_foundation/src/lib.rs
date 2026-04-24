@@ -1,8 +1,21 @@
 use self::core::{MODULE as CORE_SOURCE, SPEC as CORE_SPEC};
+use self::crypto_host::{MODULE as CRYPTO_HOST_SOURCE, SPEC as CRYPTO_HOST_SPEC};
+use self::encoding_host::{MODULE as ENCODING_HOST_SOURCE, SPEC as ENCODING_HOST_SPEC};
+use self::env::{MODULE as ENV_SOURCE, SPEC as ENV_SPEC};
+use self::ffi::{MODULE as FFI_SOURCE, SPEC as FFI_SPEC};
+use self::fmt::{MODULE as FMT_SOURCE, SPEC as FMT_SPEC};
+use self::fs::{MODULE as FS_SOURCE, SPEC as FS_SPEC};
 use self::intrinsics::{MODULE as INTRINSICS_SOURCE, SPEC as INTRINSICS_SPEC};
-use self::runtime::{MODULE as RUNTIME_SOURCE, SPEC as RUNTIME_SPEC};
+use self::io::{MODULE as IO_SOURCE, SPEC as IO_SPEC};
+use self::json_host::{MODULE as JSON_HOST_SOURCE, SPEC as JSON_HOST_SPEC};
+use self::log::{MODULE as LOG_SOURCE, SPEC as LOG_SPEC};
+use self::process::{MODULE as PROCESS_SOURCE, SPEC as PROCESS_SPEC};
+use self::random::{MODULE as RANDOM_SOURCE, SPEC as RANDOM_SPEC};
 use self::syntax::{MODULE as SYNTAX_SOURCE, SPEC as SYNTAX_SPEC};
 use self::test::{MODULE as TEST_SOURCE, SPEC as TEST_SPEC};
+use self::text::{MODULE as TEXT_SOURCE, SPEC as TEXT_SPEC};
+use self::time::{MODULE as TIME_SOURCE, SPEC as TIME_SPEC};
+use self::uuid_host::{MODULE as UUID_HOST_SOURCE, SPEC as UUID_HOST_SPEC};
 use music_builtin::foundation_module_by_spec;
 use music_module::{ImportMap, ModuleKey};
 use music_session::{Session, SessionError};
@@ -17,63 +30,135 @@ pub mod intrinsics {
     pub const MODULE: &str = include_str!("../modules/intrinsics.ms");
 }
 
-pub mod runtime {
-    pub const SPEC: &str = "musi:runtime";
-    pub const MODULE: &str = include_str!("../modules/runtime.ms");
-    pub const EFFECT: &str = "musi:runtime::Runtime";
-    pub const ENV_GET_OP: &str = "envGet";
-    pub const ENV_HAS_OP: &str = "envHas";
-    pub const ENV_SET_OP: &str = "envSet";
-    pub const ENV_REMOVE_OP: &str = "envRemove";
-    pub const PROCESS_ARG_COUNT_OP: &str = "processArgCount";
-    pub const PROCESS_ARG_AT_OP: &str = "processArgAt";
-    pub const PROCESS_CWD_OP: &str = "processCwd";
-    pub const PROCESS_RUN_OP: &str = "processRun";
-    pub const PROCESS_EXIT_OP: &str = "processExit";
-    pub const TIME_NOW_UNIX_MS_OP: &str = "timeNowUnixMs";
-    pub const TIME_MONOTONIC_MS_OP: &str = "timeMonotonicMs";
-    pub const TIME_SLEEP_MS_OP: &str = "timeSleepMs";
-    pub const RANDOM_INT_OP: &str = "randomInt";
-    pub const RANDOM_INT_IN_RANGE_OP: &str = "randomIntInRange";
-    pub const RANDOM_BOOL_OP: &str = "randomBool";
-    pub const RANDOM_FLOAT_01_OP: &str = "randomFloat01";
-    pub const LOG_INFO_OP: &str = "logInfo";
-    pub const LOG_WRITE_OP: &str = "logWrite";
-    pub const IO_PRINT_OP: &str = "ioPrint";
-    pub const IO_PRINT_LINE_OP: &str = "ioPrintLine";
-    pub const IO_PRINT_ERROR_OP: &str = "ioPrintError";
-    pub const IO_PRINT_ERROR_LINE_OP: &str = "ioPrintErrorLine";
-    pub const IO_READ_LINE_OP: &str = "ioReadLine";
-    pub const FS_READ_TEXT_OP: &str = "fsReadText";
-    pub const FS_WRITE_TEXT_OP: &str = "fsWriteText";
-    pub const FS_EXISTS_OP: &str = "fsExists";
-    pub const FS_APPEND_TEXT_OP: &str = "fsAppendText";
-    pub const FS_REMOVE_OP: &str = "fsRemove";
-    pub const FS_CREATE_DIR_ALL_OP: &str = "fsCreateDirAll";
-    pub const TEXT_LENGTH_OP: &str = "textLength";
-    pub const TEXT_TRIM_OP: &str = "textTrim";
-    pub const TEXT_TO_LOWERCASE_OP: &str = "textToLowerCase";
-    pub const TEXT_TO_UPPERCASE_OP: &str = "textToUpperCase";
-    pub const TEXT_CONTAINS_OP: &str = "textContains";
-    pub const TEXT_STARTS_WITH_OP: &str = "textStartsWith";
-    pub const TEXT_ENDS_WITH_OP: &str = "textEndsWith";
-    pub const PATH_JOIN_OP: &str = "pathJoin";
-    pub const PATH_NORMALIZE_OP: &str = "pathNormalize";
-    pub const PATH_DIRNAME_OP: &str = "pathDirname";
-    pub const PATH_BASENAME_OP: &str = "pathBasename";
-    pub const PATH_EXTNAME_OP: &str = "pathExtname";
-    pub const PATH_IS_ABSOLUTE_OP: &str = "pathIsAbsolute";
-    pub const JSON_IS_VALID_OP: &str = "jsonIsValid";
-    pub const JSON_NORMALIZE_OP: &str = "jsonNormalize";
-    pub const HEX_ENCODE_OP: &str = "hexEncode";
-    pub const HEX_DECODE_OP: &str = "hexDecode";
-    pub const HEX_IS_VALID_OP: &str = "hexIsValid";
+pub mod env {
+    pub const SPEC: &str = "musi:env";
+    pub const MODULE: &str = include_str!("../modules/env.ms");
+    pub const EFFECT: &str = "musi:env::Env";
+    pub const GET_OP: &str = "get";
+    pub const HAS_OP: &str = "has";
+    pub const SET_OP: &str = "set";
+    pub const REMOVE_OP: &str = "remove";
+}
+
+pub mod ffi {
+    pub const SPEC: &str = "musi:ffi";
+    pub const MODULE: &str = include_str!("../modules/ffi.ms");
+}
+
+pub mod process {
+    pub const SPEC: &str = "musi:process";
+    pub const MODULE: &str = include_str!("../modules/process.ms");
+    pub const EFFECT: &str = "musi:process::Process";
+    pub const ARG_COUNT_OP: &str = "argCount";
+    pub const ARG_AT_OP: &str = "argAt";
+    pub const CWD_OP: &str = "cwd";
+    pub const RUN_OP: &str = "run";
+    pub const EXIT_OP: &str = "exit";
+}
+
+pub mod io {
+    pub const SPEC: &str = "musi:io";
+    pub const MODULE: &str = include_str!("../modules/io.ms");
+    pub const EFFECT: &str = "musi:io::Io";
+    pub const PRINT_OP: &str = "print";
+    pub const PRINT_LINE_OP: &str = "printLine";
+    pub const PRINT_ERROR_OP: &str = "printError";
+    pub const PRINT_ERROR_LINE_OP: &str = "printErrorLine";
+    pub const READ_LINE_OP: &str = "readLine";
+}
+
+pub mod fs {
+    pub const SPEC: &str = "musi:fs";
+    pub const MODULE: &str = include_str!("../modules/fs.ms");
+    pub const EFFECT: &str = "musi:fs::Fs";
+    pub const READ_TEXT_OP: &str = "readText";
+    pub const WRITE_TEXT_OP: &str = "writeText";
+    pub const EXISTS_OP: &str = "exists";
+    pub const APPEND_TEXT_OP: &str = "appendText";
+    pub const REMOVE_OP: &str = "remove";
+    pub const CREATE_DIR_ALL_OP: &str = "createDirAll";
+}
+
+pub mod time {
+    pub const SPEC: &str = "musi:time";
+    pub const MODULE: &str = include_str!("../modules/time.ms");
+    pub const EFFECT: &str = "musi:time::Time";
+    pub const NOW_UNIX_MS_OP: &str = "nowUnixMs";
+    pub const MONOTONIC_MS_OP: &str = "monotonicMs";
+    pub const SLEEP_MS_OP: &str = "sleepMs";
+}
+
+pub mod random {
+    pub const SPEC: &str = "musi:random";
+    pub const MODULE: &str = include_str!("../modules/random.ms");
+    pub const EFFECT: &str = "musi:random::Random";
+    pub const INT_OP: &str = "int";
+    pub const INT_IN_RANGE_OP: &str = "intInRange";
+    pub const BOOL_OP: &str = "bool";
+    pub const FLOAT_01_OP: &str = "float01";
+    pub const ENTROPY_HEX_OP: &str = "entropyHex";
+}
+
+pub mod text {
+    pub const SPEC: &str = "musi:text";
+    pub const MODULE: &str = include_str!("../modules/text.ms");
+    pub const EFFECT: &str = "musi:text::Text";
+    pub const LENGTH_OP: &str = "length";
+    pub const CONCAT_OP: &str = "concat";
+    pub const SLICE_OP: &str = "slice";
+    pub const BYTE_AT_OP: &str = "byteAt";
+    pub const FROM_BYTE_OP: &str = "fromByte";
+}
+
+pub mod json_host {
+    pub const SPEC: &str = "musi:json";
+    pub const MODULE: &str = include_str!("../modules/json_host.ms");
+    pub const EFFECT: &str = "musi:json::JsonHost";
+    pub const IS_VALID_OP: &str = "isValid";
+    pub const NORMALIZE_OP: &str = "normalize";
+}
+
+pub mod encoding_host {
+    pub const SPEC: &str = "musi:encoding";
+    pub const MODULE: &str = include_str!("../modules/encoding_host.ms");
+    pub const EFFECT: &str = "musi:encoding::EncodingHost";
     pub const BASE64_ENCODE_OP: &str = "base64Encode";
     pub const BASE64_DECODE_OP: &str = "base64Decode";
     pub const BASE64_IS_VALID_OP: &str = "base64IsValid";
     pub const UTF8_ENCODE_OP: &str = "utf8Encode";
     pub const UTF8_DECODE_OP: &str = "utf8Decode";
     pub const UTF8_IS_VALID_OP: &str = "utf8IsValid";
+}
+
+pub mod fmt {
+    pub const SPEC: &str = "musi:fmt";
+    pub const MODULE: &str = include_str!("../modules/fmt.ms");
+    pub const EFFECT: &str = "musi:fmt::Format";
+    pub const INT_OP: &str = "int";
+    pub const FLOAT_OP: &str = "float";
+}
+
+pub mod crypto_host {
+    pub const SPEC: &str = "musi:crypto";
+    pub const MODULE: &str = include_str!("../modules/crypto_host.ms");
+    pub const EFFECT: &str = "musi:crypto::CryptoHost";
+    pub const SHA256_HEX_OP: &str = "sha256Hex";
+    pub const SHA256_BASE64_OP: &str = "sha256Base64";
+}
+
+pub mod uuid_host {
+    pub const SPEC: &str = "musi:uuid";
+    pub const MODULE: &str = include_str!("../modules/uuid_host.ms");
+    pub const EFFECT: &str = "musi:uuid::UuidHost";
+    pub const V4_OP: &str = "v4";
+}
+
+pub mod log {
+    pub const SPEC: &str = "musi:log";
+    pub const MODULE: &str = include_str!("../modules/log.ms");
+    pub const EFFECT: &str = "musi:log::Log";
+    pub const INFO_OP: &str = "info";
+    pub const WRITE_OP: &str = "write";
 }
 
 pub mod test {
@@ -97,14 +182,40 @@ type FoundationModule = (&'static str, &'static str);
 
 const CORE_MODULE: FoundationModule = (CORE_SPEC, CORE_SOURCE);
 const INTRINSICS_MODULE: FoundationModule = (INTRINSICS_SPEC, INTRINSICS_SOURCE);
-const RUNTIME_MODULE: FoundationModule = (RUNTIME_SPEC, RUNTIME_SOURCE);
+const ENV_MODULE: FoundationModule = (ENV_SPEC, ENV_SOURCE);
+const FFI_MODULE: FoundationModule = (FFI_SPEC, FFI_SOURCE);
+const PROCESS_MODULE: FoundationModule = (PROCESS_SPEC, PROCESS_SOURCE);
+const IO_MODULE: FoundationModule = (IO_SPEC, IO_SOURCE);
+const FS_MODULE: FoundationModule = (FS_SPEC, FS_SOURCE);
+const TIME_MODULE: FoundationModule = (TIME_SPEC, TIME_SOURCE);
+const RANDOM_MODULE: FoundationModule = (RANDOM_SPEC, RANDOM_SOURCE);
+const TEXT_MODULE: FoundationModule = (TEXT_SPEC, TEXT_SOURCE);
+const JSON_HOST_MODULE: FoundationModule = (JSON_HOST_SPEC, JSON_HOST_SOURCE);
+const ENCODING_HOST_MODULE: FoundationModule = (ENCODING_HOST_SPEC, ENCODING_HOST_SOURCE);
+const FMT_MODULE: FoundationModule = (FMT_SPEC, FMT_SOURCE);
+const CRYPTO_HOST_MODULE: FoundationModule = (CRYPTO_HOST_SPEC, CRYPTO_HOST_SOURCE);
+const UUID_HOST_MODULE: FoundationModule = (UUID_HOST_SPEC, UUID_HOST_SOURCE);
+const LOG_MODULE: FoundationModule = (LOG_SPEC, LOG_SOURCE);
 const TEST_MODULE: FoundationModule = (TEST_SPEC, TEST_SOURCE);
 const SYNTAX_MODULE: FoundationModule = (SYNTAX_SPEC, SYNTAX_SOURCE);
 
-const FOUNDATION_MODULES: [FoundationModule; 5] = [
+const FOUNDATION_MODULES: [FoundationModule; 18] = [
     CORE_MODULE,
     INTRINSICS_MODULE,
-    RUNTIME_MODULE,
+    ENV_MODULE,
+    FFI_MODULE,
+    PROCESS_MODULE,
+    IO_MODULE,
+    FS_MODULE,
+    TIME_MODULE,
+    RANDOM_MODULE,
+    TEXT_MODULE,
+    JSON_HOST_MODULE,
+    ENCODING_HOST_MODULE,
+    FMT_MODULE,
+    CRYPTO_HOST_MODULE,
+    UUID_HOST_MODULE,
+    LOG_MODULE,
     TEST_MODULE,
     SYNTAX_MODULE,
 ];

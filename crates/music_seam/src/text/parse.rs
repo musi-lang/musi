@@ -1,4 +1,6 @@
 use super::*;
+use crate::SeamDiagKind::{TextUnexpectedEnd, TextUnterminatedProcedure};
+use music_base::diag::DiagContext;
 
 /// Parses SEAM text into a validated artifact model.
 ///
@@ -17,7 +19,10 @@ pub fn parse_text(text: &str) -> AssemblyResult<Artifact> {
             continue;
         }
         if line == ".end" {
-            return Err(AssemblyError::TextParseFailed("unexpected `.end`".into()));
+            return Err(AssemblyError::text_parse(
+                TextUnexpectedEnd,
+                &DiagContext::new(),
+            ));
         }
         if line.starts_with(".procedure ") {
             let procedure_lines = collect_procedure_lines(&lines, &mut index)?;
@@ -53,7 +58,8 @@ fn collect_procedure_lines<'text>(
             return Ok(lines[start..index.saturating_sub(1)].to_vec());
         }
     }
-    Err(AssemblyError::TextParseFailed(
-        "unterminated `.procedure` block".into(),
+    Err(AssemblyError::text_parse(
+        TextUnterminatedProcedure,
+        &DiagContext::new().with("procedure", "<unknown>"),
     ))
 }

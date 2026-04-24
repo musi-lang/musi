@@ -4,7 +4,7 @@ struct DotCallableCallTarget {
     receiver: HirExprId,
     binding: Option<NameBindingId>,
     name: Symbol,
-    module_target: Option<ModuleKey>,
+    import_record_target: Option<ModuleKey>,
 }
 
 type ComptimeArgValues = [(usize, ComptimeValue)];
@@ -65,7 +65,7 @@ pub(super) fn lower_call_expr(
     prelude.push(IrExpr::new(
         origin,
         if has_runtime_spread {
-            IrExprKind::CallSeq {
+            IrExprKind::CallParts {
                 callee: Box::new(callee_expr),
                 args: parts.into_boxed_slice(),
             }
@@ -79,7 +79,9 @@ pub(super) fn lower_call_expr(
                 .collect::<Option<Vec<_>>>()
                 .map(Vec::into_boxed_slice);
             let Some(args) = args else {
-                return Err("call spread lowering invariant".into());
+                return Err(super::lower_errors::lowering_error(
+                    "call spread lowering invariant",
+                ));
             };
             IrExprKind::Call {
                 callee: Box::new(callee_expr),
@@ -124,7 +126,9 @@ fn lower_comptime_call_expr(
         let is_comptime = scheme.comptime_params.get(index).copied().unwrap_or(false);
         if is_comptime {
             let Some(value) = ctx.sema.expr_comptime_value(arg.expr).cloned() else {
-                return Err("comptime call argument missing sema value".into());
+                return Err(super::lower_errors::lowering_error(
+                    "comptime call argument missing sema value",
+                ));
             };
             comptime_values.push((index, value));
         } else {
@@ -139,7 +143,7 @@ fn lower_comptime_call_expr(
             IrExprKind::Name {
                 binding: None,
                 name: specialized_name,
-                module_target: Some(ctx.module_key.clone()),
+                import_record_target: Some(ctx.module_key.clone()),
             },
         )),
         args: runtime_args.into_boxed_slice(),
@@ -186,7 +190,9 @@ fn find_local_callable_definition(
             .get(*exprs)
             .iter()
             .find_map(|expr| find_local_callable_definition(ctx, *expr, binding)),
-        HirExprKind::Unsafe { body } => find_local_callable_definition(ctx, *body, binding),
+        HirExprKind::Unsafe { body } | HirExprKind::Pin { body, .. } => {
+            find_local_callable_definition(ctx, *body, binding)
+        }
         HirExprKind::Let {
             pat,
             params,
@@ -264,7 +270,7 @@ fn encode_comptime_value(value: &ComptimeValue) -> String {
         ),
         ComptimeValue::Continuation(value) => format!("k{}", encode_comptime_values(&value.frames)),
         ComptimeValue::Type(value) => format!("t{}", encode_text(&value.term.to_string())),
-        ComptimeValue::Module(value) => format!("m{}", encode_text(value.key.as_str())),
+        ComptimeValue::ImportRecord(value) => format!("m{}", encode_text(value.key.as_str())),
         ComptimeValue::Foreign(value) => format!(
             "g{}_{}_{}",
             encode_text(value.module.as_str()),
@@ -284,7 +290,7 @@ fn encode_comptime_value(value: &ComptimeValue) -> String {
                 encode_text(&value.name)
             )
         }
-        ComptimeValue::Class(value) => {
+        ComptimeValue::Shape(value) => {
             format!(
                 "h{}_{}",
                 encode_text(value.module.as_str()),
@@ -329,14 +335,15 @@ fn ensure_specialized_callable(
         .get(definition.params.clone())
         .to_vec();
     let previous = install_comptime_params(ctx, &params, comptime_values);
-    let (hidden_params, evidence_bindings) = super::hidden_evidence_params_for_binding(
-        ctx.sema,
-        ctx.interner.resolve(definition.name.name),
-        Some(definition.binding),
-    );
-    super::push_evidence_bindings(ctx, evidence_bindings);
+    let (hidden_params, constraint_answer_bindings) =
+        super::hidden_constraint_answer_params_for_binding(
+            ctx.sema,
+            ctx.interner.resolve(definition.name.name),
+            Some(definition.binding),
+        );
+    super::push_constraint_answer_bindings(ctx, constraint_answer_bindings);
     let body = lower_expr(ctx, definition.body);
-    super::pop_evidence_bindings(ctx);
+    super::pop_constraint_answer_bindings(ctx);
     restore_comptime_params(ctx, previous);
     let mut lowered_params = hidden_params;
     lowered_params.extend(lower_runtime_params(ctx, &params));
@@ -368,7 +375,7 @@ fn ensure_specialized_callable(
             "cold",
         ))
         .with_effects(effects)
-        .with_module_target(ctx.module_key.clone());
+        .with_import_record_target(ctx.module_key.clone());
     ctx.extra_callables.push(callable);
 }
 
@@ -408,7 +415,7 @@ fn lower_runtime_params(ctx: &LowerCtx<'_>, params: &[HirParam]) -> Vec<IrParam>
         .map(|param| {
             IrParam::new(
                 super::decl_binding_id(ctx.sema, param.name)
-                    .unwrap_or_else(|| invalid_lowering_path("param binding missing")),
+                    .unwrap_or_else(|| lowering_invariant_violation("param binding missing")),
                 ctx.interner.resolve(param.name.name),
             )
         })
@@ -609,23 +616,23 @@ fn pointer_storage_name(ctx: &LowerCtx<'_>, type_arg: HirExprId) -> Option<Box<s
 
 fn is_std_ffi_module(module_key: &ModuleKey) -> bool {
     let key = module_key.as_str();
-    key == "@std/ffi" || key.ends_with("ffi/index.ms")
+    key == "@std/ffi" || key.ends_with("ffi.ms")
 }
 
 fn is_std_cmp_module(module_key: &ModuleKey) -> bool {
     let key = module_key.as_str();
     key == "@std/cmp"
-        || key.ends_with("cmp/index.ms")
-        || key.ends_with("cmp/_core.ms")
-        || key.contains("cmp/index.ms::__laws")
-        || key.contains("cmp/_core.ms::__laws")
+        || key.ends_with("cmp/std.ms")
+        || key.ends_with("cmp.ms")
+        || key.contains("cmp/std.ms::__laws")
+        || key.contains("cmp.ms::__laws")
 }
 
 fn is_std_ffi_public_pointer_callee(ctx: &LowerCtx<'_>, callee: HirExprId) -> bool {
     match ctx.sema.module().store.exprs.get(callee).kind {
         HirExprKind::Field { base, .. } => is_std_ffi_public_pointer_base(ctx, base),
         HirExprKind::Name { name } => use_binding_id(ctx.sema, name)
-            .and_then(|binding| ctx.sema.binding_module_target(binding))
+            .and_then(|binding| ctx.sema.binding_import_record_target(binding))
             .is_some_and(is_std_ffi_module),
         _ => false,
     }
@@ -634,7 +641,7 @@ fn is_std_ffi_public_pointer_callee(ctx: &LowerCtx<'_>, callee: HirExprId) -> bo
 fn is_std_ffi_public_pointer_base(ctx: &LowerCtx<'_>, base: HirExprId) -> bool {
     match ctx.sema.module().store.exprs.get(base).kind {
         HirExprKind::Name { name } => use_binding_id(ctx.sema, name)
-            .and_then(|binding| ctx.sema.binding_module_target(binding))
+            .and_then(|binding| ctx.sema.binding_import_record_target(binding))
             .is_some_and(is_std_ffi_module),
         HirExprKind::Field {
             base: module_base,
@@ -660,7 +667,7 @@ fn lower_dot_callable_call_expr(
         IrExprKind::Name {
             binding: dot_callable.binding,
             name: interner.resolve(dot_callable.name).into(),
-            module_target: dot_callable.module_target.clone(),
+            import_record_target: dot_callable.import_record_target.clone(),
         },
     );
 
@@ -704,7 +711,7 @@ fn lower_dot_callable_call_expr(
     prelude.push(IrExpr::new(
         origin,
         if has_runtime_spread {
-            IrExprKind::CallSeq {
+            IrExprKind::CallParts {
                 callee: Box::new(callee_expr),
                 args: parts.into_boxed_slice(),
             }
@@ -718,7 +725,9 @@ fn lower_dot_callable_call_expr(
                 .collect::<Option<Vec<_>>>()
                 .map(Vec::into_boxed_slice);
             let Some(args) = args else {
-                return Err("dot-callable spread lowering invariant".into());
+                return Err(super::lower_errors::lowering_error(
+                    "dot-callable spread lowering invariant",
+                ));
             };
             IrExprKind::Call {
                 callee: Box::new(callee_expr),
@@ -748,10 +757,10 @@ fn resolve_dot_callable_call_target(
         receiver: base,
         binding: fact.binding,
         name: fact.name,
-        module_target: fact
-            .module_target
+        import_record_target: fact
+            .import_record_target
             .clone()
-            .or_else(|| sema.expr_module_target(callee).cloned()),
+            .or_else(|| sema.expr_import_record_target(callee).cloned()),
     })
 }
 
@@ -881,8 +890,7 @@ pub(super) fn lower_request_expr(
 ) -> Result<IrExprKind, Box<str>> {
     let sema = ctx.sema;
     let interner = ctx.interner;
-    let (effect_key, op_index, callee, args) =
-        resolve_request_target(sema, interner, expr).map_err(Box::<str>::from)?;
+    let (effect_key, op_index, callee, args) = resolve_request_target(sema, interner, expr)?;
     let args_nodes = ordered_call_args(sema, interner, callee, sema.module().store.args.get(args));
     if !args_nodes.iter().any(|arg| arg.spread) {
         let lowered_args = args_nodes
@@ -919,7 +927,9 @@ pub(super) fn lower_request_expr(
                 .collect::<Option<Vec<_>>>()
                 .map(Vec::into_boxed_slice);
             let Some(args) = args else {
-                return Err("request spread lowering invariant".into());
+                return Err(super::lower_errors::lowering_error(
+                    "ask spread lowering invariant",
+                ));
             };
             IrExprKind::Request {
                 effect_key,
@@ -942,22 +952,22 @@ enum SpreadMode {
 impl SpreadMode {
     const fn runtime_any_message(self) -> &'static str {
         match self {
-            Self::Call => "call runtime spread requires []Any",
-            Self::Request => "request runtime spread requires []Any",
+            Self::Call => "call runtime spread needs []Any",
+            Self::Request => "ask runtime spread needs []Any",
         }
     }
 
     const fn dims_message(self) -> &'static str {
         match self {
-            Self::Call => "call spread requires 1D array or tuple",
-            Self::Request => "request spread requires 1D array or tuple",
+            Self::Call => "call spread needs 1D array or tuple",
+            Self::Request => "ask spread needs 1D array or tuple",
         }
     }
 
     const fn source_message(self) -> &'static str {
         match self {
             Self::Call => "call spread source is not tuple/array",
-            Self::Request => "request spread source is not tuple/array",
+            Self::Request => "ask spread source is not tuple/array",
         }
     }
 }
@@ -971,24 +981,32 @@ fn resolve_request_target(
     sema: &SemaModule,
     interner: &Interner,
     expr: HirExprId,
-) -> Result<(DefinitionKey, u16, HirExprId, SliceRange<HirArg>), &'static str> {
+) -> Result<(DefinitionKey, u16, HirExprId, SliceRange<HirArg>), Box<str>> {
     let HirExprKind::Call { callee, ref args } = sema.module().store.exprs.get(expr).kind else {
-        return Err("request without call");
+        return Err(super::lower_errors::lowering_error("ask without call"));
     };
     let HirExprKind::Field { base, name, .. } = sema.module().store.exprs.get(callee).kind else {
-        return Err("request without effect op field access");
+        return Err(super::lower_errors::lowering_error(
+            "ask without effect op field access",
+        ));
     };
     let HirExprKind::Name { name: effect_name } = sema.module().store.exprs.get(base).kind else {
-        return Err("request without effect name");
+        return Err(super::lower_errors::lowering_error(
+            "ask without effect name",
+        ));
     };
     let effect_name = interner.resolve(effect_name.name);
     let op_name = interner.resolve(name.name);
     let Some(effect) = sema.effect_def(effect_name) else {
-        return Err("request with unknown effect");
+        return Err(super::lower_errors::lowering_error(
+            "ask with unknown effect",
+        ));
     };
     let op_index = effect.op_index(op_name).unwrap_or(u16::MAX);
     if op_index == u16::MAX {
-        return Err("request with unknown effect op");
+        return Err(super::lower_errors::lowering_error(
+            "ask with unknown effect op",
+        ));
     }
     Ok((effect.key().clone(), op_index, callee, args.clone()))
 }
@@ -1033,7 +1051,7 @@ fn lower_spread_arg(
     let sema = ctx.sema;
     let spread_ty = sema
         .try_expr_ty(spread_expr)
-        .unwrap_or_else(|| invalid_lowering_path("expr type missing for spread arg"));
+        .unwrap_or_else(|| lowering_invariant_violation("expr type missing for spread arg"));
     match &sema.ty(spread_ty).kind {
         HirTyKind::Tuple { items } => {
             for (index, _) in sema.module().store.ty_ids.get(*items).iter().enumerate() {
@@ -1059,19 +1077,24 @@ fn lower_spread_arg(
                 Err(mode.runtime_any_message().into())
             }
         }
-        HirTyKind::Range { .. } => {
-            let evidence = sema
-                .expr_evidence(spread_expr)
+        HirTyKind::Range { bound } => {
+            let result_ty_name =
+                format!("[]{}", super::render_ty_name(sema, *bound, ctx.interner)).into();
+            let constraint_answer = sema
+                .expr_constraint_answers(spread_expr)
                 .and_then(|items| items.first())
-                .map(|item| super::lower_evidence_expr(ctx, origin, item));
-            let Some(evidence) = evidence else {
-                return Err("range spread evidence missing".into());
+                .map(|item| super::lower_constraint_answer_expr(ctx, origin, item));
+            let Some(constraint_answer) = constraint_answer else {
+                return Err(super::lower_errors::lowering_error(
+                    "range spread evidence missing",
+                ));
             };
             parts.push(IrSeqPart::Spread(IrExpr::new(
                 origin,
                 IrExprKind::RangeMaterialize {
                     range: Box::new(temp_expr.clone()),
-                    evidence: Box::new(evidence),
+                    evidence: Box::new(constraint_answer),
+                    result_ty_name,
                 },
             )));
             Ok(true)

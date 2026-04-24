@@ -1,5 +1,6 @@
 use super::super::*;
 use crate::EmitDiagKind;
+use music_base::diag::DiagContext;
 
 impl ProcedureEmitter<'_, '_> {
     pub(super) fn compile_let(
@@ -59,7 +60,7 @@ impl ProcedureEmitter<'_, '_> {
             IrAssignTarget::Binding {
                 binding,
                 name,
-                module_target,
+                import_record_target,
             } => {
                 self.compile_expr(value, true, diags);
                 if let Some(binding) = binding
@@ -80,7 +81,9 @@ impl ProcedureEmitter<'_, '_> {
                     emit_zero(self);
                     return;
                 }
-                if let Some(global) = self.resolve_global(*binding, name, module_target.as_ref()) {
+                if let Some(global) =
+                    self.resolve_global(*binding, name, import_record_target.as_ref())
+                {
                     self.code.push(CodeEntry::Instruction(Instruction::new(
                         Opcode::StGlob,
                         Operand::Global(global),
@@ -88,12 +91,12 @@ impl ProcedureEmitter<'_, '_> {
                     emit_zero(self);
                     return;
                 }
-                super::support::push_expr_diag(
+                super::support::push_expr_diag_with(
                     diags,
                     self.module_key,
                     &value.origin,
                     EmitDiagKind::UnsupportedAssignTarget,
-                    format!("unsupported assignment target `{name}`"),
+                    DiagContext::new().with("target", name),
                 );
                 emit_zero(self);
             }
@@ -102,7 +105,7 @@ impl ProcedureEmitter<'_, '_> {
                 self.compile_i64(i64::from(*index));
                 self.compile_expr(value, true, diags);
                 self.code.push(CodeEntry::Instruction(Instruction::new(
-                    Opcode::DataSet,
+                    Opcode::StFld,
                     Operand::None,
                 )));
                 emit_zero(self);
@@ -114,9 +117,9 @@ impl ProcedureEmitter<'_, '_> {
                 }
                 self.compile_expr(value, true, diags);
                 let instruction = match indices.as_ref() {
-                    [_] => Instruction::new(Opcode::SeqSet, Operand::None),
+                    [_] => Instruction::new(Opcode::StElem, Operand::None),
                     _ => Instruction::new(
-                        Opcode::SeqSetN,
+                        Opcode::StElem,
                         Operand::I16(i16::try_from(indices.len()).unwrap_or(i16::MAX)),
                     ),
                 };

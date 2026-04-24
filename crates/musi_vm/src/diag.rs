@@ -1,4 +1,4 @@
-use music_base::diag::{DiagCode, DiagLevel, DiagnosticKind};
+use music_base::diag::{DiagCode, DiagContext, DiagLevel, DiagnosticKind};
 
 #[path = "diag_catalog_gen.rs"]
 mod diag_catalog_gen;
@@ -46,6 +46,20 @@ pub enum VmDiagKind {
     HeapObjectTooLarge,
     StackFrameLimitExceeded,
     InstructionBudgetExhausted,
+    RuntimeEffectArgsInvalid,
+    RuntimeEffectOperationFailed,
+    RuntimeHostUnavailable,
+    RuntimeEffectUnsupported,
+    NativeArgumentTypeMismatch,
+    NativeArgumentOutOfRange,
+    NativeArgumentInvalid,
+    NativeLayoutMissing,
+    NativeFieldMissing,
+    NativeCStringInvalid,
+    NativeFfiPrepFailed,
+    NativeAbiUnsupported,
+    NativeResultInvalid,
+    PointerArgumentInvalid,
 }
 
 impl VmDiagKind {
@@ -67,6 +81,16 @@ impl VmDiagKind {
     #[must_use]
     pub fn hint(self) -> Option<&'static str> {
         diag_catalog_gen::help(self)
+    }
+
+    #[must_use]
+    pub fn message_with(self, context: &DiagContext) -> String {
+        diag_catalog_gen::render_message(self, context)
+    }
+
+    #[must_use]
+    pub fn label_with(self, context: &DiagContext) -> String {
+        diag_catalog_gen::render_primary(self, context)
     }
 
     #[must_use]

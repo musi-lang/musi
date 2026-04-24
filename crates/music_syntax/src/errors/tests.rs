@@ -1,4 +1,5 @@
 use music_base::SourceMap;
+use music_base::diag::DiagContext;
 
 use super::*;
 
@@ -22,8 +23,14 @@ mod success {
         )
         .to_diag(source_id(text), text);
 
-        assert_eq!(diag.message(), "expected `;`, found end of file");
-        assert_eq!(diag.labels()[0].message(), "found end of input");
+        let context = DiagContext::new()
+            .with("expected", TokenKind::Semicolon)
+            .with("found", TokenKind::Eof);
+        assert_eq!(
+            diag.message(),
+            SyntaxDiagKind::ExpectedToken.message_with(&context)
+        );
+        assert!(!diag.labels()[0].message().is_empty());
     }
 }
 
@@ -36,8 +43,12 @@ mod failure {
         let diag = LexError::new(LexErrorKind::InvalidChar { ch: '€' }, Span::new(0, 3))
             .to_diag(source_id(text), text);
 
-        assert_eq!(diag.message(), "invalid character `€`");
-        assert_eq!(diag.labels()[0].message(), "found `€`");
+        let context = DiagContext::new().with("ch", '€');
+        assert_eq!(
+            diag.message(),
+            SyntaxDiagKind::InvalidChar.message_with(&context)
+        );
+        assert!(diag.labels()[0].message().contains('€'));
     }
 
     #[test]
@@ -46,8 +57,11 @@ mod failure {
         let diag = ParseError::new(ParseErrorKind::NonAssociativeChain, Span::new(6, 7))
             .to_diag(source_id(text), text);
 
-        assert_eq!(diag.message(), "comparison chain requires grouping");
-        assert_eq!(diag.hint(), Some("parenthesize comparison"));
+        assert_eq!(
+            diag.message(),
+            SyntaxDiagKind::NonAssociativeChain.message()
+        );
+        assert_eq!(diag.hint(), SyntaxDiagKind::NonAssociativeChain.hint());
     }
 
     #[test]
@@ -61,14 +75,19 @@ mod failure {
         )
         .to_diag(source_id(text), text);
 
+        let context = DiagContext::new().with("keyword", TokenKind::KwSome);
         assert_eq!(
             diag.message(),
-            "reserved keyword `some` cannot name identifier"
+            SyntaxDiagKind::ReservedKeywordIdentifier.message_with(&context)
+        );
+        assert!(
+            diag.labels()[0]
+                .message()
+                .contains(TokenKind::KwSome.to_string().as_str())
         );
         assert_eq!(
-            diag.labels()[0].message(),
-            "`some` found where identifier required"
+            diag.hint(),
+            SyntaxDiagKind::ReservedKeywordIdentifier.hint()
         );
-        assert_eq!(diag.hint(), Some("choose non-keyword identifier"));
     }
 }

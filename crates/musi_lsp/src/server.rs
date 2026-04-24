@@ -5,23 +5,31 @@ use std::path::Path;
 use std::pin::Pin;
 
 use async_lsp::lsp_types::{
+    CompletionList, CompletionOptions, CompletionParams, CompletionResponse,
     DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
-    DidSaveTextDocumentParams, DocumentFormattingParams, FormattingOptions, Hover, HoverContents,
-    HoverParams, HoverProviderCapability, InitializeParams, InitializeResult, InitializedParams,
-    InlayHint, InlayHintOptions, InlayHintParams, InlayHintServerCapabilities, MarkupContent,
-    MarkupKind, OneOf, PublishDiagnosticsParams, Range, SemanticTokens, SemanticTokensFullOptions,
+    DidSaveTextDocumentParams, DocumentFormattingParams, DocumentSymbolParams,
+    DocumentSymbolResponse, FormattingOptions, GotoDefinitionParams, GotoDefinitionResponse, Hover,
+    HoverContents, HoverParams, HoverProviderCapability, InitializeParams, InitializeResult,
+    InitializedParams, InlayHint, InlayHintOptions, InlayHintParams, InlayHintServerCapabilities,
+    Location, MarkupContent, MarkupKind, OneOf, PrepareRenameResponse, PublishDiagnosticsParams,
+    Range, ReferenceParams, RenameOptions, RenameParams, SemanticTokens, SemanticTokensFullOptions,
     SemanticTokensOptions, SemanticTokensParams, SemanticTokensRangeParams,
     SemanticTokensRangeResult, SemanticTokensResult, SemanticTokensServerCapabilities,
     ServerCapabilities, ServerInfo, TextDocumentContentChangeEvent, TextDocumentItem,
-    TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Url, WorkDoneProgressOptions,
+    TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Url,
+    WorkDoneProgressOptions, WorkspaceEdit, WorkspaceSymbolParams, WorkspaceSymbolResponse,
     notification::PublishDiagnostics,
 };
 use async_lsp::{ClientSocket, LanguageServer, ResponseError};
 use musi_fmt::{FormatOptions, format_source};
 use musi_project::{ProjectOptions, load_project_ancestor};
 use musi_tooling::{
-    collect_project_diagnostics_with_overlay, hover_for_project_file_with_overlay,
-    inlay_hints_for_project_file_with_overlay, semantic_tokens_for_project_file_with_overlay,
+    collect_project_diagnostics_with_overlay, completions_for_project_file_with_overlay,
+    definition_for_project_file_with_overlay, document_symbols_for_project_file_with_overlay,
+    hover_for_project_file_with_overlay, inlay_hints_for_project_file_with_overlay,
+    prepare_rename_for_project_file_with_overlay, references_for_project_file_with_overlay,
+    rename_for_project_file_with_overlay, semantic_tokens_for_project_file_with_overlay,
+    workspace_symbols_for_project_file_with_overlay,
 };
 
 mod config;
@@ -30,8 +38,9 @@ mod convert;
 use config::LspConfig;
 use convert::{
     diagnostic_matches_path, encode_semantic_tokens, full_document_range, position_in_range,
-    semantic_tokens_legend, to_lsp_diagnostic, to_lsp_inlay_hint, to_tool_range,
-    truncate_hover_contents,
+    semantic_tokens_legend, to_lsp_completion, to_lsp_diagnostic, to_lsp_document_symbol,
+    to_lsp_inlay_hint, to_lsp_location, to_lsp_symbol_information, to_lsp_workspace_edit,
+    to_tool_range, truncate_hover_contents,
 };
 
 type ServerFuture<T> = Pin<Box<dyn Future<Output = Result<T, ResponseError>> + Send + 'static>>;
@@ -61,7 +70,22 @@ impl MusiLanguageServer {
                     TextDocumentSyncKind::FULL,
                 )),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
+                definition_provider: Some(OneOf::Left(true)),
+                references_provider: Some(OneOf::Left(true)),
+                document_symbol_provider: Some(OneOf::Left(true)),
+                workspace_symbol_provider: Some(OneOf::Left(true)),
+                rename_provider: Some(OneOf::Right(RenameOptions {
+                    prepare_provider: Some(true),
+                    work_done_progress_options: WorkDoneProgressOptions {
+                        work_done_progress: None,
+                    },
+                })),
                 document_formatting_provider: Some(OneOf::Left(true)),
+                completion_provider: Some(CompletionOptions {
+                    resolve_provider: Some(false),
+                    trigger_characters: Some(vec![".".to_owned()]),
+                    ..CompletionOptions::default()
+                }),
                 inlay_hint_provider: Some(OneOf::Right(InlayHintServerCapabilities::Options(
                     InlayHintOptions {
                         work_done_progress_options: WorkDoneProgressOptions {
@@ -133,6 +157,32 @@ impl MusiLanguageServer {
         }
     }
 
+    fn completions(&self, params: CompletionParams) -> Option<CompletionResponse> {
+        let text_document = params.text_document_position.text_document;
+        let position = params.text_document_position.position;
+        let path = text_document.uri.to_file_path().ok()?;
+        if path.file_name().is_some_and(|name| name == "musi.json") {
+            return None;
+        }
+        let overlay = self
+            .open_documents
+            .get(&text_document.uri)
+            .map(String::as_str);
+        let items = completions_for_project_file_with_overlay(
+            &path,
+            overlay,
+            usize::try_from(position.line).ok()?.saturating_add(1),
+            usize::try_from(position.character).ok()?.saturating_add(1),
+        )
+        .into_iter()
+        .map(to_lsp_completion)
+        .collect();
+        Some(CompletionResponse::List(CompletionList {
+            is_incomplete: false,
+            items,
+        }))
+    }
+
     fn hover_at(&self, params: HoverParams) -> Option<Hover> {
         let text_document = params.text_document_position_params.text_document;
         let position = params.text_document_position_params.position;
@@ -158,6 +208,123 @@ impl MusiLanguageServer {
             }),
             range: Some(to_tool_range(&hover.range)),
         })
+    }
+
+    fn definition_at(&self, params: GotoDefinitionParams) -> Option<GotoDefinitionResponse> {
+        let text_document = params.text_document_position_params.text_document;
+        let position = params.text_document_position_params.position;
+        let path = text_document.uri.to_file_path().ok()?;
+        if path.file_name().is_some_and(|name| name == "musi.json") {
+            return None;
+        }
+        let overlay = self
+            .open_documents
+            .get(&text_document.uri)
+            .map(String::as_str);
+        let location = definition_for_project_file_with_overlay(
+            &path,
+            overlay,
+            usize::try_from(position.line).ok()?.saturating_add(1),
+            usize::try_from(position.character).ok()?.saturating_add(1),
+        )
+        .and_then(to_lsp_location)?;
+        Some(GotoDefinitionResponse::Scalar(location))
+    }
+
+    fn references_at(&self, params: ReferenceParams) -> Option<Vec<Location>> {
+        let text_document = params.text_document_position.text_document;
+        let position = params.text_document_position.position;
+        let path = text_document.uri.to_file_path().ok()?;
+        if path.file_name().is_some_and(|name| name == "musi.json") {
+            return None;
+        }
+        let overlay = self
+            .open_documents
+            .get(&text_document.uri)
+            .map(String::as_str);
+        let locations = references_for_project_file_with_overlay(
+            &path,
+            overlay,
+            usize::try_from(position.line).ok()?.saturating_add(1),
+            usize::try_from(position.character).ok()?.saturating_add(1),
+            params.context.include_declaration,
+        )
+        .into_iter()
+        .filter_map(to_lsp_location)
+        .collect();
+        Some(locations)
+    }
+
+    fn document_symbols(&self, params: DocumentSymbolParams) -> Option<DocumentSymbolResponse> {
+        let uri = params.text_document.uri;
+        let path = uri.to_file_path().ok()?;
+        if path.file_name().is_some_and(|name| name == "musi.json") {
+            return None;
+        }
+        let overlay = self.open_documents.get(&uri).map(String::as_str);
+        let symbols = document_symbols_for_project_file_with_overlay(&path, overlay)
+            .into_iter()
+            .map(to_lsp_document_symbol)
+            .collect();
+        Some(DocumentSymbolResponse::Nested(symbols))
+    }
+
+    fn workspace_symbols(&self, params: &WorkspaceSymbolParams) -> Option<WorkspaceSymbolResponse> {
+        let (uri, text) = self.open_documents.iter().next()?;
+        let path = uri.to_file_path().ok()?;
+        let symbols =
+            workspace_symbols_for_project_file_with_overlay(&path, Some(text), &params.query)
+                .into_iter()
+                .filter_map(to_lsp_symbol_information)
+                .collect();
+        Some(WorkspaceSymbolResponse::Flat(symbols))
+    }
+
+    fn prepare_rename_at(
+        &self,
+        params: TextDocumentPositionParams,
+    ) -> Option<PrepareRenameResponse> {
+        let text_document = params.text_document;
+        let position = params.position;
+        let path = text_document.uri.to_file_path().ok()?;
+        if path.file_name().is_some_and(|name| name == "musi.json") {
+            return None;
+        }
+        let overlay = self
+            .open_documents
+            .get(&text_document.uri)
+            .map(String::as_str);
+        let (range, placeholder) = prepare_rename_for_project_file_with_overlay(
+            &path,
+            overlay,
+            usize::try_from(position.line).ok()?.saturating_add(1),
+            usize::try_from(position.character).ok()?.saturating_add(1),
+        )?;
+        Some(PrepareRenameResponse::RangeWithPlaceholder {
+            range: to_tool_range(&range),
+            placeholder,
+        })
+    }
+
+    fn rename_at(&self, params: RenameParams) -> Option<WorkspaceEdit> {
+        let text_document = params.text_document_position.text_document;
+        let position = params.text_document_position.position;
+        let path = text_document.uri.to_file_path().ok()?;
+        if path.file_name().is_some_and(|name| name == "musi.json") {
+            return None;
+        }
+        let overlay = self
+            .open_documents
+            .get(&text_document.uri)
+            .map(String::as_str);
+        rename_for_project_file_with_overlay(
+            &path,
+            overlay,
+            usize::try_from(position.line).ok()?.saturating_add(1),
+            usize::try_from(position.character).ok()?.saturating_add(1),
+            &params.new_name,
+        )
+        .map(to_lsp_workspace_edit)
     }
 
     fn semantic_tokens(&self, params: &SemanticTokensParams) -> Option<SemanticTokens> {
@@ -289,8 +456,55 @@ impl LanguageServer for MusiLanguageServer {
         ControlFlow::Continue(())
     }
 
+    fn completion(&mut self, params: CompletionParams) -> ServerFuture<Option<CompletionResponse>> {
+        let result = self.completions(params);
+        Box::pin(async move { Ok(result) })
+    }
+
     fn hover(&mut self, params: HoverParams) -> ServerFuture<Option<Hover>> {
         let result = self.hover_at(params);
+        Box::pin(async move { Ok(result) })
+    }
+
+    fn definition(
+        &mut self,
+        params: GotoDefinitionParams,
+    ) -> ServerFuture<Option<GotoDefinitionResponse>> {
+        let result = self.definition_at(params);
+        Box::pin(async move { Ok(result) })
+    }
+
+    fn references(&mut self, params: ReferenceParams) -> ServerFuture<Option<Vec<Location>>> {
+        let result = self.references_at(params);
+        Box::pin(async move { Ok(result) })
+    }
+
+    fn document_symbol(
+        &mut self,
+        params: DocumentSymbolParams,
+    ) -> ServerFuture<Option<DocumentSymbolResponse>> {
+        let result = self.document_symbols(params);
+        Box::pin(async move { Ok(result) })
+    }
+
+    fn symbol(
+        &mut self,
+        params: WorkspaceSymbolParams,
+    ) -> ServerFuture<Option<WorkspaceSymbolResponse>> {
+        let result = self.workspace_symbols(&params);
+        Box::pin(async move { Ok(result) })
+    }
+
+    fn prepare_rename(
+        &mut self,
+        params: TextDocumentPositionParams,
+    ) -> ServerFuture<Option<PrepareRenameResponse>> {
+        let result = self.prepare_rename_at(params);
+        Box::pin(async move { Ok(result) })
+    }
+
+    fn rename(&mut self, params: RenameParams) -> ServerFuture<Option<WorkspaceEdit>> {
+        let result = self.rename_at(params);
         Box::pin(async move { Ok(result) })
     }
 

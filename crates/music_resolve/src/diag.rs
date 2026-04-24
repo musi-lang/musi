@@ -1,4 +1,4 @@
-use music_base::diag::{Diag, DiagCode, DiagLevel, DiagnosticKind};
+use music_base::diag::{Diag, DiagCode, DiagContext, DiagLevel, DiagnosticKind};
 
 #[path = "diag_catalog_gen.rs"]
 mod diag_catalog_gen;
@@ -31,6 +31,16 @@ impl ResolveDiagKind {
     #[must_use]
     pub fn hint(self) -> Option<&'static str> {
         diag_catalog_gen::help(self)
+    }
+
+    #[must_use]
+    pub fn message_with(self, context: &DiagContext) -> String {
+        diag_catalog_gen::render_message(self, context)
+    }
+
+    #[must_use]
+    pub fn label_with(self, context: &DiagContext) -> String {
+        diag_catalog_gen::render_primary(self, context)
     }
 
     #[must_use]

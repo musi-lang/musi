@@ -2,28 +2,39 @@
 
 use std::env::temp_dir;
 use std::fs;
+use std::io;
 use std::mem::drop;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use music_base::diag::DiagContext;
 use music_module::ModuleKey;
+use music_sema::SemaDiagKind;
 use music_session::{Session, SessionOptions};
 
-use musi_project::{Project, ProjectError, ProjectOptions};
+use musi_project::{Project, ProjectDiagKind, ProjectError, ProjectOptions};
 
 use crate::{
-    ToolInlayHintKind, ToolSemanticModifier, ToolSemanticTokenKind, ToolingError,
-    collect_project_diagnostics_with_overlay, hover_for_project_file_with_overlay,
+    ToolInlayHintKind, ToolSemanticModifier, ToolSemanticTokenKind, ToolingDiagKind, ToolingError,
+    artifact::write_output, collect_project_diagnostics_with_overlay,
+    completions_for_project_file_with_overlay, definition_for_project_file_with_overlay,
+    document_symbols_for_project_file_with_overlay, hover_for_project_file_with_overlay,
     inlay_hints_for_project_file_with_overlay, load_direct_graph,
-    module_docs_for_project_file_with_overlay, project_error_report,
-    semantic_tokens_for_project_file_with_overlay, session_error_report, tooling_error_report,
+    module_docs_for_project_file_with_overlay, prepare_rename_for_project_file_with_overlay,
+    project_error_report, references_for_project_file_with_overlay,
+    rename_for_project_file_with_overlay, semantic_tokens_for_project_file_with_overlay,
+    session_error_report, tooling_error_report, workspace_symbols_for_project_file_with_overlay,
 };
 
 static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(0);
 
 const APP_MANIFEST: &str =
     "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"entry\": \"index.ms\"\n}\n";
+
+fn diag_code(raw: u16) -> String {
+    format!("MS{raw:04}")
+}
 
 struct TempDir {
     path: PathBuf,
@@ -90,6 +101,33 @@ mod success {
     use super::*;
 
     #[test]
+    fn failed_artifact_write_removes_empty_created_parent() {
+        let temp = TempDir::new();
+        let target = temp.path().join("target/debug/out.seam");
+
+        let err = write_output(&target, |_| Err(io::Error::other("write failed")))
+            .expect_err("write should fail");
+
+        assert!(matches!(err, ToolingError::ToolingIoFailed { .. }));
+        assert!(!temp.path().join("target").exists());
+    }
+
+    #[test]
+    fn failed_artifact_write_keeps_existing_parent() {
+        let temp = TempDir::new();
+        let parent = temp.path().join("target");
+        fs::create_dir_all(&parent).expect("target dir should be created");
+
+        let err = write_output(&parent.join("out.seam"), |_| {
+            Err(io::Error::other("write failed"))
+        })
+        .expect_err("write should fail");
+
+        assert!(matches!(err, ToolingError::ToolingIoFailed { .. }));
+        assert!(parent.exists());
+    }
+
+    #[test]
     fn loads_direct_graph_with_relative_imports() {
         let temp = TempDir::new();
         write_file(
@@ -115,6 +153,199 @@ mod success {
             &ModuleKey::new(expected.display().to_string())
         );
         assert_eq!(texts.count(), 2);
+    }
+
+    #[test]
+    fn completions_include_current_terms_and_visible_bindings() {
+        let temp = TempDir::new();
+        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let source = r"let before := 1;
+let current := bef;
+";
+        write_file(temp.path(), "index.ms", source);
+
+        let completions = completions_for_project_file_with_overlay(
+            &temp.path().join("index.ms"),
+            Some(source),
+            2,
+            19,
+        );
+
+        assert!(completions.iter().any(|item| item.label == "before"));
+        assert!(completions.iter().any(|item| item.label == "let"));
+    }
+
+    #[test]
+    fn completions_replace_current_identifier_prefix() {
+        let temp = TempDir::new();
+        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let source = r"let before := 1;
+let current := bef;
+";
+        write_file(temp.path(), "index.ms", source);
+
+        let completions = completions_for_project_file_with_overlay(
+            &temp.path().join("index.ms"),
+            Some(source),
+            2,
+            19,
+        );
+        let before = completions
+            .iter()
+            .find(|item| item.label == "before")
+            .expect("before completion should exist");
+
+        assert_eq!(before.replace_range.start_line, 2);
+        assert_eq!(before.replace_range.start_col, 16);
+        assert_eq!(before.replace_range.end_line, 2);
+        assert_eq!(before.replace_range.end_col, 19);
+    }
+
+    #[test]
+    fn completions_after_dot_return_record_members_without_keywords() {
+        let temp = TempDir::new();
+        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let source = r"let point := { x := 1, y := 2 };
+point.
+";
+        write_file(temp.path(), "index.ms", source);
+
+        let completions = completions_for_project_file_with_overlay(
+            &temp.path().join("index.ms"),
+            Some(source),
+            2,
+            7,
+        );
+
+        assert!(completions.iter().any(|item| item.label == "x"));
+        assert!(completions.iter().any(|item| item.label == "y"));
+        assert!(!completions.iter().any(|item| item.label == "let"));
+    }
+
+    #[test]
+    fn completions_after_dot_filter_member_prefix() {
+        let temp = TempDir::new();
+        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let source = r"let span := 1 .. 4;
+span.lower
+";
+        write_file(temp.path(), "index.ms", source);
+
+        let completions = completions_for_project_file_with_overlay(
+            &temp.path().join("index.ms"),
+            Some(source),
+            2,
+            11,
+        );
+        let labels: Vec<_> = completions.iter().map(|item| item.label.as_str()).collect();
+
+        assert_eq!(labels, ["lowerBound"]);
+        assert_eq!(completions[0].replace_range.start_line, 2);
+        assert_eq!(completions[0].replace_range.start_col, 6);
+        assert_eq!(completions[0].replace_range.end_line, 2);
+        assert_eq!(completions[0].replace_range.end_col, 11);
+    }
+
+    #[test]
+    fn definition_resolves_local_binding_from_reference() {
+        let temp = TempDir::new();
+        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let source = "let before := 1;\nlet after := before;\n";
+        write_file(temp.path(), "index.ms", source);
+
+        let location = definition_for_project_file_with_overlay(
+            &temp.path().join("index.ms"),
+            Some(source),
+            2,
+            14,
+        )
+        .expect("definition should resolve");
+
+        assert_eq!(location.path, temp.path().join("index.ms"));
+        assert_eq!(location.range.start_line, 1);
+        assert_eq!(location.range.start_col, 5);
+        assert_eq!(location.range.end_col, 11);
+    }
+
+    #[test]
+    fn references_include_definition_when_requested() {
+        let temp = TempDir::new();
+        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let source = "let before := 1;\nlet after := before;\n";
+        write_file(temp.path(), "index.ms", source);
+
+        let references = references_for_project_file_with_overlay(
+            &temp.path().join("index.ms"),
+            Some(source),
+            2,
+            14,
+            true,
+        );
+
+        assert_eq!(references.len(), 2);
+        assert_eq!(references[0].range.start_line, 1);
+        assert_eq!(references[1].range.start_line, 2);
+    }
+
+    #[test]
+    fn rename_returns_workspace_edits_for_definition_and_references() {
+        let temp = TempDir::new();
+        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let source = "let before := 1;\nlet after := before;\n";
+        write_file(temp.path(), "index.ms", source);
+
+        let prepared = prepare_rename_for_project_file_with_overlay(
+            &temp.path().join("index.ms"),
+            Some(source),
+            2,
+            14,
+        )
+        .expect("rename should prepare");
+        let edit = rename_for_project_file_with_overlay(
+            &temp.path().join("index.ms"),
+            Some(source),
+            2,
+            14,
+            "renamed",
+        )
+        .expect("rename should produce edits");
+        let edits = edit
+            .changes
+            .get(&temp.path().join("index.ms"))
+            .expect("file edits should exist");
+
+        assert_eq!(prepared.1, "before");
+        assert_eq!(edits.len(), 2);
+        assert!(edits.iter().all(|edit| edit.new_text == "renamed"));
+    }
+
+    #[test]
+    fn document_and_workspace_symbols_include_local_defs() {
+        let temp = TempDir::new();
+        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let source = "let before := 1;\nlet after := before;\n";
+        write_file(temp.path(), "index.ms", source);
+
+        let document_symbols = document_symbols_for_project_file_with_overlay(
+            &temp.path().join("index.ms"),
+            Some(source),
+        );
+        let workspace_symbols = workspace_symbols_for_project_file_with_overlay(
+            &temp.path().join("index.ms"),
+            Some(source),
+            "bef",
+        );
+
+        assert!(
+            document_symbols
+                .iter()
+                .any(|symbol| symbol.name == "before")
+        );
+        assert!(
+            workspace_symbols
+                .iter()
+                .any(|symbol| symbol.name == "before")
+        );
     }
 
     #[test]
@@ -177,7 +408,7 @@ mod success {
     fn semantic_tokens_mark_law_names_as_functions() {
         let temp = TempDir::new();
         write_file(temp.path(), "musi.json", APP_MANIFEST);
-        let source = "let Eq[T] := class { law reflexive(value : T) := eq(value, value); };\n";
+        let source = "let Eq[T] := shape { law reflexive(value : T) := eq(value, value); };\n";
         write_file(temp.path(), "index.ms", source);
 
         let tokens = semantic_tokens_for_project_file_with_overlay(
@@ -193,7 +424,7 @@ mod success {
         assert!(!tokens.iter().any(|token| {
             token.kind == ToolSemanticTokenKind::Variable
                 && token.range.start_line == 1
-                && token.range.start_col == 26
+                && token.range.start_col == 31
         }));
     }
 
@@ -284,7 +515,7 @@ match value (| .Some(inner) => inner | .None => 0);
     fn hover_uses_member_facts_for_record_properties() {
         let temp = TempDir::new();
         write_file(temp.path(), "musi.json", APP_MANIFEST);
-        let source = "let record := { answer := 42 };\nrecord.answer;\n";
+        let source = "let record := { result := 42 };\nrecord.result;\n";
         write_file(temp.path(), "index.ms", source);
 
         let hover =
@@ -293,7 +524,7 @@ match value (| .Some(inner) => inner | .None => 0);
 
         assert_eq!(hover.range.start_line, 2);
         assert_eq!(hover.range.start_col, 8);
-        assert!(hover.contents.starts_with("```musi\n(property) answer : "));
+        assert!(hover.contents.starts_with("```musi\n(property) result : "));
     }
 
     #[test]
@@ -323,9 +554,9 @@ one.inc(2);
         write_file(
             temp.path(),
             "methods.ms",
-            "export let(self : String).length () : Int := 1;\n",
+            "export let(self : String).byteSize () : Int := 1;\n",
         );
-        let source = "import \"./methods.ms\";\n\"abc\".length();\n";
+        let source = "import \"./methods.ms\";\n\"abc\".byteSize();\n";
         write_file(temp.path(), "index.ms", source);
 
         let hover =
@@ -337,7 +568,7 @@ one.inc(2);
         assert!(
             hover
                 .contents
-                .starts_with("```musi\n(procedure) length : () -> Int\n```"),
+                .starts_with("```musi\n(procedure) byteSize : () -> Int\n```"),
             "{}",
             hover.contents
         );
@@ -349,8 +580,8 @@ one.inc(2);
         let temp = TempDir::new();
         write_file(temp.path(), "musi.json", APP_MANIFEST);
         let source = "\
-let record := { answer := 42 };
-record.answer;
+let record := { result := 42 };
+record.result;
 let inc (self : Int, by : Int) : Int := self + by;
 let one : Int := 1;
 one.inc(2);
@@ -520,7 +751,7 @@ let pointer := ptr.null[Int]();
         let temp = TempDir::new();
         let source = r#"
 let Intrinsics := import "musi:intrinsics";
-@known(name := "Type")
+@musi.known(name := "Type")
 export let Type := Type;
 "#;
         write_file(
@@ -534,8 +765,14 @@ export let Type := Type;
 
         assert!(
             diagnostics.iter().all(|diag| {
-                !diag.message.contains("`@known` requires `musi:*` module")
-                    && !diag.message.contains("unresolved import `musi:intrinsics`")
+                !diag
+                    .message
+                    .contains(SemaDiagKind::AttrKnownRequiresFoundationModule.message())
+                    && !diag.message.contains(
+                        ProjectDiagKind::SourceImportUnresolved
+                            .message_with(&DiagContext::new().with("spec", "musi:intrinsics"))
+                            .as_str(),
+                    )
             }),
             "{diagnostics:?}"
         );
@@ -549,20 +786,14 @@ let Core := import "musi:core";
 let Int := Core.Int;
 let String := Core.String;
 
-export opaque let Runtime := effect {
+export opaque let Env := effect {
   let envGet (name : String) : String;
   let envHas (name : String) : Int;
   let envSet (name : String, value : String) : Int;
 };
 "#;
-        write_file(
-            temp.path(),
-            "crates/musi_foundation/modules/runtime.ms",
-            source,
-        );
-        let path = temp
-            .path()
-            .join("crates/musi_foundation/modules/runtime.ms");
+        write_file(temp.path(), "crates/musi_foundation/modules/env.ms", source);
+        let path = temp.path().join("crates/musi_foundation/modules/env.ms");
 
         let tokens = semantic_tokens_for_project_file_with_overlay(&path, Some(source));
 
@@ -583,12 +814,12 @@ export opaque let Runtime := effect {
         }));
         assert!(tokens.iter().any(|token| {
             token.kind == ToolSemanticTokenKind::Parameter
-                && token.range.start_line == 8
+                && token.range.start_line == 7
                 && token.range.start_col == 15
         }));
         assert!(tokens.iter().any(|token| {
             token.kind == ToolSemanticTokenKind::Parameter
-                && token.range.start_line == 9
+                && token.range.start_line == 8
                 && token.range.start_col == 15
         }));
         assert!(tokens.iter().any(|token| {
@@ -598,7 +829,7 @@ export opaque let Runtime := effect {
         }));
         assert!(!tokens.iter().any(|token| {
             token.kind == ToolSemanticTokenKind::Type
-                && matches!(token.range.start_line, 8 | 9)
+                && matches!(token.range.start_line, 7..=9)
                 && matches!(token.range.start_col, 15 | 30)
         }));
     }
@@ -610,40 +841,35 @@ export opaque let Runtime := effect {
 let Core := import \"musi:core\";
 let Int := Core.Int;
 let String := Core.String;
+let Float := Core.Float;
 let Unit := Core.Unit;
 
-export opaque let Runtime := effect {
-  let randomBool () : Int;
-  let randomFloat01 () : Float;
+export opaque let Env := effect {
+  let bool () : Int;
+  let float01 () : Float;
 };
 
-export let randomFloat01 () : Float := request Runtime.randomFloat01();
+export let float01 () : Float := ask Env.float01();
 ";
-        write_file(
-            temp.path(),
-            "crates/musi_foundation/modules/runtime.ms",
-            source,
-        );
-        let path = temp
-            .path()
-            .join("crates/musi_foundation/modules/runtime.ms");
+        write_file(temp.path(), "crates/musi_foundation/modules/env.ms", source);
+        let path = temp.path().join("crates/musi_foundation/modules/env.ms");
 
         let tokens = semantic_tokens_for_project_file_with_overlay(&path, Some(source));
 
         assert!(tokens.iter().any(|token| {
             token.kind == ToolSemanticTokenKind::Type
-                && token.range.start_line == 8
-                && token.range.start_col == 26
+                && token.range.start_line == 9
+                && token.range.start_col == 20
         }));
         assert!(tokens.iter().any(|token| {
             token.kind == ToolSemanticTokenKind::Type
-                && token.range.start_line == 11
-                && token.range.start_col == 31
+                && token.range.start_line == 12
+                && token.range.start_col == 25
         }));
         assert!(!tokens.iter().any(|token| {
             token.kind == ToolSemanticTokenKind::Variable
-                && matches!(token.range.start_line, 8 | 11)
-                && matches!(token.range.start_col, 26 | 31)
+                && matches!(token.range.start_line, 9 | 12)
+                && matches!(token.range.start_col, 20 | 25)
         }));
     }
 
@@ -652,9 +878,9 @@ export let randomFloat01 () : Float := request Runtime.randomFloat01();
         let temp = TempDir::new();
         let source = "\
 let Intrinsics := import \"musi:intrinsics\";
-@known(name := \"Type\")
+@musi.known(name := \"Type\")
 export let Type := Type;
-@known(name := \"Float\")
+@musi.known(name := \"Float\")
 export let Float := Float;
 ";
         write_file(
@@ -688,7 +914,7 @@ export let Float := Float;
         let temp = TempDir::new();
         let source = "\
 let Intrinsics := import \"musi:intrinsics\";
-@known(name := \"Type\")
+@musi.known(name := \"Type\")
 export let Type := Type;
 ";
         write_file(
@@ -715,21 +941,16 @@ export let Type := Type;
 let Core := import \"musi:core\";
 let Int := Core.Int;
 let String := Core.String;
+let Float := Core.Float;
 
-export opaque let Runtime := effect {
-  let randomFloat01 () : Float;
+export opaque let Env := effect {
+  let float01 () : Float;
 };
 ";
-        write_file(
-            temp.path(),
-            "crates/musi_foundation/modules/runtime.ms",
-            source,
-        );
-        let path = temp
-            .path()
-            .join("crates/musi_foundation/modules/runtime.ms");
+        write_file(temp.path(), "crates/musi_foundation/modules/env.ms", source);
+        let path = temp.path().join("crates/musi_foundation/modules/env.ms");
 
-        let hover = hover_for_project_file_with_overlay(&path, Some(source), 6, 26)
+        let hover = hover_for_project_file_with_overlay(&path, Some(source), 7, 20)
             .expect("return annotation should hover");
 
         assert!(
@@ -851,7 +1072,7 @@ mod failure {
             "missing;",
             "resolve",
             "unbound name `missing`",
-            "unbound name `missing`",
+            "name `missing` unresolved in this scope",
             None,
         );
     }
@@ -859,11 +1080,11 @@ mod failure {
     #[test]
     fn session_error_report_carries_sema_hint() {
         assert_session_error_report(
-            "let x := 1; request x;",
+            "let x := 1; ask x;",
             "sema",
-            "request target expected effect operation call",
-            "request target must be effect operation call",
-            Some("write `request Effect.op(...)`"),
+            SemaDiagKind::InvalidRequestTarget.message(),
+            SemaDiagKind::InvalidRequestTarget.label(),
+            Some("write `ask Effect.op(...)`"),
         );
     }
 
@@ -876,19 +1097,22 @@ mod failure {
         let report = tooling_error_report("music", "check", None, None, &error);
 
         assert_eq!(report.diagnostics[0].phase, "tooling");
-        assert_eq!(report.diagnostics[0].code.as_deref(), Some("MS5101"));
+        let code = diag_code(ToolingDiagKind::PackageImportRequiresMusi.code().raw());
+        assert_eq!(report.diagnostics[0].code.as_deref(), Some(code.as_str()));
     }
 
     #[test]
     fn project_error_report_carries_typed_code() {
+        let validation_message = ProjectDiagKind::ManifestPackageNameMissing.message();
         let error = ProjectError::ManifestValidationFailed {
-            message: "name is required".into(),
+            message: validation_message.into(),
         };
 
         let report = project_error_report("musi", "check", None, None, &error);
 
         assert_eq!(report.diagnostics[0].phase, "project");
-        assert_eq!(report.diagnostics[0].code.as_deref(), Some("MS5006"));
+        let code = diag_code(ProjectDiagKind::ManifestValidationFailed.code().raw());
+        assert_eq!(report.diagnostics[0].code.as_deref(), Some(code.as_str()));
     }
 
     #[test]
@@ -908,10 +1132,13 @@ mod failure {
         let report = project_error_report("musi", "check", None, None, &error);
 
         assert_eq!(report.diagnostics[0].phase, "project");
-        assert_eq!(report.diagnostics[0].code.as_deref(), Some("MS3606"));
+        let kind = ProjectDiagKind::ManifestExportKeyInvalid;
+        let context = DiagContext::new().with("key", "bad");
+        let code = diag_code(kind.code().raw());
+        assert_eq!(report.diagnostics[0].code.as_deref(), Some(code.as_str()));
         assert!(report.diagnostics[0].file.is_some());
         assert!(report.diagnostics[0].range.is_some());
-        assert_eq!(report.diagnostics[0].message, "invalid export key `bad`");
+        assert_eq!(report.diagnostics[0].message, kind.message_with(&context));
     }
 
     #[test]
@@ -921,20 +1148,23 @@ mod failure {
         write_file(
             temp.path(),
             "index.ms",
-            "let Missing := import \"missing\";\nexport let answer : Int := 42;\n",
+            "let Missing := import \"missing\";\nexport let result : Int := 42;\n",
         );
 
         let error = load_project_error(temp.path());
         let report = project_error_report("musi", "check", None, None, &error);
 
         assert_eq!(report.diagnostics[0].phase, "project");
-        assert_eq!(report.diagnostics[0].code.as_deref(), Some("MS3615"));
-        assert_eq!(report.diagnostics[0].message, "unresolved import `missing`");
+        let kind = ProjectDiagKind::SourceImportUnresolved;
+        let context = DiagContext::new().with("spec", "missing");
+        let code = diag_code(kind.code().raw());
+        assert_eq!(report.diagnostics[0].code.as_deref(), Some(code.as_str()));
+        assert_eq!(report.diagnostics[0].message, kind.message_with(&context));
         assert!(report.diagnostics[0].file.is_some());
         assert!(report.diagnostics[0].range.is_some());
         assert_eq!(
             report.diagnostics[0].labels[0].message,
-            "import `missing` does not resolve"
+            kind.label_with(&context)
         );
     }
 }

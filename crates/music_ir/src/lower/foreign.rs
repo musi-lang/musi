@@ -9,8 +9,8 @@ pub(super) fn lower_foreign_let(
     exported: bool,
 ) -> IrForeignDef {
     let expr = sema.module().store.exprs.get(expr_id);
-    if expr.mods.foreign.is_none() {
-        invalid_lowering_path("foreign let without foreign modifier");
+    if expr.mods.native.is_none() {
+        lowering_invariant_violation("native let without native modifier");
     }
 
     let name_text: Box<str> = interner.resolve(name.name).into();
@@ -27,7 +27,7 @@ pub(super) fn lower_foreign_let(
     }
     let abi = expr
         .mods
-        .foreign
+        .native
         .as_ref()
         .and_then(|foreign| foreign.abi)
         .map_or("c", |sym| interner.resolve(sym));
@@ -80,7 +80,7 @@ fn foreign_signature_tys(
 
     let expr_ty = sema
         .try_expr_ty(expr_id)
-        .unwrap_or_else(|| invalid_lowering_path("foreign expr type missing"));
+        .unwrap_or_else(|| lowering_invariant_violation("native expr type missing"));
     match &sema.ty(expr_ty).kind {
         HirTyKind::Arrow { params, ret, .. } => (
             sema.module()
@@ -94,6 +94,6 @@ fn foreign_signature_tys(
                 .into_boxed_slice(),
             render_ty_name(sema, *ret, interner),
         ),
-        other => invalid_lowering_path(format!("foreign let without arrow type: {other:?}")),
+        other => lowering_invariant_violation(format!("native let without arrow type: {other:?}")),
     }
 }

@@ -23,6 +23,40 @@ mod success {
     }
 
     #[test]
+    fn import_block_collects_each_static_site() {
+        let src = r#"
+        import (
+          "std/io";
+          "std/cmp";
+        );
+    "#;
+        let lexed = Lexer::new(src).lex();
+        let parsed = parse(lexed);
+        assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+        let sites = collect_import_sites(SourceId::from_raw(0), parsed.tree());
+        assert_eq!(sites.len(), 2);
+        assert!(matches!(sites[0].kind, ImportSiteKind::Static { .. }));
+        assert!(matches!(sites[1].kind, ImportSiteKind::Static { .. }));
+    }
+
+    #[test]
+    fn export_block_collects_binding_names() {
+        let src = r"
+        export (
+          let x := 1;
+          let y := 2;
+        );
+    ";
+        let lexed = Lexer::new(src).lex();
+        let parsed = parse(lexed);
+        assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+        let summary = collect_export_summary(SourceId::from_raw(0), parsed.tree());
+        let exports: Vec<&str> = summary.exports().collect();
+        assert!(exports.contains(&"x"));
+        assert!(exports.contains(&"y"));
+    }
+
+    #[test]
     fn collects_static_template_import_site() {
         let src = r"
         let IO := import `std/io`;
@@ -95,7 +129,7 @@ mod success {
     #[test]
     fn export_foreign_group_collects_binding_names() {
         let src = r#"
-        export foreign "c" (
+        export native "c" (
           let puts (msg : CString) : Int;
           let gets (buf : CString) : Int;
         );
@@ -110,23 +144,23 @@ mod success {
     }
 
     #[test]
-    fn export_instance_is_tracked_separately() {
+    fn export_given_is_tracked_separately() {
         let src = r"
-        export instance Eq[Int] { };
+        export given Eq[Int] { };
     ";
         let lexed = Lexer::new(src).lex();
         let parsed = parse(lexed);
         assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
         let summary = collect_export_summary(SourceId::from_raw(0), parsed.tree());
-        assert_eq!(summary.exported_instance_count(), 1);
-        assert_eq!(summary.exported_instances().count(), 1);
+        assert_eq!(summary.exported_given_count(), 1);
+        assert_eq!(summary.exported_givens().count(), 1);
     }
 
     #[test]
     fn opaque_export_marking_is_order_independent() {
         let src = r#"
         export let x := 1;
-        export foreign "c" (
+        export native "c" (
           let x (msg : CString) : Int;
           let y (msg : CString) : Int;
         );

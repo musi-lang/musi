@@ -1,4 +1,5 @@
 use music_arena::SliceRange;
+use music_base::diag::DiagContext;
 use music_hir::{
     HirBinaryOp, HirExprId, HirExprKind, HirOrigin, HirPartialRangeKind, HirTyId, HirTyKind,
 };
@@ -27,14 +28,8 @@ impl CheckPass<'_, '_, '_> {
         let right_facts = super::check_expr(self, right);
         let mut effects = left_facts.effects.clone();
         effects.union_with(&right_facts.effects);
-        if matches!(op, HirBinaryOp::ClosedRange | HirBinaryOp::OpenRange) {
-            return self.check_range_binary_expr(
-                origin,
-                op,
-                left_facts.ty,
-                right_facts.ty,
-                effects,
-            );
+        if matches!(op, HirBinaryOp::Range { .. }) {
+            return self.check_range_binary_expr(origin, left_facts.ty, right_facts.ty, effects);
         }
         if matches!(op, HirBinaryOp::In) {
             return self.check_in_binary_expr(
@@ -47,12 +42,7 @@ impl CheckPass<'_, '_, '_> {
         }
         if matches!(
             op,
-            HirBinaryOp::Or
-                | HirBinaryOp::Xor
-                | HirBinaryOp::And
-                | HirBinaryOp::Shl
-                | HirBinaryOp::Shr
-                | HirBinaryOp::UserOp(_)
+            HirBinaryOp::Shl | HirBinaryOp::Shr | HirBinaryOp::UserOp(_)
         ) {
             self.diag(
                 origin.span,
@@ -71,7 +61,7 @@ impl CheckPass<'_, '_, '_> {
         &mut self,
         expr_id: HirExprId,
         origin: HirOrigin,
-        kind: HirPartialRangeKind,
+        _kind: HirPartialRangeKind,
         expr: HirExprId,
     ) -> ExprFacts {
         let facts = super::check_expr(self, expr);
@@ -80,16 +70,12 @@ impl CheckPass<'_, '_, '_> {
             self.range_obligation(bound, self.known().rangeable),
             self.range_obligation(bound, self.known().range_bounds),
         ];
-        if let Some(evidence) = self.resolve_obligations_to_evidence(origin, &obligations)
-            && !evidence.is_empty()
+        if let Some(answers) = self.resolve_obligations_to_answers(origin, &obligations)
+            && !answers.is_empty()
         {
-            self.set_expr_evidence(expr_id, evidence);
+            self.set_expr_constraint_answers(expr_id, answers);
         }
-        let ty = match kind {
-            HirPartialRangeKind::From => self.alloc_ty(HirTyKind::PartialRangeFrom { bound }),
-            HirPartialRangeKind::UpTo => self.alloc_ty(HirTyKind::PartialRangeUpTo { bound }),
-            HirPartialRangeKind::Thru => self.alloc_ty(HirTyKind::PartialRangeThru { bound }),
-        };
+        let ty = self.alloc_ty(HirTyKind::Range { bound });
         ExprFacts::new(ty, facts.effects)
     }
 
@@ -133,7 +119,12 @@ impl CheckPass<'_, '_, '_> {
                 self.assignment_field_contract(origin, base, name)
             }
             _ => {
-                self.diag(origin.span, DiagKind::UnsupportedAssignmentTarget, "");
+                let target = self.expr_subject(left);
+                self.diag_with(
+                    origin.span,
+                    DiagKind::UnsupportedAssignmentTarget,
+                    DiagContext::new().with("target", target),
+                );
                 (builtins.unknown, EffectRow::empty())
             }
         }
@@ -153,10 +144,12 @@ impl CheckPass<'_, '_, '_> {
             HirTyKind::Array { dims, item } if self.is_mut_ty(base_facts.ty) => {
                 let dims = self.dims(dims);
                 if !dims.is_empty() && dims.len() != arg_count {
-                    self.diag(
+                    self.diag_with(
                         origin.span,
                         DiagKind::InvalidIndexArgCount,
-                        "index arg count does not match array dimensions",
+                        DiagContext::new()
+                            .with("expected", dims.len())
+                            .with("found", arg_count),
                     );
                 }
                 item
@@ -171,10 +164,12 @@ impl CheckPass<'_, '_, '_> {
             }
             HirTyKind::Seq { item } => {
                 if arg_count != 1 {
-                    self.diag(
+                    self.diag_with(
                         origin.span,
                         DiagKind::InvalidIndexArgCount,
-                        "index expression requires exactly one argument here",
+                        DiagContext::new()
+                            .with("expected", 1)
+                            .with("found", arg_count),
                     );
                 }
                 if self.is_mut_ty(base_facts.ty) {
@@ -189,7 +184,12 @@ impl CheckPass<'_, '_, '_> {
                 }
             }
             _ => {
-                self.diag(origin.span, DiagKind::InvalidIndexTarget, "");
+                let target = self.render_ty(base_facts.ty);
+                self.diag_with(
+                    origin.span,
+                    DiagKind::InvalidIndexTarget,
+                    DiagContext::new().with("target", target),
+                );
                 builtins.unknown
             }
         };
@@ -213,11 +213,10 @@ impl CheckPass<'_, '_, '_> {
                 .map_or_else(
                     || {
                         let field_name = self.resolve_symbol(name.name).to_owned();
-                        self.diag_message(
+                        self.diag_with(
                             origin.span,
                             DiagKind::UnknownField,
-                            format!("unknown field `{field_name}`"),
-                            format!("unknown field `{field_name}`"),
+                            DiagContext::new().with("field", field_name),
                         );
                         builtins.unknown
                     },
@@ -232,10 +231,11 @@ impl CheckPass<'_, '_, '_> {
                 builtins.unknown
             }
             _ => {
-                self.diag(
+                let target = self.render_ty(base_facts.ty);
+                self.diag_with(
                     origin.span,
                     DiagKind::InvalidFieldTarget,
-                    "field update target must support field assignment",
+                    DiagContext::new().with("target", target),
                 );
                 builtins.unknown
             }
@@ -246,17 +246,12 @@ impl CheckPass<'_, '_, '_> {
     fn check_range_binary_expr(
         &mut self,
         origin: HirOrigin,
-        op: &HirBinaryOp,
         left: HirTyId,
         right: HirTyId,
         effects: EffectRow,
     ) -> ExprFacts {
         let item_ty = self.range_item_ty(origin, left, right);
-        let ty = match op {
-            HirBinaryOp::OpenRange => self.alloc_ty(HirTyKind::Range { bound: item_ty }),
-            HirBinaryOp::ClosedRange => self.alloc_ty(HirTyKind::ClosedRange { bound: item_ty }),
-            _ => self.builtins().unknown,
-        };
+        let ty = self.alloc_ty(HirTyKind::Range { bound: item_ty });
         ExprFacts::new(ty, effects)
     }
 
@@ -276,10 +271,10 @@ impl CheckPass<'_, '_, '_> {
         };
         self.type_mismatch(origin, item_ty, left);
         let obligation = self.range_obligation(item_ty, self.known().rangeable);
-        if let Some(evidence) = self.resolve_obligations_to_evidence(origin, &[obligation])
-            && !evidence.is_empty()
+        if let Some(answers) = self.resolve_obligations_to_answers(origin, &[obligation])
+            && !answers.is_empty()
         {
-            self.set_expr_evidence(expr_id, evidence);
+            self.set_expr_constraint_answers(expr_id, answers);
         }
         ExprFacts::new(builtins.bool_, effects)
     }
@@ -333,6 +328,9 @@ impl CheckPass<'_, '_, '_> {
             | HirBinaryOp::Mul
             | HirBinaryOp::Div
             | HirBinaryOp::Rem => self.numeric_binary_type(origin, left_ty, right_ty),
+            HirBinaryOp::Or | HirBinaryOp::Xor | HirBinaryOp::And => {
+                self.logical_binary_type(origin, op, left_ty, right_ty)
+            }
             HirBinaryOp::Eq
             | HirBinaryOp::TypeEq
             | HirBinaryOp::Ne
@@ -341,15 +339,59 @@ impl CheckPass<'_, '_, '_> {
             | HirBinaryOp::Le
             | HirBinaryOp::Ge => builtins.bool_,
             HirBinaryOp::Assign
-            | HirBinaryOp::Or
-            | HirBinaryOp::Xor
-            | HirBinaryOp::And
-            | HirBinaryOp::ClosedRange
-            | HirBinaryOp::OpenRange
+            | HirBinaryOp::Range { .. }
             | HirBinaryOp::In
             | HirBinaryOp::Shl
             | HirBinaryOp::Shr
             | HirBinaryOp::UserOp(_) => builtins.unknown,
+        }
+    }
+
+    fn logical_binary_type(
+        &mut self,
+        origin: HirOrigin,
+        op: &HirBinaryOp,
+        left_ty: HirTyId,
+        right_ty: HirTyId,
+    ) -> HirTyId {
+        let builtins = self.builtins();
+        if self.ty_matches(builtins.bool_, left_ty) && self.ty_matches(builtins.bool_, right_ty) {
+            return builtins.bool_;
+        }
+        if self.matching_bits_tys(left_ty, right_ty) {
+            return left_ty;
+        }
+        let left = self.render_ty(left_ty);
+        let right = self.render_ty(right_ty);
+        self.diag_with(
+            origin.span,
+            DiagKind::LogicalOperatorDomainMismatch,
+            DiagContext::new()
+                .with("operator", logical_operator_name(op))
+                .with("left", left)
+                .with("right", right),
+        );
+        builtins.unknown
+    }
+
+    fn matching_bits_tys(&self, left_ty: HirTyId, right_ty: HirTyId) -> bool {
+        match (self.ty(left_ty).kind, self.ty(right_ty).kind) {
+            (HirTyKind::Bits { width: left }, HirTyKind::Bits { width: right }) => left == right,
+            (
+                HirTyKind::Named {
+                    name: left_name,
+                    args: left_args,
+                },
+                HirTyKind::Named {
+                    name: right_name,
+                    args: right_args,
+                },
+            ) if left_name == self.known().bits && right_name == self.known().bits => {
+                self.ty_ids(left_args).len() == 1
+                    && self.ty_ids(right_args).len() == 1
+                    && self.ty_matches(left_ty, right_ty)
+            }
+            _ => false,
         }
     }
 
@@ -383,11 +425,7 @@ impl CheckPass<'_, '_, '_> {
 
     pub(super) fn range_item_type(&self, ty: HirTyId) -> Option<HirTyId> {
         match self.ty(peel_mut_ty(self, ty)).kind {
-            HirTyKind::Range { bound }
-            | HirTyKind::ClosedRange { bound }
-            | HirTyKind::PartialRangeFrom { bound }
-            | HirTyKind::PartialRangeUpTo { bound }
-            | HirTyKind::PartialRangeThru { bound } => Some(bound),
+            HirTyKind::Range { bound } => Some(bound),
             _ => None,
         }
     }
@@ -395,16 +433,25 @@ impl CheckPass<'_, '_, '_> {
     pub(super) fn range_obligation(
         &mut self,
         subject: HirTyId,
-        class_name: Symbol,
+        shape_name: Symbol,
     ) -> super::super::schemes::ConstraintObligation {
-        let class_ty = self.named_type_for_symbol(class_name);
+        let shape_ty = self.named_type_for_symbol(shape_name);
         super::super::schemes::ConstraintObligation {
             kind: ConstraintKind::Implements,
             subject,
-            value: class_ty,
-            class_key: self
-                .class_facts_by_name(class_name)
+            value: shape_ty,
+            shape_key: self
+                .shape_facts_by_name(shape_name)
                 .map(|facts| facts.key.clone()),
         }
+    }
+}
+
+const fn logical_operator_name(op: &HirBinaryOp) -> &'static str {
+    match op {
+        HirBinaryOp::Or => "or",
+        HirBinaryOp::Xor => "xor",
+        HirBinaryOp::And => "and",
+        _ => "<operator>",
     }
 }

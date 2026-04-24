@@ -5,8 +5,7 @@ mod graph;
 mod laws;
 mod store;
 
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use musi_vm::VmHost;
 #[cfg(test)]
@@ -25,7 +24,7 @@ pub struct Session {
     store: SessionStore,
     graph: SessionGraph,
     stats: SessionStats,
-    ctfe_host: Option<Rc<RefCell<Box<dyn VmHost>>>>,
+    ctfe_host: Option<Arc<Mutex<Box<dyn VmHost>>>>,
     #[cfg(test)]
     test_hooks: SessionTestHooks,
 }
@@ -53,7 +52,7 @@ impl Session {
     }
 
     pub fn set_ctfe_host(&mut self, host: impl VmHost + 'static) {
-        self.ctfe_host = Some(Rc::new(RefCell::new(Box::new(host))));
+        self.ctfe_host = Some(Arc::new(Mutex::new(Box::new(host))));
     }
 
     #[must_use]

@@ -1,5 +1,6 @@
 use super::super::*;
 use crate::EmitDiagKind;
+use music_base::diag::DiagContext;
 
 impl ProcedureEmitter<'_, '_> {
     pub(super) fn compile_perform(
@@ -20,22 +21,21 @@ impl ProcedureEmitter<'_, '_> {
                 },
                 |expr| expr.origin,
             );
-            super::support::push_expr_diag(
+            super::support::push_expr_diag_with(
                 diags,
                 self.module_key,
                 &origin,
                 EmitDiagKind::UnknownEffect,
-                format!(
-                    "unknown emitted effect `{}::{}`",
-                    effect_key.module.as_str(),
-                    effect_key.name
+                DiagContext::new().with(
+                    "effect",
+                    format!("{}::{}", effect_key.module.as_str(), effect_key.name),
                 ),
             );
             emit_zero(self);
             return;
         };
         self.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::EffInvk,
+            Opcode::Raise,
             Operand::Effect {
                 effect,
                 op: op_index,
@@ -46,22 +46,21 @@ impl ProcedureEmitter<'_, '_> {
     pub(super) fn compile_handle(
         &mut self,
         effect_key: &DefinitionKey,
-        handler: &IrExpr,
+        answer: &IrExpr,
         body: &IrExpr,
         diags: &mut EmitDiagList,
     ) {
-        self.compile_expr(handler, true, diags);
+        self.compile_expr(answer, true, diags);
 
         let Some(effect) = self.layout.effects.get(effect_key).copied() else {
-            super::support::push_expr_diag(
+            super::support::push_expr_diag_with(
                 diags,
                 self.module_key,
                 &body.origin,
                 EmitDiagKind::UnknownEffect,
-                format!(
-                    "unknown emitted effect `{}::{}`",
-                    effect_key.module.as_str(),
-                    effect_key.name
+                DiagContext::new().with(
+                    "effect",
+                    format!("{}::{}", effect_key.module.as_str(), effect_key.name),
                 ),
             );
             emit_zero(self);
@@ -80,7 +79,7 @@ impl ProcedureEmitter<'_, '_> {
         )));
     }
 
-    pub(super) fn compile_handler_lit(
+    pub(super) fn compile_answer_lit(
         &mut self,
         effect_key: &DefinitionKey,
         value: &IrExpr,
@@ -93,14 +92,14 @@ impl ProcedureEmitter<'_, '_> {
             self.compile_expr(&op.closure, true, diags);
         }
 
-        let handler_ty_name = handler_type_name(effect_key);
-        let Some(handler_ty) = self.layout.types.get(handler_ty_name.as_ref()).copied() else {
-            super::support::push_expr_diag(
+        let answer_ty_name = answer_type_name(effect_key);
+        let Some(answer_ty) = self.layout.types.get(answer_ty_name.as_ref()).copied() else {
+            super::support::push_expr_diag_with(
                 diags,
                 self.module_key,
                 origin,
                 EmitDiagKind::UnknownHandlerType,
-                format!("unknown emitted handler type `{handler_ty_name}`"),
+                DiagContext::new().with("type", answer_ty_name),
             );
             emit_zero(self);
             return;
@@ -108,9 +107,9 @@ impl ProcedureEmitter<'_, '_> {
         let field_count = u16::try_from(ops.len().saturating_add(1)).unwrap_or(u16::MAX);
         self.compile_i64(0);
         self.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::DataNew,
+            Opcode::NewObj,
             Operand::TypeLen {
-                ty: handler_ty,
+                ty: answer_ty,
                 len: field_count,
             },
         )));
@@ -123,7 +122,7 @@ impl ProcedureEmitter<'_, '_> {
             emit_zero(self);
         }
         self.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::EffResume,
+            Opcode::Resume,
             Operand::None,
         )));
     }
@@ -137,7 +136,7 @@ impl ProcedureEmitter<'_, '_> {
     ) {
         self.compile_seq_parts_any(args, diags);
         let Some(effect) = self.layout.effects.get(effect_key).copied() else {
-            super::support::push_expr_diag(
+            super::support::push_expr_diag_with(
                 diags,
                 self.module_key,
                 &IrOrigin {
@@ -145,20 +144,19 @@ impl ProcedureEmitter<'_, '_> {
                     span: Span::new(0, 0),
                 },
                 EmitDiagKind::UnknownEffect,
-                format!(
-                    "unknown emitted effect `{}::{}`",
-                    effect_key.module.as_str(),
-                    effect_key.name
+                DiagContext::new().with(
+                    "effect",
+                    format!("{}::{}", effect_key.module.as_str(), effect_key.name),
                 ),
             );
             emit_zero(self);
             return;
         };
         self.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::EffInvkSeq,
+            Opcode::Raise,
             Operand::Effect {
                 effect,
-                op: op_index,
+                op: op_index | 0x8000,
             },
         )));
     }

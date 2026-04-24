@@ -1,5 +1,6 @@
 use super::super::*;
 use crate::EmitDiagKind;
+use music_base::diag::DiagContext;
 
 impl ProcedureEmitter<'_, '_> {
     pub(super) fn compile_binary(
@@ -12,37 +13,93 @@ impl ProcedureEmitter<'_, '_> {
         self.compile_expr(left, true, diags);
         self.compile_expr(right, true, diags);
         let opcode = match op {
-            IrBinaryOp::IAdd => Opcode::IAdd,
-            IrBinaryOp::ISub => Opcode::ISub,
-            IrBinaryOp::IMul => Opcode::IMul,
-            IrBinaryOp::IDiv => Opcode::IDiv,
-            IrBinaryOp::IRem => Opcode::IRem,
-            IrBinaryOp::FAdd => Opcode::FAdd,
-            IrBinaryOp::FSub => Opcode::FSub,
-            IrBinaryOp::FMul => Opcode::FMul,
-            IrBinaryOp::FDiv => Opcode::FDiv,
-            IrBinaryOp::FRem => Opcode::FRem,
-            IrBinaryOp::StrCat => Opcode::StrCat,
-            IrBinaryOp::Eq => Opcode::CmpEq,
-            IrBinaryOp::Ne => Opcode::CmpNe,
-            IrBinaryOp::Lt => Opcode::CmpLt,
-            IrBinaryOp::Gt => Opcode::CmpGt,
-            IrBinaryOp::Le => Opcode::CmpLe,
-            IrBinaryOp::Ge => Opcode::CmpGe,
+            IrBinaryOp::IAdd | IrBinaryOp::FAdd => Opcode::Add,
+            IrBinaryOp::ISub | IrBinaryOp::FSub => Opcode::Sub,
+            IrBinaryOp::IMul | IrBinaryOp::FMul => Opcode::Mul,
+            IrBinaryOp::IDiv | IrBinaryOp::FDiv => Opcode::DivS,
+            IrBinaryOp::IRem | IrBinaryOp::FRem => Opcode::RemS,
+            IrBinaryOp::StrCat => Opcode::CallInd,
+            IrBinaryOp::Eq => Opcode::Ceq,
+            IrBinaryOp::Ne => Opcode::Cne,
+            IrBinaryOp::Lt => Opcode::CltS,
+            IrBinaryOp::Gt => Opcode::CgtS,
+            IrBinaryOp::Le => Opcode::CleS,
+            IrBinaryOp::Ge => Opcode::CgeS,
+            IrBinaryOp::LogicalXor | IrBinaryOp::BitsXor => Opcode::Xor,
+            IrBinaryOp::BitsAnd => Opcode::And,
+            IrBinaryOp::BitsOr => Opcode::Or,
             IrBinaryOp::Other(name) => {
-                super::support::push_expr_diag(
+                super::support::push_expr_diag_with(
                     diags,
                     self.module_key,
                     &left.origin,
                     EmitDiagKind::UnsupportedBinaryOperator,
-                    format!("unsupported binary operator `{name}`"),
+                    DiagContext::new().with("operator", name),
                 );
-                Opcode::CmpEq
+                Opcode::Ceq
             }
         };
         self.code.push(CodeEntry::Instruction(Instruction::new(
             opcode,
             Operand::None,
+        )));
+    }
+
+    pub(super) fn compile_bool_and(
+        &mut self,
+        left: &IrExpr,
+        right: &IrExpr,
+        diags: &mut EmitDiagList,
+    ) {
+        self.compile_bool_short_circuit(left, right, false, diags);
+    }
+
+    pub(super) fn compile_bool_or(
+        &mut self,
+        left: &IrExpr,
+        right: &IrExpr,
+        diags: &mut EmitDiagList,
+    ) {
+        self.compile_bool_short_circuit(left, right, true, diags);
+    }
+
+    fn compile_bool_short_circuit(
+        &mut self,
+        left: &IrExpr,
+        right: &IrExpr,
+        invert_branch_condition: bool,
+        diags: &mut EmitDiagList,
+    ) {
+        let slot = Self::reserve_temp_slot(self);
+        let end_label = self.alloc_label();
+        self.compile_expr(left, true, diags);
+        self.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::StLoc,
+            Operand::Local(slot),
+        )));
+        self.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::LdLoc,
+            Operand::Local(slot),
+        )));
+        if invert_branch_condition {
+            self.code.push(CodeEntry::Instruction(Instruction::new(
+                Opcode::Not,
+                Operand::None,
+            )));
+        }
+        self.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::BrFalse,
+            Operand::Label(end_label),
+        )));
+        self.compile_expr(right, true, diags);
+        self.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::StLoc,
+            Operand::Local(slot),
+        )));
+        self.code.push(CodeEntry::Label(Label { id: end_label }));
+        self.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::LdLoc,
+            Operand::Local(slot),
         )));
     }
 
@@ -172,12 +229,12 @@ impl ProcedureEmitter<'_, '_> {
                 info.data_key != first.data_key || info.variant_count != first.variant_count
             })
         {
-            super::support::push_expr_diag(
+            super::support::push_expr_diag_with(
                 diags,
                 self.module_key,
                 &origin,
                 EmitDiagKind::CaseVariantDispatchRequiresSingleDataType,
-                "case variant dispatch requires single data type",
+                DiagContext::new(),
             );
             emit_zero(self);
             return;
@@ -302,7 +359,7 @@ impl ProcedureEmitter<'_, '_> {
             Operand::Local(scrutinee_slot),
         )));
         self.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::DataTag,
+            Opcode::LdFld,
             Operand::Type(data_ty),
         )));
         self.code.push(CodeEntry::Instruction(Instruction::new(
@@ -506,7 +563,7 @@ impl ProcedureEmitter<'_, '_> {
             diags,
         );
         self.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::CmpEq,
+            Opcode::Ceq,
             Operand::None,
         )));
         self.code.push(CodeEntry::Instruction(Instruction::new(
@@ -575,19 +632,19 @@ impl ProcedureEmitter<'_, '_> {
             Operand::Local(scrutinee_slot),
         )));
         self.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::SeqLen,
+            Opcode::LdLen,
             Operand::None,
         )));
         self.compile_i64(i64::try_from(items.len()).unwrap_or(i64::MAX));
         self.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::CmpEq,
+            Opcode::Ceq,
             Operand::None,
         )));
         self.code.push(CodeEntry::Instruction(Instruction::new(
             Opcode::BrFalse,
             Operand::Label(next_label),
         )));
-        self.compile_projected_patterns(scrutinee_slot, items, Opcode::SeqGet, next_label, diags)
+        self.compile_projected_patterns(scrutinee_slot, items, Opcode::LdElem, next_label, diags)
     }
 }
 
@@ -636,7 +693,7 @@ impl ProcedureEmitter<'_, '_> {
         )));
         self.compile_i64(i64::from(index));
         self.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::DataGet,
+            Opcode::LdFld,
             Operand::None,
         )));
         let item_slot = Self::reserve_temp_slot(self);
@@ -657,13 +714,8 @@ impl ProcedureEmitter<'_, '_> {
         next_label: u16,
         diags: &mut EmitDiagList,
     ) -> bool {
-        if !self.compile_projected_patterns(
-            scrutinee_slot,
-            args,
-            Opcode::DataGet,
-            next_label,
-            diags,
-        ) {
+        if !self.compile_projected_patterns(scrutinee_slot, args, Opcode::LdFld, next_label, diags)
+        {
             return false;
         }
         if let Some((binding, _name)) = as_binding {
@@ -686,12 +738,12 @@ impl ProcedureEmitter<'_, '_> {
             Operand::Local(scrutinee_slot),
         )));
         self.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::DataTag,
+            Opcode::LdFld,
             Operand::Type(data_ty),
         )));
         self.compile_i64(tag_value);
         self.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::CmpEq,
+            Opcode::Ceq,
             Operand::None,
         )));
         self.code.push(CodeEntry::Instruction(Instruction::new(
@@ -710,12 +762,12 @@ impl ProcedureEmitter<'_, '_> {
     ) -> Option<TypeId> {
         let data_ty_name = qualified_name(&data_key.module, &data_key.name);
         let Some(data_ty) = self.layout.types.get(data_ty_name.as_ref()).copied() else {
-            super::support::push_expr_diag(
+            super::support::push_expr_diag_with(
                 diags,
                 self.module_key,
                 origin,
                 EmitDiagKind::UnknownDataType,
-                format!("unknown emitted data type `{data_ty_name}`"),
+                DiagContext::new().with("type", data_ty_name),
             );
             return None;
         };

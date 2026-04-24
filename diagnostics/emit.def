@@ -1,81 +1,62 @@
 catalog emit music_emit EmitDiagKind crates/music_emit/src/diag_catalog_gen.rs
 
 diag MissingExportTarget 3500
-  message "missing export target"
-  primary "missing export target"
+  message "export `{export}` missing emit target"
 
 diag UnknownTypeValue 3501
-  message "unknown emitted type value `{type}`"
-  primary "unknown emitted type value `{type}`"
+  message "emitted type value `{type}` unknown"
 
 diag UnknownTypeNameForOp 3502
-  message "unknown type name `{type}` for operation `{operation}`"
-  primary "unknown type name `{type}` for operation `{operation}`"
+  message "operation `{operation}` type name `{type}` unknown"
 
 diag UnsupportedBinaryOperator 3503
-  message "unsupported binary operator `{operator}`"
-  primary "unsupported binary operator `{operator}`"
+  message "binary operator `{operator}` unsupported"
 
 diag CaseVariantDispatchRequiresSingleDataType 3504
-  message "case variant dispatch requires single data type"
-  primary "case variant dispatch requires single data type"
+  message "case variant dispatch needs single data type"
 
 diag UnknownDataType 3505
-  message "unknown emitted data type `{type}`"
-  primary "unknown emitted data type `{type}`"
+  message "emitted data type `{type}` unknown"
 
 diag SpreadCallArgsNotEmitted 3506
   message "spread call arguments have no emitted form"
-  primary "spread call arguments have no emitted form"
 
 diag UnknownClosureTarget 3507
-  message "unknown emitted closure target `{target}`"
-  primary "unknown emitted closure target `{target}`"
+  message "emitted closure target `{target}` unknown"
 
 diag UnknownEffect 3508
-  message "unknown emitted effect `{effect}`"
-  primary "unknown emitted effect `{effect}`"
+  message "emitted effect `{effect}` unknown"
 
 diag UnknownHandlerType 3509
-  message "unknown emitted handler type `{type}`"
-  primary "unknown emitted handler type `{type}`"
+  message "emitted answer type `{type}` unknown"
 
 diag UnknownRecordType 3510
-  message "unknown emitted record type `{type}`"
-  primary "unknown emitted record type `{type}`"
+  message "emitted record type `{type}` unknown"
 
 diag RecordLiteralMissingFieldValue 3511
-  message "missing record literal field value"
-  primary "missing record literal field value"
+  message "record literal field `{field}` missing value"
 
 diag RecordUpdateMissingFieldValue 3512
-  message "missing record update field value"
-  primary "missing record update field value"
+  message "record update field `{field}` missing value"
 
 diag UnknownSequenceType 3513
-  message "unknown emitted sequence type `{type}`"
-  primary "unknown emitted sequence type `{type}`"
+  message "emitted sequence type `{type}` unknown"
 
 diag InvalidSyntaxLiteral 3514
-  message "invalid syntax literal"
-  primary "invalid syntax literal"
+  message "syntax literal `{literal}` invalid"
 
 diag InvalidIntegerLiteral 3515
-  message "invalid integer literal"
-  primary "invalid integer literal"
+  message "integer literal `{literal}` invalid"
 
 diag InvalidFloatLiteral 3516
-  message "invalid float literal"
-  primary "invalid float literal"
+  message "float literal `{literal}` invalid"
 
 diag UnsupportedNameRef 3517
-  message "unsupported name reference `{name}`"
-  primary "unsupported name reference `{name}`"
+  message "name reference `{name}` unsupported"
 
 diag UnsupportedAssignTarget 3518
-  message "unsupported assignment target `{target}`"
-  primary "unsupported assignment target `{target}`"
+  message "emitted assignment target `{target}` unsupported"
 
 diag EmitInvariantViolated 3519
   message "emit invariant violated"
-  primary "emit invariant violated"
+  primary "{detail}"

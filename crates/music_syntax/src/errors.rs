@@ -67,6 +67,16 @@ impl SyntaxDiagKind {
     }
 
     #[must_use]
+    pub fn message_with(self, context: &DiagContext) -> String {
+        diag_catalog_gen::render_message(self, context)
+    }
+
+    #[must_use]
+    pub fn label_with(self, context: &DiagContext) -> String {
+        diag_catalog_gen::render_primary(self, context)
+    }
+
+    #[must_use]
     pub fn from_code(code: DiagCode) -> Option<Self> {
         diag_catalog_gen::from_code(code.raw())
     }

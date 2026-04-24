@@ -5,44 +5,37 @@ diag SeamDecodeFailed 6100
   primary "SEAM decode failed"
 
 diag InvalidProgramShape 6101
-  message "invalid program shape (`{detail}`)"
-  primary "invalid program shape"
+  message "program shape invalid (`{detail}`)"
 
 diag InvalidTypeTerm 6102
-  message "invalid type term `{ty}` (`{detail}`)"
-  primary "invalid type term `{ty}`"
+  message "type term `{ty}` invalid (`{detail}`)"
+  primary "type term `{ty}` invalid"
 
 diag InvalidSyntaxConstant 6103
-  message "invalid syntax constant (`{detail}`)"
-  primary "invalid syntax constant"
+  message "syntax constant invalid (`{detail}`)"
 
 diag VmInitializationRequired 6104
-  message "VM initialization required"
-  primary "VM initialization required"
+  message "VM needs initialization"
 
 diag ModuleInitCycle 6105
   message "module `{spec}` initialization cycle detected"
-  primary "module `{spec}` initialization cycle detected"
 
 diag ExportNotFound 6106
-  message "missing export `{export}` in `{module}`"
-  primary "missing export `{export}`"
+  message "module `{module}` missing export `{export}`"
+  primary "export `{export}` missing"
 
 diag OpaqueExport 6107
   message "opaque export `{export}` inaccessible from `{module}`"
   primary "opaque export `{export}` inaccessible"
 
 diag NonCallableValue 6108
-  message "callable value expected, found `{found}`"
-  primary "callable value expected"
+  message "call target expected callable value, found `{found}`"
 
 diag MissingEntryProcedure 6109
-  message "missing entry procedure in `{module}`"
-  primary "missing entry procedure"
+  message "module `{module}` missing entry procedure"
 
 diag StackEmpty 6110
   message "{stack} stack empty"
-  primary "{stack} stack empty"
 
 diag OperandCountMismatch 6111
   message "operand stack expected `{needed}` values, found `{available}`"
@@ -53,47 +46,43 @@ diag IndexOutOfBounds 6112
   primary "{space} `{index}` out of bounds"
 
 diag InvalidBranchTarget 6113
-  message "invalid branch target `{target}` in `{procedure}`"
-  primary "invalid branch target `{target}`"
+  message "procedure `{procedure}` branch target `{target}` invalid"
+  primary "branch target `{target}` invalid"
 
 diag InvalidOperandForOpcode 6114
-  message "opcode `{opcode}` rejects operand shape `{found}`"
-  primary "opcode `{opcode}` rejects operand"
+  message "opcode `{opcode}` operand shape `{found}` invalid"
+  primary "operand shape `{found}` invalid"
 
 diag InvalidValueKind 6115
   message "value kind expected `{expected}`, found `{found}`"
   primary "value kind `{found}` found"
 
 diag InvalidSequenceIndex 6116
-  message "invalid sequence index `{index}` for length `{len}`"
-  primary "invalid sequence index `{index}`"
+  message "sequence index `{index}` invalid for length `{len}`"
+  primary "sequence index `{index}` invalid"
 
 diag EmptySequenceIndexList 6117
-  message "sequence index list empty"
-  primary "sequence index list empty"
+  message "sequence index list `[]` empty"
 
 diag InvalidRangeBounds 6118
-  message "range bounds expected integers, found `{start}` and `{end}`"
-  primary "invalid range bounds"
+  message "range bounds `{start}` and `{end}` invalid"
 
 diag InvalidRangeEvidence 6119
-  message "invalid range evidence for value kind `{found}`"
-  primary "invalid range evidence"
+  message "range answer invalid for value kind `{found}`"
 
 diag InvalidRangeStep 6120
-  message "invalid range step (`{detail}`)"
-  primary "invalid range step"
+  message "range step invalid (`{detail}`)"
 
 diag RangeMaterializeTooLarge 6121
   message "range materialize length `{len}` exceeds limit `{limit}`"
   primary "range materialize length `{len}` too large"
 
 diag InvalidDataIndex 6122
-  message "invalid data field index `{index}` for length `{len}`"
-  primary "invalid data field index `{index}`"
+  message "data field index `{index}` invalid for length `{len}`"
+  primary "data field index `{index}` invalid"
 
 diag InvalidTypeCast 6123
-  message "type cast expected `{expected}`, found `{found}`"
+  message "type cast target expected `{expected}`, found `{found}`"
   primary "type cast found `{found}`"
 
 diag ArithmeticFailed 6124
@@ -102,19 +91,17 @@ diag ArithmeticFailed 6124
 
 diag ModuleLoadRejected 6125
   message "module `{spec}` load rejected"
-  primary "module `{spec}` load rejected"
 
 diag ForeignCallRejected 6126
-  message "foreign call `{foreign}` rejected"
-  primary "foreign call `{foreign}` rejected"
+  message "native call `{native}` rejected"
 
 diag PointerIntrinsicFailed 6127
   message "pointer intrinsic `{intrinsic}` failed (`{detail}`)"
   primary "pointer intrinsic `{intrinsic}` failed"
 
 diag NativeCallFailed 6128
-  message "native call `{foreign}` failed during `{stage}` for `{subject}` (`{detail}`)"
-  primary "native call `{foreign}` failed"
+  message "native call `{native}` failed during `{stage}` for `{subject}` (`{detail}`)"
+  primary "native call `{native}` failed"
 
 diag EffectRejected 6129
   message "effect `{effect}` operation `{op}` rejected (`{reason}`)"
@@ -122,23 +109,21 @@ diag EffectRejected 6129
 
 diag RootModuleRequired 6130
   message "VM root module required"
-  primary "VM root module required"
 
 diag MissingModuleSource 6131
-  message "missing VM module source `{spec}`"
-  primary "missing VM module source `{spec}`"
+  message "VM module source `{spec}` missing"
 
 diag CallArityMismatch 6132
-  message "call `{callee}` expected `{expected}` arguments, found `{found}`"
-  primary "call `{callee}` arity mismatch"
+  message "runtime call `{callee}` expected `{expected}` arguments, found `{found}`"
+  primary "call `{callee}` has `{found}` arguments here"
 
 diag HandlerFrameMissing 6133
-  message "missing handler `{handler_id}` frame depth `{frame_depth}`"
-  primary "missing handler `{handler_id}` frame"
+  message "answer `{handler_id}` frame depth `{frame_depth}` missing"
+  primary "answer `{handler_id}` frame missing"
 
 diag MissingMatchingHandlerPop 6134
-  message "missing matching `hdl.pop` in `{procedure}`"
-  primary "missing matching `hdl.pop`"
+  message "procedure `{procedure}` missing matching `hdl.pop`"
+  primary "matching `hdl.pop` missing"
 
 diag HeapLimitExceeded 6135
   message "heap limit `{limit}` exceeded with `{allocated}` allocated bytes"
@@ -154,7 +139,62 @@ diag StackFrameLimitExceeded 6137
 
 diag InstructionBudgetExhausted 6138
   message "instruction budget `{budget}` exhausted"
-  primary "instruction budget `{budget}` exhausted"
+
+diag RuntimeEffectArgsInvalid 6139
+  message "runtime effect `{effect}.{op}` expected `{expected}`, found `{found}`"
+  primary "runtime effect `{op}` arguments invalid"
+
+diag RuntimeEffectOperationFailed 6140
+  message "runtime effect `{effect}` operation `{op}` failed (`{source}`)"
+  primary "runtime effect `{op}` failed"
+
+diag RuntimeHostUnavailable 6141
+  message "runtime host `{subject}` unavailable"
+  primary "runtime host `{subject}` unavailable"
+
+diag RuntimeEffectUnsupported 6149
+  message "runtime effect `{effect}.{op}` unsupported"
+  primary "runtime effect operation `{op}` unsupported"
+
+diag NativeArgumentTypeMismatch 6142
+  message "native argument `{index}` expected `{expected}`, found `{found}`"
+  primary "native argument `{index}` type mismatch"
+
+diag NativeArgumentOutOfRange 6143
+  message "native argument `{index}` out of range for `{expected}`"
+  primary "native argument `{index}` out of range"
+
+diag NativeArgumentInvalid 6150
+  message "native argument `{index}` `{subject}` invalid"
+  primary "native argument `{index}` invalid"
+
+diag NativeLayoutMissing 6144
+  message "native ABI layout for `{ty}` missing"
+  primary "native ABI layout `{ty}` missing"
+
+diag NativeFieldMissing 6145
+  message "native `{subject}` field `{field}` missing"
+  primary "native field `{field}` missing"
+
+diag NativeCStringInvalid 6146
+  message "native CString `{subject}` invalid (`{source}`)"
+  primary "native CString `{subject}` invalid"
+
+diag NativeFfiPrepFailed 6147
+  message "native `ffi_prep_cif` failed with status `{status}` for ABI `{abi}`"
+  primary "native `ffi_prep_cif` status `{status}` failed"
+
+diag NativeAbiUnsupported 6151
+  message "native ABI `{subject}` unsupported"
+  primary "native ABI `{subject}` unsupported"
+
+diag NativeResultInvalid 6152
+  message "native result `{subject}` invalid"
+  primary "native result `{subject}` invalid"
+
+diag PointerArgumentInvalid 6148
+  message "pointer intrinsic argument `{index}` expected `{expected}`, found `{found}`"
+  primary "pointer argument `{index}` invalid"
 
 map vm_error_kind crate::VmErrorKind required
   case "SeamDecodeFailed { .. }" SeamDecodeFailed

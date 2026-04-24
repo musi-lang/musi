@@ -2,13 +2,13 @@
 
 use crate::artifact::Artifact;
 use crate::descriptor::{
-    ClassDescriptor, ConstantDescriptor, ConstantValue, DataDescriptor, DataVariantDescriptor,
-    EffectDescriptor, EffectOpDescriptor, ForeignDescriptor, GlobalDescriptor, ProcedureDescriptor,
+    ConstantDescriptor, ConstantValue, DataDescriptor, DataVariantDescriptor, EffectDescriptor,
+    EffectOpDescriptor, ForeignDescriptor, GlobalDescriptor, ProcedureDescriptor, ShapeDescriptor,
     TypeDescriptor,
 };
 use crate::instruction::{CodeEntry, Instruction, Label, Operand};
 use crate::opcode::Opcode;
-use crate::{decode_binary, encode_binary, format_text, parse_text};
+use crate::{AssemblyError, decode_binary, encode_binary, format_text, parse_text};
 
 mod success {
     use super::*;
@@ -71,27 +71,27 @@ mod success {
                 Box::new([
                     CodeEntry::Label(Label { id: 0 }),
                     CodeEntry::Instruction(Instruction::new(
-                        Opcode::LdConst,
+                        Opcode::LdC,
                         Operand::Constant(const_id),
                     )),
                     CodeEntry::Instruction(Instruction::new(Opcode::StLoc, Operand::Local(0))),
                     CodeEntry::Instruction(Instruction::new(Opcode::LdLoc, Operand::Local(0))),
                     CodeEntry::Instruction(Instruction::new(
-                        Opcode::SeqNew,
+                        Opcode::NewArr,
                         Operand::TypeLen { ty: int_ty, len: 2 },
                     )),
-                    CodeEntry::Instruction(Instruction::new(Opcode::SeqCat, Operand::None)),
+                    CodeEntry::Instruction(Instruction::new(Opcode::CallInd, Operand::None)),
                     CodeEntry::Instruction(Instruction::new(
-                        Opcode::CallSeq,
+                        Opcode::Call,
                         Operand::Procedure(callee_id),
                     )),
-                    CodeEntry::Instruction(Instruction::new(Opcode::CallClsSeq, Operand::None)),
+                    CodeEntry::Instruction(Instruction::new(Opcode::CallInd, Operand::None)),
                     CodeEntry::Instruction(Instruction::new(
-                        Opcode::FfiCallSeq,
+                        Opcode::CallFfi,
                         Operand::Foreign(foreign_id),
                     )),
                     CodeEntry::Instruction(Instruction::new(
-                        Opcode::EffInvkSeq,
+                        Opcode::Raise,
                         Operand::Effect {
                             effect: effect_id,
                             op: 0,
@@ -108,7 +108,7 @@ mod success {
                 .with_initializer(procedure_id),
         );
         let _ = effect_id;
-        let _class_id = artifact.classes.alloc(ClassDescriptor::new(abort_name));
+        let _shape_id = artifact.shapes.alloc(ShapeDescriptor::new(abort_name));
         let _ = foreign_id;
 
         assert!(artifact.validate().is_ok());
@@ -155,14 +155,14 @@ mod success {
                         Operand::Global(global_id),
                     )),
                     CodeEntry::Instruction(Instruction::new(
-                        Opcode::SeqNew,
+                        Opcode::NewArr,
                         Operand::TypeLen { ty: int_ty, len: 2 },
                     )),
-                    CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(0))),
-                    CodeEntry::Instruction(Instruction::new(Opcode::SeqGet, Operand::None)),
-                    CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(0))),
-                    CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(1))),
-                    CodeEntry::Instruction(Instruction::new(Opcode::SeqSet, Operand::None)),
+                    CodeEntry::Instruction(Instruction::new(Opcode::LdCI4, Operand::I16(0))),
+                    CodeEntry::Instruction(Instruction::new(Opcode::LdElem, Operand::None)),
+                    CodeEntry::Instruction(Instruction::new(Opcode::LdCI4, Operand::I16(0))),
+                    CodeEntry::Instruction(Instruction::new(Opcode::LdCI4, Operand::I16(1))),
+                    CodeEntry::Instruction(Instruction::new(Opcode::StElem, Operand::None)),
                     CodeEntry::Instruction(Instruction::new(Opcode::Ret, Operand::None)),
                 ]),
             )
@@ -196,16 +196,16 @@ mod success {
                 0,
                 Box::new([
                     CodeEntry::Label(Label { id: 0 }),
-                    CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(1))),
-                    CodeEntry::Instruction(Instruction::new(Opcode::LdSmi, Operand::I16(2))),
+                    CodeEntry::Instruction(Instruction::new(Opcode::LdCI4, Operand::I16(1))),
+                    CodeEntry::Instruction(Instruction::new(Opcode::LdCI4, Operand::I16(2))),
                     CodeEntry::Instruction(Instruction::new(
-                        Opcode::ClsNew,
+                        Opcode::NewFn,
                         Operand::WideProcedureCaptures {
                             procedure: closure_procedure,
                             captures: 2,
                         },
                     )),
-                    CodeEntry::Instruction(Instruction::new(Opcode::CallCls, Operand::None)),
+                    CodeEntry::Instruction(Instruction::new(Opcode::CallInd, Operand::None)),
                     CodeEntry::Instruction(Instruction::new(Opcode::Ret, Operand::None)),
                 ]),
             )
@@ -213,6 +213,40 @@ mod success {
         );
 
         assert!(artifact.validate().is_ok());
+    }
+
+    #[test]
+    fn opcode_table_matches_bytecode_spec() {
+        let spec = include_str!("../../../specs/seam/bytecode.md");
+        let mut expected = Vec::new();
+        for line in spec.lines() {
+            let cells = line.split('|').map(str::trim).collect::<Vec<_>>();
+            if cells.len() < 4 || !cells[1].starts_with('`') || cells[2] == "reserved" {
+                continue;
+            }
+            let hex = cells[1].trim_matches('`');
+            if hex.contains('-') || hex == "Hex" {
+                continue;
+            }
+            let Ok(code) = u16::from_str_radix(hex, 16) else {
+                continue;
+            };
+            let mnemonic = cells[2].trim_matches('`');
+            if mnemonic.is_empty() {
+                continue;
+            }
+            expected.push((code, mnemonic));
+        }
+
+        assert_eq!(expected.len(), 130);
+        for (code, mnemonic) in expected {
+            let opcode = Opcode::from_wire_code(code).expect("opcode from spec code");
+            assert_eq!(opcode.mnemonic(), mnemonic);
+            assert_eq!(Opcode::from_mnemonic(mnemonic), Some(opcode));
+        }
+        assert_eq!(Opcode::from_mnemonic("range.new"), None);
+        assert_eq!(Opcode::from_mnemonic("range.has"), None);
+        assert_eq!(Opcode::from_mnemonic("range.mat"), None);
     }
 
     #[test]
@@ -304,7 +338,7 @@ mod success {
             .foreigns
             .iter()
             .next()
-            .expect("decoded foreign should exist");
+            .expect("decoded native should exist");
         assert!(!decoded_foreign.hot);
         assert!(decoded_foreign.cold);
 
@@ -323,9 +357,11 @@ mod success {
         assert_eq!(text_layout.variants[0].field_tys.len(), 2);
         assert!(text.contains("variant $main::Point tag 30"));
         assert!(text.contains(".procedure $main::work params 0 locals 0 export hot"));
-        assert!(text.contains(
-            ".foreign $main::puts param $Int result $Int abi \"c\" symbol \"puts\" cold"
-        ));
+        assert!(
+            text.contains(
+                ".native $main::puts param $Int result $Int abi \"c\" symbol \"puts\" cold"
+            )
+        );
     }
 }
 
@@ -350,5 +386,18 @@ mod failure {
         );
 
         assert!(artifact.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_older_binary_major_version() {
+        let artifact = Artifact::new();
+        let mut binary = encode_binary(&artifact).expect("binary encode should succeed");
+        binary[4] = 12;
+        binary[5] = 0;
+        let err = decode_binary(&binary).expect_err("binary decode should fail");
+        assert!(matches!(
+            err,
+            AssemblyError::UnsupportedBinaryVersion(version) if version == (12u32 << 16)
+        ));
     }
 }

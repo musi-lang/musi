@@ -1,6 +1,5 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use musi_foundation::extend_import_map;
 use musi_native::NativeHost;
@@ -22,7 +21,7 @@ mod testing;
 
 type ModuleTextMap = HashMap<Box<str>, String>;
 type ProgramMap = HashMap<Box<str>, Program>;
-type RuntimeStoreCell = Rc<RefCell<RuntimeStore>>;
+type RuntimeStoreCell = Arc<Mutex<RuntimeStore>>;
 type RuntimeProgramResult = RuntimeResult<Program>;
 
 #[derive(Default)]
@@ -46,7 +45,7 @@ impl Runtime {
     pub fn new(mut host: NativeHost, options: RuntimeOptions) -> Self {
         let mut session_options = options.session.clone();
         extend_import_map(&mut session_options.import_map);
-        let store = Rc::new(RefCell::new(RuntimeStore {
+        let store = Arc::new(Mutex::new(RuntimeStore {
             session_options,
             ..RuntimeStore::default()
         }));
@@ -54,7 +53,7 @@ impl Runtime {
         let nested_host = host.downgrade();
         syntax_eval::register_syntax_handlers(
             &mut host,
-            Rc::clone(&store),
+            Arc::clone(&store),
             &nested_host,
             &options.vm,
         );

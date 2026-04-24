@@ -1,4 +1,4 @@
-use music_base::diag::{Diag, DiagCode, DiagLevel, DiagnosticKind};
+use music_base::diag::{Diag, DiagCode, DiagContext, DiagLevel, DiagnosticKind};
 
 #[path = "diag_catalog_gen.rs"]
 mod diag_catalog_gen;
@@ -46,8 +46,8 @@ pub enum SemaDiagKind {
     RuntimeValueInComptimeContext,
     CollectDuplicateEffectOp,
     CollectDuplicateEffectLaw,
-    CollectDuplicateClassMember,
-    CollectDuplicateClassLaw,
+    CollectDuplicateShapeMember,
+    CollectDuplicateShapeLaw,
     UnknownExport,
     InvalidRequestTarget,
     UnknownEffect,
@@ -58,15 +58,15 @@ pub enum SemaDiagKind {
     HandlerMissingOperationClause,
     ResumeOutsideHandlerClause,
     EffectNotDeclared,
-    InstanceMemberArityMismatch,
-    UnknownInstanceMember,
-    InstanceMemberValueRequired,
-    DuplicateInstanceMember,
-    MissingInstanceMember,
-    InvalidInstanceTarget,
-    SealedClass,
-    UnknownClass,
-    DuplicateInstance,
+    GivenMemberArityMismatch,
+    UnknownGivenMember,
+    GivenMemberValueRequired,
+    DuplicateGivenMember,
+    MissingGivenMember,
+    InvalidGivenTarget,
+    SealedShape,
+    UnknownShape,
+    DuplicateGiven,
     PlainLetRequiresIrrefutablePattern,
     ModuleDestructuringRequiresStaticModule,
     RecordDestructuringRequiresRecordOrModule,
@@ -100,6 +100,9 @@ pub enum SemaDiagKind {
     CallNamedArgumentsAfterRuntimeSpread,
     CallNamedSpreadArgument,
     UnsafeCallRequiresUnsafeBlock,
+    PinRequiresUnsafeBlock,
+    UnsupportedPinTarget,
+    PinnedValueEscapes,
     InvalidTypeApplication,
     CallRuntimeSpreadRequiresArrayAny,
     CallSpreadRequiresTupleOrArray,
@@ -117,6 +120,9 @@ pub enum SemaDiagKind {
     UnsupportedAssignmentTarget,
     NumericOperandRequired,
     BinaryOperatorHasNoExecutableLowering,
+    LogicalOperatorDomainMismatch,
+    UnaryLogicalOperatorDomainMismatch,
+    InvalidBitsWidth,
     TypeMismatch,
     InvalidTypeExpression,
     TypeApplicationArityMismatch,
@@ -125,7 +131,7 @@ pub enum SemaDiagKind {
     VariantPatternArityMismatch,
     OrPatternBindersMismatch,
     UnsatisfiedConstraint,
-    AmbiguousInstanceMatch,
+    AmbiguousGivenMatch,
     ConstrainedNonCallableBinding,
     ExportedCallableRequiresConcreteConstraints,
 }
@@ -144,6 +150,26 @@ impl SemaDiagKind {
     #[must_use]
     pub fn label(self) -> &'static str {
         diag_catalog_gen::primary(self)
+    }
+
+    #[must_use]
+    pub fn secondary(self) -> Option<&'static str> {
+        diag_catalog_gen::secondary(self)
+    }
+
+    #[must_use]
+    pub fn message_with(self, context: &DiagContext) -> String {
+        diag_catalog_gen::render_message(self, context)
+    }
+
+    #[must_use]
+    pub fn label_with(self, context: &DiagContext) -> String {
+        diag_catalog_gen::render_primary(self, context)
+    }
+
+    #[must_use]
+    pub fn secondary_with(self, context: &DiagContext) -> Option<String> {
+        diag_catalog_gen::render_secondary(self, context)
     }
 
     #[must_use]

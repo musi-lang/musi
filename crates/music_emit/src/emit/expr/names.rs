@@ -1,12 +1,13 @@
 use super::super::*;
 use crate::EmitDiagKind;
+use music_base::diag::DiagContext;
 
 impl ProcedureEmitter<'_, '_> {
     pub(super) fn compile_name(
         &mut self,
         binding: Option<NameBindingId>,
         name: &str,
-        module_target: Option<&ModuleKey>,
+        import_record_target: Option<&ModuleKey>,
         expr: &IrExpr,
         diags: &mut EmitDiagList,
     ) {
@@ -26,16 +27,16 @@ impl ProcedureEmitter<'_, '_> {
             )));
             return;
         }
-        if let Some(global) = self.resolve_global(binding, name, module_target) {
+        if let Some(global) = self.resolve_global(binding, name, import_record_target) {
             self.code.push(CodeEntry::Instruction(Instruction::new(
                 Opcode::LdGlob,
                 Operand::Global(global),
             )));
             return;
         }
-        if let Some(procedure) = self.resolve_procedure(binding, name, module_target) {
+        if let Some(procedure) = self.resolve_procedure(binding, name, import_record_target) {
             self.code.push(CodeEntry::Instruction(Instruction::new(
-                Opcode::ClsNew,
+                Opcode::NewFn,
                 Operand::WideProcedureCaptures {
                     procedure,
                     captures: 0,
@@ -43,19 +44,19 @@ impl ProcedureEmitter<'_, '_> {
             )));
             return;
         }
-        if let Some(foreign) = self.resolve_foreign(binding, name, module_target) {
+        if let Some(foreign) = self.resolve_foreign(binding, name, import_record_target) {
             self.code.push(CodeEntry::Instruction(Instruction::new(
-                Opcode::FfiRef,
+                Opcode::LdFfi,
                 Operand::Foreign(foreign),
             )));
             return;
         }
-        super::support::push_expr_diag(
+        super::support::push_expr_diag_with(
             diags,
             self.module_key,
             &expr.origin,
             EmitDiagKind::UnsupportedNameRef,
-            format!("unsupported name reference `{name}`"),
+            DiagContext::new().with("name", name),
         );
         emit_zero(self);
     }
@@ -64,9 +65,9 @@ impl ProcedureEmitter<'_, '_> {
         &self,
         binding: Option<NameBindingId>,
         name: &str,
-        module_target: Option<&ModuleKey>,
+        import_record_target: Option<&ModuleKey>,
     ) -> Option<ProcedureId> {
-        if module_target.is_none_or(|target| target == self.module_key) {
+        if import_record_target.is_none_or(|target| target == self.module_key) {
             if let Some(procedure) = self.layout.callables_by_name.get(name).copied() {
                 return Some(procedure);
             }
@@ -74,7 +75,7 @@ impl ProcedureEmitter<'_, '_> {
         resolve_named_binding(
             binding,
             name,
-            module_target,
+            import_record_target,
             &self.layout.callables,
             &self.tables.qualified.procedures,
             &self.tables.unique.procedures,
@@ -85,12 +86,12 @@ impl ProcedureEmitter<'_, '_> {
         &self,
         binding: Option<NameBindingId>,
         name: &str,
-        module_target: Option<&ModuleKey>,
+        import_record_target: Option<&ModuleKey>,
     ) -> Option<ForeignId> {
         resolve_named_binding(
             binding,
             name,
-            module_target,
+            import_record_target,
             &self.layout.foreigns,
             &self.tables.qualified.foreigns,
             &self.tables.unique.foreigns,
@@ -101,12 +102,12 @@ impl ProcedureEmitter<'_, '_> {
         &self,
         binding: Option<NameBindingId>,
         name: &str,
-        module_target: Option<&ModuleKey>,
+        import_record_target: Option<&ModuleKey>,
     ) -> Option<GlobalId> {
         resolve_named_binding(
             binding,
             name,
-            module_target,
+            import_record_target,
             &self.layout.globals,
             &self.tables.qualified.globals,
             &self.tables.unique.globals,
@@ -117,7 +118,7 @@ impl ProcedureEmitter<'_, '_> {
 fn resolve_named_binding<T: Copy>(
     binding: Option<NameBindingId>,
     name: &str,
-    module_target: Option<&ModuleKey>,
+    import_record_target: Option<&ModuleKey>,
     locals: &HashMap<NameBindingId, T>,
     qualified: &HashMap<(ModuleKey, Box<str>), T>,
     unique: &HashMap<Box<str>, T>,
@@ -125,7 +126,7 @@ fn resolve_named_binding<T: Copy>(
     if let Some(target) = binding.and_then(|binding| locals.get(&binding).copied()) {
         return Some(target);
     }
-    if let Some(target) = module_target {
+    if let Some(target) = import_record_target {
         return qualified.get(&(target.clone(), name.into())).copied();
     }
     unique.get(name).copied()

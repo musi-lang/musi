@@ -1,6 +1,6 @@
 use super::*;
 use music_ir::{IrModuleInitPart, lower_surface_type_term};
-use music_seam::descriptor::DataVariantDescriptor;
+use music_seam::descriptor::{DataVariantDescriptor, ShapeDescriptor};
 use music_term::{TypeModuleRef, TypeTerm, TypeTermKind, parse_type_term};
 
 pub(super) fn register_module(
@@ -12,7 +12,7 @@ pub(super) fn register_module(
     register_types(state, module);
     register_data_defs(state, module, &mut layout);
     register_effects(state, module, &mut layout);
-    register_classes(state, module, &mut layout);
+    register_shapes(state, module, &mut layout);
     register_foreigns(state, module, &mut layout);
     register_callables(state, module, &mut layout);
     register_globals(state, module, &mut layout);
@@ -89,12 +89,12 @@ fn register_effects(state: &mut ProgramState, module: &IrModule, layout: &mut Mo
     }
 }
 
-fn register_classes(state: &mut ProgramState, module: &IrModule, layout: &mut ModuleLayout) {
-    for class in module.classes() {
-        let name = qualified_name(&class.key.module, &class.key.name);
+fn register_shapes(state: &mut ProgramState, module: &IrModule, layout: &mut ModuleLayout) {
+    for shape in module.shapes() {
+        let name = qualified_name(&shape.key.module, &shape.key.name);
         let name_id = state.artifact.intern_string(name.as_ref());
-        let id = state.artifact.classes.alloc(ClassDescriptor::new(name_id));
-        let _ = layout.classes.insert(class.key.clone(), id);
+        let id = state.artifact.shapes.alloc(ShapeDescriptor::new(name_id));
+        let _ = layout.shapes.insert(shape.key.clone(), id);
     }
 }
 
@@ -109,14 +109,15 @@ fn register_exports(state: &mut ProgramState, module: &IrModule, layout: &mut Mo
             export.name.as_ref(),
             export.data_key.as_ref(),
             export.effect_key.as_ref(),
-            export.class_key.as_ref(),
+            export.shape_key.as_ref(),
         );
 
         let Some(target) = target else {
+            let context = DiagContext::new().with("export", export.name.as_ref());
             state.diags.push(
-                Diag::error(EmitDiagKind::MissingExportTarget.message())
+                Diag::error(EmitDiagKind::MissingExportTarget.message_with(&context))
                     .with_code(EmitDiagKind::MissingExportTarget.code())
-                    .with_note(format!("export `{}`", export.name)),
+                    .with_note(EmitDiagKind::MissingExportTarget.label_with(&context)),
             );
             continue;
         };
@@ -135,7 +136,7 @@ fn export_target(
     export_name: &str,
     data_key: Option<&DefinitionKey>,
     effect_key: Option<&DefinitionKey>,
-    class_key: Option<&DefinitionKey>,
+    shape_key: Option<&DefinitionKey>,
 ) -> Option<ExportTarget> {
     if let Some(binding) = export_binding(module, export_name) {
         if let Some(procedure) = layout.callables.get(&binding).copied() {
@@ -165,9 +166,9 @@ fn export_target(
         return Some(ExportTarget::Effect(effect));
     }
 
-    class_key
-        .and_then(|key| layout.classes.get(key).copied())
-        .map(ExportTarget::Class)
+    shape_key
+        .and_then(|key| layout.shapes.get(key).copied())
+        .map(ExportTarget::Shape)
 }
 
 pub(super) fn export_binding(module: &IrModule, export_name: &str) -> Option<NameBindingId> {
@@ -353,6 +354,7 @@ fn collect_expr_types_aggregate(
             ..
         } => {
             let _ = ensure_type(state, layout, ty_name);
+            let _ = ensure_type(state, layout, "Any");
             collect_expr_types(state, layout, start);
             collect_expr_types(state, layout, end);
             true
@@ -379,12 +381,20 @@ fn collect_expr_types_aggregate(
             range,
             evidence,
         } => {
+            let _ = ensure_type(state, layout, "Any");
+            let _ = ensure_type(state, layout, "Bool");
             collect_expr_types(state, layout, value);
             collect_expr_types(state, layout, range);
             collect_expr_types(state, layout, evidence);
             true
         }
-        IrExprKind::RangeMaterialize { range, evidence } => {
+        IrExprKind::RangeMaterialize {
+            range,
+            evidence,
+            result_ty_name,
+        } => {
+            let _ = ensure_type(state, layout, "Any");
+            let _ = ensure_type(state, layout, result_ty_name);
             collect_expr_types(state, layout, range);
             collect_expr_types(state, layout, evidence);
             true
@@ -437,7 +447,9 @@ fn collect_expr_types_binding_and_control(
             collect_expr_types_iter(state, layout, captures);
             true
         }
-        IrExprKind::Binary { left, right, .. } => {
+        IrExprKind::Binary { left, right, .. }
+        | IrExprKind::BoolAnd { left, right }
+        | IrExprKind::BoolOr { left, right } => {
             collect_expr_types(state, layout, left);
             collect_expr_types(state, layout, right);
             true
@@ -465,8 +477,8 @@ fn collect_expr_types_call_and_effect(
     expr: &IrExpr,
 ) -> bool {
     match &expr.kind {
-        IrExprKind::Call { callee, args } => {
-            collect_call_expr_types(state, layout, callee, args);
+        IrExprKind::CallParts { callee, args } => {
+            collect_call_parts_expr_types(state, layout, callee, args);
             true
         }
         IrExprKind::IntrinsicCall {
@@ -482,8 +494,8 @@ fn collect_expr_types_call_and_effect(
             collect_expr_types_iter(state, layout, args.iter().map(|arg| &arg.expr));
             true
         }
-        IrExprKind::CallSeq { callee, args } => {
-            collect_call_seq_expr_types(state, layout, callee, args);
+        IrExprKind::Call { callee, args } => {
+            collect_call_expr_types(state, layout, callee, args);
             true
         }
         IrExprKind::Request { args, .. } => {
@@ -495,21 +507,21 @@ fn collect_expr_types_call_and_effect(
             collect_expr_types_seq_parts(state, layout, args);
             true
         }
-        IrExprKind::HandlerLit {
+        IrExprKind::AnswerLit {
             effect_key,
             value,
             ops,
         } => {
-            collect_handler_literal_expr_types(state, layout, effect_key, value, ops);
+            collect_answer_lit_expr_types(state, layout, effect_key, value, ops);
             true
         }
         IrExprKind::Handle {
             effect_key,
-            handler,
+            answer,
             body,
             ..
         } => {
-            collect_handle_expr_types(state, layout, effect_key, handler, body);
+            collect_handle_expr_types(state, layout, effect_key, answer, body);
             true
         }
         IrExprKind::Resume { expr } => {
@@ -561,7 +573,8 @@ fn collect_call_expr_types(
     collect_expr_types_iter(state, layout, args.iter().map(|arg| &arg.expr));
 }
 
-fn collect_call_seq_expr_types(
+#[allow(dead_code)]
+fn collect_call_parts_expr_types(
     state: &mut ProgramState,
     layout: &mut ModuleLayout,
     callee: &IrExpr,
@@ -572,15 +585,15 @@ fn collect_call_seq_expr_types(
     collect_expr_types_seq_parts(state, layout, args);
 }
 
-fn collect_handler_literal_expr_types(
+fn collect_answer_lit_expr_types(
     state: &mut ProgramState,
     layout: &mut ModuleLayout,
     effect_key: &DefinitionKey,
     value: &IrExpr,
     ops: &[IrHandleOp],
 ) {
-    let handler_ty = handler_type_name(effect_key);
-    let _ = ensure_type(state, layout, handler_ty.as_ref());
+    let answer_ty = answer_type_name(effect_key);
+    let _ = ensure_type(state, layout, answer_ty.as_ref());
     collect_expr_types(state, layout, value);
     collect_expr_types_iter(state, layout, ops.iter().map(|op| &op.closure));
 }
@@ -589,12 +602,12 @@ fn collect_handle_expr_types(
     state: &mut ProgramState,
     layout: &mut ModuleLayout,
     effect_key: &DefinitionKey,
-    handler: &IrExpr,
+    answer: &IrExpr,
     body: &IrExpr,
 ) {
-    let handler_ty = handler_type_name(effect_key);
-    let _ = ensure_type(state, layout, handler_ty.as_ref());
-    collect_expr_types(state, layout, handler);
+    let answer_ty = answer_type_name(effect_key);
+    let _ = ensure_type(state, layout, answer_ty.as_ref());
+    collect_expr_types(state, layout, answer);
     collect_expr_types(state, layout, body);
 }
 

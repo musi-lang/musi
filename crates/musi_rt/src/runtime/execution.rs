@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::sync::Arc;
 
 use musi_vm::{Value, Vm};
 
@@ -7,14 +7,14 @@ use super::compile::SessionLoader;
 use crate::error::{RuntimeError, RuntimeErrorKind, RuntimeResult};
 
 impl Runtime {
-    /// Loads one root module into one fresh VM instance and initializes it.
+    /// Loads one root module into one fresh VM runtime and initializes it.
     ///
     /// # Errors
     ///
     /// Returns [`crate::RuntimeError`] if source or program lookup fails, compilation fails, or VM initialization fails.
     pub fn load_root(&mut self, spec: &str) -> RuntimeResult {
         let program = self.compile_registered_program(spec)?;
-        let loader = SessionLoader::new(Rc::clone(&self.store));
+        let loader = SessionLoader::new(Arc::clone(&self.store));
         let host = self.host.clone();
         let mut vm = Vm::new(program, loader, host, self.options.vm.clone());
         vm.initialize()?;
@@ -78,7 +78,7 @@ impl Runtime {
         self.root_spec.as_deref()
     }
 
-    pub(super) fn vm_mut(&mut self) -> RuntimeResult<&mut Vm> {
+    pub(crate) fn vm_mut(&mut self) -> RuntimeResult<&mut Vm> {
         self.vm
             .as_mut()
             .ok_or_else(|| RuntimeError::new(RuntimeErrorKind::RootModuleRequired))

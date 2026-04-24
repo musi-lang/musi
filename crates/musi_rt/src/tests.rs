@@ -5,7 +5,11 @@ use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use musi_native::{NativeHost, NativeTestCaseResult, NativeTestReport};
-use musi_vm::{EffectCall, ForeignCall, Value, VmError, VmErrorKind, VmHost, VmResult};
+use musi_vm::{
+    EffectCall, ForeignCall, Value, ValueView, VmDiagKind, VmError, VmErrorKind, VmHost,
+    VmHostCallContext, VmHostContext, VmResult,
+};
+use music_base::diag::DiagContext;
 use music_module::ImportMap;
 use music_session::SessionOptions;
 use music_term::{SyntaxShape, SyntaxTerm, SyntaxTermError};
@@ -16,27 +20,63 @@ use crate::{Runtime, RuntimeErrorKind, RuntimeOptions, RuntimeOutputMode, Runtim
 struct TestHost;
 
 impl VmHost for TestHost {
-    fn call_foreign(&mut self, foreign: &ForeignCall, _args: &[Value]) -> VmResult<Value> {
+    fn call_foreign(
+        &mut self,
+        _ctx: VmHostCallContext<'_, '_>,
+        foreign: &ForeignCall,
+        _args: &[Value],
+    ) -> VmResult<Value> {
         Err(VmError::new(VmErrorKind::ForeignCallRejected {
             foreign: foreign.name().into(),
         }))
     }
 
-    fn handle_effect(&mut self, effect: &EffectCall, _args: &[Value]) -> VmResult<Value> {
+    fn handle_effect(
+        &mut self,
+        _ctx: VmHostCallContext<'_, '_>,
+        effect: &EffectCall,
+        _args: &[Value],
+    ) -> VmResult<Value> {
         Err(VmError::new(VmErrorKind::EffectRejected {
             effect: effect.effect_name().into(),
             op: Some(effect.op_name().into()),
-            reason: "test host rejected effect call".into(),
+            reason: VmDiagKind::EffectRejected
+                .message_with(
+                    &DiagContext::new()
+                        .with("effect", effect.effect_name())
+                        .with("op", effect.op_name())
+                        .with("reason", "test host"),
+                )
+                .into(),
         }))
     }
 }
 
-fn expr_syntax(text: &str) -> Value {
-    Value::syntax(SyntaxTerm::parse(SyntaxShape::Expr, text).unwrap())
+fn expr_syntax(runtime: &mut Runtime, text: &str) -> Value {
+    runtime
+        .vm_mut()
+        .unwrap()
+        .alloc_syntax(SyntaxTerm::parse(SyntaxShape::Expr, text).unwrap())
+        .unwrap()
 }
 
-fn module_syntax(text: &str) -> Value {
-    Value::syntax(SyntaxTerm::parse(SyntaxShape::Module, text).unwrap())
+fn module_syntax(runtime: &mut Runtime, text: &str) -> Value {
+    runtime
+        .vm_mut()
+        .unwrap()
+        .alloc_syntax(SyntaxTerm::parse(SyntaxShape::Module, text).unwrap())
+        .unwrap()
+}
+
+fn runtime_string(runtime: &mut Runtime, text: impl Into<Box<str>>) -> Value {
+    runtime.vm_mut().unwrap().alloc_string(text).unwrap()
+}
+
+fn assert_runtime_string(runtime: &Runtime, value: &Value, expected: &str) {
+    let ValueView::String(text) = runtime.inspect(value).unwrap() else {
+        panic!("expected string");
+    };
+    assert_eq!(text.as_str(), expected);
 }
 
 fn register_runtime_module(runtime: &mut Runtime, spec: &str, text: &str) {
@@ -63,11 +103,11 @@ mod success {
     fn loads_root_and_calls_export() {
         let mut runtime = Runtime::new(NativeHost::new(), RuntimeOptions::default());
         runtime
-            .register_module_text("main", "export let answer () : Int := 42;")
+            .register_module_text("main", "export let result () : Int := 42;")
             .unwrap();
         runtime.load_root("main").unwrap();
 
-        let value = runtime.call_export("answer", &[]).unwrap();
+        let value = runtime.call_export("result", &[]).unwrap();
         assert_eq!(value, Value::Int(42));
     }
 
@@ -80,13 +120,13 @@ mod success {
         runtime
             .register_module_text(
                 "dep",
-                "export let answer () : Int := 42; export let base : Int := 41;",
+                "export let result () : Int := 42; export let base : Int := 41;",
             )
             .unwrap();
         runtime.load_root("main").unwrap();
 
         let module = runtime.load_module("dep").unwrap();
-        let value = runtime.call_module_export(&module, "answer", &[]).unwrap();
+        let value = runtime.call_module_export(&module, "result", &[]).unwrap();
 
         assert_eq!(value, Value::Int(42));
     }
@@ -163,7 +203,8 @@ mod success {
             .unwrap();
         runtime.load_root("main").unwrap();
 
-        let value = runtime.eval_expr_syntax(&expr_syntax("42"), "Int").unwrap();
+        let syntax = expr_syntax(&mut runtime, "42");
+        let value = runtime.eval_expr_syntax(&syntax, "Int").unwrap();
         assert_eq!(value, Value::Int(42));
     }
 
@@ -175,13 +216,9 @@ mod success {
             .unwrap();
         runtime.load_root("main").unwrap();
 
-        let module = runtime
-            .load_module_syntax(
-                "generated",
-                &module_syntax("export let answer () : Int := 42;"),
-            )
-            .unwrap();
-        let value = runtime.call_module_export(&module, "answer", &[]).unwrap();
+        let syntax = module_syntax(&mut runtime, "export let result () : Int := 42;");
+        let module = runtime.load_module_syntax("generated", &syntax).unwrap();
+        let value = runtime.call_module_export(&module, "result", &[]).unwrap();
 
         assert_eq!(value, Value::Int(42));
     }
@@ -198,39 +235,47 @@ mod success {
             .register_module_text(
                 "main",
                 r#"
-            foreign "c" (
+            native "c" (
               let puts (value : Int) : Int;
             );
-            export let answer () : Int := unsafe { puts(42); };
+            export let result () : Int := unsafe { puts(42); };
         "#,
             )
             .unwrap();
         runtime.load_root("main").unwrap();
 
-        let value = runtime.call_export("answer", &[]).unwrap();
+        let value = runtime.call_export("result", &[]).unwrap();
         assert_eq!(value, Value::Int(7));
     }
 
     #[test]
     fn routes_effect_calls_through_registered_handlers() {
         let mut host = NativeHost::new();
-        host.register_effect_handler("main::Console", "readLine", |_effect, args| {
-            assert_eq!(args, &[Value::string(">")]);
-            Ok(Value::Int(42))
-        });
+        host.register_effect_handler_with_context(
+            "main::Console",
+            "readLine",
+            |ctx, _effect, args| {
+                let [prompt] = args else {
+                    panic!("prompt expected");
+                };
+                let prompt = ctx.string(prompt).expect("prompt should be string");
+                assert_eq!(prompt.as_str(), ">");
+                Ok(Value::Int(42))
+            },
+        );
         let mut runtime = Runtime::new(host, RuntimeOptions::default());
         runtime
             .register_module_text(
                 "main",
                 r#"
             let Console := effect { let readLine (prompt : String) : Int; };
-            export let answer () : Int := request Console.readLine(">");
+            export let result () : Int := ask Console.readLine(">");
         "#,
             )
             .unwrap();
         runtime.load_root("main").unwrap();
 
-        let value = runtime.call_export("answer", &[]).unwrap();
+        let value = runtime.call_export("result", &[]).unwrap();
         assert_eq!(value, Value::Int(42));
     }
 
@@ -244,16 +289,16 @@ mod success {
             .register_module_text(
                 "main",
                 r#"
-            foreign "c" (
+            native "c" (
               let puts (value : Int) : Int;
             );
-            export let answer () : Int := unsafe { puts(1); };
+            export let result () : Int := unsafe { puts(1); };
         "#,
             )
             .unwrap();
         runtime.load_root("main").unwrap();
 
-        let err = runtime.call_export("answer", &[]).unwrap_err();
+        let err = runtime.call_export("result", &[]).unwrap_err();
         assert!(matches!(
             err.kind(),
             RuntimeErrorKind::VmExecutionFailed(VmError { .. })
@@ -319,10 +364,11 @@ export let test () :=
             .register_module_text(
                 "main",
                 r#"
-            let Runtime := import "musi:runtime";
-            export let argCount () : Int := Runtime.processArgCount();
-            export let cwd () : String := Runtime.processCwd();
-            export let now () : Int := Runtime.timeNowUnixMs();
+            let Process := import "musi:process";
+            let Time := import "musi:time";
+            export let argCount () : Int := Process.argCount();
+            export let cwd () : String := Process.cwd();
+            export let now () : Int := Time.nowUnixMs();
         "#,
             )
             .unwrap();
@@ -333,10 +379,11 @@ export let test () :=
         };
         assert!(arg_count >= 1);
 
-        let Value::String(cwd) = runtime.call_export("cwd", &[]).unwrap() else {
+        let cwd = runtime.call_export("cwd", &[]).unwrap();
+        let ValueView::String(cwd) = runtime.inspect(&cwd).unwrap() else {
             panic!("cwd should return String");
         };
-        assert!(!cwd.is_empty());
+        assert!(!cwd.as_str().is_empty());
 
         let Value::Int(now) = runtime.call_export("now", &[]).unwrap() else {
             panic!("now should return Int");
@@ -351,24 +398,23 @@ export let test () :=
             .register_module_text(
                 "main",
                 r#"
-            let Runtime := import "musi:runtime";
-            export let envGet (name : String) : String := Runtime.envGet(name);
-            export let envHas (name : String) : Int := Runtime.envHas(name);
-            export let random () : Int := Runtime.randomInt();
+            let Env := import "musi:env";
+            let Random := import "musi:random";
+            export let envGet (name : String) : String := Env.get(name);
+            export let envHas (name : String) : Int := Env.has(name);
+            export let random () : Int := Random.int();
         "#,
             )
             .unwrap();
         runtime.load_root("main").unwrap();
 
         let missing_key = format!("MUSI_RT_MISSING_{}", unique_test_suffix());
-        let has_value = runtime
-            .call_export("envHas", &[Value::string(missing_key.clone())])
-            .unwrap();
-        let env_value = runtime
-            .call_export("envGet", &[Value::string(missing_key)])
-            .unwrap();
+        let missing_arg = runtime_string(&mut runtime, missing_key.clone());
+        let has_value = runtime.call_export("envHas", &[missing_arg]).unwrap();
+        let missing_arg = runtime_string(&mut runtime, missing_key);
+        let env_value = runtime.call_export("envGet", &[missing_arg]).unwrap();
         assert_eq!(has_value, Value::Int(0));
-        assert_eq!(env_value, Value::string(""));
+        assert_runtime_string(&runtime, &env_value, "");
 
         let first = runtime.call_export("random", &[]).unwrap();
         let second = runtime.call_export("random", &[]).unwrap();
@@ -384,9 +430,11 @@ export let test () :=
             .register_module_text(
                 "main",
                 r#"
-            let Runtime := import "musi:runtime";
-            export let envSet (name : String, value : String) : Int := Runtime.envSet(name, value);
-            export let envRemove (name : String) : Int := Runtime.envRemove(name);
+            let Env := import "musi:env";
+            export let envGet (name : String) : String := Env.get(name);
+            export let envHas (name : String) : Int := Env.has(name);
+            export let envSet (name : String, value : String) : Int := Env.set(name, value);
+            export let envRemove (name : String) : Int := Env.remove(name);
         "#,
             )
             .unwrap();
@@ -397,29 +445,24 @@ export let test () :=
         unsafe {
             remove_var(&key);
         }
+        let key_arg = runtime_string(&mut runtime, key.clone());
+        let value_arg = runtime_string(&mut runtime, "value");
         let set_value = runtime
-            .call_export(
-                "envSet",
-                &[Value::string(key.clone()), Value::string("value")],
-            )
+            .call_export("envSet", &[key_arg, value_arg])
             .unwrap();
-        let has_value = runtime
-            .call_export("envHas", &[Value::string(key.clone())])
-            .unwrap();
-        let get_value = runtime
-            .call_export("envGet", &[Value::string(key.clone())])
-            .unwrap();
+        let key_arg = runtime_string(&mut runtime, key.clone());
+        let has_value = runtime.call_export("envHas", &[key_arg]).unwrap();
+        let key_arg = runtime_string(&mut runtime, key.clone());
+        let get_value = runtime.call_export("envGet", &[key_arg]).unwrap();
         assert_eq!(var(&key).as_deref(), Ok("value"));
-        let remove_value = runtime
-            .call_export("envRemove", &[Value::string(key.clone())])
-            .unwrap();
-        let missing_value = runtime
-            .call_export("envHas", &[Value::string(key.clone())])
-            .unwrap();
+        let key_arg = runtime_string(&mut runtime, key.clone());
+        let remove_value = runtime.call_export("envRemove", &[key_arg]).unwrap();
+        let key_arg = runtime_string(&mut runtime, key.clone());
+        let missing_value = runtime.call_export("envHas", &[key_arg]).unwrap();
 
         assert_eq!(set_value, Value::Int(1));
         assert_eq!(has_value, Value::Int(1));
-        assert_eq!(get_value, Value::string("value"));
+        assert_runtime_string(&runtime, &get_value, "value");
         assert_eq!(remove_value, Value::Int(1));
         assert_eq!(missing_value, Value::Int(0));
         assert_eq!(var_os(&key), None);
@@ -435,14 +478,16 @@ export let test () :=
             .register_module_text(
                 "main",
                 r#"
-            let Runtime := import "musi:runtime";
+            let Fs := import "musi:fs";
+            let Io := import "musi:io";
+            let Log := import "musi:log";
             export let roundtrip (path : String, text : String) : String := (
-              Runtime.fsWriteText(path, text);
-              Runtime.fsReadText(path)
+              Fs.writeText(path, text);
+              Fs.readText(path)
             );
             export let logAndPrint () : Unit := (
-              Runtime.logInfo("runtime-log");
-              Runtime.ioPrint("runtime-print")
+              Log.info("runtime-log");
+              Io.print("runtime-print")
             );
         "#,
             )
@@ -450,11 +495,12 @@ export let test () :=
         runtime.load_root("main").unwrap();
 
         let path = temp_text_path();
-        let text = Value::string("runtime-file");
+        let text = runtime_string(&mut runtime, "runtime-file");
+        let path_value = runtime_string(&mut runtime, path.clone());
         let value = runtime
-            .call_export("roundtrip", &[Value::string(path.clone()), text.clone()])
+            .call_export("roundtrip", &[path_value, text])
             .unwrap();
-        assert_eq!(value, text);
+        assert_runtime_string(&runtime, &value, "runtime-file");
 
         let unit = runtime.call_export("logAndPrint", &[]).unwrap();
         assert_eq!(unit, Value::Unit);
@@ -472,13 +518,14 @@ export let test () :=
             .register_module_text(
                 "main",
                 r#"
-            let Runtime := import "musi:runtime";
+            let Io := import "musi:io";
+            let Log := import "musi:log";
             export let test () : Unit := (
-              Runtime.ioPrint("out");
-              Runtime.ioPrintLine(" line");
-              Runtime.ioPrintError("err");
-              Runtime.ioPrintErrorLine(" line");
-              Runtime.logWrite(40, "boom")
+              Io.print("out");
+              Io.printLine(" line");
+              Io.printError("err");
+              Io.printErrorLine(" line");
+              Log.write(40, "boom")
             );
         "#,
             )
@@ -500,11 +547,12 @@ export let test () :=
             .register_module_text(
                 "main",
                 r#"
-            let Runtime := import "musi:runtime";
+            let Io := import "musi:io";
+            let Log := import "musi:log";
             export let test () : Unit := (
-              Runtime.ioPrintLine("hidden");
-              Runtime.ioPrintErrorLine("hidden");
-              Runtime.logWrite(40, "hidden")
+              Io.printLine("hidden");
+              Io.printErrorLine("hidden");
+              Log.write(40, "hidden")
             );
         "#,
             )
@@ -590,7 +638,7 @@ export let unwrapOr [T] (value : Option[T], fallback : T) : T :=
 let Intrinsics := import "musi:test";
 
 export let toBe (actual : Int, expected : Int) := actual = expected;
-export let toBeTruthy (actual : Bool) := actual;
+export let toBeTrue (actual : Bool) := actual;
 
 export let describe (name : String) :=
     Intrinsics.suiteStart(name);
@@ -612,7 +660,7 @@ let Option := import "@std/option";
 export let test () :=
     (
       Testing.describe("std root");
-      Testing.it("bytes chain", Testing.toBeTruthy(Bytes.equals([1, 2], [1, 2])));
+      Testing.it("bytes chain", Testing.toBeTrue(Bytes.equals([1, 2], [1, 2])));
       Testing.it("math chain", Testing.toBe(Math.clamp(9, 0, 4), 4));
       Testing.it("option chain", Testing.toBe(Option.unwrapOr[Int](Option.none[Int](), 5), 5));
       Testing.endDescribe()
@@ -642,7 +690,7 @@ mod failure {
         runtime
         .register_module_text(
             "dep",
-            "export opaque let Hidden := data { | Hidden(Int) }; export let answer () : Int := 42;",
+            "export opaque let Hidden := data { | Hidden(Int) }; export let result () : Int := 42;",
         )
         .unwrap();
         runtime.load_root("main").unwrap();
@@ -724,8 +772,8 @@ mod failure {
             .register_module_text(
                 "main",
                 r#"
-            let Runtime := import "musi:runtime";
-            export let quit (code : Int) : Unit := Runtime.processExit(code);
+            let Process := import "musi:process";
+            export let quit (code : Int) : Unit := Process.exit(code);
         "#,
             )
             .unwrap();

@@ -20,7 +20,7 @@ This workspace splits language pipeline, runtime, tooling, and user-facing binar
 - `music_seam` — SEAM artifact, SEAM HIL, lowered `.seam` text, binary, opcodes
 - `musi_vm` — VM program loading, values, execution
 - `musi_native_ffi` — libffi-backed native call bridge
-- `musi_native` — host effect and foreign dispatch
+- `musi_native` — host effect and native dispatch
 - `musi_rt` — embeddable runtime wrapper around session + VM + native host
 - `musi_foundation` — compiler-owned `musi:*` modules
 

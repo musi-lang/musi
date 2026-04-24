@@ -214,7 +214,7 @@ impl Parser<'_> {
         &mut self,
         children: &mut SyntaxElementList,
     ) -> ParseResult<()> {
-        if self.at(TokenKind::KwUsing) {
+        if self.at(TokenKind::KwRequire) {
             children.push(self.advance_element());
             children.push(SyntaxElementId::Node(self.parse_effect_set()?));
         }

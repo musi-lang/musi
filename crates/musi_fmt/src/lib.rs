@@ -4,7 +4,6 @@ mod markdown;
 mod paths;
 pub mod pretty;
 mod protected;
-mod roles;
 mod source;
 mod token_class;
 
@@ -22,6 +21,8 @@ use musi_project::manifest::{
 use thiserror::Error;
 
 pub type FormatResultOf<T = FormatResult> = Result<T, FormatError>;
+
+pub const MUSI_SOURCE_EXTENSION: &str = "ms";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrailingCommas {
@@ -92,7 +93,7 @@ impl Default for FormatOptions {
             match_arm_arrow_alignment: MatchArmArrowAlignment::None,
             call_argument_layout: GroupLayout::Auto,
             declaration_parameter_layout: GroupLayout::Auto,
-            record_field_layout: GroupLayout::Block,
+            record_field_layout: GroupLayout::Auto,
             effect_member_parameter_layout: GroupLayout::Auto,
             operator_break: OperatorBreak::Before,
             include: Vec::new(),
@@ -200,7 +201,7 @@ impl FormatInputKind {
     #[must_use]
     pub fn from_extension(extension: &str) -> Option<Self> {
         match extension.to_ascii_lowercase().as_str() {
-            "ms" => Some(Self::Musi),
+            MUSI_SOURCE_EXTENSION => Some(Self::Musi),
             "md" | "mkd" | "mkdn" | "mdwn" | "mdown" | "markdown" => Some(Self::Markdown),
             _ => None,
         }

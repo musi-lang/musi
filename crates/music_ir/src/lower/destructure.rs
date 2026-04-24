@@ -5,7 +5,7 @@ type RecordPatFieldRange = SliceRange<HirRecordPatField>;
 #[derive(Clone, Copy)]
 struct IrrefutablePatInput<'a> {
     origin: IrOrigin,
-    module_target: Option<&'a ModuleKey>,
+    import_record_target: Option<&'a ModuleKey>,
 }
 
 impl IrrefutablePatInput<'_> {
@@ -96,13 +96,17 @@ impl IrrefutablePatInput<'_> {
         out: &mut Vec<IrExpr>,
     ) -> Result<(), Box<str>> {
         let sema = ctx.sema;
-        let pat_ty = sema
-            .try_pat_ty(pat)
-            .unwrap_or_else(|| invalid_lowering_path("pattern type missing for destructuring"));
+        let pat_ty = sema.try_pat_ty(pat).unwrap_or_else(|| {
+            lowering_invariant_violation("pattern type missing for destructuring")
+        });
+        if self.import_record_target.is_some() {
+            return self.lower_module_record(ctx, fields, out);
+        }
         match &sema.ty(pat_ty).kind {
-            HirTyKind::Module => self.lower_module_record(ctx, fields, out),
             HirTyKind::Record { .. } => self.lower_value_record(ctx, fields, pat_ty, base, out),
-            _ => Err("record destructuring without record base".into()),
+            _ => Err(super::lower_errors::lowering_error(
+                "record destructuring without record base",
+            )),
         }
     }
 
@@ -114,8 +118,10 @@ impl IrrefutablePatInput<'_> {
     ) -> Result<(), Box<str>> {
         let sema = ctx.sema;
         let interner = ctx.interner;
-        let Some(module_target) = self.module_target else {
-            return Err("module destructuring without module target".into());
+        let Some(import_record_target) = self.import_record_target else {
+            return Err(super::lower_errors::lowering_error(
+                "import record destructuring without import record target",
+            ));
         };
         for field in sema.module().store.record_pat_fields.get(fields) {
             let name_text: Box<str> = interner.resolve(field.name.name).into();
@@ -124,7 +130,7 @@ impl IrrefutablePatInput<'_> {
                 IrExprKind::Name {
                     binding: None,
                     name: name_text.clone(),
-                    module_target: Some(module_target.clone()),
+                    import_record_target: Some(import_record_target.clone()),
                 },
             );
             self.lower_record_field(ctx, field, proj, name_text, out)?;
@@ -145,11 +151,15 @@ impl IrrefutablePatInput<'_> {
         let stored = store_in_temp(ctx, self.origin, base, out);
         let Some((indices, _layout, _field_count)) = record_layout_for_ty(sema, pat_ty, interner)
         else {
-            return Err("record destructuring without record layout".into());
+            return Err(super::lower_errors::lowering_error(
+                "record destructuring without record layout",
+            ));
         };
         for field in sema.module().store.record_pat_fields.get(fields) {
             let Some(index) = indices.get(interner.resolve(field.name.name)).copied() else {
-                return Err("record destructuring missing field".into());
+                return Err(super::lower_errors::lowering_error(
+                    "record destructuring missing field",
+                ));
             };
             let proj = IrExpr::new(
                 self.origin,
@@ -193,7 +203,7 @@ pub(super) fn lower_destructure_let(
     pat: HirPatId,
     value: HirExprId,
 ) -> Result<IrExprKind, Box<str>> {
-    let module_target = ctx.sema.expr_module_target(value);
+    let import_record_target = ctx.sema.expr_import_record_target(value);
 
     let value_expr = lower_expr(ctx, value);
     let temp = fresh_temp(ctx);
@@ -209,7 +219,7 @@ pub(super) fn lower_destructure_let(
     let base = IrExpr::new(origin, IrExprKind::Temp { temp });
     IrrefutablePatInput {
         origin,
-        module_target,
+        import_record_target,
     }
     .lower_bindings(ctx, pat, base, &mut exprs)?;
     exprs.push(IrExpr::new(origin, IrExprKind::Unit));

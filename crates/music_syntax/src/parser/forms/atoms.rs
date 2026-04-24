@@ -250,6 +250,26 @@ impl Parser<'_> {
             .push_node_from_children(SyntaxNodeKind::UnsafeExpr, children))
     }
 
+    pub(crate) fn parse_pin_expr(&mut self) -> ParseResult<SyntaxNodeId> {
+        let pin_kw = self.expect_token(TokenKind::KwPin)?;
+        let value = self.parse_expr(0)?;
+        let as_kw = self.expect_token(TokenKind::KwAs)?;
+        let name = self.expect_token(TokenKind::Ident)?;
+        let in_kw = self.expect_token(TokenKind::KwIn)?;
+        let body = self.parse_expr(0)?;
+        Ok(self.builder.push_node_from_children(
+            SyntaxNodeKind::PinExpr,
+            vec![
+                pin_kw,
+                SyntaxElementId::Node(value),
+                as_kw,
+                name,
+                in_kw,
+                SyntaxElementId::Node(body),
+            ],
+        ))
+    }
+
     pub(crate) fn parse_splice_expr(&mut self) -> ParseResult<SyntaxNodeId> {
         if self.quote_depth == 0 {
             self.error(ParseError::new(

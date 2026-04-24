@@ -10,8 +10,8 @@ mod failure {
     #[test]
     fn dot_callable_member_rejects_other_member_kinds() {
         assert!(!is_dot_callable_member(ExprMemberKind::RecordField));
-        assert!(!is_dot_callable_member(ExprMemberKind::ClassMember));
-        assert!(!is_dot_callable_member(ExprMemberKind::ModuleExport));
+        assert!(!is_dot_callable_member(ExprMemberKind::ShapeMember));
+        assert!(!is_dot_callable_member(ExprMemberKind::ImportRecordExport));
         assert!(!is_dot_callable_member(ExprMemberKind::FfiPointerExport));
         assert!(!is_dot_callable_member(ExprMemberKind::EffectOperation));
     }

@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 
-use musi_vm::{EffectCall, ForeignCall, Value, VmResult};
+use musi_vm::{EffectCall, ForeignCall, Value, VmHostCallContext, VmResult};
 
-type ForeignHandler = Box<dyn FnMut(&ForeignCall, &[Value]) -> VmResult<Value>>;
-type EffectHandler = Box<dyn FnMut(&EffectCall, &[Value]) -> VmResult<Value>>;
+type ForeignHandler =
+    Box<dyn FnMut(VmHostCallContext<'_, '_>, &ForeignCall, &[Value]) -> VmResult<Value> + Send>;
+type EffectHandler =
+    Box<dyn FnMut(VmHostCallContext<'_, '_>, &EffectCall, &[Value]) -> VmResult<Value> + Send>;
 type HandlerName = Box<str>;
 type ForeignHandlerMap = HashMap<Box<str>, ForeignHandler>;
 type EffectHandlerKey = (Box<str>, Box<str>);
@@ -19,7 +21,21 @@ impl RegisteredHost {
     pub fn register_foreign_handler<Name>(
         &mut self,
         name: Name,
-        handler: impl FnMut(&ForeignCall, &[Value]) -> VmResult<Value> + 'static,
+        mut handler: impl FnMut(&ForeignCall, &[Value]) -> VmResult<Value> + Send + 'static,
+    ) where
+        Name: Into<HandlerName>,
+    {
+        self.register_foreign_handler_with_context(name, move |_ctx, foreign, args| {
+            handler(foreign, args)
+        });
+    }
+
+    pub fn register_foreign_handler_with_context<Name>(
+        &mut self,
+        name: Name,
+        handler: impl FnMut(VmHostCallContext<'_, '_>, &ForeignCall, &[Value]) -> VmResult<Value>
+        + Send
+        + 'static,
     ) where
         Name: Into<HandlerName>,
     {
@@ -30,7 +46,23 @@ impl RegisteredHost {
         &mut self,
         effect: Effect,
         op: Op,
-        handler: impl FnMut(&EffectCall, &[Value]) -> VmResult<Value> + 'static,
+        mut handler: impl FnMut(&EffectCall, &[Value]) -> VmResult<Value> + Send + 'static,
+    ) where
+        Effect: Into<HandlerName>,
+        Op: Into<HandlerName>,
+    {
+        self.register_effect_handler_with_context(effect, op, move |_ctx, effect, args| {
+            handler(effect, args)
+        });
+    }
+
+    pub fn register_effect_handler_with_context<Effect, Op>(
+        &mut self,
+        effect: Effect,
+        op: Op,
+        handler: impl FnMut(VmHostCallContext<'_, '_>, &EffectCall, &[Value]) -> VmResult<Value>
+        + Send
+        + 'static,
     ) where
         Effect: Into<HandlerName>,
         Op: Into<HandlerName>,
@@ -43,22 +75,24 @@ impl RegisteredHost {
     #[must_use]
     pub fn call_foreign(
         &mut self,
+        ctx: VmHostCallContext<'_, '_>,
         foreign: &ForeignCall,
         args: &[Value],
     ) -> Option<VmResult<Value>> {
         let handler = self.foreign_handlers.get_mut(foreign.name())?;
-        Some(handler(foreign, args))
+        Some(handler(ctx, foreign, args))
     }
 
     #[must_use]
     pub fn handle_effect(
         &mut self,
+        ctx: VmHostCallContext<'_, '_>,
         effect: &EffectCall,
         args: &[Value],
     ) -> Option<VmResult<Value>> {
         let handler = self
             .effect_handlers
             .get_mut(&(effect.effect_name().into(), effect.op_name().into()))?;
-        Some(handler(effect, args))
+        Some(handler(ctx, effect, args))
     }
 }

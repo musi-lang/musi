@@ -17,7 +17,7 @@ pub(super) struct ClosureCallableInput<'a> {
     pub(super) params: LoweredParams,
     pub(super) binding: Option<NameBindingId>,
     pub(super) name: Option<Box<str>>,
-    pub(super) callable_module_target: Option<ModuleKey>,
+    pub(super) callable_import_record_target: Option<ModuleKey>,
     pub(super) rewrite_recursive_self: bool,
 }
 
@@ -44,31 +44,34 @@ pub(super) fn lower_local_callable_let(
         ),
         HirPatKind::Wildcard => (None, Box::<str>::from("_")),
         other => {
-            invalid_lowering_path(format!("local callable let pattern {other:?}"));
+            lowering_invariant_violation(format!("local callable let pattern {other:?}"));
         }
     };
 
-    let (hidden_params, evidence_bindings) =
-        super::hidden_evidence_params_for_binding(ctx.sema, name.as_ref(), binding);
-    let hidden_param_names = evidence_bindings.values().cloned().collect::<Vec<_>>();
+    let (hidden_params, constraint_answer_bindings) =
+        super::hidden_constraint_answer_params_for_binding(ctx.sema, name.as_ref(), binding);
+    let hidden_param_names = constraint_answer_bindings
+        .values()
+        .cloned()
+        .collect::<Vec<_>>();
     let hidden_capture_exprs = binding
-        .and_then(|binding| ctx.sema.binding_evidence_keys(binding))
+        .and_then(|binding| ctx.sema.binding_constraint_keys(binding))
         .unwrap_or(&[])
         .iter()
         .map(|key| {
-            super::lower_evidence_expr(
+            super::lower_constraint_answer_expr(
                 ctx,
                 IrOrigin::new(
                     sema.module().store.exprs.get(value).origin.source_id,
                     sema.module().store.exprs.get(value).origin.span,
                 ),
-                &ConstraintEvidence::Param { key: key.clone() },
+                &ConstraintAnswer::Param { key: key.clone() },
             )
         })
         .collect::<Vec<_>>();
-    super::push_evidence_bindings(ctx, evidence_bindings);
+    super::push_constraint_answer_bindings(ctx, constraint_answer_bindings);
     let mut body = lower_expr(ctx, value);
-    super::pop_evidence_bindings(ctx);
+    super::pop_constraint_answer_bindings(ctx);
     body.origin = IrOrigin {
         source_id: sema.module().store.exprs.get(value).origin.source_id,
         span: sema.module().store.exprs.get(value).origin.span,
@@ -86,7 +89,7 @@ pub(super) fn lower_local_callable_let(
             params: lower_user_params(ctx, params),
             binding,
             name: (binding.is_some() && name.as_ref() != "_").then_some(name.clone()),
-            callable_module_target: sema.expr_module_target(value).cloned(),
+            callable_import_record_target: sema.expr_import_record_target(value).cloned(),
             rewrite_recursive_self: mods.is_rec,
         },
     );
@@ -118,7 +121,7 @@ pub(super) fn lower_lambda_expr(
             params: lower_user_params(ctx, params),
             binding: None,
             name: None,
-            callable_module_target: Some(ctx.module_key.clone()),
+            callable_import_record_target: Some(ctx.module_key.clone()),
             rewrite_recursive_self: false,
         },
     )
@@ -132,7 +135,7 @@ pub(super) fn lower_user_params(ctx: &LowerCtx<'_>, params: &HirParamRange) -> L
     let mut bindings = Vec::new();
     for param in sema.module().store.params.get(params.clone()) {
         let binding = decl_binding_id(sema, param.name)
-            .unwrap_or_else(|| invalid_lowering_path("param binding missing"));
+            .unwrap_or_else(|| lowering_invariant_violation("param binding missing"));
         bindings.push(binding);
         lowered.push(IrParam::new(binding, interner.resolve(param.name.name)));
     }
@@ -148,8 +151,9 @@ pub(super) fn lower_named_params(ctx: &LowerCtx<'_>, params: &[Ident]) -> Lowere
     let mut lowered = Vec::new();
     let mut bindings = Vec::new();
     for param in params {
-        let binding = decl_binding_id(sema, *param)
-            .unwrap_or_else(|| invalid_lowering_path("named param binding missing in lowering"));
+        let binding = decl_binding_id(sema, *param).unwrap_or_else(|| {
+            lowering_invariant_violation("named param binding missing in lowering")
+        });
         bindings.push(binding);
         lowered.push(IrParam::new(binding, interner.resolve(param.name)));
     }
@@ -217,10 +221,12 @@ pub(super) fn lower_closure_callable(
         .with_binding_opt(input.binding)
         .with_effects(
             sema.try_expr_effects(input.body_id)
-                .unwrap_or_else(|| invalid_lowering_path("expr effects missing for closure body"))
+                .unwrap_or_else(|| {
+                    lowering_invariant_violation("expr effects missing for closure body")
+                })
                 .clone(),
         )
-        .with_module_target_opt(input.callable_module_target),
+        .with_import_record_target_opt(input.callable_import_record_target),
     );
 
     IrExpr::new(
@@ -228,7 +234,7 @@ pub(super) fn lower_closure_callable(
         IrExprKind::ClosureNew {
             callee: IrNameRef::new(callable_name)
                 .with_binding_opt(input.binding)
-                .with_module_target(ctx.module_key.clone()),
+                .with_import_record_target(ctx.module_key.clone()),
             captures: callable_capture_exprs.into_boxed_slice(),
         },
     )
@@ -257,7 +263,7 @@ fn compute_capture_bindings(
 
     used.retain(|binding| !local.contains(binding) && !ctx.module_level_bindings.contains(binding));
     let active_synthetic = ctx
-        .evidence_bindings
+        .constraint_answer_bindings
         .iter()
         .flat_map(|bindings| bindings.values().cloned())
         .collect::<HashSet<_>>();
@@ -317,7 +323,7 @@ fn name_expr(ctx: &LowerCtx<'_>, origin: IrOrigin, binding: NameBindingId) -> Ir
         IrExprKind::Name {
             binding: Some(binding),
             name: binding_name(ctx, binding),
-            module_target: None,
+            import_record_target: None,
         },
     )
 }
@@ -349,7 +355,7 @@ fn lower_capture_exprs(
                 IrExprKind::Name {
                     binding: None,
                     name: name.clone(),
-                    module_target: None,
+                    import_record_target: None,
                 },
             ),
         })

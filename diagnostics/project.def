@@ -1,24 +1,20 @@
 catalog project musi_project ProjectDiagKind crates/musi_project/src/diag_catalog_gen.rs
 
 diag MissingManifest 5000
-  message "missing manifest `{path}`"
-  primary "missing manifest `{path}`"
+  message "manifest `{path}` missing"
 
 diag MissingManifestAncestor 5001
-  message "missing manifest ancestor from `{path}`"
-  primary "missing manifest ancestor from `{path}`"
+  message "manifest ancestor from `{path}` missing"
 
 diag MissingPackageRoot 5002
-  message "missing package root `{path}`"
-  primary "missing package root `{path}`"
+  message "package root `{path}` missing"
 
 diag MissingModule 5003
-  message "missing module path `{path}`"
-  primary "missing module path `{path}`"
+  message "module path `{path}` missing"
 
 diag InvalidManifestJson 5004
-  message "invalid manifest `{path}` JSON (`{source}`)"
-  primary "invalid manifest `{path}` JSON"
+  message "manifest `{path}` JSON invalid (`{source}`)"
+  primary "manifest `{path}` JSON invalid"
 
 diag ProjectIoFailed 5005
   message "project path `{path}` I/O failed (`{source}`)"
@@ -29,88 +25,148 @@ diag ManifestValidationFailed 5006
   primary "manifest validation failed"
 
 diag DuplicateWorkspaceMember 5007
-  message "duplicate workspace member `{member}`"
-  primary "duplicate workspace member `{member}`"
+  message "workspace member `{member}` duplicate"
 
 diag DuplicatePackageName 5008
-  message "duplicate package `{name}` in project graph"
-  primary "duplicate package `{name}`"
+  message "project graph package `{name}` duplicate"
+  primary "package `{name}` duplicate"
 
 diag MissingPackageVersion 5009
-  message "missing version for package `{name}`"
-  primary "missing version for package `{name}`"
+  message "package `{name}` missing version"
 
 diag NoRootPackage 5010
-  message "missing root package entry"
-  primary "missing root package entry"
+  message "root package entry `root` missing"
 
 diag MissingPackageEntryModule 5011
-  message "missing entry module for package `{package}`"
-  primary "missing entry module for package `{package}`"
+  message "package `{package}` entry module missing"
 
 diag UnknownTask 5012
-  message "missing task `{name}`"
-  primary "missing task `{name}`"
+  message "task `{name}` unknown"
 
 diag TaskDependencyCycle 5013
   message "task dependency cycle reaches `{name}`"
-  primary "task dependency cycle reaches `{name}`"
 
 diag PackageDependencyCycle 5014
   message "package dependency cycle reaches `{name}`"
-  primary "package dependency cycle reaches `{name}`"
 
 diag UnresolvedImport 5015
-  message "unresolved import specifier `{spec}`"
-  primary "unresolved import specifier `{spec}`"
+  message "import specifier `{spec}` unresolved"
 
 diag MissingRegistryRoot 5016
-  message "registry root required for `{name}`"
-  primary "registry root required for `{name}`"
+  message "registry root for `{name}` missing"
 
 diag MissingGlobalCacheRoot 5017
-  message "global cache directory unavailable"
-  primary "global cache directory unavailable"
+  message "global cache directory missing"
 
 diag RegistryVersionNotFound 5018
-  message "missing registry version for `{name}` matching `{requirement}`"
-  primary "missing registry version for `{name}`"
+  message "registry version for `{name}` matching `{requirement}` missing"
+  primary "registry version for `{name}` missing"
 
 diag InvalidVersionRequirement 5019
-  message "invalid semver requirement `{requirement}` for `{name}`"
-  primary "invalid semver requirement `{requirement}`"
+  message "semver requirement `{requirement}` for `{name}` invalid"
+  primary "semver requirement `{requirement}` invalid"
 
 diag MissingFrozenLockfile 5020
-  message "frozen lockfile `{path}` required"
-  primary "frozen lockfile `{path}` required"
+  message "frozen lockfile `{path}` missing"
 
 diag FrozenLockfileOutOfDate 5021
   message "frozen lockfile `{path}` out of date"
-  primary "frozen lockfile `{path}` out of date"
 
 diag UnknownPackage 5022
-  message "unknown package `{name}`"
-  primary "unknown package `{name}`"
+  message "package `{name}` unknown"
 
 diag PackageGraphEntryMissing 5023
-  message "missing package graph entry `{name}`"
-  primary "missing package graph entry `{name}`"
+  message "package graph entry `{name}` missing"
 
 diag InvalidGitDependency 5024
-  message "invalid git dependency `{requirement}` for `{name}`"
-  primary "invalid git dependency `{requirement}`"
+  message "git dependency `{requirement}` for `{name}` invalid"
+  primary "git dependency `{requirement}` invalid"
 
 diag GitCommandFailed 5025
   message "git command `{command}` failed at `{path}`"
   primary "git command `{command}` failed"
 
 diag GitReferenceNotFound 5026
-  message "missing git reference `{reference}` for `{name}`"
-  primary "missing git reference `{reference}`"
+  message "git reference `{reference}` for `{name}` missing"
+  primary "git reference `{reference}` missing"
 
 diag SessionCompilationFailed 5027
   message "project session compilation failed (`{source}`)"
   primary "project session compilation failed"
+
+diag ManifestPackageNameMissing 5028
+  message "manifest `{path}` missing package name"
+  primary "missing `name` field"
+  help "add `name` to this package manifest"
+
+diag ManifestPackageNameEmpty 5029
+  message "empty package name for `{path}`"
+  primary "`name` must not be empty"
+
+diag ManifestPackageVersionMissing 5030
+  message "manifest package `{name}` missing version"
+  primary "missing `version` field"
+  help "add `version` to this package manifest"
+
+diag ManifestLibUnknown 5031
+  message "lib `{lib}` unknown"
+  primary "lib `{lib}` unsupported"
+
+diag ManifestPublishUnsupported 5032
+  message "publish value `{value}` unsupported"
+  primary "`publish` boolean must be false"
+
+diag ManifestModulesDirUnsupported 5033
+  message "musiModulesDir value `{value}` unsupported"
+  primary "`musiModulesDir` boolean must be false"
+
+diag ManifestExportKeyInvalid 5034
+  message "export key `{key}` invalid"
+  primary "export key `{key}` must be `.` or start with `./`"
+
+diag ManifestExportTargetInvalid 5035
+  message "export target `{target}` invalid"
+  primary "export target `{target}` must start with `./`"
+
+diag ManifestFmtLineWidthInvalid 5036
+  message "fmt.lineWidth `{value}` invalid"
+  primary "`fmt.lineWidth` must be at least `1`"
+
+diag ManifestFmtIndentWidthInvalid 5037
+  message "fmt.indentWidth `{value}` invalid"
+  primary "`fmt.indentWidth` must be at least `1`"
+
+diag ManifestFmtIncludeDuplicate 5038
+  message "fmt.include pattern `{pattern}` duplicate"
+  primary "`fmt.include` pattern `{pattern}` repeats"
+
+diag ManifestFmtExcludeDuplicate 5039
+  message "fmt.exclude pattern `{pattern}` duplicate"
+  primary "`fmt.exclude` pattern `{pattern}` repeats"
+
+diag ManifestTaskDependencyUnknown 5040
+  message "task `{task}` dependency `{dependency}` unknown"
+  primary "task dependency `{dependency}` not found"
+
+diag ManifestEntryTargetMissing 5041
+  message "package `{package}` entry target `{target}` missing"
+  primary "entry target `{target}` does not resolve"
+  help "update `entry` to existing module path"
+
+diag ManifestEntryDefaultMissing 5042
+  message "package `{package}` default entry module missing"
+  primary "`entry` field absent and root `index.ms` missing"
+  help "add `entry`, or create `index.ms` at package root"
+
+diag ManifestExportTargetMissing 5043
+  message "package `{package}` export `{export}` target `{target}` missing"
+  primary "export target `{target}` does not resolve"
+  help "update export target or add target module"
+
+diag SourceImportUnresolved 5044
+  message "import `{spec}` unresolved"
+  primary "import `{spec}` does not resolve"
+  help "declare import target or fix import spec"
 
 map project_error_kind crate::ProjectError option
   case "MissingManifest { .. }" MissingManifest

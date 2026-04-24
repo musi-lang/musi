@@ -2,10 +2,12 @@ mod analysis;
 mod analysis_support;
 pub use diag::ToolingDiagKind;
 mod artifact;
+mod completion;
 mod diag;
 mod diagnostics;
 mod direct;
 mod errors;
+mod navigation;
 mod semantic;
 
 pub use analysis::{
@@ -16,6 +18,10 @@ pub use analysis::{
     module_docs_for_project_file_with_overlay,
 };
 pub use artifact::{read_artifact_bytes, write_artifact_bytes, write_text_output};
+pub use completion::{
+    ToolCompletion, ToolCompletionKind, ToolCompletionList, completions_for_project_file,
+    completions_for_project_file_with_overlay,
+};
 pub use diagnostics::{
     CliDiagnostic, CliDiagnosticLabel, CliDiagnosticRange, CliDiagnosticsReport, DiagnosticsFormat,
     project_error_report, render_project_error, render_session_error, render_tooling_error,
@@ -23,6 +29,12 @@ pub use diagnostics::{
 };
 pub use direct::{DirectGraph, load_direct_graph};
 pub use errors::{ToolingError, ToolingResult};
+pub use navigation::{
+    ToolDocumentSymbol, ToolLocation, ToolTextEdit, ToolWorkspaceEdit, ToolWorkspaceSymbol,
+    definition_for_project_file_with_overlay, document_symbols_for_project_file_with_overlay,
+    prepare_rename_for_project_file_with_overlay, references_for_project_file_with_overlay,
+    rename_for_project_file_with_overlay, workspace_symbols_for_project_file_with_overlay,
+};
 pub use semantic::{
     ToolSemanticModifier, ToolSemanticModifierList, ToolSemanticToken, ToolSemanticTokenKind,
     ToolSemanticTokenList, semantic_tokens_for_project_file,

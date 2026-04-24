@@ -5,17 +5,17 @@ use std::path::{Component, Path, PathBuf};
 
 use musi_foundation::resolve_spec;
 use music_base::SourceId;
-use music_base::diag::{Diag, DiagCode, OwnedSourceDiag};
+use music_base::diag::{Diag, DiagContext, OwnedSourceDiag};
 use music_module::{ImportMap, ImportSiteKind, ModuleKey, ModuleSpecifier, collect_import_sites};
 use music_syntax::{Lexer, parse};
 
 use super::{
     DependencyPackageMap, LoadedImportSite, LoadedModule, PackageId, PackageRecord, PackageSource,
 };
-use crate::ProjectResult;
 use crate::errors::ProjectError;
 use crate::lock::{LockedPackage, LockedPackageSource, Lockfile};
 use crate::manifest::CompilerOptions;
+use crate::{ProjectDiagKind, ProjectResult};
 
 type PackageRecordMap = BTreeMap<PackageId, PackageRecord>;
 type RelativeModuleMap = BTreeMap<String, ModuleKey>;
@@ -105,16 +105,28 @@ pub(super) fn build_import_map(
             for import_site in &module.imports {
                 let import_spec = import_site.spec.as_str();
                 let remapped = manifest_map
-                    .resolve(&module.local_scope_key, &ModuleSpecifier::new(import_spec))
-                    .map_or_else(|| import_spec.to_owned(), |spec| spec.as_str().to_owned());
-                let target = resolve_import_spec(
-                    record,
-                    module,
-                    &remapped,
-                    package_records,
-                    package_name_index,
-                )
-                .ok_or_else(|| unresolved_import(module, import_site, &remapped))?;
+                    .resolve(&module.local_scope_key, &ModuleSpecifier::new(import_spec));
+                let remapped_spec = remapped
+                    .as_ref()
+                    .map_or(import_spec, ModuleSpecifier::as_str);
+                let target = if remapped.is_some() {
+                    resolve_import_map_target(
+                        record,
+                        module,
+                        remapped_spec,
+                        package_records,
+                        package_name_index,
+                    )
+                } else {
+                    resolve_import_spec(
+                        record,
+                        module,
+                        import_spec,
+                        package_records,
+                        package_name_index,
+                    )
+                }
+                .ok_or_else(|| unresolved_import(module, import_site, remapped_spec))?;
                 let _ = scope.insert(import_spec.to_owned(), target.as_str().to_owned());
             }
         }
@@ -127,12 +139,13 @@ fn unresolved_import(
     import_site: &LoadedImportSite,
     remapped: &str,
 ) -> ProjectError {
-    let mut diag = Diag::error(format!("unresolved import `{}`", import_site.spec))
-        .with_code(DiagCode::new(3615))
+    let context = DiagContext::new().with("spec", &import_site.spec);
+    let mut diag = Diag::error(ProjectDiagKind::SourceImportUnresolved.message_with(&context))
+        .with_code(ProjectDiagKind::SourceImportUnresolved.code())
         .with_label(
             import_site.span,
             SourceId::from_raw(0),
-            format!("import `{}` does not resolve", import_site.spec),
+            ProjectDiagKind::SourceImportUnresolved.label_with(&context),
         );
     if remapped != import_site.spec {
         diag = diag.with_note(format!(
@@ -140,20 +153,40 @@ fn unresolved_import(
             import_site.spec
         ));
     }
-    let hint = if import_site.spec.starts_with("./")
-        || import_site.spec.starts_with("../")
-        || import_site.spec.starts_with('/')
-    {
-        "update import path or add target module"
-    } else {
-        "declare package/import map entry or fix import spec"
-    };
-    diag = diag.with_hint(hint);
+    if let Some(hint) = ProjectDiagKind::SourceImportUnresolved.hint() {
+        diag = diag.with_hint(hint);
+    }
     ProjectError::SourceDiagnostic(Box::new(OwnedSourceDiag::new(
         module.path.clone(),
         module.text.clone(),
         diag,
     )))
+}
+
+fn resolve_import_map_target(
+    package: &PackageRecord,
+    module: &LoadedModule,
+    spec: &str,
+    package_records: &PackageRecordMap,
+    package_name_index: &BTreeMap<String, PackageId>,
+) -> Option<ModuleKey> {
+    resolve_package_root_spec(package, spec)
+        .or_else(|| resolve_import_spec(package, module, spec, package_records, package_name_index))
+}
+
+fn resolve_package_root_spec(package: &PackageRecord, spec: &str) -> Option<ModuleKey> {
+    if let Some(target) = resolve_spec(spec) {
+        return Some(target);
+    }
+    if spec.starts_with("./") || spec.starts_with("../") {
+        return resolve_module_target(
+            &package.package.root_dir,
+            &package.relative_modules,
+            None,
+            spec,
+        );
+    }
+    None
 }
 
 fn resolve_import_spec(

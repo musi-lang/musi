@@ -13,7 +13,6 @@ mod success {
 catalog demo crate DemoKind crates/demo/src/diag_catalog_gen.rs
 diag Known 1000
   message "known"
-  primary "known"
 map demo_error_kind crate::DemoError option
   case "Known { .. }" Known
   case "Foreign(_)" none
@@ -24,6 +23,7 @@ end
 
         assert_eq!(catalog.owner, "demo");
         assert_eq!(catalog.entries.len(), 1);
+        assert_eq!(catalog.entries[0].primary, "known");
         assert_eq!(catalog.maps.len(), 1);
         assert_eq!(catalog.maps[0].cases.len(), 2);
     }

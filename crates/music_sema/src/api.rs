@@ -144,7 +144,9 @@ pub enum SurfaceTyKind {
     Rune,
     CString,
     CPtr,
-    Module,
+    Bits {
+        width: u32,
+    },
     NatLit(u64),
     Named {
         name: Box<str>,
@@ -178,18 +180,6 @@ pub enum SurfaceTyKind {
     Range {
         bound: SurfaceTyId,
     },
-    ClosedRange {
-        bound: SurfaceTyId,
-    },
-    PartialRangeFrom {
-        bound: SurfaceTyId,
-    },
-    PartialRangeUpTo {
-        bound: SurfaceTyId,
-    },
-    PartialRangeThru {
-        bound: SurfaceTyId,
-    },
     Handler {
         effect: SurfaceTyId,
         input: SurfaceTyId,
@@ -198,11 +188,11 @@ pub enum SurfaceTyKind {
     Mut {
         inner: SurfaceTyId,
     },
-    AnyClass {
-        class: SurfaceTyId,
+    AnyShape {
+        capability: SurfaceTyId,
     },
-    SomeClass {
-        class: SurfaceTyId,
+    SomeShape {
+        capability: SurfaceTyId,
     },
     Record {
         fields: Box<[SurfaceTyField]>,
@@ -246,8 +236,8 @@ pub struct ExportedValue {
     pub constraints: ConstraintSurfaceList,
     pub effects: SurfaceEffectRow,
     pub opaque: bool,
-    pub module_target: Option<ModuleKey>,
-    pub class_key: Option<DefinitionKey>,
+    pub import_record_target: Option<ModuleKey>,
+    pub shape_key: Option<DefinitionKey>,
     pub effect_key: Option<DefinitionKey>,
     pub data_key: Option<DefinitionKey>,
     pub is_attached_method: bool,
@@ -273,8 +263,8 @@ impl ExportedValue {
             constraints: Box::default(),
             effects: SurfaceEffectRow::default(),
             opaque: false,
-            module_target: None,
-            class_key: None,
+            import_record_target: None,
+            shape_key: None,
             effect_key: None,
             data_key: None,
             is_attached_method: false,
@@ -331,14 +321,14 @@ impl ExportedValue {
     }
 
     #[must_use]
-    pub fn with_module_target(mut self, module_target: ModuleKey) -> Self {
-        self.module_target = Some(module_target);
+    pub fn with_import_record_target(mut self, import_record_target: ModuleKey) -> Self {
+        self.import_record_target = Some(import_record_target);
         self
     }
 
     #[must_use]
-    pub fn with_class_key(mut self, class_key: DefinitionKey) -> Self {
-        self.class_key = Some(class_key);
+    pub fn with_shape_key(mut self, shape_key: DefinitionKey) -> Self {
+        self.shape_key = Some(shape_key);
         self
     }
 
@@ -403,10 +393,10 @@ pub enum ComptimeValue {
     Closure(ComptimeClosureValue),
     Continuation(ComptimeContinuationValue),
     Type(ComptimeTypeValue),
-    Module(ComptimeModuleValue),
+    ImportRecord(ComptimeImportRecordValue),
     Foreign(ComptimeForeignValue),
     Effect(ComptimeEffectValue),
-    Class(ComptimeClassValue),
+    Shape(ComptimeShapeValue),
 }
 
 pub type ComptimeValueList = Box<[ComptimeValue]>;
@@ -443,7 +433,7 @@ pub struct ComptimeTypeValue {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ComptimeModuleValue {
+pub struct ComptimeImportRecordValue {
     pub key: ModuleKey,
 }
 
@@ -461,7 +451,7 @@ pub struct ComptimeEffectValue {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ComptimeClassValue {
+pub struct ComptimeShapeValue {
     pub module: ModuleKey,
     pub name: Box<str>,
 }
@@ -617,7 +607,7 @@ pub struct ConstraintSurface {
     pub name: Box<str>,
     pub kind: ConstraintKind,
     pub value: SurfaceTyId,
-    pub class_key: Option<DefinitionKey>,
+    pub shape_key: Option<DefinitionKey>,
 }
 
 impl ConstraintSurface {
@@ -630,13 +620,13 @@ impl ConstraintSurface {
             name: name.into(),
             kind,
             value,
-            class_key: None,
+            shape_key: None,
         }
     }
 
     #[must_use]
-    pub fn with_class_key(mut self, class_key: DefinitionKey) -> Self {
-        self.class_key = Some(class_key);
+    pub fn with_shape_key(mut self, shape_key: DefinitionKey) -> Self {
+        self.shape_key = Some(shape_key);
         self
     }
 }
@@ -686,13 +676,13 @@ impl SurfaceEffectRow {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ClassMemberSurface {
+pub struct ShapeMemberSurface {
     pub name: Box<str>,
     pub params: Box<[SurfaceTyId]>,
     pub result: SurfaceTyId,
 }
 
-impl ClassMemberSurface {
+impl ShapeMemberSurface {
     #[must_use]
     pub fn new<Name, Params>(name: Name, params: Params, result: SurfaceTyId) -> Self
     where
@@ -747,22 +737,22 @@ impl LawSurface {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ClassSurface {
+pub struct ShapeSurface {
     pub key: DefinitionKey,
     pub type_params: Box<[Box<str>]>,
     pub type_param_kinds: SurfaceTyIdList,
     pub constraints: Box<[ConstraintSurface]>,
-    pub members: Box<[ClassMemberSurface]>,
+    pub members: Box<[ShapeMemberSurface]>,
     pub laws: Box<[LawSurface]>,
     pub inert_attrs: Box<[Attr]>,
     pub musi_attrs: Box<[Attr]>,
 }
 
-impl ClassSurface {
+impl ShapeSurface {
     #[must_use]
     pub fn new(
         key: DefinitionKey,
-        members: impl Into<Box<[ClassMemberSurface]>>,
+        members: impl Into<Box<[ShapeMemberSurface]>>,
         laws: impl Into<Box<[LawSurface]>>,
     ) -> Self {
         Self {
@@ -888,32 +878,32 @@ impl EffectSurface {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InstanceSurface {
+pub struct GivenSurface {
     pub type_params: Box<[Box<str>]>,
     pub type_param_kinds: SurfaceTyIdList,
-    pub class_key: DefinitionKey,
-    pub class_args: Box<[SurfaceTyId]>,
+    pub shape_key: DefinitionKey,
+    pub shape_args: Box<[SurfaceTyId]>,
     pub constraints: Box<[ConstraintSurface]>,
     pub member_names: Box<[Box<str>]>,
     pub inert_attrs: Box<[Attr]>,
     pub musi_attrs: Box<[Attr]>,
 }
 
-impl InstanceSurface {
+impl GivenSurface {
     #[must_use]
-    pub fn new<ClassArgs>(
-        class_key: DefinitionKey,
-        class_args: ClassArgs,
+    pub fn new<ShapeArgs>(
+        shape_key: DefinitionKey,
+        shape_args: ShapeArgs,
         member_names: impl Into<NameList>,
     ) -> Self
     where
-        ClassArgs: Into<SurfaceTyIdList>,
+        ShapeArgs: Into<SurfaceTyIdList>,
     {
         Self {
             type_params: Box::default(),
             type_param_kinds: Box::default(),
-            class_key,
-            class_args: class_args.into(),
+            shape_key,
+            shape_args: shape_args.into(),
             constraints: Box::default(),
             member_names: member_names.into(),
             inert_attrs: Box::default(),
@@ -962,17 +952,17 @@ pub struct ModuleSurface {
     tys: Box<[SurfaceTy]>,
     exported_values: Box<[ExportedValue]>,
     exported_data: Box<[DataSurface]>,
-    exported_classes: Box<[ClassSurface]>,
+    exported_shapes: Box<[ShapeSurface]>,
     exported_effects: Box<[EffectSurface]>,
-    exported_instances: Box<[InstanceSurface]>,
+    exported_givens: Box<[GivenSurface]>,
 }
 
 type ModuleSurfaceExports = (
     Box<[ExportedValue]>,
     Box<[DataSurface]>,
-    Box<[ClassSurface]>,
+    Box<[ShapeSurface]>,
     Box<[EffectSurface]>,
-    Box<[InstanceSurface]>,
+    Box<[GivenSurface]>,
 );
 
 impl ModuleSurface {
@@ -988,9 +978,9 @@ impl ModuleSurface {
             tys,
             exported_values: exports.0,
             exported_data: exports.1,
-            exported_classes: exports.2,
+            exported_shapes: exports.2,
             exported_effects: exports.3,
-            exported_instances: exports.4,
+            exported_givens: exports.4,
         }
     }
 
@@ -1020,8 +1010,8 @@ impl ModuleSurface {
     }
 
     #[must_use]
-    pub fn exported_classes(&self) -> &[ClassSurface] {
-        &self.exported_classes
+    pub fn exported_shapes(&self) -> &[ShapeSurface] {
+        &self.exported_shapes
     }
 
     #[must_use]
@@ -1030,8 +1020,8 @@ impl ModuleSurface {
     }
 
     #[must_use]
-    pub fn exported_instances(&self) -> &[InstanceSurface] {
-        &self.exported_instances
+    pub fn exported_givens(&self) -> &[GivenSurface] {
+        &self.exported_givens
     }
 
     #[must_use]
@@ -1048,8 +1038,8 @@ impl ModuleSurface {
     }
 
     #[must_use]
-    pub fn exported_class(&self, key: &DefinitionKey) -> Option<&ClassSurface> {
-        self.exported_classes.iter().find(|class| &class.key == key)
+    pub fn exported_shape(&self, key: &DefinitionKey) -> Option<&ShapeSurface> {
+        self.exported_shapes.iter().find(|shape| &shape.key == key)
     }
 
     #[must_use]
@@ -1078,21 +1068,21 @@ impl ExprFacts {
     }
 }
 
-/// Semantic class for a resolved member access expression.
+/// Semantic kind for a resolved member access expression.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExprMemberKind {
     /// Field provided by a record-like value.
     RecordField,
     /// Value exported by a module.
-    ModuleExport,
+    ImportRecordExport,
     /// Callable resolved from receiver-first visible binding lookup.
     DotCallable,
     /// Callable declared with receiver-pattern method syntax.
     AttachedMethod,
     /// Attached method reached through receiver type namespace.
     AttachedMethodNamespace,
-    /// Member projected from typeclass evidence.
-    ClassMember,
+    /// Member projected from contextual answer lookup.
+    ShapeMember,
     /// Export reached through std FFI pointer namespace support.
     FfiPointerExport,
     /// Operation exposed by an effect value.
@@ -1106,7 +1096,7 @@ pub struct ExprMemberFact {
     pub name: Symbol,
     pub ty: HirTyId,
     pub binding: Option<NameBindingId>,
-    pub module_target: Option<ModuleKey>,
+    pub import_record_target: Option<ModuleKey>,
     pub index: Option<u16>,
 }
 
@@ -1118,7 +1108,7 @@ impl ExprMemberFact {
             name,
             ty,
             binding: None,
-            module_target: None,
+            import_record_target: None,
             index: None,
         }
     }
@@ -1130,8 +1120,8 @@ impl ExprMemberFact {
     }
 
     #[must_use]
-    pub fn with_module_target(mut self, target: ModuleKey) -> Self {
-        self.module_target = Some(target);
+    pub fn with_import_record_target(mut self, target: ModuleKey) -> Self {
+        self.import_record_target = Some(target);
         self
     }
 
@@ -1453,7 +1443,7 @@ pub struct ConstraintFacts {
     pub name: Symbol,
     pub kind: ConstraintKind,
     pub value: HirTyId,
-    pub class_key: Option<DefinitionKey>,
+    pub shape_key: Option<DefinitionKey>,
 }
 
 impl ConstraintFacts {
@@ -1463,13 +1453,13 @@ impl ConstraintFacts {
             name,
             kind,
             value,
-            class_key: None,
+            shape_key: None,
         }
     }
 
     #[must_use]
-    pub fn with_class_key(mut self, class_key: DefinitionKey) -> Self {
-        self.class_key = Some(class_key);
+    pub fn with_shape_key(mut self, shape_key: DefinitionKey) -> Self {
+        self.shape_key = Some(shape_key);
         self
     }
 }
@@ -1479,7 +1469,7 @@ pub struct ConstraintKey {
     pub kind: ConstraintKind,
     pub subject: HirTyId,
     pub value: HirTyId,
-    pub class_key: Option<DefinitionKey>,
+    pub shape_key: Option<DefinitionKey>,
 }
 
 impl ConstraintKey {
@@ -1488,19 +1478,19 @@ impl ConstraintKey {
         kind: ConstraintKind,
         subject: HirTyId,
         value: HirTyId,
-        class_key: Option<DefinitionKey>,
+        shape_key: Option<DefinitionKey>,
     ) -> Self {
         Self {
             kind,
             subject,
             value,
-            class_key,
+            shape_key,
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ConstraintEvidence {
+pub enum ConstraintAnswer {
     Param {
         key: ConstraintKey,
     },
@@ -1512,13 +1502,13 @@ pub enum ConstraintEvidence {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ClassMemberFacts {
+pub struct ShapeMemberFacts {
     pub name: Symbol,
     pub params: HirTyIdList,
     pub result: HirTyId,
 }
 
-impl ClassMemberFacts {
+impl ShapeMemberFacts {
     #[must_use]
     pub fn new<Params>(name: Symbol, params: Params, result: HirTyId) -> Self
     where
@@ -1562,22 +1552,22 @@ impl LawFacts {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ClassFacts {
+pub struct ShapeFacts {
     pub key: DefinitionKey,
     pub name: Symbol,
     pub type_params: Box<[Symbol]>,
     pub type_param_kinds: HirTyIdList,
     pub constraints: Box<[ConstraintFacts]>,
-    pub members: Box<[ClassMemberFacts]>,
+    pub members: Box<[ShapeMemberFacts]>,
     pub laws: Box<[LawFacts]>,
 }
 
-impl ClassFacts {
+impl ShapeFacts {
     #[must_use]
     pub fn new(
         key: DefinitionKey,
         name: Symbol,
-        members: impl Into<Box<[ClassMemberFacts]>>,
+        members: impl Into<Box<[ShapeMemberFacts]>>,
         laws: impl Into<Box<[LawFacts]>>,
     ) -> Self {
         Self {
@@ -1614,37 +1604,37 @@ impl ClassFacts {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InstanceFacts {
+pub struct GivenFacts {
     pub origin: HirOrigin,
     pub type_params: Box<[Symbol]>,
     pub type_param_kinds: HirTyIdList,
-    pub class_key: DefinitionKey,
-    pub class_name: Symbol,
-    pub class_args: HirTyIdList,
+    pub shape_key: DefinitionKey,
+    pub shape_name: Symbol,
+    pub shape_args: HirTyIdList,
     pub constraints: Box<[ConstraintFacts]>,
     pub evidence_keys: Box<[ConstraintKey]>,
     pub member_names: Box<[Symbol]>,
 }
 
-impl InstanceFacts {
+impl GivenFacts {
     #[must_use]
-    pub fn new<ClassArgs>(
+    pub fn new<ShapeArgs>(
         origin: HirOrigin,
-        class_key: DefinitionKey,
-        class_name: Symbol,
-        class_args: ClassArgs,
+        shape_key: DefinitionKey,
+        shape_name: Symbol,
+        shape_args: ShapeArgs,
         member_names: impl Into<SymbolList>,
     ) -> Self
     where
-        ClassArgs: Into<HirTyIdList>,
+        ShapeArgs: Into<HirTyIdList>,
     {
         Self {
             origin,
             type_params: Box::default(),
             type_param_kinds: Box::default(),
-            class_key,
-            class_name,
-            class_args: class_args.into(),
+            shape_key,
+            shape_name,
+            shape_args: shape_args.into(),
             constraints: Box::default(),
             evidence_keys: Box::default(),
             member_names: member_names.into(),
@@ -1687,21 +1677,21 @@ pub struct SemaModule {
     foreign_links: HashMap<NameBindingId, ForeignLinkInfo>,
     binding_types: HashMap<NameBindingId, HirTyId>,
     binding_schemes: HashMap<NameBindingId, BindingScheme>,
-    binding_evidence_keys: HashMap<NameBindingId, Box<[ConstraintKey]>>,
-    binding_module_targets: HashMap<NameBindingId, ModuleKey>,
+    binding_constraint_keys: HashMap<NameBindingId, Box<[ConstraintKey]>>,
+    binding_import_record_targets: HashMap<NameBindingId, ModuleKey>,
     binding_comptime_values: HashMap<NameBindingId, ComptimeValue>,
     expr_facts: Box<[ExprFacts]>,
     pat_facts: Box<[PatFacts]>,
-    expr_module_targets: HashMap<HirExprId, ModuleKey>,
+    expr_import_record_targets: HashMap<HirExprId, ModuleKey>,
     type_test_targets: HashMap<HirExprId, HirTyId>,
-    expr_evidence: HashMap<HirExprId, Box<[ConstraintEvidence]>>,
+    expr_constraint_answers: HashMap<HirExprId, Box<[ConstraintAnswer]>>,
     expr_dot_callable_bindings: HashMap<HirExprId, NameBindingId>,
     expr_member_facts: HashMap<HirExprId, ExprMemberFact>,
     expr_comptime_values: HashMap<HirExprId, ComptimeValue>,
     effect_defs: HashMap<Box<str>, SemaEffectDef>,
     data_defs: HashMap<Box<str>, SemaDataDef>,
-    class_facts: HashMap<HirExprId, ClassFacts>,
-    instance_facts: HashMap<HirExprId, InstanceFacts>,
+    shape_facts: HashMap<HirExprId, ShapeFacts>,
+    given_facts: HashMap<HirExprId, GivenFacts>,
     surface: ModuleSurface,
     diags: SemaDiagList,
 }
@@ -1712,17 +1702,17 @@ struct SemaContextTables {
     foreign_links: HashMap<NameBindingId, ForeignLinkInfo>,
     binding_types: HashMap<NameBindingId, HirTyId>,
     binding_schemes: HashMap<NameBindingId, BindingScheme>,
-    binding_evidence_keys: HashMap<NameBindingId, Box<[ConstraintKey]>>,
-    binding_module_targets: HashMap<NameBindingId, ModuleKey>,
+    binding_constraint_keys: HashMap<NameBindingId, Box<[ConstraintKey]>>,
+    binding_import_record_targets: HashMap<NameBindingId, ModuleKey>,
     binding_comptime_values: HashMap<NameBindingId, ComptimeValue>,
 }
 
 struct SemaFactTables {
     expr_facts: Vec<ExprFacts>,
     pat_facts: Vec<PatFacts>,
-    expr_module_targets: HashMap<HirExprId, ModuleKey>,
+    expr_import_record_targets: HashMap<HirExprId, ModuleKey>,
     type_test_targets: HashMap<HirExprId, HirTyId>,
-    expr_evidence: HashMap<HirExprId, Box<[ConstraintEvidence]>>,
+    expr_constraint_answers: HashMap<HirExprId, Box<[ConstraintAnswer]>>,
     expr_dot_callable_bindings: HashMap<HirExprId, NameBindingId>,
     expr_member_facts: HashMap<HirExprId, ExprMemberFact>,
     expr_comptime_values: HashMap<HirExprId, ComptimeValue>,
@@ -1731,8 +1721,8 @@ struct SemaFactTables {
 struct SemaDeclTables {
     effect_defs: HashMap<Box<str>, SemaEffectDef>,
     data_defs: HashMap<Box<str>, SemaDataDef>,
-    class_facts: HashMap<HirExprId, ClassFacts>,
-    instance_facts: HashMap<HirExprId, InstanceFacts>,
+    shape_facts: HashMap<HirExprId, ShapeFacts>,
+    given_facts: HashMap<HirExprId, GivenFacts>,
 }
 
 impl From<SemaModuleBuild> for SemaModule {
@@ -1748,9 +1738,9 @@ impl From<SemaModuleBuild> for SemaModule {
         let crate::SemaFactsBuild {
             expr_facts,
             pat_facts,
-            expr_module_targets,
+            expr_import_record_targets,
             type_test_targets,
-            expr_evidence,
+            expr_constraint_answers,
             expr_dot_callable_bindings,
             expr_member_facts,
             expr_comptime_values,
@@ -1761,16 +1751,16 @@ impl From<SemaModuleBuild> for SemaModule {
             foreign_links: build_context.foreign_links,
             binding_types: build_context.binding_types,
             binding_schemes: build_context.binding_schemes,
-            binding_evidence_keys: build_context.binding_evidence_keys,
-            binding_module_targets: build_context.binding_module_targets,
+            binding_constraint_keys: build_context.binding_constraint_keys,
+            binding_import_record_targets: build_context.binding_import_record_targets,
             binding_comptime_values: build_context.binding_comptime_values,
         };
         let facts = SemaFactTables {
             expr_facts,
             pat_facts,
-            expr_module_targets,
+            expr_import_record_targets,
             type_test_targets,
-            expr_evidence,
+            expr_constraint_answers,
             expr_dot_callable_bindings,
             expr_member_facts,
             expr_comptime_values,
@@ -1778,8 +1768,8 @@ impl From<SemaModuleBuild> for SemaModule {
         let decls = SemaDeclTables {
             effect_defs: build_decls.effect_defs,
             data_defs: build_decls.data_defs,
-            class_facts: build_decls.class_facts,
-            instance_facts: build_decls.instance_facts,
+            shape_facts: build_decls.shape_facts,
+            given_facts: build_decls.given_facts,
         };
         Self::from_parts(resolved, context, facts, decls, surface, diags)
     }
@@ -1819,8 +1809,8 @@ impl SemaModule {
     }
 
     #[must_use]
-    pub fn expr_module_target(&self, id: HirExprId) -> Option<&ModuleKey> {
-        self.expr_module_targets.get(&id)
+    pub fn expr_import_record_target(&self, id: HirExprId) -> Option<&ModuleKey> {
+        self.expr_import_record_targets.get(&id)
     }
 
     #[must_use]
@@ -1829,8 +1819,8 @@ impl SemaModule {
     }
 
     #[must_use]
-    pub fn expr_evidence(&self, id: HirExprId) -> Option<&[ConstraintEvidence]> {
-        self.expr_evidence.get(&id).map(Box::as_ref)
+    pub fn expr_constraint_answers(&self, id: HirExprId) -> Option<&[ConstraintAnswer]> {
+        self.expr_constraint_answers.get(&id).map(Box::as_ref)
     }
 
     #[must_use]
@@ -1865,8 +1855,8 @@ impl SemaModule {
     }
 
     #[must_use]
-    pub fn binding_module_target(&self, binding: NameBindingId) -> Option<&ModuleKey> {
-        self.binding_module_targets.get(&binding)
+    pub fn binding_import_record_target(&self, binding: NameBindingId) -> Option<&ModuleKey> {
+        self.binding_import_record_targets.get(&binding)
     }
 
     #[must_use]
@@ -1880,8 +1870,8 @@ impl SemaModule {
     }
 
     #[must_use]
-    pub fn binding_evidence_keys(&self, binding: NameBindingId) -> Option<&[ConstraintKey]> {
-        self.binding_evidence_keys.get(&binding).map(Box::as_ref)
+    pub fn binding_constraint_keys(&self, binding: NameBindingId) -> Option<&[ConstraintKey]> {
+        self.binding_constraint_keys.get(&binding).map(Box::as_ref)
     }
 
     #[must_use]
@@ -1897,13 +1887,13 @@ impl SemaModule {
     }
 
     #[must_use]
-    pub fn class_facts(&self, id: HirExprId) -> Option<&ClassFacts> {
-        self.class_facts.get(&id)
+    pub fn shape_facts(&self, id: HirExprId) -> Option<&ShapeFacts> {
+        self.shape_facts.get(&id)
     }
 
     #[must_use]
-    pub fn class_facts_by_name(&self, name: Symbol) -> Option<&ClassFacts> {
-        self.class_facts.values().find(|facts| facts.name == name)
+    pub fn shape_facts_by_name(&self, name: Symbol) -> Option<&ShapeFacts> {
+        self.shape_facts.values().find(|facts| facts.name == name)
     }
 
     #[must_use]
@@ -1925,8 +1915,8 @@ impl SemaModule {
     }
 
     #[must_use]
-    pub fn instance_facts(&self, id: HirExprId) -> Option<&InstanceFacts> {
-        self.instance_facts.get(&id)
+    pub fn given_facts(&self, id: HirExprId) -> Option<&GivenFacts> {
+        self.given_facts.get(&id)
     }
 
     #[must_use]
@@ -1951,21 +1941,21 @@ impl SemaModule {
             foreign_links: context.foreign_links,
             binding_types: context.binding_types,
             binding_schemes: context.binding_schemes,
-            binding_evidence_keys: context.binding_evidence_keys,
-            binding_module_targets: context.binding_module_targets,
+            binding_constraint_keys: context.binding_constraint_keys,
+            binding_import_record_targets: context.binding_import_record_targets,
             binding_comptime_values: context.binding_comptime_values,
             expr_facts: facts.expr_facts.into_boxed_slice(),
             pat_facts: facts.pat_facts.into_boxed_slice(),
-            expr_module_targets: facts.expr_module_targets,
+            expr_import_record_targets: facts.expr_import_record_targets,
             type_test_targets: facts.type_test_targets,
-            expr_evidence: facts.expr_evidence,
+            expr_constraint_answers: facts.expr_constraint_answers,
             expr_dot_callable_bindings: facts.expr_dot_callable_bindings,
             expr_member_facts: facts.expr_member_facts,
             expr_comptime_values: facts.expr_comptime_values,
             effect_defs: decls.effect_defs,
             data_defs: decls.data_defs,
-            class_facts: decls.class_facts,
-            instance_facts: decls.instance_facts,
+            shape_facts: decls.shape_facts,
+            given_facts: decls.given_facts,
             surface,
             diags,
         }

@@ -1,5 +1,6 @@
 use super::super::*;
 use crate::EmitDiagKind;
+use music_base::diag::DiagContext;
 use music_base::parse_i64_literal;
 use music_term::SyntaxTerm;
 
@@ -22,7 +23,7 @@ impl ProcedureEmitter<'_, '_> {
             ConstantValue::String(string_id),
         ));
         self.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::LdConst,
+            Opcode::LdC,
             Operand::Constant(constant_id),
         )));
     }
@@ -34,12 +35,12 @@ impl ProcedureEmitter<'_, '_> {
         diags: &mut EmitDiagList,
     ) {
         let Ok(term) = SyntaxTerm::from_quote_source(raw) else {
-            super::support::push_expr_diag(
+            super::support::push_expr_diag_with(
                 diags,
                 self.module_key,
                 origin,
                 EmitDiagKind::InvalidSyntaxLiteral,
-                format!("invalid syntax literal `{raw}`"),
+                DiagContext::new().with("literal", raw),
             );
             emit_zero(self);
             return;
@@ -55,7 +56,7 @@ impl ProcedureEmitter<'_, '_> {
             },
         ));
         self.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::LdConst,
+            Opcode::LdC,
             Operand::Constant(constant_id),
         )));
     }
@@ -64,12 +65,12 @@ impl ProcedureEmitter<'_, '_> {
         if let Some(value) = parse_i64_literal(raw) {
             self.compile_i64(value);
         } else {
-            super::support::push_expr_diag(
+            super::support::push_expr_diag_with(
                 diags,
                 self.module_key,
                 origin,
                 EmitDiagKind::InvalidIntegerLiteral,
-                format!("invalid integer literal `{raw}`"),
+                DiagContext::new().with("literal", raw),
             );
             emit_zero(self);
         }
@@ -82,12 +83,12 @@ impl ProcedureEmitter<'_, '_> {
     fn compile_float_literal(&mut self, raw: &str, origin: &IrOrigin, diags: &mut EmitDiagList) {
         let compact = raw.replace('_', "");
         let Ok(value) = compact.parse::<f64>() else {
-            super::support::push_expr_diag(
+            super::support::push_expr_diag_with(
                 diags,
                 self.module_key,
                 origin,
                 EmitDiagKind::InvalidFloatLiteral,
-                format!("invalid float literal `{raw}`"),
+                DiagContext::new().with("literal", raw),
             );
             emit_zero(self);
             return;
@@ -99,7 +100,7 @@ impl ProcedureEmitter<'_, '_> {
             ConstantValue::Float(value),
         ));
         self.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::LdConst,
+            Opcode::LdC,
             Operand::Constant(constant_id),
         )));
     }
@@ -107,7 +108,7 @@ impl ProcedureEmitter<'_, '_> {
     pub(super) fn compile_i64(&mut self, value: i64) {
         if let Ok(short) = i16::try_from(value) {
             self.code.push(CodeEntry::Instruction(Instruction::new(
-                Opcode::LdSmi,
+                Opcode::LdCI4,
                 Operand::I16(short),
             )));
             return;
@@ -119,7 +120,7 @@ impl ProcedureEmitter<'_, '_> {
             .constants
             .alloc(ConstantDescriptor::new(name_id, ConstantValue::Int(value)));
         self.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::LdConst,
+            Opcode::LdC,
             Operand::Constant(constant_id),
         )));
     }

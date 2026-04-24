@@ -4,8 +4,8 @@ use music_module::{ImportMap, ModuleKey};
 use music_session::{Session, SessionOptions};
 
 use crate::{
-    core, extend_import_map, intrinsics, module_source, register_modules, resolve_spec, runtime,
-    syntax, test,
+    core, env, extend_import_map, intrinsics, module_source, process, register_modules,
+    resolve_spec, syntax, test, time,
 };
 
 fn compile_main_entry_with_source(source: &str) {
@@ -38,8 +38,12 @@ mod success {
         );
         assert_eq!(import_map.imports.get(intrinsics::SPEC), None);
         assert_eq!(
-            import_map.imports.get(runtime::SPEC).map(String::as_str),
-            Some(runtime::SPEC)
+            import_map.imports.get(env::SPEC).map(String::as_str),
+            Some(env::SPEC)
+        );
+        assert_eq!(
+            import_map.imports.get(process::SPEC).map(String::as_str),
+            Some(process::SPEC)
         );
         assert_eq!(
             import_map.imports.get(syntax::SPEC).map(String::as_str),
@@ -51,10 +55,7 @@ mod success {
     fn resolve_spec_maps_known_specs() {
         assert_eq!(resolve_spec(core::SPEC), Some(ModuleKey::new(core::SPEC)));
         assert_eq!(resolve_spec(intrinsics::SPEC), None);
-        assert_eq!(
-            resolve_spec(runtime::SPEC),
-            Some(ModuleKey::new(runtime::SPEC))
-        );
+        assert_eq!(resolve_spec(env::SPEC), Some(ModuleKey::new(env::SPEC)));
         assert_eq!(resolve_spec(test::SPEC), Some(ModuleKey::new(test::SPEC)));
         assert_eq!(
             resolve_spec(syntax::SPEC),
@@ -67,15 +68,15 @@ mod success {
     fn module_source_maps_known_specs() {
         assert_eq!(module_source(core::SPEC), Some(core::MODULE));
         assert_eq!(module_source(intrinsics::SPEC), Some(intrinsics::MODULE));
-        assert_eq!(module_source(runtime::SPEC), Some(runtime::MODULE));
+        assert_eq!(module_source(env::SPEC), Some(env::MODULE));
         assert_eq!(module_source(test::SPEC), Some(test::MODULE));
         assert_eq!(module_source(syntax::SPEC), Some(syntax::MODULE));
         assert_eq!(module_source("musi:missing"), None);
-        assert!(core::MODULE.contains("export opaque let Rangeable[T] := class"));
+        assert!(core::MODULE.contains("export opaque let Rangeable[T] := shape"));
         assert!(core::MODULE.contains("export opaque let Option [T] := data"));
-        assert!(runtime::MODULE.contains("export opaque let Runtime := effect"));
-        assert!(runtime::MODULE.contains("let processArgCount () : Int;"));
-        assert!(test::MODULE.contains("export opaque let Sample [T] := class"));
+        assert!(env::MODULE.contains("export opaque let Env := effect"));
+        assert!(process::MODULE.contains("let argCount () : Int;"));
+        assert!(test::MODULE.contains("export opaque let Sample [T] := shape"));
         assert!(test::MODULE.contains("export opaque let SampleList [T] := data"));
         assert!(test::MODULE.contains("export opaque let SampleCase [T] := data"));
     }
@@ -86,7 +87,7 @@ mod success {
             r#"
 let Core := import "musi:core";
 let Intrinsics := import "musi:test";
-export let answer : Int := 1;
+export let result : Int := 1;
 "#,
         );
     }
@@ -97,17 +98,17 @@ export let answer : Int := 1;
             r#"
 let Core := import "musi:core";
 let Syntax := import "musi:syntax";
-export let answer (body : Syntax, result : Type) : Any := Syntax.eval(body, result);
+export let result (body : Syntax, result : Type) : Any := Syntax.eval(body, result);
 "#,
         );
     }
 
     #[test]
-    fn register_modules_installs_runtime_root() {
+    fn register_modules_installs_time_root() {
         compile_main_entry_with_source(
             r#"
-let Runtime := import "musi:runtime";
-export let answer () : Int := Runtime.timeNowUnixMs();
+let Time := import "musi:time";
+export let result () : Int := Time.nowUnixMs();
 "#,
         );
     }

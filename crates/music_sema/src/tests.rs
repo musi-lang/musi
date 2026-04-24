@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use music_base::diag::Diag;
+use music_base::diag::{Diag, DiagContext};
 use music_base::{DiagCode, SourceId};
 use music_hir::{HirExprId, HirExprKind, HirTyKind};
 use music_module::{
@@ -81,6 +81,7 @@ fn check_module_src(
             inject_compiler_prelude: true,
             prelude: Vec::new(),
             import_env,
+            ..ResolveOptions::default()
         },
     );
     let module = check_module(
@@ -143,15 +144,7 @@ fn check_with_imported_surface(
     (module_a, module_b)
 }
 
-fn assert_missing_opaque_shape(module: &SemaModule) {
-    assert!(
-        has_diag(module, SemaDiagKind::UnknownDataVariant),
-        "{:?}",
-        module.diags()
-    );
-}
-
-fn assert_effect_alias_handle(binding: &str, source_id: u32) {
+fn assert_effect_alias_request(binding: &str, source_id: u32) {
     let import_env = TestImportEnv::default().with_module("std/io", "std/io");
     let io = check_module_src(
         source_id,
@@ -172,10 +165,7 @@ fn assert_effect_alias_handle(binding: &str, source_id: u32) {
             r#"
         let IO := import "std/io";
         {binding}
-        handle request Console.readLine() using Console {{
-          value => value;
-          readLine(k) => resume "ok";
-        }};
+        ask Console.readLine();
     "#
         ),
         Some(&import_env),
@@ -188,20 +178,23 @@ fn assert_effect_alias_handle(binding: &str, source_id: u32) {
         HirTyKind::String
     ));
     assert!(
-        sema.try_expr_effects(root)
-            .expect("root expr effects missing")
-            .is_pure(),
-        "{:?}",
-        sema.diags()
-    );
-    assert!(
         !has_diag(&sema, SemaDiagKind::UnknownEffect),
         "{:?}",
         sema.diags()
     );
+    let effects = sema
+        .try_expr_effects(root)
+        .expect("root expr effects missing");
+    assert!(
+        effects
+            .items
+            .iter()
+            .any(|effect| effect.name.as_ref() == "Console"),
+        "{effects:?}"
+    );
 }
 
-fn assert_class_alias_instance(
+fn assert_imported_callable_alias(
     source_id: u32,
     type_prelude: &str,
     main_prelude: &str,
@@ -214,9 +207,7 @@ fn assert_class_alias_instance(
         &format!(
             r"
         {type_prelude}
-        export let Eq[T] := class {{
-          let (=) (a : T, b : T) : Bool;
-        }};
+        export let id[T] (value : T) : T := value;
     "
         ),
         Some(&import_env),
@@ -231,19 +222,20 @@ fn assert_class_alias_instance(
         {main_prelude}
         let Types := import "std/types";
         {binding}
-        let eqInt := instance Eq[Int] {{
-          let (=) (a : Int, b : Int) : Bool := 0 = 0;
-        }};
+        id[Int](1);
     "#
         ),
         Some(&import_env),
         Some(&sema_env),
     );
-    let instance_id = find_expr(&sema, |kind| matches!(kind, HirExprKind::Instance { .. }))
-        .expect("expected instance expr");
-    assert!(sema.instance_facts(instance_id).is_some());
+    let root = sema.module().root;
+    assert!(matches!(
+        sema.ty(sema.try_expr_ty(root).expect("root expr type missing"))
+            .kind,
+        HirTyKind::Int
+    ));
     assert!(
-        !has_diag(&sema, SemaDiagKind::UnknownClass),
+        !has_diag(&sema, SemaDiagKind::UnknownExport),
         "{:?}",
         sema.diags()
     );
@@ -261,11 +253,11 @@ mod success {
     use super::*;
 
     #[test]
-    fn opaque_imported_data_stays_abstract() {
+    fn imported_data_alias_stays_constructible() {
         let (_module_a, module_b) = check_with_imported_surface(
             40,
             r"
-        export opaque let Token := data {
+        export let Token := data {
           | Token(Int)
         };
         export let makeToken (value : Int) : Token := .Token(value);
@@ -275,44 +267,37 @@ mod success {
         let Token := A.Token;
         let makeToken := A.makeToken;
         let ok : Token := makeToken(1);
-        let bad : Token := .Token(1);
+        ok;
     "#,
         );
-        assert_missing_opaque_shape(&module_b);
+        assert!(module_b.diags().is_empty(), "{:?}", module_b.diags());
     }
 
     #[test]
-    fn opaque_imported_effect_hides_ops() {
+    fn imported_effect_alias_exposes_ops() {
         let (_module_a, module_b) = check_with_imported_surface(
             42,
             r"
-        export opaque let Console := effect {
+        export let Console := effect {
           let readLine () : Int;
         };
-        export let readLine () : Int := request Console.readLine();
+        export let readLine () : Int := ask Console.readLine();
     ",
             r#"
         let A := import "a";
         let Console := A.Console;
-        let direct () : Int := request Console.readLine();
+        let direct () : Int := ask Console.readLine();
     "#,
         );
         assert!(
-            has_diag(&module_b, SemaDiagKind::InvalidRequestTarget),
+            !has_diag(&module_b, SemaDiagKind::InvalidRequestTarget),
             "{:?}",
             module_b.diags()
         );
-        let diag = find_diag(&module_b, SemaDiagKind::InvalidRequestTarget)
-            .expect("invalid request target diagnostic expected");
-        assert_eq!(
-            diag.labels()[0].message(),
-            "request target must be effect operation call"
-        );
-        assert_eq!(diag.hint(), Some("write `request Effect.op(...)`"));
     }
 
     #[test]
-    fn opaque_local_data_alias_stays_abstract() {
+    fn local_data_alias_exports_surface_shape() {
         let (module_a, module_b) = check_with_imported_surface(
             45,
             r"
@@ -320,7 +305,7 @@ mod success {
           | Token(Int)
         };
         let TokenAlias := TokenBase;
-        export opaque let Token := TokenAlias;
+        export let Token := TokenAlias;
         export let makeToken (value : Int) : Token := .Token(value);
     ",
             r#"
@@ -328,19 +313,15 @@ mod success {
         let Token := A.Token;
         let makeToken := A.makeToken;
         let ok : Token := makeToken(1);
-        let bad : Token := .Token(1);
+        ok;
     "#,
         );
-        assert!(
-            !has_diag(&module_a, SemaDiagKind::AttrOpaqueRequiresStructuralExport),
-            "{:?}",
-            module_a.diags()
-        );
-        assert_missing_opaque_shape(&module_b);
+        assert!(module_a.diags().is_empty(), "{:?}", module_a.diags());
+        assert!(module_b.diags().is_empty(), "{:?}", module_b.diags());
     }
 
     #[test]
-    fn opaque_chained_local_data_alias_stays_abstract() {
+    fn chained_local_data_alias_exports_surface_shape() {
         let (module_a, module_b) = check_with_imported_surface(
             47,
             r"
@@ -349,7 +330,7 @@ mod success {
         };
         let TokenMid := TokenBase;
         let TokenTop := TokenMid;
-        export opaque let Token := TokenTop;
+        export let Token := TokenTop;
         export let makeToken (value : Int) : Token := .Token(value);
     ",
             r#"
@@ -357,37 +338,41 @@ mod success {
         let Token := A.Token;
         let makeToken := A.makeToken;
         let ok : Token := makeToken(1);
-        let bad : Token := .Token(1);
+        ok;
     "#,
         );
-        assert!(
-            !has_diag(&module_a, SemaDiagKind::AttrOpaqueRequiresStructuralExport),
-            "{:?}",
-            module_a.diags()
-        );
-        assert_missing_opaque_shape(&module_b);
+        assert!(module_a.diags().is_empty(), "{:?}", module_a.diags());
+        assert!(module_b.diags().is_empty(), "{:?}", module_b.diags());
     }
 
     #[test]
-    fn import_exprs_type_as_opaque_module() {
+    fn import_exprs_type_as_import_records() {
         let src = r#"
         let IO := import "std/io";
         IO;
     "#;
         let env = TestImportEnv::default().with_module("std/io", "std/io");
-        let sema = check_module_src(11, "main", src, Some(&env), None);
-        let root = sema.module().root;
+        let io = check_module_src(
+            10,
+            "std/io",
+            r"export let read (path : String) : String := path;",
+            Some(&env),
+            None,
+        );
+        let sema_env = TestSemaEnv::default().with_surface("std/io", io.surface().clone());
+        let sema = check_module_src(11, "main", src, Some(&env), Some(&sema_env));
+        let import_expr = find_expr(&sema, |kind| matches!(kind, HirExprKind::Import { .. }))
+            .expect("import expr");
         assert!(matches!(
-            sema.ty(sema.try_expr_ty(root).expect("root expr type missing"))
+            sema.ty(sema
+                .try_expr_ty(import_expr)
+                .expect("import expr type missing"))
                 .kind,
-            HirTyKind::Module
+            HirTyKind::Record { .. }
         ));
         assert_eq!(
-            sema.expr_module_target(
-                find_expr(&sema, |kind| matches!(kind, HirExprKind::Import { .. }))
-                    .expect("import expr")
-            )
-            .map(ModuleKey::as_str),
+            sema.expr_import_record_target(import_expr)
+                .map(ModuleKey::as_str),
             Some("std/io")
         );
     }
@@ -452,7 +437,7 @@ mod success {
         let fact = sema
             .expr_member_fact(field_expr)
             .expect("module member fact missing");
-        assert_eq!(fact.kind, ExprMemberKind::ModuleExport);
+        assert_eq!(fact.kind, ExprMemberKind::ImportRecordExport);
         assert!(matches!(
             sema.ty(fact.ty).kind,
             HirTyKind::Arrow { .. } | HirTyKind::Pi { .. }
@@ -460,14 +445,14 @@ mod success {
     }
 
     #[test]
-    fn dynamic_module_field_access_stays_runtime_typed() {
+    fn dynamic_import_field_access_rejects_result() {
         let sema = check_module_src(
             14,
             "main",
             r"
         export let read_any (name : String) : Any := (
           let loaded := import name;
-          loaded.answer
+          loaded.value
         );
     ",
             None,
@@ -480,12 +465,8 @@ mod success {
                 .try_expr_ty(field_expr)
                 .expect("field expr type missing"))
                 .kind,
-            HirTyKind::Any
+            HirTyKind::Unknown
         ));
-        assert!(
-            !has_diag(&sema, SemaDiagKind::UnknownExport),
-            "dynamic module field access should not require static export surface"
-        );
     }
 
     #[test]
@@ -496,24 +477,40 @@ mod success {
             r"
         export let call_any (name : String) : Any := (
           let loaded := import name;
-          loaded.answer()
+          loaded.value()
         );
     ",
             None,
             None,
         );
-        assert!(
-            has_diag(&sema, SemaDiagKind::InvalidCallTarget),
-            "{:?}",
-            sema.diags()
-        );
         let diag = find_diag(&sema, SemaDiagKind::InvalidCallTarget)
             .expect("invalid call target diagnostic");
-        assert!(
-            diag.message()
-                .contains("callee `answer` lacks callable type")
+        assert_eq!(
+            diag.message(),
+            "call target `value` expected callable type, found `Unknown`"
         );
-        assert!(diag.labels()[0].message().contains("callee `answer`"));
+        assert_eq!(
+            diag.labels()[0].message(),
+            "`value` has type `Unknown` here"
+        );
+    }
+
+    #[test]
+    fn invalid_call_target_names_direct_callee_without_nested_category() {
+        let sema = check(
+            r"
+        let fromByte : Any := 1 :?> Any;
+        fromByte();
+    ",
+        );
+
+        let diag = find_diag(&sema, SemaDiagKind::InvalidCallTarget)
+            .expect("invalid call target diagnostic");
+        assert_eq!(
+            diag.message(),
+            "call target `fromByte` expected callable type, found `Any`"
+        );
+        assert_eq!(diag.labels()[0].message(), "`fromByte` has type `Any` here");
     }
 
     #[test]
@@ -644,7 +641,7 @@ mod success {
 
     #[test]
     fn record_field_access_records_member_fact() {
-        let sema = check(r"let record := { answer := 42 }; record.answer;");
+        let sema = check(r"let record := { value := 42 }; record.value;");
         let field_expr = find_expr(&sema, |kind| matches!(kind, HirExprKind::Field { .. }))
             .expect("record field expr");
         let fact = sema
@@ -790,7 +787,7 @@ mod success {
         let Console := effect {
           let readLine (prompt : String) : String;
         };
-        request Console.readLine(prompt := ">");
+        ask Console.readLine(prompt := ">");
     "#,
         );
         assert!(
@@ -879,7 +876,7 @@ mod success {
 
     #[test]
     fn imported_effect_alias_handles_perform_and_handle() {
-        assert_effect_alias_handle("let Console := IO.Console;", 16);
+        assert_effect_alias_request("let Console := IO.Console;", 16);
     }
 
     #[test]
@@ -889,7 +886,7 @@ mod success {
         let Console := effect {
           let readLine () : String;
         };
-        request Console.readLine();
+        ask Console.readLine();
     ",
         );
         let root = sema.module().root;
@@ -908,7 +905,7 @@ mod success {
 
     #[test]
     fn destructured_effect_alias_handles_perform_and_handle() {
-        assert_effect_alias_handle("let {Console} := IO;", 25);
+        assert_effect_alias_request("let {Console} := IO;", 25);
     }
 
     #[test]
@@ -935,125 +932,79 @@ mod success {
     }
 
     #[test]
-    fn imported_class_alias_supports_instance_checking() {
-        assert_class_alias_instance(18, "", "", "let Eq := Types.Eq;");
+    fn imported_callable_alias_supports_call_checking() {
+        assert_imported_callable_alias(18, "", "", "let id := Types.id;");
     }
 
     #[test]
-    fn destructured_class_alias_supports_instance_checking() {
-        assert_class_alias_instance(27, "", "", "let {Eq} := Types;");
+    fn destructured_callable_alias_supports_call_checking() {
+        assert_imported_callable_alias(27, "", "", "let {id} := Types;");
     }
 
     #[test]
-    fn imported_class_alias_ignores_symbol_allocation_order() {
-        assert_class_alias_instance(
+    fn imported_callable_alias_ignores_symbol_allocation_order() {
+        assert_imported_callable_alias(
             23,
             r#"let warmup := "noise";"#,
             "let scratch := 42;",
-            "let Eq := Types.Eq;",
+            "let id := Types.id;",
         );
     }
 
     #[test]
-    fn class_and_instance_queries_return_facts() {
-        let sema = check(
-            r"
-        let Eq[T] := class {
-          let (=) (a : T, b : T) : Bool;
-          law reflexive (x : T) := .True;
-        };
-        let eqInt := instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := 0 = 0;
-        };
-    ",
-        );
-        let class_id = find_expr(&sema, |kind| matches!(kind, HirExprKind::Class { .. }))
-            .expect("expected class expr");
-        let instance_id = find_expr(&sema, |kind| matches!(kind, HirExprKind::Instance { .. }))
-            .expect("expected instance expr");
-        assert!(sema.class_facts(class_id).is_some());
-        assert!(sema.instance_facts(instance_id).is_some());
+    fn old_capability_forms_return_no_facts() {
+        let sema = check("let value := 1; value;");
+        assert!(find_expr(&sema, |kind| matches!(kind, HirExprKind::Shape { .. })).is_none());
+        assert!(find_expr(&sema, |kind| matches!(kind, HirExprKind::Given { .. })).is_none());
     }
 
     #[test]
-    fn exported_class_and_effect_laws_keep_structured_params() {
+    fn exported_effect_ops_keep_structured_params() {
         let sema = check(
             r"
-        export let Eq[T] := class {
-          let (=) (a : T, b : T) : Bool;
-          law reflexive (x : T) := .True;
-        };
         export let Console := effect {
           @comptimeSafe
-          let readLine () : String;
-          law total (attempts : Int) := .True;
+          let readLine (prompt : String) : String;
         };
     ",
         );
 
         let surface = sema.surface();
-
-        let class = surface
-            .exported_classes()
-            .iter()
-            .find(|item| item.key.name.as_ref() == "Eq")
-            .expect("expected exported class");
-        let class_law = class.laws.first().expect("expected exported class law");
-        assert_eq!(class_law.name.as_ref(), "reflexive");
-        assert_eq!(class_law.params.len(), 1);
-        assert_eq!(class_law.params[0].name.as_ref(), "x");
-        let class_law_ty = surface
-            .try_ty(class_law.params[0].ty)
-            .expect("expected class law param type");
-        let class_member_ty = surface
-            .try_ty(class.members[0].params[0])
-            .expect("expected class member param type");
-        assert_eq!(class_law_ty, class_member_ty);
-
         let effect = surface
             .exported_effects()
             .iter()
             .find(|item| item.key.name.as_ref() == "Console")
             .expect("expected exported effect");
         assert!(effect.ops[0].is_comptime_safe);
-        let effect_law = effect.laws.first().expect("expected exported effect law");
-        assert_eq!(effect_law.name.as_ref(), "total");
-        assert_eq!(effect_law.params.len(), 1);
-        assert_eq!(effect_law.params[0].name.as_ref(), "attempts");
-        let attempts_ty = surface
-            .try_ty(effect_law.params[0].ty)
-            .expect("expected effect law param type");
-        assert!(matches!(&attempts_ty.kind, SurfaceTyKind::Int));
+        assert_eq!(effect.ops[0].name.as_ref(), "readLine");
+        assert_eq!(effect.ops[0].param_names[0].as_ref(), "prompt");
+        let prompt_ty = surface
+            .try_ty(effect.ops[0].params[0])
+            .expect("expected effect op param type");
+        assert!(matches!(&prompt_ty.kind, SurfaceTyKind::String));
     }
 
     #[test]
-    fn effectful_laws_report_purity_diag() {
+    fn handle_with_non_handler_answer_reports_diag() {
         let sema = check(
             r#"
         let Console := effect {
           let readLine () : String;
-          law total () := request Console.readLine() == "";
         };
-
-        let Eq[T] := class {
-          let (=) (a : T, b : T) : Bool;
-          law noisy (x : T) := (
-            request Console.readLine();
-            .True
-          );
-        };
+        let value := "x";
+        handle ask Console.readLine() answer value;
     "#,
         );
 
         assert!(
-            has_diag(&sema, SemaDiagKind::LawMustBePure),
+            has_diag(&sema, SemaDiagKind::InvalidCallTarget),
             "{:?}",
             sema.diags()
         );
     }
 
     #[test]
-    fn reachable_exported_instances_participate_in_coherence() {
+    fn reachable_imported_exports_participate_in_lookup() {
         let import_env = TestImportEnv::default()
             .with_module("a", "a")
             .with_module("b", "b");
@@ -1062,12 +1013,7 @@ mod success {
             20,
             "a",
             r"
-        export let Eq[T] := class {
-          let (=) (a : T, b : T) : Bool;
-        };
-        export instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := 0 = 0;
-        };
+        export let base : Int := 1;
     ",
             Some(&import_env),
             None,
@@ -1078,10 +1024,7 @@ mod success {
             "b",
             r#"
         let A := import "a";
-        export let Eq := A.Eq;
-        export instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := 0 = 0;
-        };
+        export let copyBase : Int := A.base;
     "#,
             Some(&import_env),
             Some(&env_for_b),
@@ -1095,43 +1038,30 @@ mod success {
             r#"
         let A := import "a";
         let B := import "b";
-        0;
+        A.base + B.copyBase;
     "#,
             Some(&import_env),
             Some(&env_for_main),
         );
-        assert!(
-            has_diag(&main, SemaDiagKind::DuplicateInstance),
-            "{:?}",
-            main.diags()
-        );
+        assert!(main.diags().is_empty(), "{:?}", main.diags());
     }
 
     #[test]
-    fn imported_tuple_instances_match_local_coherence_keys() {
+    fn imported_tuple_helpers_match_local_tuple_calls() {
         let (_module_a, main) = check_with_imported_surface(
             32,
             r"
-        export let Eq[T] := class {
-          let (=) (a : T, b : T) : Bool;
-        };
-        export instance Eq[(Int, Int)] {
-          let (=) (a : (Int, Int), b : (Int, Int)) : Bool := 0 = 0;
-        };
+        export let first (pair : (Int, Int)) : Int := match pair (
+          | (left, _) => left
+        );
     ",
             r#"
         let A := import "a";
-        let Eq := A.Eq;
-        let eqPair := instance Eq[(Int, Int)] {
-          let (=) (a : (Int, Int), b : (Int, Int)) : Bool := 0 = 0;
-        };
+        let first := A.first;
+        first((1, 2));
     "#,
         );
-        assert!(
-            has_diag(&main, SemaDiagKind::DuplicateInstance),
-            "{:?}",
-            main.diags()
-        );
+        assert!(main.diags().is_empty(), "{:?}", main.diags());
     }
 
     #[test]
@@ -1220,17 +1150,11 @@ mod success {
     }
 
     #[test]
-    fn generic_constraints_succeed_when_matching_instance_exists() {
+    fn type_equality_constraints_succeed_for_matching_type_apply() {
         let sema = check(
             r"
-        let Eq[T] := class {
-          let (=) (a : T, b : T) : Bool;
-        };
-        let eqInt := instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := 0 = 0;
-        };
-        let requireEq[T] (x : T) : T where T : Eq := x;
-        requireEq[Int](1);
+        let requireSame[T, U] (x : T) : T where T ~= U := x;
+        requireSame[Int, Int](1);
     ",
         );
         assert!(
@@ -1241,57 +1165,36 @@ mod success {
     }
 
     #[test]
-    fn class_member_call_uses_where_clause_evidence() {
+    fn named_member_call_uses_record_callable_value() {
         let sema = check(
             r"
-        let Eq[T] := class {
-          let eq (left : T, right : T) : Bool;
-        };
-        let eqInt := instance Eq[Int] {
-          let eq (left : Int, right : Int) : Bool := left = right;
-        };
-        let same[T] (left : T, right : T) : Bool where T : Eq := Eq.eq(left, right);
-        same[Int](1, 2);
+        let eq (left : Int, right : Int) : Bool := left = right;
+        let Ops := { eq := eq };
+        Ops.eq(1, 2);
     ",
         );
-        assert!(
-            !has_diag(&sema, SemaDiagKind::UnsatisfiedConstraint),
-            "{:?}",
-            sema.diags()
-        );
+        assert!(sema.diags().is_empty(), "{:?}", sema.diags());
     }
 
     #[test]
-    fn class_member_call_infers_provider_evidence_from_arguments() {
+    fn callable_values_in_records_infer_argument_types() {
         let sema = check(
             r"
-        let Eq[T] := class {
-          let eq (left : T, right : T) : Bool;
-        };
-        let eqInt := instance Eq[Int] {
-          let eq (left : Int, right : Int) : Bool := left = right;
-        };
-        Eq.eq(1, 2);
+        let eq (left : Int, right : Int) : Bool := left = right;
+        let Ops := { eq := eq };
+        Ops.eq(1, 2);
     ",
         );
-        assert!(
-            !has_diag(&sema, SemaDiagKind::UnsatisfiedConstraint),
-            "{:?}",
-            sema.diags()
-        );
+        assert!(sema.diags().is_empty(), "{:?}", sema.diags());
     }
 
     #[test]
-    fn class_member_call_rejects_inconsistent_subject_arguments() {
+    fn callable_values_in_records_reject_inconsistent_arguments() {
         let sema = check(
             r#"
-        let Eq[T] := class {
-          let eq (left : T, right : T) : Bool;
-        };
-        let eqInt := instance Eq[Int] {
-          let eq (left : Int, right : Int) : Bool := left = right;
-        };
-        Eq.eq(1, "x");
+        let eq (left : Int, right : Int) : Bool := left = right;
+        let Ops := { eq := eq };
+        Ops.eq(1, "x");
     "#,
         );
         assert!(
@@ -1302,18 +1205,12 @@ mod success {
     }
 
     #[test]
-    fn generic_constraints_report_unsatisfied_instances() {
+    fn type_equality_constraints_report_unsatisfied_mismatch() {
         let sema = check(
-            r#"
-        let Eq[T] := class {
-          let (=) (a : T, b : T) : Bool;
-        };
-        let eqInt := instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := 0 = 0;
-        };
-        let requireEq[T] (x : T) : T where T : Eq := x;
-        requireEq[String]("ok");
-    "#,
+            r"
+        let requireSame[T, U] (x : T) : T where T ~= U := x;
+        requireSame[Int, String](1);
+    ",
         );
         assert!(
             has_diag(&sema, SemaDiagKind::UnsatisfiedConstraint),
@@ -1323,24 +1220,15 @@ mod success {
     }
 
     #[test]
-    fn generic_constraints_report_ambiguous_instances() {
+    fn type_equality_constraints_report_mismatch_on_calls() {
         let sema = check(
             r"
-        let Eq[T] := class {
-          let (=) (a : T, b : T) : Bool;
-        };
-        instance[T] Eq[T] {
-          let (=) (a : T, b : T) : Bool := 0 = 0;
-        };
-        let eqInt := instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := 0 = 0;
-        };
-        let requireEq[T] (x : T) : T where T : Eq := x;
-        requireEq[Int](1);
+        let requireSame[T, U] (x : T) : T where T ~= U := x;
+        requireSame[Int, String](1);
     ",
         );
         assert!(
-            has_diag(&sema, SemaDiagKind::AmbiguousInstanceMatch),
+            has_diag(&sema, SemaDiagKind::UnsatisfiedConstraint),
             "{:?}",
             sema.diags()
         );
@@ -1350,10 +1238,7 @@ mod success {
     fn exported_polymorphic_constrained_callable_reports_diag() {
         let sema = check(
             r"
-        let Eq[T] := class {
-          let (=) (a : T, b : T) : Bool;
-        };
-        export let requireEq[T] (x : T) : T where T : Eq := x;
+        export let requireSame[T, U] (x : T) : T where T ~= U := x;
     ",
         );
         assert!(
@@ -1434,7 +1319,15 @@ mod success {
         let Int := Core.Int;
         let Range := Core.Range;
         let Rangeable := Core.Rangeable;
+        let RangeBounds := Core.RangeBounds;
         let xs : Range[Int] := 1 ..< 4;
+        let closed : Range[Int] := 1 .. 4;
+        let openClosed : Range[Int] := 1 <.. 4;
+        let openOpen : Range[Int] := 1 <..< 4;
+        let from : Range[Int] := 1 ..;
+        let fromExclusive : Range[Int] := 1 <..;
+        let thru : Range[Int] := .. 4;
+        let upTo : Range[Int] := ..< 4;
         let ok : Bool := 2 in xs;
     "#,
         );
@@ -1451,10 +1344,87 @@ mod success {
     }
 
     #[test]
+    fn logical_operator_family_accepts_bool_and_matching_bits() {
+        let sema = check(
+            r"
+        export let boolAnd (left : Bool, right : Bool) : Bool := left and right;
+        export let boolOr (left : Bool, right : Bool) : Bool := left or right;
+        export let boolXor (left : Bool, right : Bool) : Bool := left xor right;
+        export let bitsAnd (left : Bits[4], right : Bits[4]) : Bits[4] := left and right;
+        export let bitsOr (left : Bits[4], right : Bits[4]) : Bits[4] := left or right;
+        export let bitsXor (left : Bits[4], right : Bits[4]) : Bits[4] := left xor right;
+        export let bitsNot (value : Bits[4]) : Bits[4] := not value;
+    ",
+        );
+        assert!(
+            !has_diag(&sema, SemaDiagKind::BinaryOperatorHasNoExecutableLowering),
+            "{:?}",
+            sema.diags()
+        );
+        assert!(
+            !has_diag(&sema, SemaDiagKind::LogicalOperatorDomainMismatch),
+            "{:?}",
+            sema.diags()
+        );
+        assert!(
+            !has_diag(&sema, SemaDiagKind::TypeMismatch),
+            "{:?}",
+            sema.diags()
+        );
+    }
+
+    #[test]
+    fn logical_operator_family_accepts_symbolic_bits_width() {
+        let sema = check(
+            r"
+        export let bitsAnd [N : Nat] (left : Bits[N], right : Bits[N]) : Bits[N] :=
+            left and right;
+        export let bitsNot [N : Nat] (value : Bits[N]) : Bits[N] := not value;
+    ",
+        );
+        assert!(
+            !has_diag(&sema, SemaDiagKind::InvalidBitsWidth),
+            "{:?}",
+            sema.diags()
+        );
+        assert!(
+            !has_diag(&sema, SemaDiagKind::LogicalOperatorDomainMismatch),
+            "{:?}",
+            sema.diags()
+        );
+        assert!(
+            !has_diag(&sema, SemaDiagKind::UnaryLogicalOperatorDomainMismatch),
+            "{:?}",
+            sema.diags()
+        );
+    }
+
+    #[test]
+    fn logical_operator_family_rejects_mismatched_domains() {
+        let sema = check(
+            r"
+        export let badBits (left : Bits[4], right : Bits[8]) := left and right;
+        export let badInt (left : Int, right : Int) := left and right;
+        export let badNot (value : Int) := not value;
+    ",
+        );
+        assert!(
+            has_diag(&sema, SemaDiagKind::LogicalOperatorDomainMismatch),
+            "{:?}",
+            sema.diags()
+        );
+        assert!(
+            has_diag(&sema, SemaDiagKind::UnaryLogicalOperatorDomainMismatch),
+            "{:?}",
+            sema.diags()
+        );
+    }
+
+    #[test]
     fn local_recursive_callable_let_typechecks() {
         let sema = check(
             r"
-        export let answer (n : Int) : Int := (
+        export let recurseDown (n : Int) : Int := (
           let rec loop (x : Int) : Int := match x (| 0 => 0 | _ => loop(x - 1));
           loop(n)
         );
@@ -1472,7 +1442,7 @@ mod success {
         let sema = check(
             r"
         export let add (left : Int, right : Int) : Int := left + right;
-        export let answer : Int := 1 |> add(2);
+        export let result : Int := 1 |> add(2);
     ",
         );
         assert!(
@@ -1493,17 +1463,14 @@ mod success {
     }
 
     #[test]
-    fn open_effect_rows_absorb_extra_effects() {
+    fn request_effect_rows_capture_declared_effects() {
         let sema = check(
             r"
-        let Console := effect {
-          let readLine () : String;
-        };
         let State := effect {
           let readLine () : String;
         };
-        let readOpen (x : Int) : String using { Console, ...r } := request State.readLine();
-        readOpen(0);
+        let readState () : String := ask State.readLine();
+        readState();
     ",
         );
         let root = sema.module().root;
@@ -1517,29 +1484,30 @@ mod success {
                 .any(|item| item.name.as_ref() == "State"),
             "{effects:?}"
         );
-        assert!(effects.open.is_some(), "{effects:?}");
+        assert!(effects.open.is_none(), "{effects:?}");
         assert!(
-            !has_diag(&sema, SemaDiagKind::EffectNotDeclared),
+            !has_diag(&sema, SemaDiagKind::UnknownEffect),
             "{:?}",
             sema.diags()
         );
     }
 
     #[test]
-    fn handler_type_annotations_typecheck() {
+    fn handle_with_bound_answer_value_parses_current_syntax() {
         let sema = check(
             r"
         let Console := effect {
           let readLine () : Int;
         };
-        let h : using Console (Int -> Int) := using Console {
-          value => value;
-          readLine(k) => resume 41;
-        };
-        h;
+        let h := answer Console;
+        handle ask Console.readLine() answer h;
     ",
         );
-        assert!(sema.diags().is_empty(), "{:?}", sema.diags());
+        assert!(
+            !has_diag(&sema, SemaDiagKind::UnknownEffect),
+            "{:?}",
+            sema.diags()
+        );
     }
 
     #[test]
@@ -1640,7 +1608,7 @@ mod success {
     fn foreign_call_inside_unsafe_block_passes_unsafe_check() {
         let module = check(
             r#"
-        foreign "c" let clock () : Int;
+        native "c" let clock () : Int;
         let value := unsafe { clock(); };
     "#,
         );
@@ -1651,38 +1619,86 @@ mod success {
     }
 
     #[test]
-    fn higher_kinded_class_accepts_unary_data_constructor() {
+    fn pin_inside_unsafe_accepts_pinnable_target() {
+        let module = check(
+            r"
+        let xs := [1, 2];
+        let value := unsafe { pin xs as pinned in 1; };
+    ",
+        );
+        assert!(!has_diag(&module, SemaDiagKind::UnsupportedPinTarget));
+        assert!(!has_diag(&module, SemaDiagKind::PinnedValueEscapes));
+    }
+
+    #[test]
+    fn pin_outside_unsafe_reports_unsafe_block_requirement() {
+        let module = check(
+            r"
+        let xs := [1, 2];
+        let value := pin xs as pinned in 1;
+    ",
+        );
+        assert!(has_diag(&module, SemaDiagKind::PinRequiresUnsafeBlock));
+    }
+
+    #[test]
+    fn pin_inside_unsafe_rejects_scalar_target() {
+        let module = check(
+            r"
+        let value := unsafe { pin 1 as pinned in 0; };
+    ",
+        );
+        let diag =
+            find_diag(&module, SemaDiagKind::UnsupportedPinTarget).expect("pin target diagnostic");
+        assert_eq!(
+            diag.message(),
+            SemaDiagKind::UnsupportedPinTarget
+                .message_with(&DiagContext::new().with("target", "Int"))
+        );
+    }
+
+    #[test]
+    fn pin_inside_unsafe_rejects_returned_pin_handle() {
+        let module = check(
+            r"
+        let xs := [1, 2];
+        let value := unsafe { pin xs as pinned in pinned; };
+    ",
+        );
+        let diag =
+            find_diag(&module, SemaDiagKind::PinnedValueEscapes).expect("pin escape diagnostic");
+        assert_eq!(
+            diag.message(),
+            SemaDiagKind::PinnedValueEscapes
+                .message_with(&DiagContext::new().with("name", "pinned"))
+        );
+    }
+
+    #[test]
+    fn generic_callable_accepts_unary_data_constructor() {
         let sema = check(
             r"
-        let Option[T] := data {
-          | Some(T)
-          | None
+        let Flag := data {
+          | On
+          | Off
         };
-        let Functor[F : Type -> Type] := class {
-          let keep(value : F[Int]) : F[Int];
-        };
-        let optionFunctor := instance Functor[Option] {
-          let keep(value : Option[Int]) : Option[Int] := value;
-        };
+        let keep[T] (value : T) : T := value;
+        keep[Flag](.On);
     ",
         );
         assert!(sema.diags().is_empty(), "{:?}", sema.diags());
     }
 
     #[test]
-    fn higher_kinded_class_accepts_partial_type_application() {
+    fn generic_callable_accepts_fully_applied_data_constructor() {
         let sema = check(
-            r"
-        let Box2[A, B] := data {
-          | Box2(A, B)
+            r#"
+        let Pair := data {
+          | Pair(String, Int)
         };
-        let Uses[F : Type -> Type] := class {
-          let keep(value : F[Int]) : F[Int];
-        };
-        let boxStringUses := instance Uses[Box2[String]] {
-          let keep(value : Box2[String, Int]) : Box2[String, Int] := value;
-        };
-    ",
+        let keep[T] (value : T) : T := value;
+        keep[Pair](.Pair("x", 1));
+    "#,
         );
         assert!(sema.diags().is_empty(), "{:?}", sema.diags());
     }
@@ -1731,7 +1747,7 @@ mod success {
         let sema = check(
             r"
         let same[A, B] (value : A) : A where A ~= B := value;
-        let answer := same[Int, Int](42);
+        let result := same[Int, Int](42);
     ",
         );
         assert!(sema.diags().is_empty(), "{:?}", sema.diags());
@@ -1854,7 +1870,7 @@ mod failure {
     fn known_attr_requires_foundation_module() {
         let sema = check(
             r#"
-        @known(name := "Type")
+        @musi.known(name := "Type")
         export let Type := Type;
     "#,
         );
@@ -1871,7 +1887,7 @@ mod failure {
             44,
             "musi:intrinsics",
             r#"
-        @intrinsic(name := "ptr.load")
+        @musi.intrinsic(name := "ptr.load")
         let ptrLoad := 1;
     "#,
             None,
@@ -1902,11 +1918,11 @@ mod failure {
     }
 
     #[test]
-    fn hot_and_cold_conflict_on_callable() {
+    fn profile_conflict_on_callable() {
         let sema = check(
             r"
-        @hot
-        @cold
+        @profile(level := .hot)
+        @profile(level := .cold)
         let work () : Int := 1;
     ",
         );
@@ -1918,10 +1934,10 @@ mod failure {
     }
 
     #[test]
-    fn opaque_export_requires_structural_target() {
-        let sema = check("export opaque let hidden : Int := 41;");
+    fn exported_plain_value_with_wrong_type_reports_type_mismatch() {
+        let sema = check(r#"export let hidden : Int := "no";"#);
         assert!(
-            has_diag(&sema, SemaDiagKind::AttrOpaqueRequiresStructuralExport),
+            has_diag(&sema, SemaDiagKind::TypeMismatch),
             "{:?}",
             sema.diags()
         );
@@ -1945,22 +1961,21 @@ mod failure {
     }
 
     #[test]
-    fn duplicate_handler_clause_reports_diag() {
+    fn handle_with_non_handler_answer_reports_diag() {
         let sema = check(
             r#"
         let Console := effect {
           let readLine () : String;
         };
-        handle request Console.readLine() using Console {
-          value => value;
-          readLine(k) => resume "ok";
-          readLine(k) => resume "ok";
-        };
+        let value := "ok";
+        handle ask Console.readLine() answer value;
     "#,
         );
-        let diag = find_diag(&sema, SemaDiagKind::DuplicateHandlerClause)
-            .expect("duplicate handler clause diag");
-        assert_eq!(diag.message(), "duplicate handler clause `readLine`");
+        assert!(
+            has_diag(&sema, SemaDiagKind::InvalidCallTarget),
+            "{:?}",
+            sema.diags()
+        );
     }
 
     #[test]
@@ -1992,40 +2007,33 @@ mod failure {
     }
 
     #[test]
-    fn duplicate_class_member_reports_diag() {
+    fn missing_required_record_field_reports_diag() {
         let sema = check(
             r"
-        let Eq[T] := class {
-          let (=) (a : T, b : T) : Bool;
-          let (=) (a : T, b : T) : Bool;
-        };
+        let Box[T] := data { value : T; };
+        let boxed : Box[Int] := {};
     ",
         );
-        let diag = find_diag(&sema, SemaDiagKind::CollectDuplicateClassMember)
-            .expect("duplicate class member diag");
-        assert_eq!(diag.message(), "duplicate class member `=`");
+        assert!(
+            has_diag(&sema, SemaDiagKind::MissingRecordField),
+            "{:?}",
+            sema.diags()
+        );
     }
 
     #[test]
-    fn missing_instance_member_reports_diag() {
-        let sema = check(
-            r"
-        let Eq[T] := class {
-          let (=) (a : T, b : T) : Bool;
-          let compare (a : T, b : T) : Int;
-        };
-        let eqInt := instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := 0 = 0;
-        };
-    ",
+    fn unknown_record_field_reports_diag() {
+        let sema =
+            check(r"let Box[T] := data { value : T; }; let boxed : Box[Int] := { other := 1 };");
+        assert!(
+            has_diag(&sema, SemaDiagKind::UnknownField),
+            "{:?}",
+            sema.diags()
         );
-        let diag = find_diag(&sema, SemaDiagKind::MissingInstanceMember)
-            .expect("missing instance member diag");
-        assert_eq!(diag.message(), "missing instance member `compare`");
     }
 
     #[test]
-    fn non_exported_instances_do_not_participate_in_coherence() {
+    fn imported_surfaces_do_not_conflict_for_distinct_exports() {
         let import_env = TestImportEnv::default()
             .with_module("a", "a")
             .with_module("b", "b");
@@ -2034,12 +2042,7 @@ mod failure {
             29,
             "a",
             r"
-        export let Eq[T] := class {
-          let (=) (a : T, b : T) : Bool;
-        };
-        instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := 0 = 0;
-        };
+        export let valueA : Int := 1;
     ",
             Some(&import_env),
             None,
@@ -2050,10 +2053,7 @@ mod failure {
             "b",
             r#"
         let A := import "a";
-        export let Eq := A.Eq;
-        export instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := .True;
-        };
+        export let valueB : Int := A.valueA + 1;
     "#,
             Some(&import_env),
             Some(&env_for_b),
@@ -2067,29 +2067,19 @@ mod failure {
             r#"
         let A := import "a";
         let B := import "b";
-        0;
+        A.valueA + B.valueB;
     "#,
             Some(&import_env),
             Some(&env_for_main),
         );
-        assert!(
-            !has_diag(&main, SemaDiagKind::DuplicateInstance),
-            "{:?}",
-            main.diags()
-        );
+        assert!(main.diags().is_empty(), "{:?}", main.diags());
     }
 
     #[test]
     fn constrained_non_callable_let_reports_diag() {
         let sema = check(
             r"
-        let Eq[T] := class {
-          let (=) (a : T, b : T) : Bool;
-        };
-        let eqInt := instance Eq[Int] {
-          let (=) (a : Int, b : Int) : Bool := .True;
-        };
-        let x : Int where Int : Eq := 1;
+        let x : Int where Int ~= Int := 1;
     ",
         );
         assert!(
@@ -2169,7 +2159,7 @@ mod failure {
 
     #[test]
     fn rejects_invalid_field_access_empty_index_and_callable_pattern() {
-        let sema = check("let answer := 1.x;");
+        let sema = check("let value := 1.x;");
         assert!(
             has_diag(&sema, SemaDiagKind::InvalidFieldTarget),
             "{:?}",
@@ -2179,7 +2169,7 @@ mod failure {
         let sema = check(
             r"
         let grid : [2][2]Int := [[1, 2], [3, 4]];
-        let answer := grid.[];
+        let value := grid.[];
     ",
         );
         assert!(
@@ -2197,21 +2187,18 @@ mod failure {
     }
 
     #[test]
-    fn closed_effect_rows_reject_extra_effects() {
+    fn request_without_effect_op_target_reports_diag() {
         let sema = check(
-            r"
-        let Console := effect {
-          let readLine () : String;
-        };
+            r#"
         let State := effect {
           let readLine () : String;
         };
-        let readClosed (x : Int) : String using { Console } := request State.readLine();
-        readClosed(0);
-    ",
+        let notEffect := { readLine := \() => "" };
+        ask notEffect.readLine();
+    "#,
         );
         assert!(
-            has_diag(&sema, SemaDiagKind::EffectNotDeclared),
+            has_diag(&sema, SemaDiagKind::InvalidRequestTarget),
             "{:?}",
             sema.diags()
         );
@@ -2231,7 +2218,7 @@ mod failure {
     fn foreign_call_requires_unsafe_block() {
         let module = check(
             r#"
-        foreign "c" let clock () : Int;
+        native "c" let clock () : Int;
         let value := clock();
     "#,
         );
@@ -2246,7 +2233,7 @@ mod failure {
         let sema = check(
             r"
         let same[A, B] (value : A) : A where A ~= B := value;
-        let answer := same[Int, String](42);
+        let result := same[Int, String](42);
     ",
         );
         assert!(

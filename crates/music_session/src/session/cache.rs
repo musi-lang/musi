@@ -4,8 +4,8 @@ use std::path::Path;
 use music_base::{SourceId, Span};
 use music_emit::{EmittedModule, lower_ir_module};
 use music_ir::{IrModule, lower_module};
-use music_module::ModuleSpecifier;
 use music_module::{ImportEnv, ModuleKey, collect_export_summary, collect_import_sites};
+use music_module::{ImportSiteKind, ModuleSpecifier};
 use music_names::Symbol;
 use music_resolve::{ResolveOptions, ResolvedImport, ResolvedModule, resolve_module};
 use music_sema::{ModuleSurface, SemaEnv, SemaModule, SemaOptions, check_module};
@@ -22,7 +22,9 @@ type ExpansionSeenSet = BTreeSet<ModuleKey>;
 
 impl Session {
     fn is_std_prelude_module_key(key: &str) -> bool {
-        key.starts_with("@@std@") && Path::new(key).ends_with(Path::new("prelude").join("index.ms"))
+        key.starts_with("@@std@")
+            && (Path::new(key).ends_with("prelude.ms")
+                || Path::new(key).ends_with(Path::new("prelude").join("std.ms")))
     }
 
     fn auto_prelude_target(&self, key: &ModuleKey) -> Option<ModuleKey> {
@@ -426,9 +428,13 @@ impl Session {
     }
 
     fn build_resolved_module(&mut self, key: &ModuleKey) -> Result<ResolvedModule, SessionError> {
-        let (source_id, has_imports) = {
+        let (source_id, import_sites, has_imports) = {
             let parsed = self.parse_module(key)?;
-            (parsed.source_id, !parsed.import_sites.is_empty())
+            (
+                parsed.source_id,
+                parsed.import_sites.clone(),
+                !parsed.import_sites.is_empty(),
+            )
         };
         let parsed = self
             .module_record(key)?
@@ -438,11 +444,27 @@ impl Session {
             .clone();
         let module_keys = self.store.modules.keys().cloned().collect::<BTreeSet<_>>();
         let import_map = self.options.import_map.clone();
-        let import_env = SessionImportEnv {
+        let session_import_env = SessionImportEnv {
             import_map: &import_map,
             module_keys: &module_keys,
         };
-        let import_env: Option<&dyn ImportEnv> = if has_imports { Some(&import_env) } else { None };
+        let import_env: Option<&dyn ImportEnv> = if has_imports {
+            Some(&session_import_env)
+        } else {
+            None
+        };
+        let mut import_export_summaries = BTreeMap::new();
+        for site in &import_sites {
+            let ImportSiteKind::Static { spec } = &site.kind else {
+                continue;
+            };
+            let Ok(target) = session_import_env.resolve(key, spec) else {
+                continue;
+            };
+            let target_summary = self.parse_module(&target)?.export_summary.clone();
+            let _prev = import_export_summaries.insert(target, target_summary);
+        }
+        let import_export_summaries = import_export_summaries.into_iter().collect();
         let auto_prelude = self.auto_prelude_symbols(key)?;
         let inject_compiler_prelude = auto_prelude.is_none();
         let prelude = auto_prelude
@@ -458,6 +480,7 @@ impl Session {
                 inject_compiler_prelude,
                 prelude,
                 import_env,
+                import_export_summaries,
             },
         );
         if let Some((target, _)) = auto_prelude {

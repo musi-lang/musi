@@ -1,8 +1,8 @@
 #![allow(unused_imports)]
 
 use crate::{
-    HilBinaryOp, HilBlock, HilCapability, HilFunction, HilInstruction, HilModule, HilParam,
-    HilTerminator, HilType, HilValueId, HilVerifyError, format_hil,
+    HilBinaryOp, HilBlock, HilFunction, HilInstruction, HilModule, HilParam, HilShape,
+    HilTerminator, HilType, HilValueId, HilVerifyError, format_hil, parse_hil,
 };
 
 fn int_ty() -> HilType {
@@ -55,9 +55,17 @@ mod success {
     fn formats_high_level_hil() {
         let text = format_hil(&sample_module());
 
-        assert!(text.contains("module @main"));
-        assert!(text.contains("fn @addOne(%0 n: Int) -> Int"));
+        assert!(text.contains("module main"));
+        assert!(text.contains("fn addOne(%0 n: Int) -> Int"));
         assert!(text.contains("%2: Int = int.add %0, %1"));
+    }
+
+    #[test]
+    fn roundtrips_hil_text() {
+        let module = sample_module();
+        let text = format_hil(&module);
+        let parsed = parse_hil(&text).expect("HIL parses");
+        assert_eq!(parsed, module);
     }
 
     #[test]
@@ -81,7 +89,7 @@ mod success {
                     HilTerminator::Return(Some(HilValueId(0))),
                 )],
             )
-            .with_capabilities([HilCapability::Effect])],
+            .with_capabilities([HilShape::Effect])],
         );
 
         module.verify().expect("effect capability declared");
@@ -174,8 +182,8 @@ mod failure {
 
         assert!(matches!(
             module.verify(),
-            Err(HilVerifyError::CapabilityRequired {
-                capability: HilCapability::Effect
+            Err(HilVerifyError::ShapeRequired {
+                capability: HilShape::Effect
             })
         ));
     }

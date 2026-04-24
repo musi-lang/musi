@@ -2,7 +2,6 @@ catalog session music_session SessionDiagKind crates/music_session/src/diag_cata
 
 diag ModuleNotRegistered 5200
   message "module `{key}` not registered"
-  primary "module `{key}` not registered"
 
 diag SourceMapUpdateFailed 5201
   message "source map update failed (`{kind}`)"
@@ -10,23 +9,18 @@ diag SourceMapUpdateFailed 5201
 
 diag ModuleParseFailed 5202
   message "module `{module}` parse failed"
-  primary "module `{module}` parse failed"
 
 diag ModuleResolveFailed 5203
   message "module `{module}` resolve failed"
-  primary "module `{module}` resolve failed"
 
 diag ModuleSemanticCheckFailed 5204
   message "module `{module}` semantic check failed"
-  primary "module `{module}` semantic check failed"
 
 diag ModuleLoweringFailed 5205
   message "module `{module}` lowering failed"
-  primary "module `{module}` lowering failed"
 
 diag ModuleEmissionFailed 5206
   message "module `{module}` emission failed"
-  primary "module `{module}` emission failed"
 
 diag LawSuiteSynthesisFailed 5207
   message "module `{module}` law-suite synthesis failed (`{reason}`)"
@@ -38,11 +32,9 @@ diag ArtifactTransportFailed 5208
 
 diag SourceRegistryOverflow 5209
   message "source registry overflow"
-  primary "source registry overflow"
 
 diag SourceTooLarge 5210
   message "source text `{len}` bytes exceeds limit"
-  primary "source text `{len}` bytes exceeds limit"
 
 map session_error_kind crate::SessionError required
   case "ModuleNotRegistered { .. }" ModuleNotRegistered

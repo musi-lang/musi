@@ -46,8 +46,18 @@ fn assert_format_preserves_tokens(source: &str) {
     assert_formatted_text_is_stable(&result.text);
 }
 
-fn assert_format_is_stable(source: &str) {
-    let result = format_source(source, &options()).unwrap();
+fn assert_file_format_is_stable(path: &Path, source: &str) {
+    let lexed = Lexer::new(source).lex();
+    let parsed = parse(lexed.clone());
+    assert!(
+        lexed.errors().is_empty() && parsed.errors().is_empty(),
+        "{}: lex={:?} parse={:?}",
+        path.display(),
+        lexed.errors(),
+        parsed.errors()
+    );
+    let result = format_source(source, &options())
+        .unwrap_or_else(|err| panic!("{}: {err:?}", path.display()));
     assert_formatted_text_is_stable(&result.text);
 }
 
@@ -171,6 +181,15 @@ mod success {
     }
 
     #[test]
+    fn keeps_space_after_unary_not() {
+        let source = "let value := not zero1();";
+
+        let result = format_source(source, &options()).unwrap();
+
+        assert_eq!(result.text, "let value := not zero1();\n");
+    }
+
+    #[test]
     fn wraps_long_word_operator_chain_at_default_width() {
         let source = "let value := aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa and bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb and cccccccccccccccccccccccccccccccccccccccc;";
 
@@ -231,13 +250,13 @@ mod success {
 
     #[test]
     fn keeps_call_arguments_on_one_line_when_they_fit_width() {
-        let source = "let ok := testing.it(\"adds values\", testing.toBeTruthy(add(1, 2)));";
+        let source = "let ok := testing.it(\"adds values\", testing.toBeTrue(add(1, 2)));";
 
         let result = format_source(source, &options()).unwrap();
 
         assert_eq!(
             result.text,
-            "let ok := testing.it(\"adds values\", testing.toBeTruthy(add(1, 2)));\n"
+            "let ok := testing.it(\"adds values\", testing.toBeTrue(add(1, 2)));\n"
         );
         assert!(
             result
@@ -265,6 +284,72 @@ mod success {
                 .lines()
                 .all(|line| line.chars().count() <= options.line_width)
         );
+    }
+
+    #[test]
+    fn keeps_space_after_let_for_receiver_methods() {
+        let source = "export let(self : Error).message () : String := self;";
+
+        let result = format_source(source, &options()).unwrap();
+
+        assert_eq!(
+            result.text,
+            "export let (self : Error).message () : String := self;\n"
+        );
+        let second = format_source(&result.text, &options()).unwrap();
+        assert_eq!(second.text, result.text);
+    }
+
+    #[test]
+    fn keeps_bind_operator_attached_to_broken_receiver_signature() {
+        let mut options = options();
+        options.line_width = 64;
+        let source = r"export let(self : Option[T]).fold [T, U] (onNone : U, onSome : T -> U) : U
+  :=
+  fold[T, U](self, onNone, onSome);
+";
+
+        let result = format_source(source, &options).unwrap();
+
+        assert_eq!(
+            result.text,
+            r"export let (self : Option[T]).fold [T, U] (
+  onNone : U,
+  onSome : T -> U
+) : U := fold[T, U](self, onNone, onSome);
+"
+        );
+        assert!(
+            result
+                .text
+                .lines()
+                .all(|line| line.chars().count() <= options.line_width)
+        );
+        let second = format_source(&result.text, &options).unwrap();
+        assert_eq!(second.text, result.text);
+    }
+
+    #[test]
+    fn keeps_fitting_rhs_after_multiline_receiver_signature() {
+        let source = r"export let (self : Result[T, E]).fold [T, E, U] (
+  onOk : T -> U,
+  onErr : E -> U
+) : U :=
+  fold[T, E, U](self, onOk, onErr);
+";
+
+        let result = format_source(source, &options()).unwrap();
+
+        assert_eq!(
+            result.text,
+            r"export let (self : Result[T, E]).fold [T, E, U] (
+  onOk : T -> U,
+  onErr : E -> U
+) : U := fold[T, E, U](self, onOk, onErr);
+"
+        );
+        let second = format_source(&result.text, &options()).unwrap();
+        assert_eq!(second.text, result.text);
     }
 
     #[test]
@@ -361,13 +446,13 @@ mod success {
 
     #[test]
     fn keeps_fitting_instance_members_inline_and_spaced() {
-        let source = "export instance Rangeable[Int]{ let next (value : Int) : Option[Int] := someOf[Int](value + 1); };";
+        let source = "export let intRangeable := given Rangeable[Int] { let next (value : Int) : Option[Int] := someOf[Int](value + 1); };";
 
         let result = format_source(source, &options()).unwrap();
 
         assert_eq!(
             result.text,
-            "export instance Rangeable[Int] {\n  let next (value : Int) : Option[Int] := someOf[Int](value + 1);\n};\n"
+            "export let intRangeable :=\n  given Rangeable[Int] {\n  let next (value : Int) : Option[Int] := someOf[Int](value + 1);\n};\n"
         );
     }
 
@@ -417,6 +502,7 @@ mod success {
     #[test]
     fn trailing_commas_apply_to_record_comma_lists() {
         let mut options = options();
+        options.record_field_layout = GroupLayout::Block;
         options.trailing_commas = TrailingCommas::MultiLine;
         let source = "let value := { left := 1, right := 2 };";
 
@@ -634,6 +720,79 @@ mod success {
     }
 
     #[test]
+    fn auto_record_field_layout_keeps_simple_data_fields_one_line_when_fitting() {
+        let mut options = options();
+        options.record_field_layout = GroupLayout::Auto;
+        let source = "let p := data { x : Int; y : Int };";
+
+        let result = format_source(source, &options).unwrap();
+
+        assert_eq!(result.text, "let p := data { x : Int; y : Int };\n");
+    }
+
+    #[test]
+    fn zero_line_width_compacts_simple_data_fields() {
+        let mut options = options();
+        options.line_width = 0;
+        options.record_field_layout = GroupLayout::Auto;
+        let source = "let p := data { x : Int; y : Int };";
+
+        let result = format_source(source, &options).unwrap();
+
+        assert_eq!(result.text, "let p := data { x : Int; y : Int };\n");
+    }
+
+    #[test]
+    fn auto_record_field_layout_keeps_comment_blocks_expanded() {
+        let mut options = options();
+        options.record_field_layout = GroupLayout::Auto;
+        let source = r"let p := data {
+  --- x coordinate
+  x : Int;
+  y : Int
+};
+";
+
+        let result = format_source(source, &options).unwrap();
+
+        assert_eq!(
+            result.text,
+            r"let p := data {
+  --- x coordinate
+  x : Int;
+  y : Int
+};
+"
+        );
+    }
+
+    #[test]
+    fn block_record_field_layout_expands_simple_data_fields() {
+        let mut options = options();
+        options.record_field_layout = GroupLayout::Block;
+        let source = "let p := data { x : Int; y : Int };";
+
+        let result = format_source(source, &options).unwrap();
+
+        assert_eq!(result.text, "let p := data {\n  x : Int;\n  y : Int\n};\n");
+    }
+
+    #[test]
+    fn auto_record_field_layout_expands_data_fields_when_width_overflows() {
+        let mut options = options();
+        options.line_width = 32;
+        options.record_field_layout = GroupLayout::Auto;
+        let source = "let p := data { longLeftName : Int; longRightName : Int };";
+
+        let result = format_source(source, &options).unwrap();
+
+        assert_eq!(
+            result.text,
+            "let p := data {\n  longLeftName : Int;\n  longRightName : Int\n};\n"
+        );
+    }
+
+    #[test]
     fn operator_break_after_keeps_operator_on_previous_line() {
         let mut options = options();
         options.line_width = 24;
@@ -692,13 +851,13 @@ mod success {
     fn trailing_commas_apply_to_effect_sets() {
         let mut options = options();
         options.trailing_commas = TrailingCommas::MultiLine;
-        let source = "let f () : Int using { Console, Runtime } := 1;";
+        let source = "let f () : Int require { Console, Runtime } := 1;";
 
         let result = format_source(source, &options).unwrap();
 
         assert_eq!(
             result.text,
-            "let f () : Int using {\n  Console,\n  Runtime,\n} := 1;\n"
+            "let f () : Int require {\n  Console,\n  Runtime,\n} := 1;\n"
         );
         let second = format_source(&result.text, &options).unwrap();
         assert_eq!(second.text, result.text);
@@ -726,8 +885,8 @@ mod success {
     }
 
     #[test]
-    fn keeps_attribute_attached_on_own_line_before_foreign() {
-        let source = "@link(symbol := \"data.tag\")\nforeign \"musi\" let levelTagIntrinsic (level : Level) : Int;";
+    fn keeps_attribute_attached_on_own_line_before_native() {
+        let source = "@link(symbol := \"data.tag\")\nnative \"musi\" let levelTagIntrinsic (level : Level) : Int;";
 
         let mut options = options();
         options.trailing_commas = TrailingCommas::Never;
@@ -736,7 +895,7 @@ mod success {
 
         assert_eq!(
             result.text,
-            "@link(symbol := \"data.tag\")\nforeign \"musi\" let levelTagIntrinsic (level : Level) : Int;\n"
+            "@link(symbol := \"data.tag\")\nnative \"musi\" let levelTagIntrinsic (level : Level) : Int;\n"
         );
         let second = format_source(&result.text, &options).unwrap();
         assert_eq!(second.text, result.text);
@@ -744,7 +903,7 @@ mod success {
 
     #[test]
     fn formats_multiple_attributes_as_attached_lines() {
-        let source = "@when(os := \"linux\") @link(name := \"c\") foreign \"c\" let puts (msg : CString) : Int;";
+        let source = "@target(os := \"linux\") @link(name := \"c\") native \"c\" let puts (msg : CString) : Int;";
 
         let mut options = options();
         options.trailing_commas = TrailingCommas::Never;
@@ -753,7 +912,7 @@ mod success {
 
         assert_eq!(
             result.text,
-            "@when(os := \"linux\")\n@link(name := \"c\")\nforeign \"c\" let puts (msg : CString) : Int;\n"
+            "@target(os := \"linux\")\n@link(name := \"c\")\nnative \"c\" let puts (msg : CString) : Int;\n"
         );
     }
 
@@ -1041,7 +1200,7 @@ let io := import "@std/io";
     #[test]
     fn format_file_writes_changed_file() {
         let root = temp_dir();
-        let path = root.join("index.ms");
+        let path = root.join("std.ms");
         fs::write(&path, "let x:=1;").unwrap();
 
         let change = format_file(&path, &options(), false).unwrap();
@@ -1095,17 +1254,17 @@ let io := import "@std/io";
     #[test]
     fn preserves_multiline_test_sequence_regression() {
         let source = r#"let testing := import "@std/testing";
-let array := import "./index.ms";
+let array := import "./std.ms";
 
 export let test () :=
   (
     testing.describe("array");
-    testing.it("'copy' clones sequence values", testing.toBeTruthy(array.equalsInt(array.copy[Int]([1, 2, 3]), [1, 2, 3])));
-    testing.it("'concat' joins two sequences", testing.toBeTruthy(array.equalsInt(array.concat[Int]([1, 2], [3, 4]), [1, 2, 3, 4])));
-    testing.it("'append' adds trailing value", testing.toBeTruthy(array.equalsInt(array.append[Int]([1, 2], 3), [1, 2, 3])));
-    testing.it("'prepend' adds leading value", testing.toBeTruthy(array.equalsInt(array.prepend[Int](0, [1, 2]), [0, 1, 2])));
-    testing.it("'isEmpty' detects empty arrays", testing.toBeTruthy(array.isEmpty[Int]([])));
-    testing.it("'nonEmpty' detects non-empty arrays", testing.toBeTruthy(array.nonEmpty[Int]([1])));
+    testing.it("'copy' clones sequence values", testing.toBeTrue(array.equalsInt(array.copy[Int]([1, 2, 3]), [1, 2, 3])));
+    testing.it("'concat' joins two sequences", testing.toBeTrue(array.equalsInt(array.concat[Int]([1, 2], [3, 4]), [1, 2, 3, 4])));
+    testing.it("'append' adds trailing value", testing.toBeTrue(array.equalsInt(array.append[Int]([1, 2], 3), [1, 2, 3])));
+    testing.it("'prepend' adds leading value", testing.toBeTrue(array.equalsInt(array.prepend[Int](0, [1, 2]), [0, 1, 2])));
+    testing.it("'isEmpty' detects empty arrays", testing.toBeTrue(array.isEmpty[Int]([])));
+    testing.it("'nonEmpty' detects non-empty arrays", testing.toBeTrue(array.nonEmpty[Int]([1])));
     testing.endDescribe()
   );
 "#;
@@ -1117,7 +1276,7 @@ export let test () :=
 
         assert_eq!(
             result.text,
-            r#"let array := import "./index.ms";
+            r#"let array := import "./std.ms";
 let testing := import "@std/testing";
 
 export let test () :=
@@ -1125,33 +1284,31 @@ export let test () :=
     testing.describe("array");
     testing.it(
       "'copy' clones sequence values",
-      testing.toBeTruthy(array.equalsInt(array.copy[Int]([1, 2, 3]), [1, 2, 3]))
+      testing.toBeTrue(array.equalsInt(array.copy[Int]([1, 2, 3]), [1, 2, 3]))
     );
     testing.it(
       "'concat' joins two sequences",
-      testing.toBeTruthy(
+      testing.toBeTrue(
         array.equalsInt(array.concat[Int]([1, 2], [3, 4]), [1, 2, 3, 4])
       )
     );
     testing.it(
       "'append' adds trailing value",
-      testing.toBeTruthy(
-        array.equalsInt(array.append[Int]([1, 2], 3), [1, 2, 3])
-      )
+      testing.toBeTrue(array.equalsInt(array.append[Int]([1, 2], 3), [1, 2, 3]))
     );
     testing.it(
       "'prepend' adds leading value",
-      testing.toBeTruthy(
+      testing.toBeTrue(
         array.equalsInt(array.prepend[Int](0, [1, 2]), [0, 1, 2])
       )
     );
     testing.it(
       "'isEmpty' detects empty arrays",
-      testing.toBeTruthy(array.isEmpty[Int]([]))
+      testing.toBeTrue(array.isEmpty[Int]([]))
     );
     testing.it(
       "'nonEmpty' detects non-empty arrays",
-      testing.toBeTruthy(array.nonEmpty[Int]([1]))
+      testing.toBeTrue(array.nonEmpty[Int]([1]))
     );
     testing.endDescribe()
   );
@@ -1173,7 +1330,7 @@ export let test () :=
             "export let command (value : String) : Command := .Command(value := value);",
             "export let values : []Int := [1, 2, 3];",
             "export let cast [T] (raw : CPtr) : Ptr[T] := .Ptr(raw := raw);",
-            "export foreign \"musi\" (\nlet offset[T] (pointer : Ptr[T], count : Int) : Ptr[T];\nlet read[T] (pointer : Ptr[T]) : T;\n);",
+            "export native \"musi\" (\nlet offset[T] (pointer : Ptr[T], count : Int) : Ptr[T];\nlet read[T] (pointer : Ptr[T]) : T;\n);",
             "--- Documented value.\nexport let x : Int := 1;",
             "let x := 1; -- trailing\nlet y := /- inline -/ 2;",
         ];
@@ -1195,7 +1352,7 @@ export let test () :=
 
         for path in files {
             let source = fs::read_to_string(&path).unwrap();
-            assert_format_is_stable(&source);
+            assert_file_format_is_stable(&path, &source);
         }
     }
 
@@ -1220,6 +1377,15 @@ mod failure {
     use super::*;
 
     #[test]
+    fn musi_extension_is_not_source_extension() {
+        assert_eq!(
+            FormatInputKind::from_extension(MUSI_SOURCE_EXTENSION),
+            Some(FormatInputKind::Musi)
+        );
+        assert_eq!(FormatInputKind::from_extension("musi"), None);
+    }
+
+    #[test]
     fn syntax_errors_fail_without_formatting() {
         let error = format_source("let := 1;", &options()).unwrap_err();
 
@@ -1229,7 +1395,7 @@ mod failure {
     #[test]
     fn check_mode_does_not_write_changed_file() {
         let root = temp_dir();
-        let path = root.join("index.ms");
+        let path = root.join("std.ms");
         fs::write(&path, "let x:=1;").unwrap();
 
         let change = format_file(&path, &options(), true).unwrap();

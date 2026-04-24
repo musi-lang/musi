@@ -67,16 +67,16 @@ pub(super) fn ensure_label(
     }
     let name_id = artifact.intern_string(&name);
     let id = u16::try_from(labels.len())
-        .map_err(|_| AssemblyError::TextParseFailed("too many labels".into()))?;
+        .map_err(|_| text_invalid_operand("label count", labels.len()))?;
     labels.push(name_id);
     let _ = label_ids.insert(name, id);
     Ok(id)
 }
 
 pub(super) fn parse_symbol(token: &str) -> AssemblyResult<String> {
-    let body = token.strip_prefix('$').ok_or_else(|| {
-        AssemblyError::TextParseFailed(format!("expected symbolic name, got `{token}`"))
-    })?;
+    let body = token
+        .strip_prefix('$')
+        .ok_or_else(|| text_invalid_operand("symbolic name", token))?;
     if body.starts_with('"') {
         parse_quoted(body)
     } else {
@@ -88,9 +88,9 @@ pub(super) fn parse_local(token: Option<&String>) -> AssemblyResult<u16> {
     let token = must_get(token, "local")?;
     token
         .strip_prefix('%')
-        .ok_or_else(|| AssemblyError::TextParseFailed("expected local slot like `%0`".into()))?
+        .ok_or_else(|| text_invalid_operand("local", token))?
         .parse()
-        .map_err(|_| AssemblyError::TextParseFailed("invalid local slot".into()))
+        .map_err(|_| text_invalid_operand("local", token))
 }
 
 pub(super) fn parse_quoted(token: &str) -> AssemblyResult<String> {
@@ -98,9 +98,7 @@ pub(super) fn parse_quoted(token: &str) -> AssemblyResult<String> {
         .strip_prefix('"')
         .and_then(|rest| rest.strip_suffix('"'))
     else {
-        return Err(AssemblyError::TextParseFailed(format!(
-            "expected quoted string, got `{token}`"
-        )));
+        return Err(text_invalid_operand("quoted string", token));
     };
     Ok(body.replace("\\\"", "\"").replace("\\\\", "\\"))
 }
@@ -108,7 +106,7 @@ pub(super) fn parse_quoted(token: &str) -> AssemblyResult<String> {
 pub(super) fn must_get<'a>(token: Option<&'a String>, name: &str) -> AssemblyResult<&'a str> {
     token
         .map(String::as_str)
-        .ok_or_else(|| AssemblyError::TextParseFailed(format!("missing {name} operand")))
+        .ok_or_else(|| text_missing_operand(name))
 }
 
 pub(super) fn tokenize(line: &str) -> AssemblyResult<Vec<String>> {
@@ -157,9 +155,7 @@ pub(super) fn tokenize(line: &str) -> AssemblyResult<Vec<String>> {
     }
 
     if in_string {
-        return Err(AssemblyError::TextParseFailed(
-            "unterminated string literal".into(),
-        ));
+        return Err(text_unterminated_string(line));
     }
     if !current.is_empty() {
         tokens.push(current);

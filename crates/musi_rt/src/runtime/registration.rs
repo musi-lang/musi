@@ -1,7 +1,11 @@
+use std::sync::MutexGuard;
+
 use musi_vm::Program;
+use musi_vm::{VmDiagKind, VmError, VmErrorKind};
+use music_base::diag::DiagContext;
 
 use super::Runtime;
-use crate::error::RuntimeResult;
+use crate::error::{RuntimeError, RuntimeErrorKind, RuntimeResult};
 
 impl Runtime {
     /// Registers source text for one runtime module spec.
@@ -15,11 +19,7 @@ impl Runtime {
         text: impl Into<String>,
     ) -> RuntimeResult {
         let spec = spec.into();
-        let _ = self
-            .store
-            .borrow_mut()
-            .module_texts
-            .insert(spec, text.into());
+        let _ = self.store_mut()?.module_texts.insert(spec, text.into());
         self.invalidate_loaded_state();
         Ok(())
     }
@@ -35,14 +35,28 @@ impl Runtime {
         program: Program,
     ) -> RuntimeResult {
         let spec = spec.into();
-        let _ = self.store.borrow_mut().programs.insert(spec, program);
+        let _ = self.store_mut()?.programs.insert(spec, program);
         self.invalidate_loaded_state();
         Ok(())
     }
 
     pub(super) fn invalidate_loaded_state(&mut self) {
-        self.store.borrow_mut().programs.clear();
+        if let Ok(mut store) = self.store.lock() {
+            store.programs.clear();
+        }
         self.vm = None;
         self.root_spec = None;
+    }
+
+    fn store_mut(&self) -> RuntimeResult<MutexGuard<'_, super::RuntimeStore>> {
+        self.store.lock().map_err(|_| {
+            RuntimeError::new(RuntimeErrorKind::VmExecutionFailed(VmError::new(
+                VmErrorKind::InvalidProgramShape {
+                    detail: VmDiagKind::RuntimeHostUnavailable
+                        .message_with(&DiagContext::new().with("subject", "runtime store lock"))
+                        .into(),
+                },
+            )))
+        })
     }
 }

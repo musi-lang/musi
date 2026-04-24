@@ -1,13 +1,31 @@
 catalog ir music_ir IrDiagKind crates/music_ir/src/diag_catalog_gen.rs
 
 diag InvalidSurfaceTypeId 3400
-  message "invalid surface type identifier"
-  primary "invalid surface type identifier"
+  message "surface type identifier `{id}` invalid"
 
 diag LoweringRequiresSemaCleanModule 3401
-  message "IR lowering requires semantic-clean module"
-  primary "IR lowering requires semantic-clean module"
+  message "IR lowering needs semantic-clean module"
 
 diag LoweringInvariantViolated 3402
-  message "IR lowering invariant violated"
-  primary "IR lowering invariant violated"
+  message "IR lowering invariant `{subject}` violated"
+  primary "IR lowering invariant `{subject}` violated"
+
+diag LoweringInputMissing 3403
+  message "IR lowering input `{input}` missing"
+  primary "lowering input `{input}` missing"
+
+diag LoweringStateInvalid 3404
+  message "IR lowering state `{state}` invalid"
+  primary "lowering state `{state}` invalid"
+
+diag LoweringTargetUnsupported 3405
+  message "IR lowering target `{target}` unsupported"
+  primary "lowering target `{target}` unsupported"
+
+diag LoweringSymbolUnknown 3406
+  message "IR lowering symbol `{symbol}` unknown"
+  primary "lowering symbol `{symbol}` unknown"
+
+diag LoweringOverflow 3407
+  message "IR lowering `{subject}` exceeds `{limit}`"
+  primary "lowering `{subject}` too large"

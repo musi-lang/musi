@@ -9,7 +9,7 @@ use crate::{ArtifactError, SeamDiagKind, diag::assembly_error_kind};
 pub enum AssemblyError {
     ArtifactValidationFailed(ArtifactError),
     InvalidBinaryHeader,
-    UnsupportedBinaryVersion(u16),
+    UnsupportedBinaryVersion(u32),
     UnknownSectionTag(u8),
     BinaryPayloadTruncated,
     UnknownOpcode(u16),
@@ -36,6 +36,19 @@ impl AssemblyError {
             Self::UnknownOpcode(opcode) => DiagContext::new().with("opcode", *opcode),
             Self::TextParseFailed(source) => DiagContext::new().with("source", source),
         }
+    }
+
+    #[must_use]
+    pub fn text_parse(kind: SeamDiagKind, context: &DiagContext) -> Self {
+        Self::TextParseFailed(kind.message_with(context))
+    }
+
+    #[must_use]
+    pub fn text_parse_source(source: impl Display) -> Self {
+        Self::text_parse(
+            SeamDiagKind::TextParseFailed,
+            &DiagContext::new().with("source", source),
+        )
     }
 }
 

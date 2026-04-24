@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use music_arena::SliceRange;
+use music_base::diag::DiagContext;
 use music_hir::{
     HirBinaryOp, HirConstraint, HirConstraintKind, HirDim, HirEffectSet, HirExprId, HirExprKind,
     HirLitKind, HirOrigin, HirParam, HirPrefixOp, HirRecordItem, HirTyField, HirTyId, HirTyKind,
@@ -103,6 +104,7 @@ impl PassBase<'_, '_, '_> {
             HirTyKind::Tuple { items } => self.render_tuple_ty(*items),
             HirTyKind::Seq { item } => format!("[]{}", self.render_ty(*item)),
             HirTyKind::Array { dims, item } => self.render_array_ty(dims.clone(), *item),
+            HirTyKind::Bits { width } => format!("Bits[{width}]"),
             _ => return None,
         })
     }
@@ -110,16 +112,6 @@ impl PassBase<'_, '_, '_> {
     fn render_ty_range(&self, kind: &HirTyKind) -> Option<String> {
         Some(match kind {
             HirTyKind::Range { bound } => format!("Range[{}]", self.render_ty(*bound)),
-            HirTyKind::ClosedRange { bound } => format!("ClosedRange[{}]", self.render_ty(*bound)),
-            HirTyKind::PartialRangeFrom { bound } => {
-                format!("PartialRangeFrom[{}]", self.render_ty(*bound))
-            }
-            HirTyKind::PartialRangeUpTo { bound } => {
-                format!("PartialRangeUpTo[{}]", self.render_ty(*bound))
-            }
-            HirTyKind::PartialRangeThru { bound } => {
-                format!("PartialRangeThru[{}]", self.render_ty(*bound))
-            }
             _ => return None,
         })
     }
@@ -131,14 +123,18 @@ impl PassBase<'_, '_, '_> {
                 input,
                 output,
             } => format!(
-                "using {} ({} -> {})",
+                "answer {} ({} -> {})",
                 self.render_ty(*effect),
                 self.render_ty(*input),
                 self.render_ty(*output)
             ),
             HirTyKind::Mut { inner } => format!("mut {}", self.render_ty(*inner)),
-            HirTyKind::AnyClass { class } => format!("any {}", self.render_ty(*class)),
-            HirTyKind::SomeClass { class } => format!("some {}", self.render_ty(*class)),
+            HirTyKind::AnyShape { capability } => {
+                format!("any {}", self.render_ty(*capability))
+            }
+            HirTyKind::SomeShape { capability } => {
+                format!("some {}", self.render_ty(*capability))
+            }
             HirTyKind::Record { fields } => self.render_record_ty(fields.clone()),
             _ => return None,
         })
@@ -229,9 +225,14 @@ impl PassBase<'_, '_, '_> {
         }
         let expected = self.render_ty(expected);
         let found = self.render_ty(found);
-        let message = format!("value expected `{expected}`, found `{found}`");
-        let label = format!("value has type `{found}` here");
-        self.diag_message(origin.span, DiagKind::TypeMismatch, message, label);
+        self.diag_with(
+            origin.span,
+            DiagKind::TypeMismatch,
+            DiagContext::new()
+                .with("subject", "value")
+                .with("expected", expected)
+                .with("found", found),
+        );
     }
 
     pub fn type_mismatch_for(
@@ -246,11 +247,13 @@ impl PassBase<'_, '_, '_> {
         }
         let expected = self.render_ty(expected);
         let found = self.render_ty(found);
-        self.diag_message(
+        self.diag_with(
             origin.span,
             DiagKind::TypeMismatch,
-            format!("{subject} expected `{expected}`, found `{found}`"),
-            format!("{subject} has type `{found}` here"),
+            DiagContext::new()
+                .with("subject", subject)
+                .with("expected", expected)
+                .with("found", found),
         );
     }
 
@@ -284,7 +287,7 @@ impl PassBase<'_, '_, '_> {
             || self.ty_matches_handler_or_record(left, right)
     }
 
-    const fn ty_matches_primitives(left: &HirTyKind, right: &HirTyKind) -> bool {
+    fn ty_matches_primitives(left: &HirTyKind, right: &HirTyKind) -> bool {
         matches!(
             (left, right),
             (HirTyKind::Type, HirTyKind::Type)
@@ -309,8 +312,7 @@ impl PassBase<'_, '_, '_> {
                 | (HirTyKind::String, HirTyKind::String)
                 | (HirTyKind::CString, HirTyKind::CString)
                 | (HirTyKind::CPtr, HirTyKind::CPtr)
-                | (HirTyKind::Module, HirTyKind::Module)
-        )
+        ) || matches!((left, right), (HirTyKind::Bits { width: left }, HirTyKind::Bits { width: right }) if left == right)
     }
 
     fn ty_matches_named_or_arrow(&self, left: &HirTyKind, right: &HirTyKind) -> bool {
@@ -387,24 +389,15 @@ impl PassBase<'_, '_, '_> {
         match (left, right) {
             (HirTyKind::Seq { item: left }, HirTyKind::Seq { item: right })
             | (HirTyKind::Range { bound: left }, HirTyKind::Range { bound: right })
-            | (HirTyKind::ClosedRange { bound: left }, HirTyKind::ClosedRange { bound: right })
-            | (
-                HirTyKind::PartialRangeFrom { bound: left },
-                HirTyKind::PartialRangeFrom { bound: right },
-            )
-            | (
-                HirTyKind::PartialRangeUpTo { bound: left },
-                HirTyKind::PartialRangeUpTo { bound: right },
-            )
-            | (
-                HirTyKind::PartialRangeThru { bound: left },
-                HirTyKind::PartialRangeThru { bound: right },
-            )
             | (HirTyKind::Mut { inner: left }, HirTyKind::Mut { inner: right })
-            | (HirTyKind::AnyClass { class: left }, HirTyKind::AnyClass { class: right })
-            | (HirTyKind::SomeClass { class: left }, HirTyKind::SomeClass { class: right }) => {
-                self.ty_matches(*left, *right)
-            }
+            | (
+                HirTyKind::AnyShape { capability: left },
+                HirTyKind::AnyShape { capability: right },
+            )
+            | (
+                HirTyKind::SomeShape { capability: left },
+                HirTyKind::SomeShape { capability: right },
+            ) => self.ty_matches(*left, *right),
             _ => false,
         }
     }
@@ -517,7 +510,9 @@ impl PassBase<'_, '_, '_> {
             known.empty,
             known.unit,
             known.bool_,
+            known.bits,
             known.range,
+            known.pin,
             known.closed_range,
             known.partial_range_from,
             known.partial_range_up_to,
@@ -555,7 +550,12 @@ impl PassBase<'_, '_, '_> {
             .or_else(|| self.lower_type_callable_expr(expr))
             .or_else(|| self.lower_type_operator_expr(expr, origin))
             .unwrap_or_else(|| {
-                self.diag(origin.span, DiagKind::InvalidTypeExpression, "");
+                let target = self.expr_subject(expr);
+                self.diag_with(
+                    origin.span,
+                    DiagKind::InvalidTypeExpression,
+                    DiagContext::new().with("target", target),
+                );
                 builtins.error
             })
     }
@@ -571,7 +571,6 @@ impl PassBase<'_, '_, '_> {
                 },
                 _ => return None,
             },
-            HirExprKind::Import { .. } => self.builtins().module,
             _ => return None,
         })
     }
@@ -595,7 +594,7 @@ impl PassBase<'_, '_, '_> {
 
     fn lower_type_callable_expr(&mut self, expr: HirExprId) -> Option<HirTyId> {
         Some(match self.expr(expr).kind {
-            HirExprKind::HandlerTy {
+            HirExprKind::AnswerTy {
                 effect,
                 input,
                 output,
@@ -636,6 +635,7 @@ impl PassBase<'_, '_, '_> {
     fn lower_type_operator_expr(&mut self, expr: HirExprId, origin: HirOrigin) -> Option<HirTyId> {
         Some(match self.expr(expr).kind {
             HirExprKind::Apply { callee, args } => self.lower_apply_type_expr(origin, callee, args),
+            HirExprKind::Index { base, args } => self.lower_apply_type_expr(origin, base, args),
             HirExprKind::Binary { op, left, right } => {
                 self.lower_binary_type_expr(origin, &op, left, right)
             }
@@ -652,16 +652,16 @@ impl PassBase<'_, '_, '_> {
                 expr,
             } => {
                 let origin = self.expr(expr).origin;
-                let class = self.lower_type_expr(expr, origin);
-                self.alloc_ty(HirTyKind::AnyClass { class })
+                let shape = self.lower_type_expr(expr, origin);
+                self.alloc_ty(HirTyKind::AnyShape { capability: shape })
             }
             HirExprKind::Prefix {
                 op: HirPrefixOp::Some,
                 expr,
             } => {
                 let origin = self.expr(expr).origin;
-                let class = self.lower_type_expr(expr, origin);
-                self.alloc_ty(HirTyKind::SomeClass { class })
+                let shape = self.lower_type_expr(expr, origin);
+                self.alloc_ty(HirTyKind::SomeShape { capability: shape })
             }
             _ => return None,
         })
@@ -695,11 +695,19 @@ impl PassBase<'_, '_, '_> {
                 self.lower_type_expr(arg, origin)
             })
             .collect::<Vec<_>>();
+        if args.is_empty() {
+            return callee_ty;
+        }
         if self
             .remaining_constructor_kind(origin, callee_ty, args.len())
             .is_none()
         {
-            self.diag(origin.span, DiagKind::InvalidTypeApplication, "");
+            let target = self.render_ty(callee_ty);
+            self.diag_with(
+                origin.span,
+                DiagKind::InvalidTypeApplication,
+                DiagContext::new().with("target", target),
+            );
             return self.builtins().error;
         }
         let HirTyKind::Named {
@@ -707,7 +715,12 @@ impl PassBase<'_, '_, '_> {
             args: existing_args,
         } = self.ty(callee_ty).kind
         else {
-            self.diag(origin.span, DiagKind::InvalidTypeApplication, "");
+            let target = self.render_ty(callee_ty);
+            self.diag_with(
+                origin.span,
+                DiagKind::InvalidTypeApplication,
+                DiagContext::new().with("target", target),
+            );
             return self.builtins().error;
         };
         let mut all_args = self.ty_ids(existing_args);
@@ -723,18 +736,7 @@ impl PassBase<'_, '_, '_> {
             "Range" if all_args.len() == 1 => {
                 self.alloc_ty(HirTyKind::Range { bound: all_args[0] })
             }
-            "ClosedRange" if all_args.len() == 1 => {
-                self.alloc_ty(HirTyKind::ClosedRange { bound: all_args[0] })
-            }
-            "PartialRangeFrom" if all_args.len() == 1 => {
-                self.alloc_ty(HirTyKind::PartialRangeFrom { bound: all_args[0] })
-            }
-            "PartialRangeUpTo" if all_args.len() == 1 => {
-                self.alloc_ty(HirTyKind::PartialRangeUpTo { bound: all_args[0] })
-            }
-            "PartialRangeThru" if all_args.len() == 1 => {
-                self.alloc_ty(HirTyKind::PartialRangeThru { bound: all_args[0] })
-            }
+            "Bits" if all_args.len() == 1 => self.lower_bits_ty(origin, all_args[0]),
             _ => {
                 let args = self.alloc_ty_list(all_args);
                 self.alloc_ty(HirTyKind::Named { name, args })
@@ -742,8 +744,44 @@ impl PassBase<'_, '_, '_> {
         }
     }
 
+    fn lower_bits_ty(&mut self, origin: HirOrigin, width_ty: HirTyId) -> HirTyId {
+        match self.ty(width_ty).kind {
+            HirTyKind::NatLit(width) if width > 0 && u32::try_from(width).is_ok() => {
+                self.alloc_ty(HirTyKind::Bits {
+                    width: u32::try_from(width).unwrap_or(u32::MAX),
+                })
+            }
+            HirTyKind::Named { name, args }
+                if self.ty_ids(args).is_empty() && self.type_param_is_nat(name) =>
+            {
+                let args = self.alloc_ty_list([width_ty]);
+                self.alloc_ty(HirTyKind::Named {
+                    name: self.known().bits,
+                    args,
+                })
+            }
+            _ => {
+                let width = self.render_ty(width_ty);
+                self.diag_with(
+                    origin.span,
+                    DiagKind::InvalidBitsWidth,
+                    DiagContext::new().with("width", width),
+                );
+                self.builtins().error
+            }
+        }
+    }
+
+    fn type_param_is_nat(&self, name: Symbol) -> bool {
+        self.type_param_kind(name)
+            .is_some_and(|kind| self.ty_matches(kind, self.builtins().nat))
+    }
+
     fn type_constructor_param_kinds(&self, name: Symbol) -> Option<Vec<HirTyId>> {
         let known = self.known();
+        if name == known.bits {
+            return Some(vec![self.builtins().nat]);
+        }
         if [
             known.array,
             known.range,
@@ -760,7 +798,7 @@ impl PassBase<'_, '_, '_> {
         if let Some(data) = self.data_def(text) {
             return Some(data.type_param_kinds().to_vec());
         }
-        if let Some(facts) = self.class_facts_by_name(name) {
+        if let Some(facts) = self.shape_facts_by_name(name) {
             return Some(facts.type_param_kinds.to_vec());
         }
         self.type_constructor_scheme_arity(name)
@@ -818,7 +856,12 @@ impl PassBase<'_, '_, '_> {
             };
             let params = self.ty_ids(params);
             if params.len() != 1 {
-                self.diag(origin.span, DiagKind::InvalidTypeApplication, "");
+                let target = self.render_ty(kind);
+                self.diag_with(
+                    origin.span,
+                    DiagKind::InvalidTypeApplication,
+                    DiagContext::new().with("target", target),
+                );
                 return None;
             }
             kind = ret;
@@ -854,7 +897,12 @@ impl PassBase<'_, '_, '_> {
                 self.alloc_ty(HirTyKind::Sum { left, right })
             }
             _ => {
-                self.diag(origin.span, DiagKind::InvalidTypeExpression, "");
+                let target = self.binary_op_subject(op);
+                self.diag_with(
+                    origin.span,
+                    DiagKind::InvalidTypeExpression,
+                    DiagContext::new().with("target", target),
+                );
                 self.builtins().error
             }
         }
@@ -911,8 +959,8 @@ impl PassBase<'_, '_, '_> {
                 };
                 {
                     let lowered = ConstraintFacts::new(constraint.name.name, kind, value);
-                    if let Some(class_key) = self.constraint_class_key(kind, value) {
-                        lowered.with_class_key(class_key)
+                    if let Some(shape_key) = self.constraint_shape_key(kind, value) {
+                        lowered.with_shape_key(shape_key)
                     } else {
                         lowered
                     }
@@ -922,14 +970,14 @@ impl PassBase<'_, '_, '_> {
             .into_boxed_slice()
     }
 
-    fn constraint_class_key(&self, kind: ConstraintKind, value: HirTyId) -> Option<DefinitionKey> {
+    fn constraint_shape_key(&self, kind: ConstraintKind, value: HirTyId) -> Option<DefinitionKey> {
         if kind != ConstraintKind::Implements {
             return None;
         }
         let HirTyKind::Named { name, .. } = self.ty(value).kind else {
             return None;
         };
-        Some(self.class_facts_by_name(name).map_or_else(
+        Some(self.shape_facts_by_name(name).map_or_else(
             || surface_key(self.module_key(), self.interner(), name),
             |facts| facts.key.clone(),
         ))
