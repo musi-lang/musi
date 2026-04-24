@@ -72,7 +72,7 @@ mod success {
         assert_eq!(module_source(test::SPEC), Some(test::MODULE));
         assert_eq!(module_source(syntax::SPEC), Some(syntax::MODULE));
         assert_eq!(module_source("musi:missing"), None);
-        assert!(core::MODULE.contains("export opaque let Rangeable[T] := shape"));
+        assert!(core::MODULE.contains("export opaque let Rangeable [T] := shape"));
         assert!(core::MODULE.contains("export opaque let Option [T] := data"));
         assert!(env::MODULE.contains("export opaque let Env := effect"));
         assert!(process::MODULE.contains("let argCount () : Int;"));
