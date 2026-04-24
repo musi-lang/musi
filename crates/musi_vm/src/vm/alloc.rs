@@ -3,8 +3,8 @@ use music_term::SyntaxTerm;
 
 use super::super::value::{ContinuationFrameList, ContinuationHandlerList};
 use super::{
-    ClosureValue, ContinuationValue, DataValue, ModuleValue, SequenceValue, Value, ValueList, Vm,
-    VmResult,
+    ClosureValue, ContinuationValue, DataValue, GcRef, ModuleValue, SequenceValue, Value,
+    ValueList, Vm, VmResult,
 };
 
 impl Vm {
@@ -64,6 +64,43 @@ impl Vm {
         let value = self
             .heap
             .alloc_sequence(SequenceValue::new(ty, items), &self.heap_options())?;
+        self.after_heap_allocation(&value)?;
+        Ok(value)
+    }
+
+    pub(crate) fn alloc_i64_array8_sequence(
+        &mut self,
+        ty: TypeId,
+        cells: [i64; 8],
+    ) -> VmResult<(Value, GcRef)> {
+        let (value, buffer) =
+            self.heap
+                .alloc_i64_array_sequence(ty, cells, &self.heap_options())?;
+        self.after_heap_allocation(&value)?;
+        Ok((value, buffer))
+    }
+
+    pub(crate) fn alloc_shared_i64_array8_sequence(
+        &mut self,
+        ty: TypeId,
+        cells: [i64; 8],
+    ) -> VmResult<(Value, GcRef)> {
+        let (value, buffer) =
+            self.heap
+                .alloc_shared_i64_array_sequence(ty, cells, &self.heap_options())?;
+        self.after_heap_allocation(&value)?;
+        Ok((value, buffer))
+    }
+
+    pub(crate) fn alloc_sequence_with_i64_array(
+        &mut self,
+        ty: TypeId,
+        buffer: GcRef,
+        len: usize,
+    ) -> VmResult<Value> {
+        let value =
+            self.heap
+                .alloc_sequence_with_i64_array(ty, buffer, len, &self.heap_options())?;
         self.after_heap_allocation(&value)?;
         Ok(value)
     }

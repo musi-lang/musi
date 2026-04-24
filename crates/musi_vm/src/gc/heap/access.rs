@@ -1,73 +1,49 @@
 use crate::error::{VmError, VmErrorKind};
 use crate::types::VmResult;
-use crate::value::{ClosureValue, ContinuationValue, DataValue, GcRef, ModuleValue};
+use crate::value::{ClosureValue, ContinuationValue, DataValue, GcRef, ModuleValue, SequenceValue};
 use music_term::SyntaxTerm;
+use std::ptr::from_mut;
 
 use super::super::error::{invalid_heap_ref, stale_heap_ref};
-use super::super::object::{HeapObject, PackedSeq2x2};
+use super::super::object::HeapObject;
 use super::super::space::HeapSlot;
-use super::{RuntimeHeap, Seq2x2ArgCache};
+use super::{RuntimeHeap, Seq2x2ArgGuard, SequenceGuard};
 
 impl RuntimeHeap {
-    pub(crate) fn bind_seq2x2_packed_arg(&mut self, reference: GcRef) -> VmResult<Seq2x2ArgCache> {
-        let (grid_slot, grid_generation, row_refs) = match self.object(reference)? {
-            HeapObject::PackedSeq2x2(grid) => {
-                let slot = self.slot(reference)?;
-                (reference.slot(), slot.generation, grid.row_refs)
-            }
-            _ => return Err(invalid_heap_ref(reference, "packed sequence([2][2]Int)")),
-        };
-        let row0_slot = self.slot(row_refs[0])?;
-        let row1_slot = self.slot(row_refs[1])?;
-        let cache = Seq2x2ArgCache {
-            grid_slot,
-            grid_generation,
-            row0_slot: row_refs[0].slot(),
-            row0_generation: row0_slot.generation,
-            row1_slot: row_refs[1].slot(),
-            row1_generation: row1_slot.generation,
-        };
-        self.pin_cache_slot(grid_slot, grid_generation)?;
-        self.pin_cache_slot(cache.row0_slot, cache.row0_generation)?;
-        self.pin_cache_slot(cache.row1_slot, cache.row1_generation)?;
-        Ok(cache)
-    }
-
-    pub(crate) fn unpin_seq2x2_packed_arg(&mut self, cache: Seq2x2ArgCache) {
-        self.unpin_cache_slot(cache.grid_slot, cache.grid_generation);
-        self.unpin_cache_slot(cache.row0_slot, cache.row0_generation);
-        self.unpin_cache_slot(cache.row1_slot, cache.row1_generation);
-    }
-
     pub(crate) fn validate_ref(&self, reference: GcRef) -> VmResult {
         self.slot(reference).map(|_| ())
     }
 
-    fn pin_cache_slot(&mut self, slot_index: usize, generation: u32) -> VmResult {
-        let Some(slot) = self.slots.get_mut(slot_index) else {
-            return Err(VmError::new(VmErrorKind::InvalidProgramShape {
-                detail: "stale cached pin slot".into(),
-            }));
-        };
-        if slot.generation != generation || slot.object.is_none() {
-            return Err(VmError::new(VmErrorKind::InvalidProgramShape {
-                detail: "stale cached pin generation".into(),
-            }));
+    pub(crate) fn bind_seq2x2_arg(&self, reference: GcRef) -> VmResult<Seq2x2ArgGuard> {
+        if self.sequence_len(reference)? != 2 {
+            return Err(invalid_heap_ref(reference, "sequence(len=2)"));
         }
-        slot.pin_count = slot.pin_count.saturating_add(1);
-        slot.is_pinned = slot.pin_count > 0;
-        Ok(())
+        let row0 = self.sequence_seq_at(reference, 0)?;
+        let row1 = self.sequence_seq_at(reference, 1)?;
+        if self.sequence_int_pair(row0).is_err() || self.sequence_int_pair(row1).is_err() {
+            return Err(invalid_heap_ref(reference, "sequence([2][2]Int)"));
+        }
+        Ok(Seq2x2ArgGuard {
+            grid: self.sequence_guard(reference)?,
+            row0: self.sequence_guard(row0)?,
+            row1: self.sequence_guard(row1)?,
+        })
     }
 
-    fn unpin_cache_slot(&mut self, slot_index: usize, generation: u32) {
-        let Some(slot) = self.slots.get_mut(slot_index) else {
-            return;
+    pub(crate) fn sequence_guard(&self, reference: GcRef) -> VmResult<SequenceGuard> {
+        let slot = self.slot(reference)?;
+        let HeapObject::Seq(sequence) = slot
+            .object
+            .as_ref()
+            .ok_or_else(|| stale_heap_ref(reference))?
+        else {
+            return Err(invalid_heap_ref(reference, "sequence"));
         };
-        if slot.generation != generation || slot.object.is_none() {
-            return;
-        }
-        slot.pin_count = slot.pin_count.saturating_sub(1);
-        slot.is_pinned = slot.pin_count > 0;
+        Ok(SequenceGuard {
+            slot: reference.slot(),
+            generation: slot.generation,
+            layout_version: sequence.layout_version(),
+        })
     }
 
     fn checked_slot_index(&self, reference: GcRef) -> VmResult<usize> {
@@ -168,17 +144,45 @@ impl RuntimeHeap {
         }
     }
 
-    pub(super) fn packed_grid(&self, reference: GcRef) -> VmResult<&PackedSeq2x2> {
-        match self.object(reference)? {
-            HeapObject::PackedSeq2x2(grid) => Ok(grid),
-            _ => Err(invalid_heap_ref(reference, "packed grid")),
+    pub(crate) fn guarded_sequence_mut(
+        &mut self,
+        guard: SequenceGuard,
+    ) -> VmResult<&mut SequenceValue> {
+        let Some(slot) = self.slots.get_mut(guard.slot) else {
+            return Err(VmError::new(VmErrorKind::InvalidProgramShape {
+                detail: "stale sequence guard slot".into(),
+            }));
+        };
+        if slot.generation != guard.generation {
+            return Err(VmError::new(VmErrorKind::InvalidProgramShape {
+                detail: "stale sequence guard generation".into(),
+            }));
         }
+        let Some(object) = slot.object.as_mut() else {
+            return Err(VmError::new(VmErrorKind::InvalidProgramShape {
+                detail: "stale sequence guard object".into(),
+            }));
+        };
+        let HeapObject::Seq(sequence) = object else {
+            return Err(VmError::new(VmErrorKind::InvalidProgramShape {
+                detail: "sequence guard not sequence".into(),
+            }));
+        };
+        if sequence.layout_version() != guard.layout_version {
+            return Err(VmError::new(VmErrorKind::InvalidProgramShape {
+                detail: "sequence guard layout changed".into(),
+            }));
+        }
+        Ok(sequence)
     }
 
-    pub(super) fn packed_grid_mut(&mut self, reference: GcRef) -> VmResult<&mut PackedSeq2x2> {
-        match self.object_mut(reference)? {
-            HeapObject::PackedSeq2x2(grid) => Ok(grid),
-            _ => Err(invalid_heap_ref(reference, "packed grid")),
-        }
+    pub(crate) fn guarded_int_pair_ptr(&mut self, guard: SequenceGuard) -> VmResult<*mut [i64; 2]> {
+        let sequence = self.guarded_sequence_mut(guard)?;
+        let pair = sequence.int_pair_mut().ok_or_else(|| {
+            VmError::new(VmErrorKind::InvalidProgramShape {
+                detail: "sequence guard not int pair".into(),
+            })
+        })?;
+        Ok(from_mut(pair))
     }
 }

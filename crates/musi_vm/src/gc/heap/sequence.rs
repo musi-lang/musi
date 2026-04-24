@@ -3,7 +3,7 @@ use music_seam::TypeId;
 use crate::VmValueKind::Seq;
 use crate::error::{VmError, VmErrorKind};
 use crate::types::VmResult;
-use crate::value::{GcRef, SequenceValue, Value, ValueList};
+use crate::value::{GcRef, I64ArrayValue, SequenceValue, Value, ValueList};
 
 use super::super::error::invalid_heap_ref;
 use super::super::object::HeapObject;
@@ -29,8 +29,7 @@ impl RuntimeHeap {
 
     pub(crate) fn sequence_len(&self, reference: GcRef) -> VmResult<usize> {
         match self.object(reference)? {
-            HeapObject::Seq(value) => Ok(value.items.len()),
-            HeapObject::PackedSeq2x2(_) | HeapObject::PackedSeq2x2Row(_) => Ok(2),
+            HeapObject::Seq(value) => Ok(value.len()),
             _ => Err(invalid_heap_ref(reference, "sequence")),
         }
     }
@@ -38,42 +37,27 @@ impl RuntimeHeap {
     pub(crate) fn sequence_ty(&self, reference: GcRef) -> VmResult<TypeId> {
         match self.object(reference)? {
             HeapObject::Seq(value) => Ok(value.ty),
-            HeapObject::PackedSeq2x2(value) => Ok(value.ty),
-            HeapObject::PackedSeq2x2Row(value) => Ok(value.ty),
             _ => Err(invalid_heap_ref(reference, "sequence")),
         }
     }
 
     pub(crate) fn sequence_get_cloned(&self, reference: GcRef, index: usize) -> VmResult<Value> {
-        match self.object(reference)? {
-            HeapObject::Seq(value) => value.items.get(index).cloned().ok_or_else(|| {
-                VmError::new(VmErrorKind::InvalidSequenceIndex {
-                    index: i64::try_from(index).unwrap_or(i64::MAX),
-                    len: value.items.len(),
-                })
-            }),
-            HeapObject::PackedSeq2x2(value) => value
-                .row_refs
-                .get(index)
-                .copied()
-                .map(Value::Seq)
-                .ok_or_else(|| {
-                    VmError::new(VmErrorKind::InvalidSequenceIndex {
-                        index: i64::try_from(index).unwrap_or(i64::MAX),
-                        len: 2,
-                    })
-                }),
-            HeapObject::PackedSeq2x2Row(value) => {
-                if index >= 2 {
-                    return Err(VmError::new(VmErrorKind::InvalidSequenceIndex {
-                        index: i64::try_from(index).unwrap_or(i64::MAX),
-                        len: 2,
-                    }));
-                }
-                let grid = self.packed_grid(value.grid)?;
-                Ok(Value::Int(grid.cell_for(value.logical_row, index)))
+        match sequence_read(self, reference, index)? {
+            SequenceRead::Inline { value, len } => {
+                value.ok_or_else(|| invalid_sequence_index(index, len))
             }
-            _ => Err(invalid_heap_ref(reference, "sequence")),
+            SequenceRead::I64Array { buffer, len } => self
+                .i64_array(buffer)?
+                .get(index)
+                .map(Value::Int)
+                .ok_or_else(|| invalid_sequence_index(index, len)),
+        }
+    }
+
+    pub(crate) fn i64_array(&self, reference: GcRef) -> VmResult<&I64ArrayValue> {
+        match self.object(reference)? {
+            HeapObject::I64Array(value) => Ok(value),
+            _ => Err(invalid_heap_ref(reference, "i64 array")),
         }
     }
 
@@ -84,45 +68,53 @@ impl RuntimeHeap {
         value: Value,
     ) -> VmResult {
         self.mark_write_barrier(reference)?;
-        match self.object(reference)? {
-            HeapObject::PackedSeq2x2(_) => {
-                self.promote_packed_grid(reference)?;
-                return self.sequence_set(reference, index, value);
+        if let Some((buffer, len)) = self.sequence(reference)?.i64_array() {
+            if index >= len {
+                return Err(invalid_sequence_index(index, len));
             }
-            HeapObject::PackedSeq2x2Row(_) => {
-                if index >= 2 {
-                    return Err(VmError::new(VmErrorKind::InvalidSequenceIndex {
-                        index: i64::try_from(index).unwrap_or(i64::MAX),
-                        len: 2,
-                    }));
+            return match value {
+                Value::Int(value) => {
+                    if self.i64_array(buffer)?.is_shared() {
+                        let mut items = self.i64_array_values(buffer)?;
+                        *items.get_mut(index).expect("index checked before detach") =
+                            Value::Int(value);
+                        let HeapObject::Seq(sequence) = self.object_mut(reference)? else {
+                            return Err(invalid_heap_ref(reference, "sequence"));
+                        };
+                        sequence.replace_with_values(items);
+                        Ok(())
+                    } else {
+                        self.i64_array_set(buffer, index, value)
+                    }
                 }
-                let int = fast_int(&value)?;
-                let HeapObject::PackedSeq2x2Row(row) = self.object(reference)? else {
-                    return Err(invalid_heap_ref(reference, "packed row"));
-                };
-                let grid_ref = row.grid;
-                let logical_row = row.logical_row;
-                let grid = self.packed_grid_mut(grid_ref)?;
-                grid.set_cell_for(logical_row, index, int);
-                return Ok(());
-            }
-            _ => {}
+                value => {
+                    let mut items = self.i64_array_values(buffer)?;
+                    *items.get_mut(index).expect("index checked before demotion") = value;
+                    let HeapObject::Seq(sequence) = self.object_mut(reference)? else {
+                        return Err(invalid_heap_ref(reference, "sequence"));
+                    };
+                    sequence.replace_with_values(items);
+                    Ok(())
+                }
+            };
         }
         let HeapObject::Seq(sequence) = self.object_mut(reference)? else {
             return Err(invalid_heap_ref(reference, "sequence"));
         };
-        let len = sequence.items.len();
-        let Some(slot) = sequence.items.get_mut(index) else {
+        let len = sequence.len();
+        if sequence.set(index, value).is_none() {
             return Err(VmError::new(VmErrorKind::InvalidSequenceIndex {
                 index: i64::try_from(index).unwrap_or(i64::MAX),
                 len,
             }));
-        };
-        *slot = value;
+        }
         Ok(())
     }
 
     pub(crate) fn sequence_items_cloned(&self, reference: GcRef) -> VmResult<Vec<Value>> {
+        if let Some((buffer, _)) = self.sequence(reference)?.i64_array() {
+            return Ok(self.i64_array_values(buffer)?.into_iter().collect());
+        }
         let len = self.sequence_len(reference)?;
         (0..len)
             .map(|index| self.sequence_get_cloned(reference, index))
@@ -143,35 +135,81 @@ impl RuntimeHeap {
         }
     }
 
-    fn promote_packed_grid(&mut self, grid_ref: GcRef) -> VmResult {
-        let (ty, row_refs) = {
-            let grid = self.packed_grid(grid_ref)?;
-            (grid.ty, grid.row_refs)
-        };
-        let row0 = self.promote_packed_row_to_plain(row_refs[0])?;
-        let row1 = if row_refs[1] == row_refs[0] {
-            row0
-        } else {
-            self.promote_packed_row_to_plain(row_refs[1])?
-        };
-        let mut items = ValueList::new();
-        items.push(Value::Seq(row0));
-        items.push(Value::Seq(row1));
-        *self.object_mut(grid_ref)? = HeapObject::Seq(SequenceValue::new(ty, items));
-        Ok(())
+    pub(crate) fn sequence_int_pair(&self, reference: GcRef) -> VmResult<[i64; 2]> {
+        match self.object(reference)? {
+            HeapObject::Seq(value) => value
+                .int_pair()
+                .ok_or_else(|| invalid_heap_ref(reference, "int pair sequence")),
+            _ => Err(invalid_heap_ref(reference, "sequence")),
+        }
     }
 
-    fn promote_packed_row_to_plain(&mut self, row_ref: GcRef) -> VmResult<GcRef> {
-        let (ty, grid_ref, logical_row) = match self.object(row_ref)? {
-            HeapObject::PackedSeq2x2Row(row) => (row.ty, row.grid, row.logical_row),
-            HeapObject::Seq(_) => return Ok(row_ref),
-            _ => return Err(invalid_heap_ref(row_ref, "packed row")),
-        };
-        let grid = self.packed_grid(grid_ref)?;
-        let mut items = ValueList::new();
-        items.push(Value::Int(grid.cell_for(logical_row, 0)));
-        items.push(Value::Int(grid.cell_for(logical_row, 1)));
-        *self.object_mut(row_ref)? = HeapObject::Seq(SequenceValue::new(ty, items));
-        Ok(row_ref)
+    pub(crate) fn sequence_set_int_pair_cell(
+        &mut self,
+        reference: GcRef,
+        index: usize,
+        value: i64,
+    ) -> VmResult {
+        self.mark_write_barrier(reference)?;
+        match self.object_mut(reference)? {
+            HeapObject::Seq(sequence) => sequence
+                .set_int_pair_cell(index, value)
+                .ok_or_else(|| invalid_heap_ref(reference, "int pair sequence")),
+            _ => Err(invalid_heap_ref(reference, "sequence")),
+        }
     }
+
+    fn i64_array_set(&mut self, reference: GcRef, index: usize, value: i64) -> VmResult {
+        match self.object_mut(reference)? {
+            HeapObject::I64Array(array) => array
+                .set(index, value)
+                .ok_or_else(|| invalid_sequence_index(index, array.len())),
+            _ => Err(invalid_heap_ref(reference, "i64 array")),
+        }
+    }
+
+    fn i64_array_values(&self, reference: GcRef) -> VmResult<ValueList> {
+        match self.object(reference)? {
+            HeapObject::I64Array(array) => {
+                Ok(array.values().iter().copied().map(Value::Int).collect())
+            }
+            _ => Err(invalid_heap_ref(reference, "i64 array")),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn sequence_i64_array_ref(&self, reference: GcRef) -> VmResult<Option<GcRef>> {
+        Ok(self
+            .sequence(reference)?
+            .i64_array()
+            .map(|(buffer, _)| buffer))
+    }
+}
+
+enum SequenceRead {
+    Inline { value: Option<Value>, len: usize },
+    I64Array { buffer: GcRef, len: usize },
+}
+
+fn sequence_read(heap: &RuntimeHeap, reference: GcRef, index: usize) -> VmResult<SequenceRead> {
+    match heap.object(reference)? {
+        HeapObject::Seq(value) => {
+            if let Some((buffer, len)) = value.i64_array() {
+                Ok(SequenceRead::I64Array { buffer, len })
+            } else {
+                Ok(SequenceRead::Inline {
+                    value: value.get_cloned(index),
+                    len: value.len(),
+                })
+            }
+        }
+        _ => Err(invalid_heap_ref(reference, "sequence")),
+    }
+}
+
+fn invalid_sequence_index(index: usize, len: usize) -> VmError {
+    VmError::new(VmErrorKind::InvalidSequenceIndex {
+        index: i64::try_from(index).unwrap_or(i64::MAX),
+        len,
+    })
 }

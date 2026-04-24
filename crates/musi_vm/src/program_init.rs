@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use music_seam::{GlobalId, Instruction, Opcode, Operand, ProcedureId};
 
 use crate::Value;
@@ -44,7 +46,7 @@ fn decode_op_clause_resume(procedure: &LoadedProcedure) -> Option<i16> {
 }
 
 pub fn specialize_runtime_kernels(procedures: &mut [LoadedProcedure]) {
-    let kernels = procedures
+    let mut kernels = procedures
         .iter()
         .map(|procedure| match procedure.runtime_kernel {
             Some(RuntimeKernel::InlineEffectResumeClauses {
@@ -55,9 +57,111 @@ pub fn specialize_runtime_kernels(procedures: &mut [LoadedProcedure]) {
             other => other,
         })
         .collect::<Vec<_>>();
+    let answer_kernels = answer_global_inline_effect_kernels(procedures);
+    let inline_effect = unique_inline_effect_kernel(&kernels);
+    for (procedure, kernel) in procedures.iter().zip(kernels.iter_mut()) {
+        if kernel.is_some()
+            || procedure.params != 0
+            || !is_handled_effect_procedure(&procedure.instructions)
+        {
+            continue;
+        }
+        if let Some(answer_global) = handled_effect_answer_global(&procedure.instructions)
+            && let Some(answer_kernel) = answer_kernels.get(&answer_global)
+        {
+            *kernel = Some(*answer_kernel);
+        } else if let Some(inline_effect) = inline_effect {
+            *kernel = Some(inline_effect);
+        }
+    }
     for (procedure, kernel) in procedures.iter_mut().zip(kernels) {
         procedure.runtime_kernel = kernel;
     }
+}
+
+fn answer_global_inline_effect_kernels(
+    procedures: &[LoadedProcedure],
+) -> HashMap<GlobalId, RuntimeKernel> {
+    procedures
+        .iter()
+        .filter_map(|procedure| {
+            let (global, value_clause, op_clause) =
+                answer_global_assignment(&procedure.instructions)?;
+            Some((
+                global,
+                inline_effect_resume_kernel(procedures, value_clause, op_clause)?,
+            ))
+        })
+        .collect()
+}
+
+fn answer_global_assignment(
+    instructions: &[Instruction],
+) -> Option<(GlobalId, ProcedureId, ProcedureId)> {
+    let mut closures = instructions.iter().filter_map(|instruction| {
+        let (
+            Opcode::NewFn,
+            Operand::WideProcedureCaptures {
+                procedure,
+                captures: 0,
+            },
+        ) = (instruction.opcode, &instruction.operand)
+        else {
+            return None;
+        };
+        Some(*procedure)
+    });
+    let value_clause = closures.next()?;
+    let op_clause = closures.next()?;
+    let global = instructions.iter().find_map(|instruction| {
+        let (Opcode::StGlob, Operand::Global(global)) = (instruction.opcode, &instruction.operand)
+        else {
+            return None;
+        };
+        Some(*global)
+    })?;
+    Some((global, value_clause, op_clause))
+}
+
+fn unique_inline_effect_kernel(kernels: &[Option<RuntimeKernel>]) -> Option<RuntimeKernel> {
+    let mut matches = kernels.iter().filter_map(|kernel| {
+        let Some(RuntimeKernel::InlineEffectResume {
+            resume_value,
+            value_add,
+        }) = kernel
+        else {
+            return None;
+        };
+        Some(RuntimeKernel::InlineEffectResume {
+            resume_value: *resume_value,
+            value_add: *value_add,
+        })
+    });
+    let first = matches.next()?;
+    matches.next().is_none().then_some(first)
+}
+
+fn is_handled_effect_procedure(instructions: &[Instruction]) -> bool {
+    let has_handler = instructions
+        .iter()
+        .any(|instruction| instruction.opcode == Opcode::HdlPush);
+    let has_effect = instructions
+        .iter()
+        .any(|instruction| instruction.opcode == Opcode::Raise);
+    let has_pop = instructions
+        .iter()
+        .any(|instruction| instruction.opcode == Opcode::HdlPop);
+    has_handler && has_effect && has_pop
+}
+
+fn handled_effect_answer_global(instructions: &[Instruction]) -> Option<GlobalId> {
+    instructions.iter().find_map(|instruction| {
+        let (Opcode::LdGlob, Operand::Global(global)) = (instruction.opcode, &instruction.operand)
+        else {
+            return None;
+        };
+        Some(*global)
+    })
 }
 
 fn inline_effect_resume_kernel(

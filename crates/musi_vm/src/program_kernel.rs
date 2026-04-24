@@ -8,6 +8,7 @@ pub fn decode_runtime_kernel(
     runtime_instructions: &[RuntimeInstruction],
 ) -> Option<RuntimeKernel> {
     decode_direct_int_wrapper_call(instructions)
+        .or_else(|| decode_const_i64_array8_return_kernel(param_count, instructions))
         .or_else(|| decode_int_tail_accumulator_kernel(runtime_instructions, instructions))
         .or_else(|| decode_inline_effect_resume_kernel(instructions))
         .or_else(|| decode_seq2_mutation_kernel(runtime_instructions))
@@ -36,6 +37,31 @@ fn decode_direct_int_wrapper_call(instructions: &[Instruction]) -> Option<Runtim
         const_arg: *const_arg,
         procedure: *procedure,
     })
+}
+
+fn decode_const_i64_array8_return_kernel(
+    param_count: u16,
+    instructions: &[Instruction],
+) -> Option<RuntimeKernel> {
+    if param_count != 0 || instructions.len() != 10 {
+        return None;
+    }
+    let window = instruction_window::<10>(0, instructions)?;
+    let mut cells = [0i64; 8];
+    for (index, instruction) in window.iter().take(8).enumerate() {
+        let (Opcode::LdCI4, Operand::I16(cell)) = (instruction.opcode, &instruction.operand) else {
+            return None;
+        };
+        cells[index] = i64::from(*cell);
+    }
+    let (Opcode::NewArr, Operand::TypeLen { ty, len: 8 }) = (window[8].opcode, &window[8].operand)
+    else {
+        return None;
+    };
+    if window[9].opcode != Opcode::Ret {
+        return None;
+    }
+    Some(RuntimeKernel::ConstI64Array8Return { ty: *ty, cells })
 }
 
 fn decode_int_tail_accumulator_kernel(

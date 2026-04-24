@@ -21,11 +21,15 @@ public static class Program
         Console.WriteLine($"C# CLR VM baselines ({(settings.IsSmoke ? "smoke" : "full")})");
         Console.WriteLine($"Runtime: {Environment.Version}");
         Console.WriteLine(
-            $"Config: profile={settings.Profile.Label} phase={settings.Phase.Label} rounds={settings.Rounds} iterations={settings.Iterations} warmup={settings.WarmupIterations}");
+            $"Config: profile={settings.Profile.Label} phase={settings.Phase.Label} workload={settings.WorkloadName} rounds={settings.Rounds} iterations={settings.Iterations} warmup={settings.WarmupIterations}");
         Console.WriteLine();
 
         foreach (var workload in Workloads.All)
         {
+            if (!settings.Includes(workload.Name))
+            {
+                continue;
+            }
             if (settings.Phase.IncludesCold)
             {
                 var measurement = BenchmarkRunner.MeasureCold(workload, settings.Iterations);
@@ -101,7 +105,8 @@ public static class Program
         int Iterations,
         int WarmupIterations,
         Phase Phase,
-        Profile Profile)
+        Profile Profile,
+        string WorkloadName)
     {
         public static Settings Parse(string[] args)
         {
@@ -111,6 +116,7 @@ public static class Program
             var warmupIterations = DefaultWarmupIterations;
             var phase = Phase.Both;
             var profile = Profile.Native;
+            var workloadName = "all";
             for (var index = 0; index < args.Length; index++)
             {
                 var arg = args[index];
@@ -144,6 +150,11 @@ public static class Program
                     profile = Profile.Parse(RequireValue(args, ++index, arg));
                     continue;
                 }
+                if (arg.Equals("--workload", StringComparison.OrdinalIgnoreCase))
+                {
+                    workloadName = RequireValue(args, ++index, arg);
+                    continue;
+                }
                 throw new ArgumentException($"unknown argument: {arg}");
             }
 
@@ -153,7 +164,13 @@ public static class Program
                 iterations = SmokeIterations;
                 warmupIterations = SmokeWarmupIterations;
             }
-            return new Settings(isSmoke, rounds, iterations, warmupIterations, phase, profile);
+            return new Settings(isSmoke, rounds, iterations, warmupIterations, phase, profile, workloadName);
+        }
+
+        public bool Includes(string candidate)
+        {
+            return WorkloadName.Equals("all", StringComparison.OrdinalIgnoreCase)
+                || candidate.Equals(WorkloadName, StringComparison.OrdinalIgnoreCase);
         }
 
         private static string RequireValue(string[] args, int index, string flag)
@@ -221,6 +238,7 @@ public static class Program
     private static class Sink
     {
         public static long Value;
+        public static object? Object;
     }
 
     private static class Workloads
@@ -233,6 +251,8 @@ public static class Program
             new("sequence_index_mutation", VmBaselines.SequenceIndexMutation),
             new("data_match_option", VmBaselines.DataMatchOption),
             new("effect_resume_equivalent", VmBaselines.EffectResumeEquivalent),
+            new("sequence_return_alloc", VmBaselines.SequenceReturnAlloc),
+            new("sequence_return_forced_gc", VmBaselines.SequenceReturnForcedGc),
             new("construct_small_module", VmBaselines.ConstructSmallModule),
         ];
     }
@@ -297,6 +317,22 @@ public static class Program
         public static long EffectResumeEquivalent()
         {
             return HandleReadLine(value => value + 1, _ => 41);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static long SequenceReturnAlloc()
+        {
+            long[] values = [0, 1, 2, 3, 4, 5, 6, 7];
+            Sink.Object = values;
+            return values[7] + values.Length;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static long SequenceReturnForcedGc()
+        {
+            var result = SequenceReturnAlloc();
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: false);
+            return result;
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]

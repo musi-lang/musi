@@ -36,8 +36,6 @@ pub(super) struct HeapSlot {
     pub(super) allocation: HeapAllocation,
     pub(super) bytes: usize,
     pub(super) is_marked: bool,
-    pub(super) pin_count: u32,
-    pub(super) is_pinned: bool,
 }
 
 impl HeapSlot {
@@ -56,8 +54,6 @@ impl HeapSlot {
             allocation,
             bytes,
             is_marked: false,
-            pin_count: 0,
-            is_pinned: false,
         }
     }
 

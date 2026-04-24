@@ -61,7 +61,7 @@ impl RuntimeHeap {
             if slot.space != HeapSpace::Young {
                 continue;
             }
-            let should_reclaim = slot.object.is_some() && !slot.is_marked && !slot.is_pinned;
+            let should_reclaim = slot.object.is_some() && !slot.is_marked;
             if should_reclaim {
                 reclaimed_objects += self.reclaim_slot(slot_index);
                 continue;
@@ -97,9 +97,8 @@ impl RuntimeHeap {
         let before_objects = self.live_object_count();
         let mut reclaimed_objects = 0;
         for slot_index in 0..self.slots.len() {
-            let should_reclaim = self.slots[slot_index].object.is_some()
-                && !self.slots[slot_index].is_marked
-                && !self.slots[slot_index].is_pinned;
+            let should_reclaim =
+                self.slots[slot_index].object.is_some() && !self.slots[slot_index].is_marked;
             if !should_reclaim {
                 if let Some(slot) = self.slots.get_mut(slot_index) {
                     slot.is_marked = false;
@@ -107,9 +106,6 @@ impl RuntimeHeap {
                 continue;
             }
             reclaimed_objects += self.reclaim_slot(slot_index);
-        }
-        for slot in &mut self.slots {
-            slot.is_marked = false;
         }
         self.finish_line_sweep();
         let evacuated_objects = if reclaimed_objects == 0 {
@@ -147,12 +143,10 @@ impl RuntimeHeap {
             slot.is_marked = true;
             let allocation = slot.allocation;
             let mut children = SmallVec::<[GcRef; 8]>::new();
-            if let Some(object) = slot.object.as_ref() {
-                object.visit_children(|child| {
-                    if let Some(reference) = child.gc_ref() {
-                        children.push(reference);
-                    }
-                });
+            if let Some(object) = slot.object.as_ref()
+                && object.has_children()
+            {
+                object.visit_children(|child| children.push(child));
             }
             (allocation, children)
         };
@@ -173,12 +167,10 @@ impl RuntimeHeap {
             slot.is_marked = true;
             let allocation = slot.allocation;
             let mut children = SmallVec::<[GcRef; 8]>::new();
-            if let Some(object) = slot.object.as_ref() {
-                object.visit_children(|child| {
-                    if let Some(reference) = child.gc_ref() {
-                        children.push(reference);
-                    }
-                });
+            if let Some(object) = slot.object.as_ref()
+                && object.has_children()
+            {
+                object.visit_children(|child| children.push(child));
             }
             (allocation, children)
         };
@@ -189,6 +181,9 @@ impl RuntimeHeap {
     }
 
     fn mark_from_dirty_mature_cards(&mut self) {
+        if self.mature_card_table.is_empty() && self.remembered_large_slots.is_empty() {
+            return;
+        }
         let marked_slots = self
             .slots
             .iter()
@@ -203,13 +198,10 @@ impl RuntimeHeap {
         for slot_index in marked_slots {
             if let Some(slot) = self.slots.get(slot_index)
                 && let Some(object) = slot.object.as_ref()
+                && object.has_children()
             {
                 let mut young_children = SmallVec::<[GcRef; 8]>::new();
-                object.visit_children(|child| {
-                    if let Some(reference) = child.gc_ref() {
-                        young_children.push(reference);
-                    }
-                });
+                object.visit_children(|child| young_children.push(child));
                 for child in young_children {
                     self.mark_ref_young(child);
                 }
@@ -223,13 +215,11 @@ impl RuntimeHeap {
             if slot.object.is_none() || slot.space != HeapSpace::Mature {
                 continue;
             }
-            if let Some(object) = slot.object.as_ref() {
+            if let Some(object) = slot.object.as_ref()
+                && object.has_children()
+            {
                 let mut young_children = SmallVec::<[GcRef; 8]>::new();
-                object.visit_children(|child| {
-                    if let Some(reference) = child.gc_ref() {
-                        young_children.push(reference);
-                    }
-                });
+                object.visit_children(|child| young_children.push(child));
                 for child in young_children {
                     self.mark_ref_young(child);
                 }
@@ -260,6 +250,9 @@ impl RuntimeHeap {
     }
 
     fn collect_remembered_survivor_cards(&self) -> Vec<[bool; IMMIX_CARDS_PER_BLOCK]> {
+        if self.mature_card_table.is_empty() && self.remembered_large_slots.is_empty() {
+            return Vec::new();
+        }
         let mut remembered = vec![[false; IMMIX_CARDS_PER_BLOCK]; self.mature_card_table.len()];
         for slot in &self.slots {
             if slot.space != HeapSpace::Mature || slot.object.is_none() {
@@ -277,6 +270,9 @@ impl RuntimeHeap {
             let Some(object) = slot.object.as_ref() else {
                 continue;
             };
+            if !object.has_children() {
+                continue;
+            }
             let has_young = has_young_child(object, self);
             if !has_young {
                 continue;
@@ -303,6 +299,13 @@ impl RuntimeHeap {
 
     fn install_remembered_cards(&mut self, remembered: Vec<[bool; IMMIX_CARDS_PER_BLOCK]>) {
         self.mature_card_table = remembered;
+        let mature_block_count = self
+            .blocks
+            .iter()
+            .filter(|block| block.space == HeapSpace::Mature)
+            .count();
+        self.mature_card_table
+            .resize(mature_block_count, [false; IMMIX_CARDS_PER_BLOCK]);
         self.remembered_large_slots = self
             .slots
             .iter()
@@ -315,6 +318,9 @@ impl RuntimeHeap {
                     return None;
                 };
                 let object = slot.object.as_ref()?;
+                if !object.has_children() {
+                    return None;
+                }
                 has_young_child(object, self).then_some(slot_index)
             })
             .collect();
@@ -339,17 +345,13 @@ impl RuntimeHeap {
         self.slots[slot_index].generation = self.slots[slot_index].generation.wrapping_add(1);
         self.slots[slot_index].survive_count = 0;
         self.slots[slot_index].is_marked = false;
-        self.slots[slot_index].pin_count = 0;
-        self.slots[slot_index].is_pinned = false;
         self.allocated_bytes = self.allocated_bytes.saturating_sub(bytes);
         self.free_slots.push(slot_index);
         1
     }
 
     const fn should_promote(slot: &super::space::HeapSlot) -> bool {
-        slot.is_pinned
-            || slot.bytes >= LARGE_PROMOTE_BYTES
-            || slot.survive_count >= PROMOTE_SURVIVE_THRESHOLD
+        slot.bytes >= LARGE_PROMOTE_BYTES || slot.survive_count >= PROMOTE_SURVIVE_THRESHOLD
     }
 
     fn promote_slot(&mut self, slot_index: usize) {
@@ -390,7 +392,6 @@ impl RuntimeHeap {
             .enumerate()
             .filter(|(_, slot)| {
                 slot.object.is_some()
-                    && !slot.is_pinned
                     && matches!(
                         slot.allocation,
                         HeapAllocation::Immix { block, .. } if candidates.contains(&block)
@@ -419,13 +420,10 @@ impl RuntimeHeap {
 
 fn has_young_child(object: &super::object::HeapObject, heap: &RuntimeHeap) -> bool {
     let mut has_young = false;
-    object.visit_children(|value| {
+    object.visit_children(|reference| {
         if has_young {
             return;
         }
-        let Some(reference) = value.gc_ref() else {
-            return;
-        };
         let Ok(slot) = heap.slot(reference) else {
             return;
         };

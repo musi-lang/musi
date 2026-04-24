@@ -42,7 +42,7 @@ mod core;
 mod options;
 mod runtime;
 
-pub use bound::{BoundI64Call, BoundInitCall, BoundSeq2x2Call, BoundSeq2x2PackedArg};
+pub use bound::{BoundI64Call, BoundInitCall, BoundSeq2x2Arg, BoundSeq2x2Call, BoundSeq8Call};
 pub use options::{VmOptimizationLevel, VmOptions};
 pub use runtime::VmRuntime;
 

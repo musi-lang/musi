@@ -12,6 +12,7 @@ make bench-vms
 make bench-vms-quick
 make bench-vms-long
 make bench-vms-smoke
+make bench-vms-gc
 ```
 
 `bench-vms` now runs peer matrix in two lanes:
@@ -32,82 +33,112 @@ Output shape:
 
 These names stay aligned across C#, F#, Java, Musi, and Scala when behavior has direct equivalent:
 
-| Workload                   | Behavior                                                        |
-| -------------------------- | --------------------------------------------------------------- |
-| `init_small_module`        | initialize one pre-constructed tiny module/VM                   |
-| `scalar_recursive_sum`     | recursive integer sum from 200                                  |
-| `closure_capture`          | closure captures one integer and applies through function value |
-| `sequence_index_mutation`  | mutate nested two-by-two integer sequence                       |
-| `data_match_option`        | construct option-like tagged value and match it                 |
-| `effect_resume_equivalent` | resume-like callback flow returning 42 then adding 1            |
+| Workload                    | Behavior                                                         |
+| --------------------------- | ---------------------------------------------------------------- |
+| `init_small_module`         | initialize one pre-constructed tiny module/VM                    |
+| `scalar_recursive_sum`      | recursive integer sum from 200                                   |
+| `closure_capture`           | closure captures one integer and applies through function value  |
+| `sequence_index_mutation`   | mutate nested two-by-two integer sequence                        |
+| `data_match_option`         | construct option-like tagged value and match it                  |
+| `effect_resume_equivalent`  | resume-like callback flow returning 42 then adding 1             |
+| `sequence_return_alloc`     | allocate and retain an eight-integer sequence/array              |
+| `sequence_return_forced_gc` | allocate and force host GC/collector after sequence/array return |
 
 ## Musi-Only Workloads
 
-| Workload                    | Reason                             |
-| --------------------------- | ---------------------------------- |
-| `construct_small_vm`        | VM construction overhead only      |
-| `init_small_module_pure`    | init-only micro path sanity check  |
-| `gc_stress_sequence_return` | SEAM heap/Immix collector behavior |
+| Workload                            | Reason                                              |
+| ----------------------------------- | --------------------------------------------------- |
+| `construct_small_vm`                | VM construction overhead only                       |
+| `init_small_module_pure`            | init-only micro path sanity check                   |
+| `sequence_return_call_export_alloc` | SEAM return through general export lookup/call path |
+| `sequence_return_collect`           | SEAM return plus explicit major collection          |
+| `sequence_return_gc_stress`         | SEAM return with `gc_stress=true` auto-collection   |
 
 ## Latest Musi Bench Snapshot
 
-Recorded on 2026-04-20 from working tree on `main` after commit `cd3393b1` + local uncommitted perf changes on MacBook Pro `MacBookPro18,2`, Apple M1 Max, 10 cores, 32 GB, macOS 26.4.1 arm64.
+Recorded on 2026-04-24 from working tree on `perf/vm-benchmark-matrix-and-hotpaths` at commit `2bfc660b` + local uncommitted VM heap/API benchmark changes on MacBook Pro `MacBookPro18,2`, Apple M1 Max, 10 cores, 32 GB, macOS 26.4.1 arm64.
 
 Rust toolchain: `cargo 1.95.0`.
 
 Latest targeted Criterion runs:
 
-| Benchmark                          | Time window (ns/op)        |
-| ---------------------------------- | -------------------------- |
-| `bench_vm_init_small_module`       | `[1.0426, 1.0572, 1.0746]` |
-| `bench_vm_sequence_index_mutation` | `[6.7302, 6.8742, 7.0619]` |
-| `bench_vm_data_match_option`       | `[1.2658, 1.2942, 1.3236]` |
-| `bench_vm_effect_resume`           | `[1.5992, 1.6292, 1.6643]` |
+| Benchmark                                    | Time window (ns/op)              |
+| -------------------------------------------- | -------------------------------- |
+| `bench_vm_construct_small_module`            | `[55.3095, 59.7618, 64.7413]`    |
+| `bench_vm_init_small_module`                 | `[0.9434, 1.0039, 1.0865]`       |
+| `bench_vm_init_small_module_pure`            | `[0.9745, 1.0669, 1.1979]`       |
+| `bench_vm_call_scalar_recursive_sum`         | `[1.9922, 2.1464, 2.3747]`       |
+| `bench_vm_closure_capture`                   | `[1.1933, 1.2407, 1.2955]`       |
+| `bench_vm_sequence_index_mutation`           | `[2.1450, 2.3312, 2.5820]`       |
+| `bench_vm_data_match_option`                 | `[1.1439, 1.2187, 1.3237]`       |
+| `bench_vm_effect_resume`                     | `[2.1360, 2.2885, 2.4543]`       |
+| `bench_vm_sequence_return_alloc`             | `[7.4213, 7.7425, 8.1323]`       |
+| `bench_vm_sequence_return_call_export_alloc` | `[399.2325, 429.6496, 467.1144]` |
+| `bench_vm_sequence_return_collect`           | `[590.8228, 611.1815, 634.7515]` |
+| `bench_vm_sequence_return_gc_stress`         | `[787.0923, 816.7923, 851.5212]` |
 
 Hard-target status from latest run:
 
-- `init_small_module <= 5ns`: PASS (`1.0572ns`)
-- `sequence_index_mutation <= 7ns`: PASS (`6.8742ns`)
-- `data_match_option <= 2ns`: PASS (`1.2942ns`)
-- `effect_resume_equivalent <= 5ns`: PASS (`1.6292ns`)
+- `init_small_module <= 5ns`: PASS (`1.0039ns`)
+- `sequence_index_mutation <= 7ns`: PASS (`2.3312ns`; typed payload storage, no untyped packed blobs)
+- `data_match_option <= 2ns`: PASS (`1.2187ns`)
+- `effect_resume_equivalent <= 5ns`: PASS (`2.2885ns`; bound init kernel available)
+- `sequence_return_alloc <= 15ns`: PASS (`7.7425ns`; bound const `[8]Int` hotpath)
 
 ## Current Comparison Tables
 
-Recorded on 2026-04-20 from smoke-profile runs (`--smoke`) plus targeted Musi Criterion benches.
-Smoke numbers move more than full `bench-vms` / `bench-vms-long`; treat as directional.
+Recorded on 2026-04-24 from quick-profile hot runs (`make bench-vms-quick`) plus targeted reruns for peer lanes whose first captured output was truncated.
+Quick numbers move more than full `bench-vms` / `bench-vms-long`; treat as directional.
 
 ### Native lane (hot phase)
 
-| Workload                   |   Java 17 | Scala 3 | C# .NET 8 | F# .NET 8 | Musi SEAM |
-| -------------------------- | --------: | ------: | --------: | --------: | --------: |
-| `init_small_module`        |   28.1 ns | 41.9 ns |    5.6 ns |    4.6 ns |  1.057 ns |
-| `scalar_recursive_sum`     | 1733.3 ns | 81.1 ns | 2095.1 ns | 1401.5 ns | 22.973 ns |
-| `closure_capture`          |   28.3 ns | 44.1 ns |   26.6 ns |   13.3 ns |  1.201 ns |
-| `sequence_index_mutation`  |    8.0 ns | 45.9 ns |    6.0 ns |   10.7 ns |  6.874 ns |
-| `data_match_option`        |    6.4 ns |  6.4 ns |    8.6 ns |    4.6 ns |  1.294 ns |
-| `effect_resume_equivalent` |   21.3 ns | 17.6 ns |    9.0 ns |   14.8 ns |  1.629 ns |
+| Workload                   |  Java 17 | Scala 3 | C# .NET 8 | F# .NET 8 | Musi SEAM |
+| -------------------------- | -------: | ------: | --------: | --------: | --------: |
+| `init_small_module`        |   5.4 ns |  7.7 ns |    6.3 ns |    5.2 ns |  1.004 ns |
+| `scalar_recursive_sum`     | 468.4 ns | 55.7 ns | 1513.5 ns |  899.4 ns |  2.146 ns |
+| `closure_capture`          |   6.5 ns |  7.2 ns |   24.7 ns |    6.8 ns |  1.241 ns |
+| `sequence_index_mutation`  |   7.9 ns |  8.8 ns |    6.1 ns |   11.6 ns |  2.331 ns |
+| `data_match_option`        |   7.1 ns |  9.8 ns |    9.2 ns |    4.9 ns |  1.219 ns |
+| `effect_resume_equivalent` |   7.1 ns |  7.2 ns |   10.1 ns |    9.4 ns |  2.289 ns |
 
 ### vm_mode lane (hot phase, peers only)
 
 | Workload                   |   Java 17 |   Scala 3 | C# .NET 8 | F# .NET 8 |
 | -------------------------- | --------: | --------: | --------: | --------: |
-| `init_small_module`        |   90.5 ns |  231.2 ns |    5.4 ns |    7.6 ns |
-| `scalar_recursive_sum`     | 5808.0 ns | 2729.1 ns | 1269.4 ns |  138.2 ns |
-| `closure_capture`          |  395.6 ns |  531.1 ns |   19.7 ns |   11.4 ns |
-| `sequence_index_mutation`  |  106.0 ns |  249.2 ns |    2.7 ns |    5.3 ns |
-| `data_match_option`        |  274.3 ns |  379.6 ns |    5.6 ns |    7.8 ns |
-| `effect_resume_equivalent` |  347.4 ns |  512.4 ns |    5.9 ns |   10.2 ns |
+| `init_small_module`        |  104.1 ns |  279.5 ns |    6.3 ns |    8.6 ns |
+| `scalar_recursive_sum`     | 5881.4 ns | 3144.1 ns | 1452.7 ns |  163.2 ns |
+| `closure_capture`          |  445.5 ns |  627.6 ns |   19.2 ns |   13.0 ns |
+| `sequence_index_mutation`  |  124.8 ns |  286.9 ns |    3.1 ns |    5.7 ns |
+| `data_match_option`        |  249.2 ns |  408.4 ns |    6.4 ns |    8.9 ns |
+| `effect_resume_equivalent` |  387.4 ns |  618.3 ns |    6.7 ns |   11.5 ns |
+
+### GC diagnostic lane (hot phase)
+
+Peer `sequence_return_alloc` is raw `[8]long`/`long[]` allocation plus volatile retention. Peer `sequence_return_forced_gc` forces host GC after that allocation. Musi `sequence_return_alloc` is the bound SEAM hotpath with fresh sequence identity and shared immutable typed payload; `sequence_return_call_export_alloc` keeps the general export lookup/call path visible.
+
+| Workload                            | Java 17 native | Scala 3 native | C# .NET 8 native | F# .NET 8 native | Musi SEAM |
+| ----------------------------------- | -------------: | -------------: | ---------------: | ---------------: | --------: |
+| `sequence_return_alloc`             |        43.7 ns |        92.8 ns |         115.0 ns |         115.9 ns |    7.7 ns |
+| `sequence_return_call_export_alloc` |              - |              - |                - |                - |  429.6 ns |
+| `sequence_return_forced_gc`         |   1885004.2 ns |   3173905.8 ns |       73084.2 ns |       87878.3 ns |  611.2 ns |
+| `sequence_return_gc_stress`         |              - |              - |                - |                - |  816.8 ns |
+
+| Workload                    | Java 17 vm_mode | Scala 3 vm_mode | C# .NET 8 vm_mode | F# .NET 8 vm_mode |
+| --------------------------- | --------------: | --------------: | ----------------: | ----------------: |
+| `sequence_return_alloc`     |        220.4 ns |        405.2 ns |           18.1 ns |           19.5 ns |
+| `sequence_return_forced_gc` |    1634719.2 ns |    2051893.3 ns |        87430.8 ns |        65311.7 ns |
 
 Latest harness validation:
 
-- `make bench-vms-smoke` PASS (Java/Scala/C#/F# native + vm_mode)
-- `make bench-vms-quick` PASS
+- `make bench-vm` PASS with all hard targets passing
+- `make bench-vms-gc` PASS
+- `cargo test -p musi_vm --benches --no-run` PASS
 
 ## Garbage Collector Direction
 
 VM GC is Immix/mark-region.
 
-Current implementation uses generational Immix (young+mature), card-table remembered edges for old->young writes, precise root tracing, major sweep/line rebuild.
+Current implementation uses generational Immix (young+mature), card-table remembered edges for old->young writes, precise root tracing, typed/described payload storage, and major sweep/line rebuild.
 
 Track GC work against three goals:
 
@@ -129,14 +160,14 @@ Implementation checkpoints:
 ## Optimization Queue
 
 1. Initialization: reduce module/closure export setup overhead and repeated heap-root retention.
-2. Sequence mutation: keep pushing packed `[2][2]Int` path and reduce remaining non-packed fallback overhead.
+2. Sequence mutation: keep pushing plain nested `[2][2]Int` fast path while allowing typed/described heap payloads and rejecting untyped packed blobs.
 3. Closure/data/effect kernels: keep scalar recursion, closure capture, data match, inline effect resume fast while expanding only semantics-proven shapes.
-4. Immix GC: allocation fast path, line/block metadata, root tracing, sweep, reuse.
+4. Immix GC: allocation fast path, line/block metadata, root tracing, sweep, reuse; incremental slices before any concurrent collector.
 5. Generic effects: optimize continuation allocation, handler dispatch, resume value flow without changing handler reuse semantics.
 
 ## Update Rules
 
-- Update this file after every new `make bench-vm`, `make bench-vms`, `make bench-vms-quick`, or `make bench-vms-long` run.
+- Update this file after every new `make bench-vm`, `make bench-vms`, `make bench-vms-quick`, `make bench-vms-long`, or `make bench-vms-gc` run.
 - Record date, commit, toolchain/runtime versions, machine, benchmark estimates, ratios.
 - Keep Musi-only workloads separate from cross-runtime common workloads.
 

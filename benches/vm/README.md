@@ -39,11 +39,19 @@ Run long local pass (high-repeat matrix):
 make bench-vms-long
 ```
 
+Run GC diagnostic lane plus Musi GC Criterion split:
+
+```sh
+make bench-vms-gc
+```
+
 Run only Musi Criterion numbers:
 
 ```sh
 make bench-vm
 ```
+
+Musi `sequence_return_alloc` tracks the bound SEAM hotpath. `sequence_return_call_export_alloc` keeps the general export lookup/call path visible.
 
 Harness flags accepted by Java/Scala/C#/F# runners:
 
@@ -52,6 +60,7 @@ Harness flags accepted by Java/Scala/C#/F# runners:
 - `--rounds <N>`
 - `--iterations <N>`
 - `--warmup-iterations <N>`
+- `--workload <name|all>`
 
 Output shape:
 

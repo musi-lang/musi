@@ -378,8 +378,7 @@ mod success {
         };
         heap.sequence_mut(reference)
             .expect("cycle should be mutable")
-            .items
-            .push(Value::Seq(reference));
+            .push_value(Value::Seq(reference));
 
         let before = heap.allocated_bytes();
         let stats = heap.collect_from_roots(empty::<&Value>());
@@ -387,6 +386,192 @@ mod success {
         assert!(before > 0);
         assert_eq!(stats.after_bytes, 0);
         assert_eq!(heap.allocated_bytes(), 0);
+    }
+
+    #[test]
+    fn typed_i64_array_sequence_get_set_and_demotes() {
+        let ty = TypeId::from_raw(0);
+        let mut heap = RuntimeHeap::default();
+        let options = HeapOptions {
+            max_object_bytes: None,
+        };
+        let sequence = heap
+            .alloc_sequence(
+                SequenceValue::new(ty, (1..=16).map(Value::Int).collect()),
+                &options,
+            )
+            .expect("sequence should allocate");
+        let Value::Seq(sequence_ref) = sequence else {
+            panic!("value should be sequence");
+        };
+
+        assert!(
+            heap.sequence_i64_array_ref(sequence_ref)
+                .expect("sequence should inspect")
+                .is_some()
+        );
+        assert_eq!(
+            heap.sequence_get_cloned(sequence_ref, 2)
+                .expect("typed array get should succeed"),
+            Value::Int(3)
+        );
+        heap.sequence_set(sequence_ref, 1, Value::Int(9))
+            .expect("typed array set should succeed");
+        assert_eq!(
+            heap.sequence_get_cloned(sequence_ref, 1)
+                .expect("typed array get should succeed"),
+            Value::Int(9)
+        );
+
+        let child = heap
+            .alloc_string("demoted", &options)
+            .expect("child string should allocate");
+        heap.sequence_set(sequence_ref, 2, child.clone())
+            .expect("non-int write should demote");
+
+        assert!(
+            heap.sequence_i64_array_ref(sequence_ref)
+                .expect("sequence should inspect")
+                .is_none()
+        );
+        assert_eq!(
+            heap.sequence_get_cloned(sequence_ref, 0)
+                .expect("demoted sequence get should succeed"),
+            Value::Int(1)
+        );
+        assert_eq!(
+            heap.sequence_get_cloned(sequence_ref, 2)
+                .expect("demoted sequence get should succeed"),
+            child
+        );
+    }
+
+    #[test]
+    fn shared_i64_array_sequence_detaches_on_write() {
+        let ty = TypeId::from_raw(0);
+        let mut heap = RuntimeHeap::default();
+        let options = HeapOptions {
+            max_object_bytes: None,
+        };
+        let (_prototype, buffer) = heap
+            .alloc_shared_i64_array_sequence(ty, [0, 1, 2, 3, 4, 5, 6, 7], &options)
+            .expect("prototype should allocate");
+        let first = heap
+            .alloc_sequence_with_i64_array(ty, buffer, 8, &options)
+            .expect("first sequence should allocate");
+        let second = heap
+            .alloc_sequence_with_i64_array(ty, buffer, 8, &options)
+            .expect("second sequence should allocate");
+        let Value::Seq(first_ref) = first else {
+            panic!("first should be sequence");
+        };
+        let Value::Seq(second_ref) = second else {
+            panic!("second should be sequence");
+        };
+
+        heap.sequence_set(first_ref, 0, Value::Int(99))
+            .expect("shared sequence write should detach");
+
+        assert!(
+            heap.sequence_i64_array_ref(first_ref)
+                .expect("first should inspect")
+                .is_none()
+        );
+        assert_eq!(
+            heap.sequence_i64_array_ref(second_ref)
+                .expect("second should inspect"),
+            Some(buffer)
+        );
+        assert_eq!(
+            heap.sequence_get_cloned(first_ref, 0)
+                .expect("first get should succeed"),
+            Value::Int(99)
+        );
+        assert_eq!(
+            heap.sequence_get_cloned(second_ref, 0)
+                .expect("second get should succeed"),
+            Value::Int(0)
+        );
+    }
+
+    #[test]
+    fn typed_i64_array_sequence_survives_minor_and_major_collection() {
+        let ty = TypeId::from_raw(0);
+        let mut heap = RuntimeHeap::default();
+        let options = HeapOptions {
+            max_object_bytes: None,
+        };
+        let sequence = heap
+            .alloc_sequence(
+                SequenceValue::new(ty, (10..26).map(Value::Int).collect()),
+                &options,
+            )
+            .expect("sequence should allocate");
+        let Value::Seq(sequence_ref) = sequence else {
+            panic!("value should be sequence");
+        };
+        let buffer_ref = heap
+            .sequence_i64_array_ref(sequence_ref)
+            .expect("sequence should inspect")
+            .expect("sequence should use typed buffer");
+
+        let _ = heap.collect_minor_from_refs([sequence_ref]);
+        assert_eq!(
+            heap.sequence_get_cloned(sequence_ref, 2)
+                .expect("minor collection should preserve typed array"),
+            Value::Int(12)
+        );
+        assert!(heap.validate_ref(buffer_ref).is_ok());
+
+        let _ = heap.collect_major_from_refs([sequence_ref]);
+        assert_eq!(
+            heap.sequence_get_cloned(sequence_ref, 1)
+                .expect("major collection should preserve typed array"),
+            Value::Int(11)
+        );
+        assert!(heap.validate_ref(buffer_ref).is_ok());
+    }
+
+    #[test]
+    fn typed_i64_array_demotion_marks_mature_sequence_card() {
+        let ty = TypeId::from_raw(0);
+        let mut heap = RuntimeHeap::default();
+        let options = HeapOptions {
+            max_object_bytes: None,
+        };
+        let sequence = heap
+            .alloc_sequence(
+                SequenceValue::new(ty, (1..=16).map(Value::Int).collect()),
+                &options,
+            )
+            .expect("sequence should allocate");
+        let Value::Seq(sequence_ref) = sequence else {
+            panic!("value should be sequence");
+        };
+        for _ in 0..3 {
+            let _ = heap.collect_minor_from_refs([sequence_ref]);
+        }
+
+        let child = heap
+            .alloc_string("young", &options)
+            .expect("child string should allocate");
+        let Value::String(child_ref) = child.clone() else {
+            panic!("child should be string");
+        };
+        heap.sequence_set(sequence_ref, 1, child.clone())
+            .expect("demotion should store young child");
+        let _ = heap.collect_minor_from_refs([sequence_ref]);
+
+        assert_eq!(
+            heap.sequence_get_cloned(sequence_ref, 1)
+                .expect("remembered edge should preserve child"),
+            child
+        );
+        assert_eq!(
+            heap.string(child_ref)
+                .expect("young child should survive minor collection"),
+            "young"
+        );
     }
 
     #[test]
@@ -595,6 +780,64 @@ mod success {
     }
 
     #[test]
+    fn binds_const_i64_array8_return() {
+        let program = compile_program(
+            &[(
+                "main",
+                r"
+            export let result () : [8]Int := [0, 1, 2, 3, 4, 5, 6, 7];
+        ",
+            )],
+            "main",
+        );
+        let result = program
+            .loaded_procedure(ProcedureId::from_raw(0))
+            .expect("result should load");
+        assert!(matches!(
+            result.runtime_kernel(),
+            Some(RuntimeKernel::ConstI64Array8Return {
+                cells: [0, 1, 2, 3, 4, 5, 6, 7],
+                ..
+            })
+        ));
+
+        let mut vm = Vm::with_rejecting_host(program, VmOptions);
+        let bound = vm
+            .bind_export_seq8_i64("result")
+            .expect("const sequence export should bind");
+        let first = vm
+            .call_seq8_i64(bound)
+            .expect("first const sequence call should run");
+        let second = vm
+            .call_seq8_i64(bound)
+            .expect("second const sequence call should run");
+
+        let (Value::Seq(first_ref), Value::Seq(second_ref)) = (&first, &second) else {
+            panic!("calls should return sequences");
+        };
+        assert_ne!(first_ref, second_ref);
+        let ValueView::Seq(sequence) = vm.inspect(&first) else {
+            panic!("first should inspect as sequence");
+        };
+        assert_eq!(sequence.len(), 8);
+        assert_eq!(sequence.get(7), Some(Value::Int(7)));
+
+        for _ in 0..5000 {
+            let _ = vm
+                .call_seq8_i64(bound)
+                .expect("pooled const sequence call should run");
+        }
+        let _ = vm.collect_garbage();
+        let third = vm
+            .call_seq8_i64(bound)
+            .expect("post-collection const sequence call should run");
+        let ValueView::Seq(sequence) = vm.inspect(&third) else {
+            panic!("third should inspect as sequence");
+        };
+        assert_eq!(sequence.get(0), Some(Value::Int(0)));
+    }
+
+    #[test]
     fn fuses_data_match_option_path() {
         let program = compile_program(
             &[(
@@ -699,6 +942,10 @@ mod success {
             .expect("result should bind");
         let value = vm.call_i64_i64(bound, 200).expect("typed sum should run");
         assert_eq!(value, 20_100);
+        let error = vm
+            .call_i64_i64(bound, i64::MAX)
+            .expect_err("overflow-risk typed sum should fail");
+        assert!(matches!(error.kind(), VmErrorKind::ArithmeticFailed { .. }));
     }
 
     #[test]
@@ -734,21 +981,56 @@ mod success {
         let dynamic = vm
             .call_export("result", from_ref(&grid))
             .expect("dynamic sequence call should run");
-        let Value::Seq(grid_ref) = grid else {
-            panic!("grid should be sequence")
+        let first = vm
+            .alloc_sequence(ty, [Value::Int(1), Value::Int(2)])
+            .expect("first row should allocate");
+        let second = vm
+            .alloc_sequence(ty, [Value::Int(3), Value::Int(4)])
+            .expect("second row should allocate");
+        let typed_grid = vm
+            .alloc_sequence(ty, [first, second])
+            .expect("typed grid should allocate");
+        let Value::Seq(typed_grid_ref) = typed_grid else {
+            panic!("typed grid should be sequence")
         };
-        let grid = vm
-            .bind_seq2x2_packed_int_arg(grid_ref)
-            .expect("grid should bind");
-        let typed = grid
-            .call_i64(bound)
+        let typed = vm
+            .call_seq2x2_i64(bound, typed_grid_ref)
             .expect("typed sequence call should run");
         assert_eq!(dynamic, Value::Int(85));
         assert_eq!(typed, 85);
+        let first = vm
+            .alloc_sequence(ty, [Value::Int(1), Value::Int(2)])
+            .expect("first row should allocate");
+        let second = vm
+            .alloc_sequence(ty, [Value::Int(3), Value::Int(4)])
+            .expect("second row should allocate");
+        let bound_grid = vm
+            .alloc_sequence(ty, [first.clone(), second.clone()])
+            .expect("bound grid should allocate");
+        let Value::Seq(bound_grid_ref) = bound_grid else {
+            panic!("bound grid should be sequence")
+        };
+        let typed = {
+            let bound_grid_arg = vm
+                .bind_seq2x2_i64_arg(bound_grid_ref)
+                .expect("grid arg should bind");
+            bound_grid_arg
+                .call_i64(bound)
+                .expect("bound sequence arg should run")
+        };
+        assert_eq!(typed, 85);
+        let ValueView::Seq(first) = vm.inspect(&first) else {
+            panic!("first row should inspect as sequence");
+        };
+        assert_eq!(first.get(1), Some(Value::Int(42)));
+        let ValueView::Seq(second) = vm.inspect(&second) else {
+            panic!("second row should inspect as sequence");
+        };
+        assert_eq!(second.get(0), Some(Value::Int(43)));
     }
 
     #[test]
-    fn bound_packed_sequence_bind_rejects_plain_layout() {
+    fn bound_sequence_call_rejects_non_2x2_layout() {
         let program = compile_program(
             &[(
                 "main",
@@ -780,9 +1062,12 @@ mod success {
         let Value::Seq(grid_ref) = grid else {
             panic!("grid should be sequence")
         };
+        let bound = vm
+            .bind_export_seq2x2_i64("result")
+            .expect("result should bind");
         let error = vm
-            .bind_seq2x2_packed_int_arg(grid_ref)
-            .expect_err("plain layout should fail packed bind");
+            .call_seq2x2_i64(bound, grid_ref)
+            .expect_err("non-2x2 layout should fail typed call");
         assert!(matches!(
             error.kind(),
             VmErrorKind::InvalidProgramShape { .. }
@@ -790,7 +1075,7 @@ mod success {
     }
 
     #[test]
-    fn bound_packed_arg_release_unpins_and_keeps_call_result() {
+    fn bound_sequence_call_rejects_stale_grid() {
         let program = compile_program(
             &[(
                 "main",
@@ -822,58 +1107,10 @@ mod success {
         let bound = vm
             .bind_export_seq2x2_i64("result")
             .expect("result should bind");
-        let arg = vm
-            .bind_seq2x2_packed_int_arg(grid_ref)
-            .expect("packed grid should bind");
-        let value = arg.call_i64(bound).expect("typed seq call should run");
-        assert_eq!(value, 85);
-        arg.release();
-    }
-
-    #[test]
-    fn bound_packed_arg_drop_unpins_for_gc_reclaim() {
-        let program = compile_program(
-            &[(
-                "main",
-                r"
-            export let result (grid : mut [2][2]Int) : Int := (
-              grid.[0, 1] := 42;
-              grid.[1, 0] := grid.[0, 1] + 1;
-              grid.[0, 1] + grid.[1, 0]
-            );
-        ",
-            )],
-            "main",
-        );
-        let mut vm = Vm::with_rejecting_host(program, VmOptions);
-        vm.initialize().expect("vm init should succeed");
-        let ty = TypeId::from_raw(0);
-        let first = vm
-            .alloc_sequence(ty, [Value::Int(1), Value::Int(2)])
-            .expect("first row should allocate");
-        let second = vm
-            .alloc_sequence(ty, [Value::Int(3), Value::Int(4)])
-            .expect("second row should allocate");
-        let grid = vm
-            .alloc_sequence(ty, [first, second])
-            .expect("grid should allocate");
-        let Value::Seq(grid_ref) = grid else {
-            panic!("grid should be sequence")
-        };
-        {
-            let bound = vm
-                .bind_export_seq2x2_i64("result")
-                .expect("result should bind");
-            let arg = vm
-                .bind_seq2x2_packed_int_arg(grid_ref)
-                .expect("packed grid should bind");
-            let value = arg.call_i64(bound).expect("typed seq call should run");
-            assert_eq!(value, 85);
-        }
         _ = vm.collect_garbage();
         let error = vm
-            .bind_seq2x2_packed_int_arg(grid_ref)
-            .expect_err("stale grid ref should fail after drop+gc");
+            .call_seq2x2_i64(bound, grid_ref)
+            .expect_err("stale grid ref should fail after gc");
         assert!(matches!(
             error.kind(),
             VmErrorKind::InvalidProgramShape { .. }
@@ -1177,6 +1414,32 @@ mod success {
         let result = vm
             .lookup_export("result")
             .expect("result export should resolve");
+        let Value::Procedure(procedure) = result else {
+            panic!("result export should be procedure");
+        };
+        assert_eq!(
+            vm.module(procedure.module_slot)
+                .expect("result module should exist")
+                .program
+                .loaded_procedure(procedure.procedure)
+                .expect("result procedure should exist")
+                .runtime_kernel(),
+            Some(RuntimeKernel::InlineEffectResume {
+                resume_value: 41,
+                value_add: 1
+            })
+        );
+        let init = vm
+            .bind_export_init0("result")
+            .expect("result export should bind");
+        assert_eq!(
+            vm.call_init0_i64(init)
+                .expect("bound effect resume should run"),
+            42
+        );
+        let result = vm
+            .lookup_export("result")
+            .expect("result export should resolve");
         let before = vm.executed_instructions();
         let value = vm
             .call_value(result, &[])
@@ -1184,7 +1447,7 @@ mod success {
         let executed = vm.executed_instructions() - before;
 
         assert_eq!(value, Value::Int(42));
-        assert_eq!(executed, 12);
+        assert_eq!(executed, 1);
     }
 
     #[test]

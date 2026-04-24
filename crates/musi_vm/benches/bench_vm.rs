@@ -4,7 +4,9 @@ use std::time::{Duration, Instant};
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 
 use musi_foundation::register_modules;
-use musi_vm::{BoundI64Call, BoundInitCall, BoundSeq2x2Call, Program, Value, Vm, VmOptions};
+use musi_vm::{
+    BoundI64Call, BoundInitCall, BoundSeq2x2Call, BoundSeq8Call, Program, Value, Vm, VmOptions,
+};
 use music_module::ModuleKey;
 use music_seam::TypeId;
 use music_session::{Session, SessionOptions};
@@ -39,6 +41,11 @@ fn bind_result_init(vm: &mut Vm) -> BoundInitCall {
 
 fn bind_result_seq2(vm: &mut Vm) -> BoundSeq2x2Call {
     vm.bind_export_seq2x2_i64("result")
+        .expect("result export should bind")
+}
+
+fn bind_result_seq8(vm: &mut Vm) -> BoundSeq8Call {
+    vm.bind_export_seq8_i64("result")
         .expect("result export should bind")
 }
 
@@ -186,13 +193,13 @@ fn bench_vm_sequence_index_mutation(c: &mut Criterion) {
         panic!("grid allocation should return sequence")
     };
     let grid = vm
-        .bind_seq2x2_packed_int_arg(grid)
+        .bind_seq2x2_i64_arg(grid)
         .expect("grid should bind to seq2x2 arg");
 
     _ = c.bench_function("bench_vm_sequence_index_mutation", |b| {
         b.iter(|| {
             let result = grid
-                .call_i64(result)
+                .call_i64(black_box(result))
                 .expect("sequence mutation should succeed");
             black_box(result)
         });
@@ -248,25 +255,59 @@ fn bench_vm_effect_resume(c: &mut Criterion) {
     });
 }
 
-fn bench_vm_gc_stress_sequence_return(c: &mut Criterion) {
+fn bench_vm_sequence_return_gc(c: &mut Criterion) {
     let program = compile_program(
         r"
         export let result () : [8]Int := [0, 1, 2, 3, 4, 5, 6, 7];
         ",
     );
 
-    let mut group = c.benchmark_group("bench_vm_gc_stress_sequence_return");
+    let mut group = c.benchmark_group("bench_vm_sequence_return_gc");
     _ = group.sample_size(20);
     _ = group.measurement_time(Duration::from_secs(4));
-    _ = group.bench_function("fresh_vm_gc_stress", |b| {
+    let mut vm = initialized_vm(&program, VmOptions);
+    let result = bind_result_seq8(&mut vm);
+    _ = group.bench_function("sequence_return_alloc", |b| {
+        b.iter(|| {
+            let result = vm
+                .call_seq8_i64(black_box(result))
+                .expect("sequence return should succeed");
+            black_box((result, vm.heap_allocated_bytes()))
+        });
+    });
+    _ = group.bench_function("sequence_return_call_export_alloc", |b| {
         b.iter_batched(
-            || initialized_vm(&program, VmOptions.with_gc_stress(true)),
+            || initialized_vm(&program, VmOptions),
+            |mut vm| {
+                let result = vm
+                    .call_export("result", &[])
+                    .expect("sequence return should succeed");
+                black_box((result, vm.heap_allocated_bytes()))
+            },
+            BatchSize::SmallInput,
+        );
+    });
+    _ = group.bench_function("sequence_return_collect", |b| {
+        b.iter_batched(
+            || initialized_vm(&program, VmOptions),
             |mut vm| {
                 let result = vm
                     .call_export("result", &[])
                     .expect("sequence return should succeed");
                 let stats = vm.collect_garbage();
                 black_box((result, stats.after_bytes))
+            },
+            BatchSize::SmallInput,
+        );
+    });
+    _ = group.bench_function("sequence_return_gc_stress", |b| {
+        b.iter_batched(
+            || initialized_vm(&program, VmOptions.with_gc_stress(true)),
+            |mut vm| {
+                let result = vm
+                    .call_export("result", &[])
+                    .expect("sequence return should succeed");
+                black_box((result, vm.heap_allocated_bytes()))
             },
             BatchSize::SmallInput,
         );
@@ -282,6 +323,6 @@ criterion_group!(
     bench_vm_sequence_index_mutation,
     bench_vm_data_match_option,
     bench_vm_effect_resume,
-    bench_vm_gc_stress_sequence_return,
+    bench_vm_sequence_return_gc,
 );
 criterion_main!(benches);

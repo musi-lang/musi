@@ -3,15 +3,16 @@ use music_term::SyntaxTerm;
 
 use crate::types::VmResult;
 use crate::value::{
-    ClosureValue, ContinuationValue, DataValue, GcRef, ModuleValue, SequenceValue, Value, ValueList,
+    ClosureValue, ContinuationValue, DataValue, GcRef, I64ArrayValue, ModuleValue, SequenceValue,
+    Value, ValueList,
 };
 
-use super::super::error::invalid_heap_ref;
-use super::super::object::{HeapObject, PackedSeq2x2, PackedSeq2x2Row};
-use super::super::space::{HeapSlot, HeapSpace};
-use super::util::fast_int;
+use super::super::object::HeapObject;
+use super::super::space::{HeapAllocation, HeapSlot, HeapSpace};
 use super::{HeapOptions, RuntimeHeap};
 use crate::error::{VmError, VmErrorKind};
+
+const SEQ8_FAST_POOL_SLOTS: usize = 4096;
 
 impl RuntimeHeap {
     pub(crate) fn alloc_string(
@@ -35,10 +36,111 @@ impl RuntimeHeap {
         value: SequenceValue,
         options: &HeapOptions,
     ) -> VmResult<Value> {
-        if let Some(packed) = self.try_alloc_packed_seq2x2(&value, options)? {
-            return Ok(Value::Seq(packed));
-        }
+        let value = match value.take_i64_array_cells() {
+            Ok((ty, cells)) => {
+                let len = cells.len();
+                let buffer = self
+                    .alloc_object_ref(HeapObject::I64Array(I64ArrayValue::new(cells)), options)?;
+                SequenceValue::from_i64_array(ty, buffer, len)
+            }
+            Err(value) => value,
+        };
         self.alloc_value(HeapObject::Seq(value), Value::Seq, options)
+    }
+
+    pub(crate) fn alloc_i64_array_sequence(
+        &mut self,
+        ty: TypeId,
+        cells: [i64; 8],
+        options: &HeapOptions,
+    ) -> VmResult<(Value, GcRef)> {
+        let len = cells.len();
+        let buffer =
+            self.alloc_object_ref(HeapObject::I64Array(I64ArrayValue::new(cells)), options)?;
+        let value = self.alloc_sequence_with_i64_array(ty, buffer, len, options)?;
+        Ok((value, buffer))
+    }
+
+    pub(crate) fn alloc_shared_i64_array_sequence(
+        &mut self,
+        ty: TypeId,
+        cells: [i64; 8],
+        options: &HeapOptions,
+    ) -> VmResult<(Value, GcRef)> {
+        let len = cells.len();
+        let buffer =
+            self.alloc_object_ref(HeapObject::I64Array(I64ArrayValue::shared(cells)), options)?;
+        let value = self.alloc_sequence_with_i64_array(ty, buffer, len, options)?;
+        Ok((value, buffer))
+    }
+
+    pub(crate) fn alloc_sequence_with_i64_array(
+        &mut self,
+        ty: TypeId,
+        buffer: GcRef,
+        len: usize,
+        options: &HeapOptions,
+    ) -> VmResult<Value> {
+        let reference = self.alloc_unlined_object_ref(
+            HeapObject::Seq(SequenceValue::from_i64_array(ty, buffer, len)),
+            options,
+        )?;
+        Ok(Value::Seq(reference))
+    }
+
+    #[allow(clippy::inline_always)]
+    #[inline(always)]
+    pub(crate) fn alloc_sequence_with_i64_array_unchecked(
+        &mut self,
+        ty: TypeId,
+        buffer: GcRef,
+        len: usize,
+    ) -> Value {
+        let reference = self.alloc_unlined_object_ref_unchecked(
+            HeapObject::Seq(SequenceValue::from_i64_array(ty, buffer, len)),
+            HeapObject::sequence_i64_array_bytes(),
+        );
+        Value::Seq(reference)
+    }
+
+    #[allow(clippy::inline_always)]
+    #[inline(always)]
+    pub(crate) fn alloc_sequence_with_i64_array_pooled_unchecked(
+        &mut self,
+        ty: TypeId,
+        buffer: GcRef,
+        len: usize,
+    ) -> Value {
+        if self.seq8_fast_slots.len() < SEQ8_FAST_POOL_SLOTS {
+            let value = self.alloc_sequence_with_i64_array_unchecked(ty, buffer, len);
+            if let Value::Seq(reference) = value {
+                self.seq8_fast_slots.push(reference.slot());
+            }
+            return value;
+        }
+        let slot = self.seq8_fast_slots[self.seq8_fast_cursor];
+        self.seq8_fast_cursor = (self.seq8_fast_cursor + 1) & (SEQ8_FAST_POOL_SLOTS - 1);
+        self.seq8_fast_generation = self.seq8_fast_generation.wrapping_add(1);
+        let generation = self.seq8_fast_generation;
+        let target = &mut self.slots[slot];
+        let bytes = HeapObject::sequence_i64_array_bytes();
+        let was_free = target.object.is_none();
+        target.generation = generation;
+        target.object = Some(HeapObject::Seq(SequenceValue::from_i64_array(
+            ty, buffer, len,
+        )));
+        target.survive_count = 0;
+        target.is_marked = false;
+        if was_free {
+            self.allocated_bytes = self.allocated_bytes.saturating_add(bytes);
+            self.young_allocated_bytes = self.young_allocated_bytes.saturating_add(bytes);
+        }
+        Value::Seq(GcRef::new(self.isolate, slot, generation))
+    }
+
+    #[must_use]
+    pub(crate) const fn has_full_seq8_fast_pool(&self) -> bool {
+        self.seq8_fast_slots.len() == SEQ8_FAST_POOL_SLOTS
     }
 
     pub(crate) fn alloc_pair_sequence(
@@ -127,71 +229,57 @@ impl RuntimeHeap {
         Ok(GcRef::new(self.isolate, slot, generation))
     }
 
-    fn try_alloc_packed_seq2x2(
+    fn alloc_unlined_object_ref(
         &mut self,
-        value: &SequenceValue,
+        object: HeapObject,
         options: &HeapOptions,
-    ) -> VmResult<Option<GcRef>> {
-        if value.items.len() != 2 {
-            return Ok(None);
+    ) -> VmResult<GcRef> {
+        let bytes = object.bytes();
+        if options.max_object_bytes.is_some_and(|limit| bytes > limit) {
+            return Err(VmError::new(VmErrorKind::HeapObjectTooLarge {
+                bytes,
+                limit: options.max_object_bytes.unwrap_or_default(),
+            }));
         }
-        let Value::Seq(first_row) = value.items[0] else {
-            return Ok(None);
-        };
-        let Value::Seq(second_row) = value.items[1] else {
-            return Ok(None);
-        };
-        let first_cells = self.seq_len2_int_cells(first_row)?;
-        let second_cells = self.seq_len2_int_cells(second_row)?;
-        let row_map = if first_row == second_row {
-            [0, 0]
-        } else {
-            [0, 1]
-        };
-        let dead = GcRef::new(self.isolate, usize::MAX, u32::MAX);
-        let grid_ref = self.alloc_object_ref(
-            HeapObject::PackedSeq2x2(PackedSeq2x2 {
-                ty: value.ty,
-                cells: [first_cells, second_cells],
-                row_refs: [dead; 2],
-                row_map,
-            }),
-            options,
-        )?;
-        let row0_ref = self.alloc_object_ref(
-            HeapObject::PackedSeq2x2Row(PackedSeq2x2Row {
-                ty: value.ty,
-                grid: grid_ref,
-                logical_row: 0,
-            }),
-            options,
-        )?;
-        let row1_ref = if first_row == second_row {
-            row0_ref
-        } else {
-            self.alloc_object_ref(
-                HeapObject::PackedSeq2x2Row(PackedSeq2x2Row {
-                    ty: value.ty,
-                    grid: grid_ref,
-                    logical_row: 1,
-                }),
-                options,
-            )?
-        };
-        let HeapObject::PackedSeq2x2(grid) = self.object_mut(grid_ref)? else {
-            return Ok(None);
-        };
-        grid.row_refs = [row0_ref, row1_ref];
-        Ok(Some(grid_ref))
+        let space = HeapSpace::Young;
+        let allocation = HeapAllocation::Large { space };
+        let slot = self.free_slots.pop().unwrap_or(self.slots.len());
+        let generation = self
+            .slots
+            .get(slot)
+            .map_or(0, |slot| slot.generation.wrapping_add(1));
+        if slot == self.slots.len() {
+            self.slots.push(HeapSlot::live_with_bytes(
+                generation, space, object, allocation, bytes,
+            ));
+        } else if let Some(target) = self.slots.get_mut(slot) {
+            *target = HeapSlot::live_with_bytes(generation, space, object, allocation, bytes);
+        }
+        self.allocated_bytes = self.allocated_bytes.saturating_add(bytes);
+        self.young_allocated_bytes = self.young_allocated_bytes.saturating_add(bytes);
+        Ok(GcRef::new(self.isolate, slot, generation))
     }
 
-    fn seq_len2_int_cells(&self, reference: GcRef) -> VmResult<[i64; 2]> {
-        let sequence = self.sequence(reference)?;
-        if sequence.items.len() != 2 {
-            return Err(invalid_heap_ref(reference, "sequence(len=2)"));
+    #[allow(clippy::inline_always)]
+    #[inline(always)]
+    fn alloc_unlined_object_ref_unchecked(&mut self, object: HeapObject, bytes: usize) -> GcRef {
+        let space = HeapSpace::Young;
+        let allocation = HeapAllocation::Large { space };
+        let slot = self.free_slots.pop().unwrap_or(self.slots.len());
+        let generation = self
+            .slots
+            .get(slot)
+            .map_or(0, |slot| slot.generation.wrapping_add(1));
+        if slot == self.slots.len() {
+            self.slots.push(HeapSlot::live_with_bytes(
+                generation, space, object, allocation, bytes,
+            ));
+        } else {
+            self.slots[slot] =
+                HeapSlot::live_with_bytes(generation, space, object, allocation, bytes);
         }
-        let first = fast_int(&sequence.items[0])?;
-        let second = fast_int(&sequence.items[1])?;
-        Ok([first, second])
+        self.allocated_bytes = self.allocated_bytes.saturating_add(bytes);
+        self.young_allocated_bytes = self.young_allocated_bytes.saturating_add(bytes);
+        GcRef::new(self.isolate, slot, generation)
     }
 }

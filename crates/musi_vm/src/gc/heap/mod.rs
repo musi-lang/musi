@@ -31,21 +31,28 @@ pub struct RuntimeHeap {
     pub(super) remembered_large_slots: Vec<usize>,
     pub(super) allocated_bytes: usize,
     pub(super) young_allocated_bytes: usize,
+    pub(super) seq8_fast_slots: Vec<usize>,
+    pub(super) seq8_fast_cursor: usize,
+    pub(super) seq8_fast_generation: u32,
     single_thread_marker: PhantomData<Cell<()>>,
 }
 
-pub(super) const YOUNG_TARGET_BYTES: usize = 256 * 1024;
+pub(super) const YOUNG_TARGET_BYTES: usize = 64 * 1024;
 pub(super) const LARGE_PROMOTE_BYTES: usize = 4096;
 pub(super) const PROMOTE_SURVIVE_THRESHOLD: u8 = 2;
 
 #[derive(Debug, Clone, Copy)]
-pub struct Seq2x2ArgCache {
-    pub grid_slot: usize,
-    pub grid_generation: u32,
-    pub row0_slot: usize,
-    pub row0_generation: u32,
-    pub row1_slot: usize,
-    pub row1_generation: u32,
+pub struct SequenceGuard {
+    pub slot: usize,
+    pub generation: u32,
+    pub layout_version: u32,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Seq2x2ArgGuard {
+    pub grid: SequenceGuard,
+    pub row0: SequenceGuard,
+    pub row1: SequenceGuard,
 }
 
 static NEXT_ISOLATE_ID: AtomicU64 = AtomicU64::new(1);
@@ -70,6 +77,9 @@ impl RuntimeHeap {
             remembered_large_slots: Vec::new(),
             allocated_bytes: 0,
             young_allocated_bytes: 0,
+            seq8_fast_slots: Vec::new(),
+            seq8_fast_cursor: 0,
+            seq8_fast_generation: 0,
             single_thread_marker: PhantomData,
         }
     }

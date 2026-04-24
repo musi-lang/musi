@@ -15,6 +15,7 @@ CultureInfo.CurrentUICulture <- CultureInfo.InvariantCulture
 
 module Sink =
     let mutable value = 0L
+    let mutable objectValue: obj = null
 
 [<Struct>]
 type Measurement =
@@ -58,7 +59,11 @@ type RunSettings =
       Iterations: int
       WarmupIterations: int
       Phase: Phase
-      Profile: Profile }
+      Profile: Profile
+      WorkloadName: string }
+    member this.Includes(candidate: string) =
+        this.WorkloadName.Equals("all", StringComparison.OrdinalIgnoreCase)
+        || candidate.Equals(this.WorkloadName, StringComparison.OrdinalIgnoreCase)
 
 module ArgumentParsing =
     let private parsePositiveInt (flag: string) (value: string) =
@@ -91,6 +96,7 @@ module ArgumentParsing =
         let mutable warmupIterations = defaultWarmupIterations
         let mutable phase = Both
         let mutable profile = Native
+        let mutable workloadName = "all"
         let mutable index = 0
 
         let requireValue flag =
@@ -118,6 +124,9 @@ module ArgumentParsing =
             | "--profile" ->
                 profile <- parseProfile (requireValue "--profile")
                 index <- index + 2
+            | "--workload" ->
+                workloadName <- requireValue "--workload"
+                index <- index + 2
             | other -> invalidArg "args" $"unknown argument: {other}"
 
         if isSmoke then
@@ -130,7 +139,8 @@ module ArgumentParsing =
           Iterations = iterations
           WarmupIterations = warmupIterations
           Phase = phase
-          Profile = profile }
+          Profile = profile
+          WorkloadName = workloadName }
 
 module BenchmarkRunner =
     [<MethodImpl(MethodImplOptions.NoInlining)>]
@@ -226,6 +236,18 @@ module VmBaselines =
     let effectResumeEquivalent () =
         handleReadLine (fun value -> value + 1L) (fun _ -> 41L)
 
+    [<MethodImpl(MethodImplOptions.NoInlining)>]
+    let sequenceReturnAlloc () =
+        let values = [| 0L; 1L; 2L; 3L; 4L; 5L; 6L; 7L |]
+        Sink.objectValue <- values
+        values[7] + int64 values.Length
+
+    [<MethodImpl(MethodImplOptions.NoInlining)>]
+    let sequenceReturnForcedGc () =
+        let result = sequenceReturnAlloc ()
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, false)
+        result
+
 let workloads =
     [| { Name = "init_small_module"; Run = VmBaselines.initSmallModule }
        { Name = "scalar_recursive_sum"; Run = VmBaselines.scalarRecursiveSum }
@@ -233,22 +255,25 @@ let workloads =
        { Name = "sequence_index_mutation"; Run = VmBaselines.sequenceIndexMutation }
        { Name = "data_match_option"; Run = VmBaselines.dataMatchOption }
        { Name = "effect_resume_equivalent"; Run = VmBaselines.effectResumeEquivalent }
+       { Name = "sequence_return_alloc"; Run = VmBaselines.sequenceReturnAlloc }
+       { Name = "sequence_return_forced_gc"; Run = VmBaselines.sequenceReturnForcedGc }
        { Name = "construct_small_module"; Run = VmBaselines.constructSmallModule } |]
 
 let settings = ArgumentParsing.parse (Environment.GetCommandLineArgs() |> Array.skip 1)
 let mode = if settings.IsSmoke then "smoke" else "full"
 printfn $"F# CLR VM baselines ({mode})"
 printfn $"Runtime: {Environment.Version}"
-printfn $"Config: profile={settings.Profile.Label} phase={settings.Phase.Label} rounds={settings.Rounds} iterations={settings.Iterations} warmup={settings.WarmupIterations}"
+printfn $"Config: profile={settings.Profile.Label} phase={settings.Phase.Label} workload={settings.WorkloadName} rounds={settings.Rounds} iterations={settings.Iterations} warmup={settings.WarmupIterations}"
 printfn ""
 
 let printMeasurement phase workload measurement =
     printfn "fsharp/%s/%s/%-36s %12.1f ns/op" settings.Profile.Label phase workload measurement.NanosecondsPerOperation
 
 for workload in workloads do
-    if settings.Phase.IncludesCold then
-        BenchmarkRunner.measureCold workload settings.Iterations
-        |> printMeasurement "cold" workload.Name
-    if settings.Phase.IncludesHot then
-        BenchmarkRunner.measureHot workload settings.Rounds settings.Iterations settings.WarmupIterations
-        |> printMeasurement "hot" workload.Name
+    if settings.Includes workload.Name then
+        if settings.Phase.IncludesCold then
+            BenchmarkRunner.measureCold workload settings.Iterations
+            |> printMeasurement "cold" workload.Name
+        if settings.Phase.IncludesHot then
+            BenchmarkRunner.measureHot workload settings.Rounds settings.Iterations settings.WarmupIterations
+            |> printMeasurement "hot" workload.Name

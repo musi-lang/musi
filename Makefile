@@ -1,4 +1,4 @@
-.PHONY: check lint fmt test rscheck bench-vm bench-musi bench-csharp bench-csharp-smoke bench-csharp-vm-mode bench-csharp-smoke-vm-mode bench-fsharp bench-fsharp-smoke bench-fsharp-vm-mode bench-fsharp-smoke-vm-mode bench-java bench-java-smoke bench-java-vm-mode bench-java-smoke-vm-mode bench-scala bench-scala-smoke bench-scala-vm-mode bench-scala-smoke-vm-mode bench-vms bench-vms-smoke bench-vms-quick bench-vms-long bench-vms-peers install-local
+.PHONY: check lint fmt test rscheck bench-vm bench-musi bench-csharp bench-csharp-smoke bench-csharp-vm-mode bench-csharp-smoke-vm-mode bench-fsharp bench-fsharp-smoke bench-fsharp-vm-mode bench-fsharp-smoke-vm-mode bench-java bench-java-smoke bench-java-vm-mode bench-java-smoke-vm-mode bench-scala bench-scala-smoke bench-scala-vm-mode bench-scala-smoke-vm-mode bench-vms bench-vms-smoke bench-vms-quick bench-vms-long bench-vms-gc bench-vms-peers install-local
 
 RUST_TOOLCHAIN := 1.95.0
 CARGO := rustup run $(RUST_TOOLCHAIN) cargo
@@ -10,7 +10,8 @@ VM_BENCH_PHASE ?= both
 VM_BENCH_ROUNDS ?= 5
 VM_BENCH_ITERATIONS ?= 100000
 VM_BENCH_WARMUP_ITERATIONS ?= 10000
-VM_BENCH_ARGS := --phase $(VM_BENCH_PHASE) --rounds $(VM_BENCH_ROUNDS) --iterations $(VM_BENCH_ITERATIONS) --warmup-iterations $(VM_BENCH_WARMUP_ITERATIONS)
+VM_BENCH_WORKLOAD ?= all
+VM_BENCH_ARGS := --phase $(VM_BENCH_PHASE) --rounds $(VM_BENCH_ROUNDS) --iterations $(VM_BENCH_ITERATIONS) --warmup-iterations $(VM_BENCH_WARMUP_ITERATIONS) --workload $(VM_BENCH_WORKLOAD)
 CLR_VM_MODE_ENV := COMPlus_TieredCompilation=0 COMPlus_TC_QuickJit=0 COMPlus_TC_QuickJitForLoops=0 COMPlus_ReadyToRun=0 DOTNET_TieredPGO=0
 
 check:
@@ -134,6 +135,11 @@ bench-vms-quick:
 
 bench-vms-long:
 	$(MAKE) VM_BENCH_PHASE=both VM_BENCH_ROUNDS=8 VM_BENCH_ITERATIONS=250000 VM_BENCH_WARMUP_ITERATIONS=25000 bench-vms-peers
+	$(MAKE) bench-vm
+
+bench-vms-gc:
+	$(MAKE) VM_BENCH_PHASE=hot VM_BENCH_ROUNDS=3 VM_BENCH_ITERATIONS=2000 VM_BENCH_WARMUP_ITERATIONS=100 VM_BENCH_WORKLOAD=sequence_return_alloc bench-vms-peers
+	$(MAKE) VM_BENCH_PHASE=hot VM_BENCH_ROUNDS=3 VM_BENCH_ITERATIONS=50 VM_BENCH_WARMUP_ITERATIONS=5 VM_BENCH_WORKLOAD=sequence_return_forced_gc bench-vms-peers
 	$(MAKE) bench-vm
 
 install-local:

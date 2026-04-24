@@ -1,5 +1,3 @@
-use std::hint::unreachable_unchecked;
-
 use crate::program::RuntimeSeq2Mutation;
 use crate::types::VmResult;
 use crate::value::{GcRef, SequenceValue, Value};
@@ -92,18 +90,18 @@ impl RuntimeHeap {
     }
 
     fn fast_seq2_mutation_2x2(&mut self, grid: GcRef, plan: RuntimeSeq2Mutation) -> VmResult<i64> {
-        if let HeapObject::PackedSeq2x2(packed) = self.object_mut(grid)? {
-            packed.set_cell_for(0, 1, i64::from(plan.init_value));
-            let source = packed.cell_for(0, 1);
+        let (row0, row1) = self.seq2_rows_2x2(grid)?;
+        if self.sequence_int_pair(row0).is_ok() && self.sequence_int_pair(row1).is_ok() {
+            self.sequence_set_int_pair_cell(row0, 1, i64::from(plan.init_value))?;
+            let source = self.sequence_int_pair(row0)?[1];
             let next = source
                 .checked_add(i64::from(plan.update_add))
                 .ok_or_else(arithmetic_overflow)?;
-            packed.set_cell_for(1, 0, next);
-            let left = packed.cell_for(0, 1);
-            let right = packed.cell_for(1, 0);
+            self.sequence_set_int_pair_cell(row1, 0, next)?;
+            let left = self.sequence_int_pair(row0)?[1];
+            let right = self.sequence_int_pair(row1)?[0];
             return left.checked_add(right).ok_or_else(arithmetic_overflow);
         }
-        let (row0, row1) = self.seq2_rows_2x2(grid)?;
         let (row0_items, row0_len) = self.sequence_items_mut_ptr(row0)?;
         let (row1_items, row1_len) = self.sequence_items_mut_ptr(row1)?;
         let row0_slot = fast_sequence_index(1, row0_len)?;
@@ -145,36 +143,14 @@ impl RuntimeHeap {
     fn sequence_items_mut_ptr(&mut self, reference: GcRef) -> VmResult<(*mut Value, usize)> {
         self.mark_write_barrier(reference)?;
         match self.object_mut(reference)? {
-            HeapObject::Seq(value) => Ok((value.items.as_mut_ptr(), value.items.len())),
+            HeapObject::Seq(value) => {
+                let Some(items) = value.values_mut() else {
+                    return Err(invalid_heap_ref(reference, "value sequence"));
+                };
+                Ok((items.as_mut_ptr(), items.len()))
+            }
             _ => Err(invalid_heap_ref(reference, "sequence")),
         }
-    }
-
-    #[allow(clippy::inline_always)]
-    #[inline(always)]
-    pub(crate) fn fast_seq2_mutation_2x2_pinned(
-        &mut self,
-        cache: super::Seq2x2ArgCache,
-        init_value: i64,
-        update_add: i64,
-    ) -> VmResult<i64> {
-        // SAFETY: cache comes from active pinned lease handle tied to VM borrow.
-        let root_slot = unsafe { self.slots.get_unchecked_mut(cache.grid_slot) };
-        // SAFETY: pinned lease guarantees live packed grid object for slot lifetime.
-        let object = unsafe { root_slot.object.as_mut().unwrap_unchecked() };
-        let HeapObject::PackedSeq2x2(packed) = object else {
-            // SAFETY: packed lease handle only binds packed grid slots.
-            unsafe { unreachable_unchecked() };
-        };
-        packed.set_cell_for(0, 1, init_value);
-        let source = packed.cell_for(0, 1);
-        let next = source
-            .checked_add(update_add)
-            .ok_or_else(arithmetic_overflow)?;
-        packed.set_cell_for(1, 0, next);
-        let left = packed.cell_for(0, 1);
-        let right = packed.cell_for(1, 0);
-        left.checked_add(right).ok_or_else(arithmetic_overflow)
     }
 }
 
@@ -195,13 +171,16 @@ fn fast_sequence_index(index: i16, len: usize) -> VmResult<usize> {
 }
 
 fn seq_ref_at(sequence: &SequenceValue, index: i16) -> VmResult<GcRef> {
-    let index = fast_sequence_index(index, sequence.items.len())?;
-    // SAFETY: index is checked against sequence length directly above.
-    match unsafe { sequence.items.get_unchecked(index) } {
-        Value::Seq(reference) => Ok(*reference),
-        other => Err(VmError::new(VmErrorKind::InvalidValueKind {
+    let index = fast_sequence_index(index, sequence.len())?;
+    match sequence.get_cloned(index) {
+        Some(Value::Seq(reference)) => Ok(reference),
+        Some(other) => Err(VmError::new(VmErrorKind::InvalidValueKind {
             expected: Seq,
             found: other.kind(),
+        })),
+        None => Err(VmError::new(VmErrorKind::InvalidSequenceIndex {
+            index: i64::try_from(index).unwrap_or(i64::MAX),
+            len: sequence.len(),
         })),
     }
 }

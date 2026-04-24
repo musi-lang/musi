@@ -1,5 +1,5 @@
 use crate::{VmIndexSpace, VmValueKind};
-use music_seam::ProcedureId;
+use music_seam::{ProcedureId, TypeId};
 
 use super::{
     CompareOp, GcRef, RuntimeKernel, RuntimeSeq2Mutation, Value, Vm, VmError, VmErrorKind,
@@ -92,6 +92,9 @@ impl Vm {
                 update_add,
             } => self.exec_seq2_mutation_2x2_kernel(args, grid_local, init_value, update_add),
             RuntimeKernel::Seq2Mutation(plan) => self.exec_seq2_mutation_kernel(args, plan),
+            RuntimeKernel::ConstI64Array8Return { ty, cells } => {
+                self.exec_const_i64_array8_return_kernel(args, ty, cells)
+            }
             RuntimeKernel::InlineEffectResume {
                 resume_value,
                 value_add,
@@ -186,6 +189,19 @@ impl Vm {
         self.heap
             .fast_seq2_mutation_2x2_kernel(grid, init_value, update_add)
             .map(|value| Some(Value::Int(value)))
+    }
+
+    fn exec_const_i64_array8_return_kernel(
+        &mut self,
+        args: &[Value],
+        ty: TypeId,
+        cells: [i64; 8],
+    ) -> VmResult<Option<Value>> {
+        if !args.is_empty() {
+            return Ok(None);
+        }
+        self.alloc_i64_array8_sequence(ty, cells)
+            .map(|(value, _)| Some(value))
     }
 }
 

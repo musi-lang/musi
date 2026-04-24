@@ -1,65 +1,38 @@
 use std::mem::size_of;
 
-use music_seam::TypeId;
 use music_term::SyntaxTerm;
 
 use crate::value::{
-    ClosureValue, ContinuationValue, DataValue, GcRef, IsolateId, ModuleValue, SequenceValue, Value,
+    ClosureValue, ContinuationValue, DataValue, GcRef, I64ArrayValue, ModuleValue, SequenceValue,
+    Value,
 };
 
 const VALUE_BYTES: usize = size_of::<Value>();
 const OBJECT_HEADER_BYTES: usize = 16;
-const I64_BYTES: usize = size_of::<i64>();
-
-#[derive(Debug, Clone, Copy)]
-pub(super) struct PackedSeq2x2 {
-    pub ty: TypeId,
-    pub cells: [[i64; 2]; 2],
-    pub row_refs: [GcRef; 2],
-    pub row_map: [u8; 2],
-}
-
-impl PackedSeq2x2 {
-    #[must_use]
-    pub(super) fn cell_for(self, logical_row: u8, column: usize) -> i64 {
-        let physical_row = usize::from(self.row_map[usize::from(logical_row)]);
-        self.cells[physical_row][column]
-    }
-
-    pub(super) fn set_cell_for(&mut self, logical_row: u8, column: usize, value: i64) {
-        let physical_row = usize::from(self.row_map[usize::from(logical_row)]);
-        self.cells[physical_row][column] = value;
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(super) struct PackedSeq2x2Row {
-    pub ty: TypeId,
-    pub grid: GcRef,
-    pub logical_row: u8,
-}
 
 #[derive(Debug, Clone)]
 pub(super) enum HeapObject {
     String(Box<str>),
     Syntax(SyntaxTerm),
     Seq(SequenceValue),
+    I64Array(I64ArrayValue),
     Data(DataValue),
     Closure(ClosureValue),
     Module(ModuleValue),
     Continuation(Box<ContinuationValue>),
-    PackedSeq2x2(PackedSeq2x2),
-    PackedSeq2x2Row(PackedSeq2x2Row),
 }
 
 impl HeapObject {
+    pub(super) const fn sequence_i64_array_bytes() -> usize {
+        OBJECT_HEADER_BYTES + size_of::<GcRef>() + size_of::<usize>()
+    }
+
     pub(super) fn bytes(&self) -> usize {
         match self {
             Self::String(text) => OBJECT_HEADER_BYTES.saturating_add(text.len()),
             Self::Syntax(term) => OBJECT_HEADER_BYTES.saturating_add(term.text().len()),
-            Self::Seq(value) => {
-                OBJECT_HEADER_BYTES.saturating_add(value.items.len().saturating_mul(VALUE_BYTES))
-            }
+            Self::Seq(value) => OBJECT_HEADER_BYTES.saturating_add(value.inline_bytes()),
+            Self::I64Array(value) => OBJECT_HEADER_BYTES.saturating_add(value.bytes()),
             Self::Data(value) => {
                 OBJECT_HEADER_BYTES.saturating_add(value.fields.len().saturating_mul(VALUE_BYTES))
             }
@@ -76,65 +49,74 @@ impl HeapObject {
                 let value_count = frame_values.saturating_add(value.handlers.len());
                 OBJECT_HEADER_BYTES.saturating_add(value_count.saturating_mul(VALUE_BYTES))
             }
-            Self::PackedSeq2x2(_) => OBJECT_HEADER_BYTES.saturating_add(4 * I64_BYTES),
-            Self::PackedSeq2x2Row(_) => OBJECT_HEADER_BYTES.saturating_add(VALUE_BYTES),
         }
     }
 
-    pub(super) fn visit_children(&self, mut visit: impl FnMut(&Value)) {
+    pub(super) fn visit_children(&self, mut visit: impl FnMut(GcRef)) {
         match self {
-            Self::Seq(value) => {
-                for child in &value.items {
-                    visit(child);
-                }
-            }
+            Self::Seq(value) => value.visit_heap_children(&mut visit),
             Self::Data(value) => {
-                for child in &value.fields {
+                for child in value.fields.iter().filter_map(Value::gc_ref) {
                     visit(child);
                 }
             }
             Self::Closure(value) => {
-                for child in &value.captures {
+                for child in value.captures.iter().filter_map(Value::gc_ref) {
                     visit(child);
                 }
             }
             Self::Continuation(value) => {
                 for frame in &value.frames {
-                    for child in frame.locals.iter().chain(frame.stack.iter()) {
+                    for child in frame
+                        .locals
+                        .iter()
+                        .chain(frame.stack.iter())
+                        .filter_map(Value::gc_ref)
+                    {
                         visit(child);
                     }
                 }
                 for handler in &value.handlers {
-                    visit(&handler.handler);
+                    if let Some(reference) = handler.handler.gc_ref() {
+                        visit(reference);
+                    }
                 }
             }
-            Self::PackedSeq2x2(value) => {
-                for row in value.row_refs {
-                    visit(&Value::Seq(row));
-                }
+            Self::String(_) | Self::Syntax(_) | Self::I64Array(_) | Self::Module(_) => {}
+        }
+    }
+
+    pub(super) fn has_children(&self) -> bool {
+        match self {
+            Self::Seq(value) => value.has_heap_children(),
+            Self::Data(value) => value.fields.iter().any(|value| value.gc_ref().is_some()),
+            Self::Closure(value) => value.captures.iter().any(|value| value.gc_ref().is_some()),
+            Self::Continuation(value) => {
+                value.frames.iter().any(|frame| {
+                    frame
+                        .locals
+                        .iter()
+                        .chain(frame.stack.iter())
+                        .any(|value| value.gc_ref().is_some())
+                }) || value
+                    .handlers
+                    .iter()
+                    .any(|handler| handler.handler.gc_ref().is_some())
             }
-            Self::PackedSeq2x2Row(value) => visit(&Value::Seq(value.grid)),
-            Self::String(_) | Self::Syntax(_) | Self::Module(_) => {}
+            Self::String(_) | Self::Syntax(_) | Self::I64Array(_) | Self::Module(_) => false,
         }
     }
 
     pub(super) fn break_edges(&mut self) {
         match self {
-            Self::Seq(value) => value.items.clear(),
+            Self::Seq(value) => value.clear_edges(),
             Self::Data(value) => value.fields.clear(),
             Self::Closure(value) => value.captures.clear(),
             Self::Continuation(value) => {
                 value.frames.clear();
                 value.handlers.clear();
             }
-            Self::PackedSeq2x2(value) => {
-                let dead = GcRef::new(IsolateId::new(0), usize::MAX, u32::MAX);
-                value.row_refs = [dead; 2];
-            }
-            Self::PackedSeq2x2Row(value) => {
-                value.grid = GcRef::new(IsolateId::new(0), usize::MAX, u32::MAX);
-            }
-            Self::String(_) | Self::Syntax(_) | Self::Module(_) => {}
+            Self::String(_) | Self::Syntax(_) | Self::I64Array(_) | Self::Module(_) => {}
         }
     }
 }

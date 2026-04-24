@@ -16,18 +16,19 @@ private object Settings:
   println(s"Scala 3 JVM baselines (${if settings.isSmoke then "smoke" else "full"})")
   println(s"Runtime: ${ManagementFactory.getRuntimeMXBean.getVmVersion}")
   println(
-    s"Config: profile=${settings.profile.label} phase=${settings.phase.label} rounds=${settings.rounds} iterations=${settings.iterations} warmup=${settings.warmupIterations}"
+    s"Config: profile=${settings.profile.label} phase=${settings.phase.label} workload=${settings.workloadName} rounds=${settings.rounds} iterations=${settings.iterations} warmup=${settings.warmupIterations}"
   )
   println()
 
   Workloads.All.foreach { workload =>
-    if settings.phase.includesCold then
-      val measurement = BenchmarkRunner.measureCold(workload, settings.iterations)
-      printMeasurement(settings, "cold", workload.name, measurement)
-    if settings.phase.includesHot then
-      val measurement =
-        BenchmarkRunner.measureHot(workload, settings.rounds, settings.iterations, settings.warmupIterations)
-      printMeasurement(settings, "hot", workload.name, measurement)
+    if settings.includes(workload.name) then
+      if settings.phase.includesCold then
+        val measurement = BenchmarkRunner.measureCold(workload, settings.iterations)
+        printMeasurement(settings, "cold", workload.name, measurement)
+      if settings.phase.includesHot then
+        val measurement =
+          BenchmarkRunner.measureHot(workload, settings.rounds, settings.iterations, settings.warmupIterations)
+        printMeasurement(settings, "hot", workload.name, measurement)
   }
 
 private def printMeasurement(settings: RunSettings, phase: String, workload: String, measurement: Measurement): Unit =
@@ -102,8 +103,11 @@ private final case class RunSettings(
     iterations: Int,
     warmupIterations: Int,
     phase: Phase,
-    profile: Profile
-)
+    profile: Profile,
+    workloadName: String
+):
+  def includes(candidate: String): Boolean =
+    workloadName.equalsIgnoreCase("all") || candidate.equalsIgnoreCase(workloadName)
 
 private object RunSettings:
   def parse(args: Array[String]): RunSettings =
@@ -113,6 +117,7 @@ private object RunSettings:
     var warmupIterations = Settings.DefaultWarmupIterations
     var phase = Phase.Both
     var profile = Profile.Native
+    var workloadName = "all"
 
     var index = 0
     while index < args.length do
@@ -138,6 +143,9 @@ private object RunSettings:
         case "--profile" =>
           profile = Profile.parse(requireValue(args, index + 1, "--profile"))
           index += 2
+        case "--workload" =>
+          workloadName = requireValue(args, index + 1, "--workload")
+          index += 2
         case other =>
           throw IllegalArgumentException(s"unknown argument: $other")
 
@@ -146,7 +154,7 @@ private object RunSettings:
       iterations = Settings.SmokeIterations
       warmupIterations = Settings.SmokeWarmupIterations
 
-    RunSettings(smoke, rounds, iterations, warmupIterations, phase, profile)
+    RunSettings(smoke, rounds, iterations, warmupIterations, phase, profile, workloadName)
 
   private def requireValue(args: Array[String], index: Int, flag: String): String =
     if index >= args.length then throw IllegalArgumentException(s"missing value for $flag")
@@ -164,6 +172,7 @@ private object RunSettings:
 
 private object Sink:
   @volatile var value: Long = 0L
+  @volatile var obj: AnyRef | Null = null
 
 private object Workloads:
   val All: Array[Workload] = Array(
@@ -173,6 +182,8 @@ private object Workloads:
     Workload("sequence_index_mutation", VmBaselines.sequenceIndexMutation),
     Workload("data_match_option", VmBaselines.dataMatchOption),
     Workload("effect_resume_equivalent", VmBaselines.effectResumeEquivalent),
+    Workload("sequence_return_alloc", VmBaselines.sequenceReturnAlloc),
+    Workload("sequence_return_forced_gc", VmBaselines.sequenceReturnForcedGc),
     Workload("construct_small_module", VmBaselines.constructSmallModule)
   )
 
@@ -207,6 +218,16 @@ private object VmBaselines:
 
   def effectResumeEquivalent(): Long =
     handleReadLine(value => value + 1L, _ => 41L)
+
+  def sequenceReturnAlloc(): Long =
+    val values = Array(0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L)
+    Sink.obj = values
+    values(7) + values.length
+
+  def sequenceReturnForcedGc(): Long =
+    val result = sequenceReturnAlloc()
+    System.gc()
+    result
 
   private def sum(n: Long, acc: Long): Long =
     if n == 0L then acc else sum(n - 1L, acc + n)

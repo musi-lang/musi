@@ -47,6 +47,9 @@ impl RuntimeHeap {
                 line_count,
             };
         }
+        if space == HeapSpace::Young && current_block.is_some() && excluded_blocks.is_empty() {
+            return self.allocate_new_block(space, line_count);
+        }
         for (block_index, block) in self.blocks.iter_mut().enumerate() {
             if excluded_blocks.contains(&block_index) {
                 continue;
@@ -67,6 +70,10 @@ impl RuntimeHeap {
                 };
             }
         }
+        self.allocate_new_block(space, line_count)
+    }
+
+    fn allocate_new_block(&mut self, space: HeapSpace, line_count: usize) -> HeapAllocation {
         let block_index = self.blocks.len();
         let mut block = ImmixBlock::new(space);
         let start_line = block.reserve_lines(line_count).unwrap_or_default();

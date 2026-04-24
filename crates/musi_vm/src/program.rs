@@ -69,6 +69,10 @@ pub enum RuntimeKernel {
         update_add: i16,
     },
     Seq2Mutation(RuntimeSeq2Mutation),
+    ConstI64Array8Return {
+        ty: TypeId,
+        cells: [i64; 8],
+    },
     InlineEffectResume {
         resume_value: i16,
         value_add: i16,

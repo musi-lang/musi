@@ -20,14 +20,18 @@ public final class Program {
                 settings.isSmoke() ? "smoke" : "full");
         System.out.printf("Runtime: %s%n", ManagementFactory.getRuntimeMXBean().getVmVersion());
         System.out.printf(
-                "Config: profile=%s phase=%s rounds=%d iterations=%d warmup=%d%n%n",
+                "Config: profile=%s phase=%s workload=%s rounds=%d iterations=%d warmup=%d%n%n",
                 settings.profile().label(),
                 settings.phase().label(),
+                settings.workloadName(),
                 settings.rounds(),
                 settings.iterations(),
                 settings.warmupIterations());
 
         for (Workload workload : Workloads.ALL) {
+            if (!settings.includes(workload.name())) {
+                continue;
+            }
             if (settings.phase().includesCold()) {
                 Measurement measurement = BenchmarkRunner.measureCold(workload, settings.iterations());
                 printMeasurement(settings, "cold", workload.name(), measurement);
@@ -165,7 +169,8 @@ record Settings(
         int iterations,
         int warmupIterations,
         Phase phase,
-        Profile profile) {
+        Profile profile,
+        String workloadName) {
     static Settings parse(String[] args) {
         boolean smoke = false;
         int rounds = Program.DEFAULT_ROUNDS;
@@ -173,6 +178,7 @@ record Settings(
         int warmupIterations = Program.DEFAULT_WARMUP_ITERATIONS;
         Phase phase = Phase.BOTH;
         Profile profile = Profile.NATIVE;
+        String workloadName = "all";
         for (int index = 0; index < args.length; index++) {
             String arg = args[index];
             if ("--smoke".equalsIgnoreCase(arg)) {
@@ -199,6 +205,10 @@ record Settings(
                 profile = Profile.parse(requireValue(args, ++index, arg));
                 continue;
             }
+            if ("--workload".equalsIgnoreCase(arg)) {
+                workloadName = requireValue(args, ++index, arg);
+                continue;
+            }
             throw new IllegalArgumentException("unknown argument: " + arg);
         }
         if (smoke) {
@@ -206,7 +216,11 @@ record Settings(
             iterations = Program.SMOKE_ITERATIONS;
             warmupIterations = Program.SMOKE_WARMUP_ITERATIONS;
         }
-        return new Settings(smoke, rounds, iterations, warmupIterations, phase, profile);
+        return new Settings(smoke, rounds, iterations, warmupIterations, phase, profile, workloadName);
+    }
+
+    boolean includes(String candidate) {
+        return "all".equalsIgnoreCase(workloadName) || candidate.equalsIgnoreCase(workloadName);
     }
 
     private static String requireValue(String[] args, int index, String flag) {
@@ -235,6 +249,7 @@ record Settings(
 
 final class Sink {
     static volatile long value;
+    static volatile Object object;
 
     private Sink() {}
 }
@@ -247,6 +262,8 @@ final class Workloads {
         new Workload("sequence_index_mutation", VmBaselines::sequenceIndexMutation),
         new Workload("data_match_option", VmBaselines::dataMatchOption),
         new Workload("effect_resume_equivalent", VmBaselines::effectResumeEquivalent),
+        new Workload("sequence_return_alloc", VmBaselines::sequenceReturnAlloc),
+        new Workload("sequence_return_forced_gc", VmBaselines::sequenceReturnForcedGc),
         new Workload("construct_small_module", VmBaselines::constructSmallModule),
     };
 
@@ -293,6 +310,18 @@ final class VmBaselines {
 
     static long effectResumeEquivalent() {
         return handleReadLine(value -> value + 1, ignored -> 41);
+    }
+
+    static long sequenceReturnAlloc() {
+        long[] values = {0, 1, 2, 3, 4, 5, 6, 7};
+        Sink.object = values;
+        return values[7] + values.length;
+    }
+
+    static long sequenceReturnForcedGc() {
+        long result = sequenceReturnAlloc();
+        System.gc();
+        return result;
     }
 
     private static long sum(long n, long acc) {
