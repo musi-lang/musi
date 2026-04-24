@@ -9,4 +9,6 @@ export opaque let Log := effect {
 };
 
 export let info (message : String) : Unit := ask Log.info(message);
-export let write (level : Int, message : String) : Unit := ask Log.write(level, message);
+
+export let write (level : Int, message : String) : Unit :=
+  ask Log.write(level, message);

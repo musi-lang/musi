@@ -11,7 +11,12 @@ export opaque let Random := effect {
 };
 
 export let int () : Int := ask Random.int();
-export let intInRange (lowerBound : Int, upperBound : Int) : Int := ask Random.intInRange(lowerBound, upperBound);
+
+export let intInRange (lowerBound : Int, upperBound : Int) : Int :=
+  ask Random.intInRange(lowerBound, upperBound);
+
 export let bool () : Int := ask Random.bool();
+
 export let float01 () : Float := ask Random.float01();
+
 export let entropyHex (count : Int) : String := ask Random.entropyHex(count);

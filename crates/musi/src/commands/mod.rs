@@ -236,7 +236,8 @@ pub fn test_project(target: Option<&Path>, workspace: u8) -> MusiResult {
     reject_workspace_target(workspace, target)?;
     let anchor = project_anchor(target)?;
     let project = load_project_ancestor(anchor, ProjectOptions::default())?;
-    let tests = resolve_test_targets(&project, target, workspace)?;
+    let target = normalized_project_target(&project, target)?;
+    let tests = resolve_test_targets(&project, target.as_deref(), workspace)?;
     let mut reports = Vec::new();
     for test in &tests {
         let mut runtime = project_runtime_with_output(&project, RuntimeOutputMode::Capture);
@@ -713,6 +714,38 @@ fn resolve_project_path_entry(project: &Project, target: &Path) -> MusiResult<Pr
         }
     }
     Err(MusiError::UnknownTarget { target: resolved })
+}
+
+fn normalized_project_target(
+    project: &Project,
+    target: Option<&Path>,
+) -> MusiResult<Option<PathBuf>> {
+    let Some(target) = target else {
+        return Ok(None);
+    };
+    if !target.exists() && target.components().count() == 1 && target.extension().is_none() {
+        return Ok(Some(target.to_path_buf()));
+    }
+    let resolved = if target.is_absolute() {
+        target.to_path_buf()
+    } else {
+        current_dir()
+            .map_err(|_| MusiError::MissingCurrentDirectory)?
+            .join(target)
+    };
+    let resolved = resolved
+        .canonicalize()
+        .map_err(|_| MusiError::UnknownTarget {
+            target: resolved.clone(),
+        })?;
+    if resolved == project.root_dir() || resolved == project.root_manifest_path() {
+        return Ok(None);
+    }
+    Ok(Some(
+        resolved
+            .strip_prefix(project.root_dir())
+            .map_or_else(|_| resolved.clone(), Path::to_path_buf),
+    ))
 }
 
 fn resolve_test_targets(

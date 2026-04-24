@@ -9,4 +9,5 @@ export opaque let Format := effect {
 };
 
 export let int (value : Int) : String := ask Format.int(value);
+
 export let float (value : Float) : String := ask Format.float(value);

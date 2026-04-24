@@ -9,5 +9,7 @@ export opaque let Time := effect {
 };
 
 export let nowUnixMs () : Int := ask Time.nowUnixMs();
+
 export let monotonicMs () : Int := ask Time.monotonicMs();
+
 export let sleepMs (ms : Int) : Unit := ask Time.sleepMs(ms);

@@ -13,8 +13,15 @@ export opaque let Fs := effect {
 };
 
 export let readText (path : String) : String := ask Fs.readText(path);
-export let writeText (path : String, text : String) : Unit := ask Fs.writeText(path, text);
+
+export let writeText (path : String, text : String) : Unit :=
+  ask Fs.writeText(path, text);
+
 export let exists (path : String) : Int := ask Fs.exists(path);
-export let appendText (path : String, text : String) : Int := ask Fs.appendText(path, text);
+
+export let appendText (path : String, text : String) : Int :=
+  ask Fs.appendText(path, text);
+
 export let remove (path : String) : Int := ask Fs.remove(path);
+
 export let createDirAll (path : String) : Int := ask Fs.createDirAll(path);

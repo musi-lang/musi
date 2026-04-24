@@ -8,4 +8,6 @@ export opaque let JsonHost := effect {
 };
 
 export let isValid (source : String) : Int := ask JsonHost.isValid(source);
-export let normalize (source : String) : String := ask JsonHost.normalize(source);
+
+export let normalize (source : String) : String :=
+  ask JsonHost.normalize(source);

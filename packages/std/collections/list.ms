@@ -18,69 +18,97 @@ export let fromArray [T] (values : []T) : List[T] :=
   .ListValues(values := [...values]);
 
 --- Core operation for `toArray`.
-export let toArray [T] (target : List[T]) : []T :=
+let listToArray [T] (target : List[T]) : []T :=
   match target (
   | .ListValues(values := values) =>[...values]
   );
 
+--- Core operation for `toArray`.
+export let toArray [T] (target : List[T]) : []T := listToArray[T](target);
+
 --- Core operation for `copy`.
-export let copy [T] (target : List[T]) : List[T] :=
-  fromArray[T](toArray[T](target));
+let copyList [T] (target : List[T]) : List[T] :=
+  fromArray[T](listToArray[T](target));
+
+--- Copy a list.
+export let copy [T] (target : List[T]) : List[T] := copyList[T](target);
 
 --- Core operation for `concat`.
+let concatList [T] (target : List[T], other : List[T]) : List[T] :=
+  fromArray[T]([...listToArray[T](target), ...listToArray[T](other)]);
+
+--- Concatenate two lists.
 export let concat [T] (target : List[T], other : List[T]) : List[T] :=
-  fromArray[T]([...toArray[T](target), ...toArray[T](other)]);
+  concatList[T](target, other);
 
 --- Core operation for `append`.
+let appendList [T] (target : List[T], value : T) : List[T] :=
+  fromArray[T]([...listToArray[T](target), value]);
+
+--- Append one value.
 export let append [T] (target : List[T], value : T) : List[T] :=
-  fromArray[T]([...toArray[T](target), value]);
+  appendList[T](target, value);
 
 --- Core operation for `prepend`.
+let prependList [T] (target : List[T], value : T) : List[T] :=
+  fromArray[T]([value, ...listToArray[T](target)]);
+
+--- Prepend one value.
 export let prepend [T] (target : List[T], value : T) : List[T] :=
-  fromArray[T]([value, ...toArray[T](target)]);
+  prependList[T](target, value);
 
 --- Core operation for `equalsInt`.
+let listsEqualInt (target : List[Int], other : List[Int]) : Bool :=
+  listToArray[Int](target) = listToArray[Int](other);
+
+--- Compare integer lists.
 export let equalsInt (target : List[Int], other : List[Int]) : Bool :=
-  toArray[Int](target) = toArray[Int](other);
+  listsEqualInt(target, other);
 
 --- Core operation for `isEmpty`.
-export let isEmpty [T] (target : List[T]) : Bool :=
-  match toArray[T](target) (
+let listIsEmpty [T] (target : List[T]) : Bool :=
+  match listToArray[T](target) (
   | [] => 0 = 0
   | _ => 0 = 1
   );
 
 --- Core operation for `nonEmpty`.
-export let nonEmpty [T] (target : List[T]) : Bool :=
-  match toArray[T](target) (
+let listNonEmpty [T] (target : List[T]) : Bool :=
+  match listToArray[T](target) (
   | [] => 0 = 1
   | _ => 0 = 0
   );
 
 --- Return a copy of list values.
-export let (self : List[T]).toArray [T] () : []T := toArray[T](self);
+export let (self : List[T]).toArray [T] () : []T := listToArray[T](self);
 
 --- Copy a list.
-export let (self : List[T]).copy [T] () : List[T] := copy[T](self);
+export let (self : List[T]).copy [T] () : List[T] := copyList[T](self);
 
 --- Concatenate two lists.
 export let (self : List[T]).concat [T] (other : List[T]) : List[T] :=
-  concat[T](self, other);
+  concatList[T](self, other);
 
 --- Append one value.
 export let (self : List[T]).append [T] (value : T) : List[T] :=
-  append[T](self, value);
+  appendList[T](self, value);
 
 --- Prepend one value.
 export let (self : List[T]).prepend [T] (value : T) : List[T] :=
-  prepend[T](self, value);
+  prependList[T](self, value);
 
 --- Compare integer lists.
 export let (self : List[Int]).equalsInt (other : List[Int]) : Bool :=
-  equalsInt(self, other);
+  listsEqualInt(self, other);
 
 --- Returns true when list is empty.
-export let (self : List[T]).isEmpty [T] () : Bool := isEmpty[T](self);
+export let isEmpty [T] (target : List[T]) : Bool := listIsEmpty[T](target);
+
+--- Returns true when list is empty.
+export let (self : List[T]).isEmpty [T] () : Bool := listIsEmpty[T](self);
 
 --- Returns true when list has values.
-export let (self : List[T]).nonEmpty [T] () : Bool := nonEmpty[T](self);
+export let nonEmpty [T] (target : List[T]) : Bool := listNonEmpty[T](target);
+
+--- Returns true when list has values.
+export let (self : List[T]).nonEmpty [T] () : Bool := listNonEmpty[T](self);

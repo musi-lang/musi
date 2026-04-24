@@ -10,6 +10,12 @@ export opaque let Env := effect {
 };
 
 export let get (name : String) : String := ask Env.get(name);
+
 export let has (name : String) : Int := ask Env.has(name);
-export let set (name : String, value : String) : Int := ask Env.set(name, value);
+
+export let set (
+  name : String,
+  value : String
+) : Int := ask Env.set(name, value);
+
 export let remove (name : String) : Int := ask Env.remove(name);

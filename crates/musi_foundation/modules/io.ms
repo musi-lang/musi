@@ -11,7 +11,11 @@ export opaque let Io := effect {
 };
 
 export let print (text : String) : Unit := ask Io.print(text);
+
 export let printLine (text : String) : Unit := ask Io.printLine(text);
+
 export let printError (text : String) : Unit := ask Io.printError(text);
+
 export let printErrorLine (text : String) : Unit := ask Io.printErrorLine(text);
+
 export let readLine () : String := ask Io.readLine();

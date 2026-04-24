@@ -44,8 +44,22 @@ export let io := import "@std/io";
 export let env := import "@std/env";
 --- Process helpers module.
 export let process := import "@std/process";
+let osModule := import "@std/os";
 --- Typed operating system target helpers module.
-export let os := import "@std/os";
+export let os := {
+  current := osModule.current,
+  currentJit := osModule.currentJit,
+  targetOs := osModule.targetOs,
+  targetArch := osModule.targetArch,
+  targetFamily := osModule.targetFamily,
+  targetPointerWidth := osModule.targetPointerWidth,
+  targetEndian := osModule.targetEndian,
+  targetJit := osModule.targetJit,
+  matchesOs := osModule.matchesOs,
+  matchesArch := osModule.matchesArch,
+  matchesFamily := osModule.matchesFamily,
+  supportsJit := osModule.supportsJit,
+};
 --- Logging helpers module.
 export let log := import "@std/log";
 --- Foreign function interface helpers module.

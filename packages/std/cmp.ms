@@ -22,21 +22,21 @@ export let equal () : Ordering := .Equal;
 export let greater () : Ordering := .Greater;
 
 --- Core operation for `isLess`.
-export let isLess (target : Ordering) : Bool :=
+let orderingIsLess (target : Ordering) : Bool :=
   match target (
   | .Less => 0 = 0
   | _ => 0 = 1
   );
 
 --- Core operation for `isEqual`.
-export let isEqual (target : Ordering) : Bool :=
+let orderingIsEqual (target : Ordering) : Bool :=
   match target (
   | .Equal => 0 = 0
   | _ => 0 = 1
   );
 
 --- Core operation for `isGreater`.
-export let isGreater (target : Ordering) : Bool :=
+let orderingIsGreater (target : Ordering) : Bool :=
   match target (
   | .Greater => 0 = 0
   | _ => 0 = 1
@@ -45,11 +45,15 @@ export let isGreater (target : Ordering) : Bool :=
 --- Ordering contract.
 export let Ord [T] := shape {
   let compare (left : T, right : T) : Ordering;
-  law reflexive (value : T) := isEqual(compare(value, value));
+  law reflexive (value : T) := orderingIsEqual(compare(value, value));
   law lessGreaterDual (left : T, right : T) :=
-    isLess(compare(left, right)) = isGreater(compare(right, left));
+    orderingIsLess(compare(left, right)) = orderingIsGreater(
+      compare(right, left)
+    );
   law equalSymmetric (left : T, right : T) :=
-    isEqual(compare(left, right)) = isEqual(compare(right, left));
+    orderingIsEqual(compare(left, right)) = orderingIsEqual(
+      compare(right, left)
+    );
 };
 
 --- Generic equality with built-in equality semantics.
@@ -148,10 +152,19 @@ export let stringOrd :=
 };
 
 --- Returns true when ordering is less.
-export let (self : Ordering).isLess () : Bool := isLess(self);
+export let isLess (target : Ordering) : Bool := orderingIsLess(target);
+
+--- Returns true when ordering is less.
+export let (self : Ordering).isLess () : Bool := orderingIsLess(self);
 
 --- Returns true when ordering is equal.
-export let (self : Ordering).isEqual () : Bool := isEqual(self);
+export let isEqual (target : Ordering) : Bool := orderingIsEqual(target);
+
+--- Returns true when ordering is equal.
+export let (self : Ordering).isEqual () : Bool := orderingIsEqual(self);
 
 --- Returns true when ordering is greater.
-export let (self : Ordering).isGreater () : Bool := isGreater(self);
+export let isGreater (target : Ordering) : Bool := orderingIsGreater(target);
+
+--- Returns true when ordering is greater.
+export let (self : Ordering).isGreater () : Bool := orderingIsGreater(self);

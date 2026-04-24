@@ -12,7 +12,11 @@ export opaque let Process := effect {
 };
 
 export let argCount () : Int := ask Process.argCount();
+
 export let argAt (index : Int) : String := ask Process.argAt(index);
+
 export let cwd () : String := ask Process.cwd();
+
 export let run (command : String) : Int := ask Process.run(command);
+
 export let exit (code : Int) : Unit := ask Process.exit(code);

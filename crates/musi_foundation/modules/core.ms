@@ -115,20 +115,20 @@ export opaque let Abort := effect {
 
 export let abort () : Empty := ask Abort.abort();
 
-export opaque let Rangeable[T] := shape {
+export opaque let Rangeable [T] := shape {
   let compare (left : T, right : T) : Int;
   let next (value : T) : Option[T];
   let prev (value : T) : Option[T];
 };
 
-export opaque let RangeBounds[T] := shape {
+export opaque let RangeBounds [T] := shape {
   let defaultLowerBound () : T;
   let defaultUpperBound () : T;
 };
 
 export given Rangeable[Int] {
   let compare (left : Int, right : Int) : Int := left - right;
-  let next (value : Int) : Option[Int] := someOf[Int] (value + 1);
+  let next (value : Int) : Option[Int] := someOf[Int](value + 1);
   let prev (value : Int) : Option[Int] := someOf[Int](value - 1);
 };
 

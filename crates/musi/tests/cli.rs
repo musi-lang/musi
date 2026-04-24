@@ -742,6 +742,60 @@ export let test () :=
     }
 
     #[test]
+    fn test_package_directory_target_runs_that_package_tests() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"workspace\": { \"members\": [\"packages/std\"] }\n}\n",
+        );
+        write_file(
+            temp.path(),
+            "packages/std/musi.json",
+            "{\n  \"name\": \"@std\",\n  \"version\": \"0.1.0\"\n}\n",
+        );
+        write_file(temp.path(), "packages/std/index.ms", "let value := 1;\n");
+        write_file(
+            temp.path(),
+            "packages/std/__tests__/std.test.ms",
+            "export let test () := ();\n",
+        );
+
+        let output = run_musi(&["test", "packages/std"], temp.path());
+
+        assert_success(&output);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("✓ __tests__/std.test.ms (0)"));
+    }
+
+    #[test]
+    fn test_package_file_target_runs_that_test_module() {
+        let temp = TempDir::new();
+        write_file(
+            temp.path(),
+            "musi.json",
+            "{\n  \"workspace\": { \"members\": [\"packages/std\"] }\n}\n",
+        );
+        write_file(
+            temp.path(),
+            "packages/std/musi.json",
+            "{\n  \"name\": \"@std\",\n  \"version\": \"0.1.0\"\n}\n",
+        );
+        write_file(temp.path(), "packages/std/index.ms", "let value := 1;\n");
+        write_file(
+            temp.path(),
+            "packages/std/__tests__/std.test.ms",
+            "export let test () := ();\n",
+        );
+
+        let output = run_musi(&["test", "packages/std/__tests__/std.test.ms"], temp.path());
+
+        assert_success(&output);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("✓ __tests__/std.test.ms (0)"));
+    }
+
+    #[test]
     fn test_explicit_workspace_root_runs_root_and_member_tests_by_default() {
         let temp = TempDir::new();
         write_file(

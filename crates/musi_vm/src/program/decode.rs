@@ -366,7 +366,12 @@ fn decode_local_data_new1_init(
     else {
         return None;
     };
-    if data_local != reloaded || zero_local != match_local {
+    if data_local != reloaded
+        || zero_local != match_local
+        || field_local == data_local
+        || field_local == match_local
+        || data_local == match_local
+    {
         return None;
     }
     Some(RuntimeFusedOp::LocalNewObj1Init {
