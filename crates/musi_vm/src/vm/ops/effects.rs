@@ -156,43 +156,87 @@ impl Vm {
         op: u16,
         args: &[Value],
     ) -> VmResult<Value> {
-        let module = self.module(module_slot)?;
-        let descriptor = module.program.artifact().effects.get(effect);
-        let effect_name: Box<str> = module.program.string_text(descriptor.name).into();
-        let op_desc = descriptor.ops.get(usize::from(op)).ok_or_else(|| {
-            VmError::new(VmErrorKind::IndexOutOfBounds {
-                space: VmIndexSpace::EffectOp,
-                owner: Some(effect_name.clone()),
-                index: i64::from(op),
-                len: descriptor.ops.len(),
-            })
-        })?;
+        let op_index = usize::from(op);
+        {
+            let module = self.module(module_slot)?;
+            let descriptor = module.program.artifact().effects.get(effect);
+            if op_index >= descriptor.ops.len() {
+                let effect_name: Box<str> = module.program.string_text(descriptor.name).into();
+                return Err(VmError::new(VmErrorKind::IndexOutOfBounds {
+                    space: VmIndexSpace::EffectOp,
+                    owner: Some(effect_name),
+                    index: i64::from(op),
+                    len: descriptor.ops.len(),
+                }));
+            }
+        }
         if let Some(handler_index) = self
             .handlers
-            .iter()
-            .rposition(|handler| handler.effect == effect)
+            .last()
+            .and_then(|handler| {
+                (handler.effect == effect).then_some(self.handlers.len().saturating_sub(1))
+            })
+            .or_else(|| {
+                self.handlers
+                    .iter()
+                    .rposition(|handler| handler.effect == effect)
+            })
         {
-            let handler = self.handlers.get(handler_index).cloned().ok_or_else(|| {
-                VmError::new(VmErrorKind::EffectRejected {
-                    effect: effect_name.clone(),
-                    op: Some(module.program.string_text(op_desc.name).into()),
-                    reason: "matching handler is missing".into(),
-                })
-            })?;
-            let closure =
-                self.handler_clause_closure(&handler, usize::from(op).saturating_add(1))?;
+            let (handler_id, handler_effect, handler_value, frame_depth, stack_depth, pop_ip) =
+                self.handlers
+                    .get(handler_index)
+                    .map(|handler| {
+                        (
+                            handler.handler_id,
+                            handler.effect,
+                            handler.handler.clone(),
+                            handler.frame_depth,
+                            handler.stack_depth,
+                            handler.pop_ip,
+                        )
+                    })
+                    .ok_or_else(|| {
+                        VmError::new(VmErrorKind::EffectRejected {
+                            effect: format!("{}", effect.raw()).into(),
+                            op: Some(format!("{op}").into()),
+                            reason: "matching handler is missing".into(),
+                        })
+                    })?;
+            let closure = self.handler_clause_closure_from_value(
+                handler_effect,
+                &handler_value,
+                op_index.saturating_add(1),
+            )?;
             let continuation = self.capture_continuation(handler_index)?;
             let mut clause_args = args.iter().cloned().collect::<ValueList>();
             clause_args.push(Value::Continuation(continuation));
-            self.frames.truncate(handler.frame_depth.saturating_add(1));
+            self.frames.truncate(frame_depth.saturating_add(1));
             self.handlers.truncate(handler_index.saturating_add(1));
-            self.restore_handler_stack_depth(&handler)?;
+            self.restore_handler_stack_state(handler_id, frame_depth, stack_depth)?;
             self.active_resumes.push(continuation);
             let result = self.call_value(closure, &clause_args);
             let _ = self.active_resumes.pop();
             let result = result?;
-            self.finish_handled_effect(handler_index, result)
+            self.finish_handled_effect_state(
+                handler_index,
+                handler_id,
+                frame_depth,
+                stack_depth,
+                pop_ip,
+                result,
+            )
         } else {
+            let module = self.module(module_slot)?;
+            let descriptor = module.program.artifact().effects.get(effect);
+            let effect_name: Box<str> = module.program.string_text(descriptor.name).into();
+            let op_desc = descriptor.ops.get(op_index).ok_or_else(|| {
+                VmError::new(VmErrorKind::IndexOutOfBounds {
+                    space: VmIndexSpace::EffectOp,
+                    owner: Some(effect_name.clone()),
+                    index: i64::from(op),
+                    len: descriptor.ops.len(),
+                })
+            })?;
             let effect_call = EffectCall {
                 program: module.program.clone(),
                 effect,
@@ -241,12 +285,21 @@ impl Vm {
         handler: &EffectHandler,
         index: usize,
     ) -> VmResult<Value> {
-        let handler_value = handler.handler.clone();
+        self.handler_clause_closure_from_value(handler.effect, &handler.handler, index)
+    }
+
+    pub(crate) fn handler_clause_closure_from_value(
+        &self,
+        effect: EffectId,
+        handler_value: &Value,
+        index: usize,
+    ) -> VmResult<Value> {
+        let handler_value = handler_value.clone();
         let handler_data = Self::expect_data(handler_value)?;
         let data_ref = self.heap.data(handler_data)?;
         let closure = data_ref.fields.get(index).cloned().ok_or_else(|| {
             VmError::new(VmErrorKind::EffectRejected {
-                effect: format!("{}", handler.effect.raw()).into(),
+                effect: format!("{}", effect.raw()).into(),
                 op: None,
                 reason: format!("handler clause `{index}` is missing").into(),
             })
@@ -255,13 +308,26 @@ impl Vm {
     }
 
     pub(crate) fn restore_handler_stack_depth(&mut self, handler: &EffectHandler) -> VmResult {
-        let frame = self.frames.get_mut(handler.frame_depth).ok_or_else(|| {
+        self.restore_handler_stack_state(
+            handler.handler_id,
+            handler.frame_depth,
+            handler.stack_depth,
+        )
+    }
+
+    pub(crate) fn restore_handler_stack_state(
+        &mut self,
+        handler_id: u64,
+        frame_depth: usize,
+        stack_depth: usize,
+    ) -> VmResult {
+        let frame = self.frames.get_mut(frame_depth).ok_or_else(|| {
             VmError::new(VmErrorKind::HandlerFrameMissing {
-                handler_id: handler.handler_id,
-                frame_depth: handler.frame_depth,
+                handler_id,
+                frame_depth,
             })
         })?;
-        frame.stack.truncate(handler.stack_depth);
+        frame.stack.truncate(stack_depth);
         Ok(())
     }
 
@@ -291,28 +357,25 @@ impl Vm {
         }
     }
 
-    pub(crate) fn finish_handled_effect(
+    pub(crate) fn finish_handled_effect_state(
         &mut self,
         handler_index: usize,
+        handler_id: u64,
+        frame_depth: usize,
+        stack_depth: usize,
+        pop_ip: usize,
         result: Value,
     ) -> VmResult<Value> {
-        let handler = self.handlers.get(handler_index).cloned().ok_or_else(|| {
-            VmError::new(VmErrorKind::EffectRejected {
-                effect: "<handler>".into(),
-                op: None,
-                reason: "matching handler is missing".into(),
-            })
-        })?;
-        self.frames.truncate(handler.frame_depth.saturating_add(1));
+        self.frames.truncate(frame_depth.saturating_add(1));
         self.handlers.truncate(handler_index);
-        let frame = self.frames.get_mut(handler.frame_depth).ok_or_else(|| {
+        let frame = self.frames.get_mut(frame_depth).ok_or_else(|| {
             VmError::new(VmErrorKind::HandlerFrameMissing {
-                handler_id: handler.handler_id,
-                frame_depth: handler.frame_depth,
+                handler_id,
+                frame_depth,
             })
         })?;
-        frame.stack.truncate(handler.stack_depth);
-        frame.set_ip(handler.pop_ip.saturating_add(1));
+        frame.stack.truncate(stack_depth);
+        frame.set_ip(pop_ip.saturating_add(1));
         Ok(result)
     }
 

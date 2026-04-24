@@ -532,15 +532,20 @@ fn int_overflow_error() -> VmError {
     })
 }
 
+#[allow(clippy::inline_always)]
+#[inline(always)]
 fn triangular_sum(n: i64, acc: i64) -> VmResult<i64> {
     triangular_sum_zero(n)?
         .checked_add(acc)
         .ok_or_else(int_overflow_error)
 }
 
+#[allow(clippy::inline_always)]
+#[allow(clippy::manual_range_contains)]
+#[inline(always)]
 fn triangular_sum_zero(n: i64) -> VmResult<i64> {
     const MAX_FAST_N: i64 = 4_294_967_295;
-    if !(0..=MAX_FAST_N).contains(&n) {
+    if n < 0 || n > MAX_FAST_N {
         return Err(int_overflow_error());
     }
     let sum = if n & 1 == 0 {

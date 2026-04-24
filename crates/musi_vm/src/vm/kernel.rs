@@ -207,6 +207,8 @@ impl Vm {
 }
 
 fn sum_kernel_result(locals: &[i64], kernel: IntTailAccumulatorKernel) -> VmResult<Option<i64>> {
+    const MAX_FAST_N: i64 = 4_294_967_295;
+
     if kernel.compare != CompareOp::Eq
         || kernel.compare_smi != 0
         || kernel.dec_smi != 1
@@ -220,10 +222,14 @@ fn sum_kernel_result(locals: &[i64], kernel: IntTailAccumulatorKernel) -> VmResu
         return Ok(None);
     }
     let acc = locals[usize::from(kernel.acc_local)];
-    let sum = n
-        .checked_mul(n.checked_add(1).ok_or_else(int_overflow_error)?)
-        .and_then(|value| value.checked_div(2))
-        .ok_or_else(int_overflow_error)?;
+    if n > MAX_FAST_N {
+        return Err(int_overflow_error());
+    }
+    let sum = if n & 1 == 0 {
+        (n / 2) * (n + 1)
+    } else {
+        n * ((n + 1) / 2)
+    };
     Ok(Some(acc.checked_add(sum).ok_or_else(int_overflow_error)?))
 }
 
