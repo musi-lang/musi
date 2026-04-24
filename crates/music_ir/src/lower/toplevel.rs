@@ -427,11 +427,11 @@ fn lower_given_provider_callable(
         .enumerate()
         .filter_map(|(index, shape_member)| {
             let member = member_map.get(&shape_member.name)?;
-            let value = lower_given_member_value(ctx, provider_name, member, index);
+            let field_value = lower_given_member_value(ctx, provider_name, member, index);
             Some(IrRecordField::new(
                 interner.resolve(shape_member.name),
                 u16::try_from(index).unwrap_or(u16::MAX),
-                value,
+                field_value,
             ))
         })
         .collect::<Vec<_>>()

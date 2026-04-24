@@ -1,3 +1,4 @@
+use musi_vm::BoundExportCall;
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 
@@ -49,6 +50,11 @@ fn bind_result_seq8(vm: &mut Vm) -> BoundSeq8Call {
         .expect("result export should bind")
 }
 
+fn bind_result_export(vm: &mut Vm) -> BoundExportCall {
+    vm.bind_export_call("result")
+        .expect("result export should bind")
+}
+
 fn int_grid(vm: &mut Vm) -> Value {
     let ty = TypeId::from_raw(0);
     let first = vm
@@ -70,14 +76,14 @@ fn bench_result_with_int_arg(
 ) {
     let program = compile_program(source);
     let mut vm = initialized_vm(&program, VmOptions);
-    let result = bind_result_i64(&mut vm);
+    let bound_call = bind_result_i64(&mut vm);
 
     _ = c.bench_function(name, |b| {
         b.iter(|| {
-            let result = vm
-                .call_i64_i64(black_box(result), black_box(arg))
+            let returned_int = vm
+                .call_i64_i64(black_box(bound_call), black_box(arg))
                 .expect(failure);
-            black_box(result)
+            black_box(returned_int)
         });
     });
 }
@@ -105,9 +111,7 @@ fn bench_vm_init_small_module(c: &mut Criterion) {
             while remaining > 0 {
                 let batch = remaining.min(512);
                 let mut vms = Vec::with_capacity(batch as usize);
-                for _ in 0..batch {
-                    vms.push(Vm::with_rejecting_host(program.clone(), VmOptions));
-                }
+                vms.extend((0..batch).map(|_| Vm::with_rejecting_host(program.clone(), VmOptions)));
                 let start = Instant::now();
                 for vm in &mut vms {
                     vm.initialize().expect("vm init should succeed");
@@ -127,9 +131,7 @@ fn bench_vm_init_small_module(c: &mut Criterion) {
             while remaining > 0 {
                 let batch = remaining.min(512);
                 let mut vms = Vec::with_capacity(batch as usize);
-                for _ in 0..batch {
-                    vms.push(Vm::with_rejecting_host(program.clone(), VmOptions));
-                }
+                vms.extend((0..batch).map(|_| Vm::with_rejecting_host(program.clone(), VmOptions)));
                 let start = Instant::now();
                 for vm in &mut vms {
                     vm.initialize().expect("vm init should succeed");
@@ -188,7 +190,7 @@ fn bench_vm_sequence_index_mutation(c: &mut Criterion) {
         ",
     );
     let mut vm = initialized_vm(&program, VmOptions);
-    let result = bind_result_seq2(&mut vm);
+    let bound_call = bind_result_seq2(&mut vm);
     let Value::Seq(grid) = int_grid(&mut vm) else {
         panic!("grid allocation should return sequence")
     };
@@ -198,10 +200,10 @@ fn bench_vm_sequence_index_mutation(c: &mut Criterion) {
 
     _ = c.bench_function("bench_vm_sequence_index_mutation", |b| {
         b.iter(|| {
-            let result = grid
-                .call_i64(black_box(result))
+            let returned_int = grid
+                .call_i64(black_box(bound_call))
                 .expect("sequence mutation should succeed");
-            black_box(result)
+            black_box(returned_int)
         });
     });
 }
@@ -243,14 +245,14 @@ fn bench_vm_effect_resume(c: &mut Criterion) {
         ",
     );
     let mut vm = initialized_vm(&program, VmOptions);
-    let result = bind_result_init(&mut vm);
+    let bound_call = bind_result_init(&mut vm);
 
     _ = c.bench_function("bench_vm_effect_resume", |b| {
         b.iter(|| {
-            let result = vm
-                .call_init0_i64(black_box(result))
+            let returned_int = vm
+                .call_init0_i64(black_box(bound_call))
                 .expect("effect resume should succeed");
-            black_box(result)
+            black_box(returned_int)
         });
     });
 }
@@ -266,23 +268,33 @@ fn bench_vm_sequence_return_gc(c: &mut Criterion) {
     _ = group.sample_size(20);
     _ = group.measurement_time(Duration::from_secs(4));
     let mut vm = initialized_vm(&program, VmOptions);
-    let result = bind_result_seq8(&mut vm);
+    let bound_call = bind_result_seq8(&mut vm);
     _ = group.bench_function("sequence_return_alloc", |b| {
         b.iter(|| {
-            let result = vm
-                .call_seq8_i64(black_box(result))
+            let returned_value = vm
+                .call_seq8_i64(black_box(bound_call))
                 .expect("sequence return should succeed");
-            black_box((result, vm.heap_allocated_bytes()))
+            black_box((returned_value, vm.heap_allocated_bytes()))
+        });
+    });
+    let mut vm = initialized_vm(&program, VmOptions);
+    let bound_call = bind_result_export(&mut vm);
+    _ = group.bench_function("sequence_return_bound_export_alloc", |b| {
+        b.iter(|| {
+            let returned_value = vm
+                .call_bound_export(black_box(&bound_call), &[])
+                .expect("sequence return should succeed");
+            black_box((returned_value, vm.heap_allocated_bytes()))
         });
     });
     _ = group.bench_function("sequence_return_call_export_alloc", |b| {
         b.iter_batched(
             || initialized_vm(&program, VmOptions),
             |mut vm| {
-                let result = vm
+                let returned_value = vm
                     .call_export("result", &[])
                     .expect("sequence return should succeed");
-                black_box((result, vm.heap_allocated_bytes()))
+                black_box((returned_value, vm.heap_allocated_bytes()))
             },
             BatchSize::SmallInput,
         );
@@ -291,11 +303,11 @@ fn bench_vm_sequence_return_gc(c: &mut Criterion) {
         b.iter_batched(
             || initialized_vm(&program, VmOptions),
             |mut vm| {
-                let result = vm
+                let returned_value = vm
                     .call_export("result", &[])
                     .expect("sequence return should succeed");
                 let stats = vm.collect_garbage();
-                black_box((result, stats.after_bytes))
+                black_box((returned_value, stats.after_bytes))
             },
             BatchSize::SmallInput,
         );
@@ -304,10 +316,10 @@ fn bench_vm_sequence_return_gc(c: &mut Criterion) {
         b.iter_batched(
             || initialized_vm(&program, VmOptions.with_gc_stress(true)),
             |mut vm| {
-                let result = vm
+                let returned_value = vm
                     .call_export("result", &[])
                     .expect("sequence return should succeed");
-                black_box((result, vm.heap_allocated_bytes()))
+                black_box((returned_value, vm.heap_allocated_bytes()))
             },
             BatchSize::SmallInput,
         );

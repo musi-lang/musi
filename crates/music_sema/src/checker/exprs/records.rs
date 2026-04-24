@@ -393,10 +393,10 @@ impl CheckPass<'_, '_, '_> {
         name: Symbol,
         args: SliceRange<HirTyId>,
     ) -> Option<BTreeMap<Box<str>, HirTyId>> {
-        let data = self.data_def(self.resolve_symbol(name))?.clone();
-        let variant = data.record_shape_variant()?;
+        let data_def = self.data_def(self.resolve_symbol(name))?.clone();
+        let variant = data_def.record_shape_variant()?;
         let ty_args = self.ty_ids(args);
-        let subst = data
+        let subst = data_def
             .type_params()
             .iter()
             .copied()

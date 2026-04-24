@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 
 use music_arena::SliceRange;
 use music_base::diag::DiagContext;
@@ -196,11 +197,13 @@ impl PassBase<'_, '_, '_> {
         let mut out = String::new();
         for dim in dims {
             out.push('[');
-            out.push_str(&match dim {
-                HirDim::Unknown => "_".into(),
-                HirDim::Name(name) => self.resolve_symbol(name.name).into(),
-                HirDim::Int(value) => value.to_string(),
-            });
+            match dim {
+                HirDim::Unknown => out.push('_'),
+                HirDim::Name(name) => out.push_str(self.resolve_symbol(name.name)),
+                HirDim::Int(value) => {
+                    write!(&mut out, "{value}").expect("writing to String should not fail");
+                }
+            }
             out.push(']');
         }
         out.push_str(&self.render_ty(item));
@@ -580,11 +583,14 @@ impl PassBase<'_, '_, '_> {
             HirExprKind::Tuple { items } => self.lower_tuple_type_expr(items),
             HirExprKind::ArrayTy { dims, item } => {
                 let item_origin = self.expr(item).origin;
-                let item = self.lower_type_expr(item, item_origin);
+                let item_ty = self.lower_type_expr(item, item_origin);
                 if self.dims(dims.clone()).is_empty() {
-                    self.alloc_ty(HirTyKind::Seq { item })
+                    self.alloc_ty(HirTyKind::Seq { item: item_ty })
                 } else {
-                    self.alloc_ty(HirTyKind::Array { dims, item })
+                    self.alloc_ty(HirTyKind::Array {
+                        dims,
+                        item: item_ty,
+                    })
                 }
             }
             HirExprKind::Record { items } => self.lower_record_type_expr(items),
@@ -953,13 +959,14 @@ impl PassBase<'_, '_, '_> {
                     HirConstraintKind::Implements => ConstraintKind::Implements,
                     HirConstraintKind::TypeEq => ConstraintKind::TypeEq,
                 };
-                let value = {
+                let constraint_value = {
                     let origin = self.expr(constraint.value).origin;
                     self.lower_type_expr(constraint.value, origin)
                 };
                 {
-                    let lowered = ConstraintFacts::new(constraint.name.name, kind, value);
-                    if let Some(shape_key) = self.constraint_shape_key(kind, value) {
+                    let lowered =
+                        ConstraintFacts::new(constraint.name.name, kind, constraint_value);
+                    if let Some(shape_key) = self.constraint_shape_key(kind, constraint_value) {
                         lowered.with_shape_key(shape_key)
                     } else {
                         lowered

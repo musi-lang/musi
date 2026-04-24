@@ -429,8 +429,8 @@ mod success {
         let program = Program::from_bytes(&output.bytes).expect("program should load");
         let mut vm = Vm::with_rejecting_host(program, VmOptions);
         vm.initialize().expect("program should initialize");
-        let value = vm.call_export("result", &[]).expect("export should run");
-        let ValueView::Seq(seq) = vm.inspect(&value) else {
+        let result_value = vm.call_export("result", &[]).expect("export should run");
+        let ValueView::Seq(seq) = vm.inspect(&result_value) else {
             panic!("result should return sequence");
         };
         assert_eq!(seq.len(), 3);

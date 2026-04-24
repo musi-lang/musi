@@ -9,8 +9,8 @@ pub(super) fn transform_string_arg(
     op_name: &str,
     f: impl FnOnce(&str) -> String,
 ) -> Result<Value, VmError> {
-    let value = string_arg(ctx, effect, args, op_name)?;
-    ctx.alloc_string(f(value))
+    let source_text = string_arg(ctx, effect, args, op_name)?;
+    ctx.alloc_string(f(source_text))
 }
 
 pub(super) fn normalize_json(source: &str, effect: &EffectCall) -> Result<String, VmError> {

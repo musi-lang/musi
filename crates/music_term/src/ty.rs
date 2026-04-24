@@ -739,15 +739,15 @@ impl Parser<'_> {
                 self.expect(",")?;
             }
         }
-        let item = self.parse_prefix()?;
+        let item_ty = self.parse_prefix()?;
         if dims.is_empty() {
             Ok(TypeTerm::new(TypeTermKind::Seq {
-                item: Box::new(item),
+                item: Box::new(item_ty),
             }))
         } else {
             Ok(TypeTerm::new(TypeTermKind::Array {
                 dims: dims.into_boxed_slice(),
-                item: Box::new(item),
+                item: Box::new(item_ty),
             }))
         }
     }

@@ -129,10 +129,10 @@ fn lower_attr_value(
                     return None;
                 }
                 let name = item.name?;
-                let value = lower_attr_value(module, interner, item.value)?;
+                let attr_value = lower_attr_value(module, interner, item.value)?;
                 fields.push(AttrRecordField {
                     name: interner.resolve(name.name).into(),
-                    value,
+                    value: attr_value,
                 });
             }
             Some(AttrValue::Record {
@@ -163,8 +163,11 @@ fn lower_attr(module: &ModuleState, interner: &Interner, attr: &HirAttr) -> Opti
         .get(attr.args.clone())
     {
         let name = arg.name.map(|ident| interner.resolve(ident.name).into());
-        let value = lower_attr_value(module, interner, arg.value)?;
-        args.push(AttrArg { name, value });
+        let attr_value = lower_attr_value(module, interner, arg.value)?;
+        args.push(AttrArg {
+            name,
+            value: attr_value,
+        });
     }
     Some(Attr {
         path,
@@ -266,8 +269,9 @@ impl ExportSurfaceCollector<'_, '_> {
             || typing.binding_types().get(&export.binding).copied(),
             |scheme| Some(scheme.ty),
         )?;
-        let value = self.lower_exported_value_base(export, scheme, ty, inert_attrs, musi_attrs);
-        Some(self.attach_exported_value_metadata(value, typing, decls, export, symbol))
+        let exported_value =
+            self.lower_exported_value_base(export, scheme, ty, inert_attrs, musi_attrs);
+        Some(self.attach_exported_value_metadata(exported_value, typing, decls, export, symbol))
     }
 
     fn lower_exported_value_base(
@@ -488,12 +492,13 @@ fn expr_import_record_target(
 impl ExportSurfaceCollector<'_, '_> {
     pub(super) fn collect_exported_data(&mut self, decls: &DeclState) -> Box<[DataSurface]> {
         self.collect_binding_exports(|this, export, inert_attrs, musi_attrs| {
-            let data = decls.data_def(export.name.as_ref())?;
+            let data_def = decls.data_def(export.name.as_ref())?;
             let variants = export
                 .opaque
                 .then(Box::<[DataVariantSurface]>::default)
                 .unwrap_or_else(|| {
-                    data.variants()
+                    data_def
+                        .variants()
                         .map(|(name, variant)| {
                             let lowered = DataVariantSurface::new(
                                 name,
@@ -522,10 +527,11 @@ impl ExportSurfaceCollector<'_, '_> {
                         .collect::<Vec<_>>()
                         .into_boxed_slice()
                 });
-            let mut surface = DataSurface::new(data.key().clone(), variants)
-                .with_type_params(lower_type_params(data.type_params(), this.tys.interner))
+            let mut surface = DataSurface::new(data_def.key().clone(), variants)
+                .with_type_params(lower_type_params(data_def.type_params(), this.tys.interner))
                 .with_type_param_kinds(
-                    data.type_param_kinds()
+                    data_def
+                        .type_param_kinds()
                         .iter()
                         .copied()
                         .map(|ty| this.tys.lower(ty))
@@ -534,19 +540,19 @@ impl ExportSurfaceCollector<'_, '_> {
                 )
                 .with_inert_attrs(inert_attrs)
                 .with_musi_attrs(musi_attrs);
-            if let Some(repr_kind) = data.repr_kind() {
+            if let Some(repr_kind) = data_def.repr_kind() {
                 surface = surface.with_repr_kind(repr_kind);
             }
-            if let Some(layout_align) = data.layout_align() {
+            if let Some(layout_align) = data_def.layout_align() {
                 surface = surface.with_layout_align(layout_align);
             }
-            if let Some(layout_pack) = data.layout_pack() {
+            if let Some(layout_pack) = data_def.layout_pack() {
                 surface = surface.with_layout_pack(layout_pack);
             }
-            if data.frozen() {
+            if data_def.frozen() {
                 surface = surface.with_frozen(true);
             }
-            if data.is_record_shape() {
+            if data_def.is_record_shape() {
                 surface = surface.with_record_shape(true);
             }
             Some(surface)

@@ -208,7 +208,7 @@ fn lower_variant_patterns(
     let ty = sema
         .try_pat_ty(pat)
         .unwrap_or_else(|| lowering_invariant_violation("pattern type missing for variant case"));
-    let data = match &sema.ty(ty).kind {
+    let data_def = match &sema.ty(ty).kind {
         HirTyKind::Named { name, .. } => {
             let data_name = interner.resolve(*name);
             sema.data_def(data_name)
@@ -219,23 +219,23 @@ fn lower_variant_patterns(
         }
         _ => None,
     };
-    let Some(data) = data else {
+    let Some(data_def) = data_def else {
         return Vec::new();
     };
     let tag_name = interner.resolve(tag.name);
-    let Some(tag_index) = data.variant_index(tag_name) else {
+    let Some(tag_index) = data_def.variant_index(tag_name) else {
         return Vec::new();
     };
-    let Some(variant_count) = u16::try_from(data.variant_count()).ok() else {
+    let Some(variant_count) = u16::try_from(data_def.variant_count()).ok() else {
         return Vec::new();
     };
-    let Some(variant) = data.variant(tag_name) else {
+    let Some(variant) = data_def.variant(tag_name) else {
         return Vec::new();
     };
     let pat_args = ordered_variant_pat_args(sema, variant, args, interner);
 
     lower_product_patterns(sema, &pat_args, interner, |items| IrCasePattern::Variant {
-        data_key: data.key().clone(),
+        data_key: data_def.key().clone(),
         variant_count,
         tag_index,
         tag_value: variant.tag(),

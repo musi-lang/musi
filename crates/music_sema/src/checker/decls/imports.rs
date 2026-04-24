@@ -136,7 +136,7 @@ impl CheckPass<'_, '_, '_> {
     }
 
     fn runtime_import_result_ty(&mut self) -> HirTyId {
-        let result = self.intern("Result");
+        let result_symbol = self.intern("Result");
         let import_error = self.intern("ImportError");
         let empty_args = self.alloc_ty_list(Vec::<HirTyId>::new());
         let import_error = self.alloc_ty(HirTyKind::Named {
@@ -145,7 +145,10 @@ impl CheckPass<'_, '_, '_> {
         });
         let any_ty = self.builtins().any;
         let args = self.alloc_ty_list([any_ty, import_error]);
-        self.alloc_ty(HirTyKind::Named { name: result, args })
+        self.alloc_ty(HirTyKind::Named {
+            name: result_symbol,
+            args,
+        })
     }
 
     fn expr_has_structural_target_impl(&self, expr: HirExprId) -> bool {

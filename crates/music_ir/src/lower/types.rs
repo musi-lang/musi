@@ -88,8 +88,8 @@ fn render_composite_type_value_expr_name(
                 .filter_map(|item| {
                     item.name.map(|name| {
                         let name = interner.resolve(name.name);
-                        let value = render_type_value_expr_name(sema, item.value, interner);
-                        format!("{name} : {value}")
+                        let value_name = render_type_value_expr_name(sema, item.value, interner);
+                        format!("{name} : {value_name}")
                     })
                 })
                 .collect::<Vec<_>>();
@@ -145,9 +145,9 @@ fn render_array_type_value_expr_name(
     item: HirExprId,
     interner: &Interner,
 ) -> Box<str> {
-    let item = render_type_value_expr_name(sema, item, interner);
+    let item_name = render_type_value_expr_name(sema, item, interner);
     let dims = render_dim_prefix(sema.module().store.dims.get(dims), interner);
-    format!("{dims}{item}").into()
+    format!("{dims}{item_name}").into()
 }
 
 pub(super) fn render_ty_name(sema: &SemaModule, ty: HirTyId, interner: &Interner) -> Box<str> {
@@ -288,8 +288,8 @@ fn render_array_ty_name(
     interner: &Interner,
 ) -> Box<str> {
     let dims = render_dim_prefix(sema.module().store.dims.get(dims.clone()), interner);
-    let item = render_ty_name(sema, item, interner);
-    format!("{dims}{item}").into()
+    let item_name = render_ty_name(sema, item, interner);
+    format!("{dims}{item_name}").into()
 }
 
 fn render_dim_prefix(dims: &[HirDim], interner: &Interner) -> String {

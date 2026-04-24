@@ -70,12 +70,12 @@ pub(super) fn register(host: &mut NativeHost) {
             let text = ctx
                 .string(text)
                 .ok_or_else(|| invalid_runtime_args(effect, "text string", text.kind()))?;
-            let result = fs::OpenOptions::new()
+            let append_result = fs::OpenOptions::new()
                 .create(true)
                 .append(true)
                 .open(path.as_str())
                 .and_then(|mut file| file.write_all(text.as_str().as_bytes()));
-            Ok(Value::Int(i64::from(result.is_ok())))
+            Ok(Value::Int(i64::from(append_result.is_ok())))
         },
     );
 

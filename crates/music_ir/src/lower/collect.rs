@@ -2,6 +2,8 @@ use super::*;
 
 type BoundNameSetMut<'a> = &'a mut HashSet<NameBindingId>;
 type BindingCollector = fn(&IrExpr, BoundNameSetMut<'_>);
+type AssignBindingCollector = fn(&IrExpr, &IrAssignTarget, BoundNameSetMut<'_>);
+type MatchBindingCollector = fn(&IrExpr, &[IrLoweredMatchArm], BoundNameSetMut<'_>);
 struct SyntheticNameSetMut<'a> {
     names: &'a mut HashSet<Box<str>>,
 }
@@ -216,11 +218,37 @@ pub(super) fn collect_used_synthetic_names(expr: &IrExpr, out: &mut HashSet<Box<
 }
 
 fn collect_used_bindings_nested(expr: &IrExpr, out: BoundNameSetMut<'_>) {
+    collect_nested_bindings(
+        expr,
+        out,
+        collect_used_bindings,
+        collect_used_assign_target,
+        collect_used_match_exprs,
+    );
+}
+
+fn collect_local_decl_bindings_nested(expr: &IrExpr, out: BoundNameSetMut<'_>) {
+    collect_nested_bindings(
+        expr,
+        out,
+        collect_local_decl_bindings,
+        collect_local_assign_target,
+        collect_local_match_exprs,
+    );
+}
+
+fn collect_nested_bindings(
+    expr: &IrExpr,
+    out: BoundNameSetMut<'_>,
+    collect: BindingCollector,
+    collect_assign: AssignBindingCollector,
+    collect_match: MatchBindingCollector,
+) {
     match &expr.kind {
         IrExprKind::Let { value, .. } | IrExprKind::TempLet { value, .. } => {
-            collect_used_bindings(value, out);
+            collect(value, out);
         }
-        IrExprKind::Assign { target, value } => collect_used_in_assign_target(value, target, out),
+        IrExprKind::Assign { target, value } => collect_assign(value, target, out),
         IrExprKind::Binary { left, right, .. }
         | IrExprKind::BoolAnd { left, right }
         | IrExprKind::BoolOr { left, right }
@@ -229,26 +257,26 @@ fn collect_used_bindings_nested(expr: &IrExpr, out: BoundNameSetMut<'_>) {
             upper: right,
             ..
         } => {
-            collect_used_bindings(left, out);
-            collect_used_bindings(right, out);
+            collect(left, out);
+            collect(right, out);
         }
         IrExprKind::RangeContains {
             value,
             range,
             evidence,
         } => {
-            collect_used_bindings(value, out);
-            collect_used_bindings(range, out);
-            collect_used_bindings(evidence, out);
+            collect(value, out);
+            collect(range, out);
+            collect(evidence, out);
         }
         IrExprKind::RangeMaterialize {
             range, evidence, ..
         } => {
-            collect_used_bindings(range, out);
-            collect_used_bindings(evidence, out);
+            collect(range, out);
+            collect(evidence, out);
         }
         IrExprKind::Index { base, indices } => {
-            collect_used_bindings(base, out);
+            collect(base, out);
             collect_expr_slice(indices, out, collect_used_bindings);
         }
         IrExprKind::ModuleGet { base, .. }
@@ -257,7 +285,7 @@ fn collect_used_bindings_nested(expr: &IrExpr, out: BoundNameSetMut<'_>) {
         | IrExprKind::TyTest { base, .. }
         | IrExprKind::TyCast { base, .. }
         | IrExprKind::Not { expr: base }
-        | IrExprKind::ModuleLoad { spec: base } => collect_used_bindings(base, out),
+        | IrExprKind::ModuleLoad { spec: base } => collect(base, out),
         IrExprKind::Sequence { exprs }
         | IrExprKind::Tuple { items: exprs, .. }
         | IrExprKind::Array { items: exprs, .. }
@@ -275,33 +303,30 @@ fn collect_used_bindings_nested(expr: &IrExpr, out: BoundNameSetMut<'_>) {
             collect_record_field_exprs(fields, out, collect_used_bindings);
         }
         IrExprKind::RecordUpdate { base, updates, .. } => {
-            collect_used_bindings(base, out);
+            collect(base, out);
             collect_record_field_exprs(updates, out, collect_used_bindings);
         }
-        IrExprKind::Match { scrutinee, arms } => {
-            collect_used_bindings(scrutinee, out);
-            collect_used_in_match_arms(arms, out);
-        }
+        IrExprKind::Match { scrutinee, arms } => collect_match(scrutinee, arms, out),
         IrExprKind::Call { callee, args } => {
-            collect_used_bindings(callee, out);
+            collect(callee, out);
             collect_call_arg_exprs(args, out, collect_used_bindings);
         }
         IrExprKind::IntrinsicCall { args, .. } => {
             collect_call_arg_exprs(args, out, collect_used_bindings);
         }
         IrExprKind::AnswerLit { value, ops, .. } => {
-            collect_used_bindings(value, out);
+            collect(value, out);
             for op in ops {
-                collect_used_bindings(&op.closure, out);
+                collect(&op.closure, out);
             }
         }
         IrExprKind::Handle { answer, body, .. } => {
-            collect_used_bindings(answer, out);
-            collect_used_bindings(body, out);
+            collect(answer, out);
+            collect(body, out);
         }
         IrExprKind::Resume { expr } => {
             if let Some(expr) = expr {
-                collect_used_bindings(expr, out);
+                collect(expr, out);
             }
         }
         IrExprKind::Unit
@@ -313,102 +338,29 @@ fn collect_used_bindings_nested(expr: &IrExpr, out: BoundNameSetMut<'_>) {
     }
 }
 
-fn collect_local_decl_bindings_nested(expr: &IrExpr, out: BoundNameSetMut<'_>) {
-    match &expr.kind {
-        IrExprKind::Let { value, .. }
-        | IrExprKind::TempLet { value, .. }
-        | IrExprKind::Assign { value, .. } => collect_local_decl_bindings(value, out),
-        IrExprKind::Binary { left, right, .. }
-        | IrExprKind::BoolAnd { left, right }
-        | IrExprKind::BoolOr { left, right }
-        | IrExprKind::Range {
-            lower: left,
-            upper: right,
-            ..
-        } => {
-            collect_local_decl_bindings(left, out);
-            collect_local_decl_bindings(right, out);
-        }
-        IrExprKind::RangeContains {
-            value,
-            range,
-            evidence,
-        } => {
-            collect_local_decl_bindings(value, out);
-            collect_local_decl_bindings(range, out);
-            collect_local_decl_bindings(evidence, out);
-        }
-        IrExprKind::RangeMaterialize {
-            range, evidence, ..
-        } => {
-            collect_local_decl_bindings(range, out);
-            collect_local_decl_bindings(evidence, out);
-        }
-        IrExprKind::Index { base, indices } => {
-            collect_local_decl_bindings(base, out);
-            collect_expr_slice(indices, out, collect_local_decl_bindings);
-        }
-        IrExprKind::ModuleGet { base, .. }
-        | IrExprKind::RecordGet { base, .. }
-        | IrExprKind::TypeApply { callee: base, .. }
-        | IrExprKind::TyTest { base, .. }
-        | IrExprKind::TyCast { base, .. }
-        | IrExprKind::Not { expr: base }
-        | IrExprKind::ModuleLoad { spec: base } => collect_local_decl_bindings(base, out),
-        IrExprKind::Sequence { exprs }
-        | IrExprKind::Tuple { items: exprs, .. }
-        | IrExprKind::Array { items: exprs, .. }
-        | IrExprKind::VariantNew { args: exprs, .. }
-        | IrExprKind::Request { args: exprs, .. }
-        | IrExprKind::ClosureNew {
-            captures: exprs, ..
-        } => {
-            collect_expr_slice(exprs, out, collect_local_decl_bindings);
-        }
-        IrExprKind::ArrayCat { parts, .. }
-        | IrExprKind::CallParts { args: parts, .. }
-        | IrExprKind::RequestSeq { args: parts, .. } => {
-            collect_seq_part_exprs(parts, out, collect_local_decl_bindings);
-        }
-        IrExprKind::Record { fields, .. } => {
-            collect_record_field_exprs(fields, out, collect_local_decl_bindings);
-        }
-        IrExprKind::RecordUpdate { base, updates, .. } => {
-            collect_local_decl_bindings(base, out);
-            collect_record_field_exprs(updates, out, collect_local_decl_bindings);
-        }
-        IrExprKind::Match { scrutinee, arms } => {
-            collect_local_case_arm_bindings(scrutinee, arms, out);
-        }
-        IrExprKind::Call { callee, args } => {
-            collect_local_decl_bindings(callee, out);
-            collect_call_arg_exprs(args, out, collect_local_decl_bindings);
-        }
-        IrExprKind::IntrinsicCall { args, .. } => {
-            collect_call_arg_exprs(args, out, collect_local_decl_bindings);
-        }
-        IrExprKind::AnswerLit { value, ops, .. } => {
-            collect_local_decl_bindings(value, out);
-            for op in ops {
-                collect_local_decl_bindings(&op.closure, out);
-            }
-        }
-        IrExprKind::Handle { answer, body, .. } => {
-            collect_local_decl_bindings(answer, out);
-            collect_local_decl_bindings(body, out);
-        }
-        IrExprKind::Resume { expr } => {
-            if let Some(expr) = expr {
-                collect_local_decl_bindings(expr, out);
-            }
-        }
-        IrExprKind::Unit
-        | IrExprKind::Name { .. }
-        | IrExprKind::Temp { .. }
-        | IrExprKind::Lit(_)
-        | IrExprKind::TypeValue { .. }
-        | IrExprKind::SyntaxValue { .. } => {}
-    }
+fn collect_used_assign_target(value: &IrExpr, target: &IrAssignTarget, out: BoundNameSetMut<'_>) {
+    collect_used_in_assign_target(value, target, out);
+}
+
+fn collect_local_assign_target(value: &IrExpr, _target: &IrAssignTarget, out: BoundNameSetMut<'_>) {
+    collect_local_decl_bindings(value, out);
+}
+
+fn collect_used_match_exprs(
+    scrutinee: &IrExpr,
+    arms: &[IrLoweredMatchArm],
+    out: BoundNameSetMut<'_>,
+) {
+    collect_used_bindings(scrutinee, out);
+    collect_used_in_match_arms(arms, out);
+}
+
+fn collect_local_match_exprs(
+    scrutinee: &IrExpr,
+    arms: &[IrLoweredMatchArm],
+    out: BoundNameSetMut<'_>,
+) {
+    collect_local_case_arm_bindings(scrutinee, arms, out);
 }
 
 fn collect_local_case_arm_bindings(

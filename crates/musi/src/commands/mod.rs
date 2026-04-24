@@ -702,16 +702,17 @@ fn resolve_project_path_entry(project: &Project, target: &Path) -> MusiResult<Pr
         .map_err(|_| MusiError::UnknownTarget {
             target: resolved.clone(),
         })?;
-    for package in project.workspace().packages.values() {
-        for (module_key, path) in &package.module_keys {
-            if path == &resolved {
-                return Ok(ProjectEntry::new(
-                    package.id.clone(),
-                    module_key.clone(),
-                    path.clone(),
-                ));
-            }
-        }
+    let matched_entry = project.workspace().packages.values().find_map(|package| {
+        package.module_keys.iter().find_map(|(module_key, path)| {
+            (path == &resolved).then_some((package, module_key, path))
+        })
+    });
+    if let Some((package, module_key, path)) = matched_entry {
+        return Ok(ProjectEntry::new(
+            package.id.clone(),
+            module_key.clone(),
+            path.clone(),
+        ));
     }
     Err(MusiError::UnknownTarget { target: resolved })
 }
@@ -809,18 +810,23 @@ fn register_synthetic_test_modules(
     }
     let mut session = project.build_session()?;
     let _ = session.law_suite_modules()?;
+    let mut missing_module_key = None;
     for target in tests {
         if !matches!(target.source, ProjectTestTargetSource::SyntheticModule) {
             continue;
         }
         let Some(source) = session.module_text(&target.module_key) else {
-            return Err(MusiError::SessionCompilationFailed(
-                SessionError::ModuleNotRegistered {
-                    key: target.module_key.clone(),
-                },
-            ));
+            missing_module_key = Some(&target.module_key);
+            break;
         };
-        runtime.register_module_text(target.module_key.as_str(), source.to_owned())?;
+        runtime.register_module_text(target.module_key.as_str(), String::from(source))?;
+    }
+    if let Some(module_key) = missing_module_key {
+        return Err(MusiError::SessionCompilationFailed(
+            SessionError::ModuleNotRegistered {
+                key: module_key.clone(),
+            },
+        ));
     }
     Ok(())
 }

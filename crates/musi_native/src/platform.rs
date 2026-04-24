@@ -1,5 +1,6 @@
 use std::env::consts::OS;
 
+use musi_native_ffi::{call_foreign, call_musi_pointer_intrinsic};
 use musi_vm::{
     EffectCall, ForeignCall, ProgramTypeAbiKind, Value, VmError, VmErrorKind, VmHostCallContext,
     VmResult,
@@ -112,13 +113,11 @@ impl PlatformHost {
         foreign: &ForeignCall,
         args: &[Value],
     ) -> Option<VmResult<Value>> {
-        if let Some(result) = musi_native_ffi::call_musi_pointer_intrinsic(ctx, foreign, args) {
+        if let Some(result) = call_musi_pointer_intrinsic(ctx, foreign, args) {
             return Some(result);
         }
         match self.native_abi_support(foreign) {
-            NativeAbiCallSupport::Supported => {
-                Some(musi_native_ffi::call_foreign(ctx, foreign, args))
-            }
+            NativeAbiCallSupport::Supported => Some(call_foreign(ctx, foreign, args)),
             NativeAbiCallSupport::UnsupportedTarget
             | NativeAbiCallSupport::UnsupportedAbi { .. }
             | NativeAbiCallSupport::MissingLink

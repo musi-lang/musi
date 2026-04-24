@@ -336,14 +336,14 @@ fn format_array_surface_ty(
     dims: &[SurfaceDim],
     item: SurfaceTyId,
 ) -> String {
-    let item = format_surface_ty(surface, item);
+    let item_ty = format_surface_ty(surface, item);
     let mut out = String::new();
     for dim in dims {
         out.push('[');
         out.push_str(&format_surface_dim(dim));
         out.push(']');
     }
-    out.push_str(&item);
+    out.push_str(&item_ty);
     out
 }
 

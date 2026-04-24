@@ -64,9 +64,15 @@ where
                 }
             }
         }
-        let item = item_expr.unwrap_or_else(|| self.error_expr(origin));
+        let item_ty = item_expr.unwrap_or_else(|| self.error_expr(origin));
         let dims = self.store.dims.alloc_from_iter(dims);
-        self.alloc_expr(origin, HirExprKind::ArrayTy { dims, item })
+        self.alloc_expr(
+            origin,
+            HirExprKind::ArrayTy {
+                dims,
+                item: item_ty,
+            },
+        )
     }
 
     pub(super) fn lower_answer_ty_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
@@ -98,8 +104,8 @@ where
             .child_tokens()
             .any(|t| t.kind() == TokenKind::DotDotDot)
         {
-            let value = self.lower_opt_expr(origin, node.child_nodes().next());
-            return HirRecordItem::new(true, None, value);
+            let spread_value = self.lower_opt_expr(origin, node.child_nodes().next());
+            return HirRecordItem::new(true, None, spread_value);
         }
 
         let name_tok = node
@@ -108,7 +114,7 @@ where
         let name = self.intern_ident_token_or_placeholder(name_tok, node.span());
 
         let has_bind = node.child_tokens().any(|t| t.kind() == TokenKind::ColonEq);
-        let value = if has_bind {
+        let item_value = if has_bind {
             self.lower_opt_expr(origin, node.child_nodes().next())
         } else {
             self.record_use(name);
@@ -116,7 +122,7 @@ where
             self.alloc_expr(name_origin, HirExprKind::Name { name })
         };
 
-        HirRecordItem::new(false, Some(name), value)
+        HirRecordItem::new(false, Some(name), item_value)
     }
 
     pub(super) fn lower_variant_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {

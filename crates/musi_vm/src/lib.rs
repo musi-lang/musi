@@ -14,8 +14,8 @@ pub(crate) mod value;
 mod vm;
 
 pub use api::{
-    BitsValue, BoundI64Call, BoundInitCall, BoundSeq2x2Arg, BoundSeq2x2Call, BoundSeq8Call,
-    ClosureView, ForeignView, HeapCollectionStats, IsolateId, ModuleView, Program,
+    BitsValue, BoundExportCall, BoundI64Call, BoundInitCall, BoundSeq2x2Arg, BoundSeq2x2Call,
+    BoundSeq8Call, ClosureView, ForeignView, HeapCollectionStats, IsolateId, ModuleView, Program,
     ProgramDataLayout, ProgramDataVariantLayout, ProgramExport, ProgramExportKind,
     ProgramTypeAbiKind, RecordView, RejectingHost, RejectingLoader, SeqView, StringView, Value,
     ValueView, Vm, VmHost, VmHostCallContext, VmHostContext, VmLoader, VmOptions, VmRuntime,

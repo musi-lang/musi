@@ -53,13 +53,13 @@ fn lower_comptime_seq(ctx: &mut LowerCtx<'_>, value: &ComptimeSeqValue) -> IrExp
 
 fn lower_comptime_data(ctx: &mut LowerCtx<'_>, value: &ComptimeDataValue) -> IrExprKind {
     let data_key = definition_key_for_type(ctx, &value.ty);
-    let data = ctx
+    let data_def = ctx
         .sema
         .data_defs()
-        .find(|data| data.key() == &data_key)
+        .find(|def| def.key() == &data_key)
         .or_else(|| ctx.sema.data_def(data_key.name.as_ref()))
         .unwrap_or_else(|| lowering_invariant_violation("compile-time data definition missing"));
-    let tag_index = data
+    let tag_index = data_def
         .variant_index(value.variant.as_ref())
         .unwrap_or_else(|| lowering_invariant_violation("compile-time data variant missing"));
     let args = value

@@ -1,88 +1,309 @@
-version = 2
 extends = []
 scope = []
+version = 3
+
+[adapters.clippy]
+args = []
+enabled = false
+toolchain = "inherit"
 
 [engine]
+nightly_toolchain = "nightly"
 semantic = "auto"
-
-[workspace]
-include = ["**/*.rs"]
-exclude = ["target/**", ".git/**", "**/diag_catalog_gen.rs"]
+toolchain = "stable"
 
 [output]
 format = "text"
 
-[adapters.clippy]
-enabled = false
-args = []
-
 [rules."architecture.qualified_module_paths"]
-level = "deny"
-allow_prefixes = []
-roots = [
-  "std",
-  "core",
-  "alloc",
-  "crate",
-  "music",
-  "music_arena",
-  "music_base",
-  "music_emit",
-  "music_hir",
-  "music_ir",
-  "music_module",
-  "music_names",
-  "music_resolve",
-  "music_seam",
-  "music_sema",
-  "music_session",
-  "music_syntax",
-  "music_term",
-  "musi",
-  "musi_foundation",
-  "musi_lsp",
-  "musi_native",
-  "musi_project",
-  "musi_rt",
-  "musi_tooling",
-  "musi_vm",
-]
-allow_crate_root_macros = true
 allow_crate_root_consts = true
 allow_crate_root_fn_calls = true
-
-[rules."portability.absolute_literal_paths"]
-level = "warn"
-check_comments = false
-allow_globs = []
-allow_regex = []
-
-[rules."shape.file_complexity"]
-level = "warn"
-
-[rules."shape.duplicate_logic"]
-level = "warn"
-
-[rules."design.repeated_type_aliases"]
-level = "warn"
-min_occurrences = 3
-exclude_outer = [
-  "Option",
-  "Result",
-  "VmResult",
-  "ToolingResult",
-  "SyntaxTermResult",
-  "ProjectResult",
-  "TypeTermResult",
-  "RuntimeResult",
-  "ParseResult",
-  "StringLitResult",
-  "AssemblyResult",
-  "MusiResult",
-  "MusicResult",
-  "ImportResolveResult",
-  "SyntaxNode",
+allow_crate_root_macros = true
+allow_prefixes = []
+level = "deny"
+roots = [
+    "std",
+    "core",
+    "alloc",
+    "crate",
+    "music",
+    "music_arena",
+    "music_base",
+    "music_builtin",
+    "music_emit",
+    "music_hir",
+    "music_ir",
+    "music_module",
+    "music_names",
+    "music_resolve",
+    "music_seam",
+    "music_sema",
+    "music_session",
+    "music_syntax",
+    "music_term",
+    "musi",
+    "musi_foundation",
+    "musi_fmt",
+    "musi_lsp",
+    "musi_native",
+    "musi_native_ffi",
+    "musi_project",
+    "musi_rt",
+    "musi_tooling",
+    "musi_vm",
 ]
 
+[rules."architecture.banned_dependencies"]
+banned_prefixes = ["std::process::exit", "crate::legacy"]
+level = "deny"
+
+[rules."architecture.layer_direction"]
+level = "deny"
+layers = [
+    { name = "foundation", include = [
+        "crates/music_base/**",
+        "crates/music_arena/**",
+        "crates/music_builtin/**",
+    ], may_depend_on = [
+    ] },
+    { name = "names", include = [
+        "crates/music_names/**",
+    ], may_depend_on = [
+        "foundation",
+    ] },
+    { name = "syntax", include = [
+        "crates/music_syntax/**",
+        "crates/music_term/**",
+        "crates/music_module/**",
+    ], may_depend_on = [
+        "foundation",
+        "names",
+    ] },
+    { name = "resolve", include = [
+        "crates/music_resolve/**",
+    ], may_depend_on = [
+        "foundation",
+        "names",
+        "syntax",
+    ] },
+    { name = "sema", include = [
+        "crates/music_hir/**",
+        "crates/music_sema/**",
+    ], may_depend_on = [
+        "foundation",
+        "names",
+        "syntax",
+        "resolve",
+    ] },
+    { name = "ir", include = [
+        "crates/music_ir/**",
+    ], may_depend_on = [
+        "foundation",
+        "names",
+        "syntax",
+        "resolve",
+        "sema",
+    ] },
+    { name = "seam", include = [
+        "crates/music_seam/**",
+    ], may_depend_on = [
+        "foundation",
+        "syntax",
+    ] },
+    { name = "emit", include = [
+        "crates/music_emit/**",
+    ], may_depend_on = [
+        "foundation",
+        "names",
+        "syntax",
+        "resolve",
+        "sema",
+        "ir",
+        "seam",
+    ] },
+    { name = "vm", include = [
+        "crates/musi_vm/**",
+        "crates/musi_native_ffi/**",
+    ], may_depend_on = [
+        "foundation",
+        "syntax",
+        "seam",
+    ] },
+    { name = "native", include = [
+        "crates/musi_native/**",
+    ], may_depend_on = [
+        "foundation",
+        "syntax",
+        "seam",
+        "vm",
+    ] },
+    { name = "session", include = [
+        "crates/music_session/**",
+    ], may_depend_on = [
+        "foundation",
+        "names",
+        "syntax",
+        "resolve",
+        "sema",
+        "ir",
+        "seam",
+        "emit",
+        "vm",
+    ] },
+    { name = "runtime", include = [
+        "crates/musi_foundation/**",
+        "crates/musi_rt/**",
+    ], may_depend_on = [
+        "foundation",
+        "syntax",
+        "seam",
+        "vm",
+        "native",
+        "session",
+    ] },
+    { name = "project", include = [
+        "crates/musi_project/**",
+    ], may_depend_on = [
+        "foundation",
+        "syntax",
+        "seam",
+        "emit",
+        "sema",
+        "session",
+        "runtime",
+    ] },
+    { name = "tooling", include = [
+        "crates/musi_fmt/**",
+        "crates/musi_tooling/**",
+        "crates/musi_lsp/**",
+    ], may_depend_on = [
+        "foundation",
+        "names",
+        "syntax",
+        "resolve",
+        "sema",
+        "ir",
+        "seam",
+        "session",
+        "project",
+        "runtime",
+    ] },
+    { name = "bin", include = [
+        "crates/music/**",
+        "crates/musi/**",
+    ], may_depend_on = [
+        "foundation",
+        "syntax",
+        "seam",
+        "sema",
+        "session",
+        "vm",
+        "native",
+        "runtime",
+        "project",
+        "tooling",
+    ] },
+]
+
+[rules."design.public_api_errors"]
+allowed_error_types = [
+    "MusiError",
+    "MusicError",
+    "ProjectError",
+    "RuntimeError",
+    "ToolingError",
+    "VmError",
+    "SeamError",
+    "SemaDiag",
+    "SyntaxError",
+    "StringLitError",
+    "ParseError",
+    "TypeTermError",
+    "ImportResolveError",
+    "EmitDiagList",
+    "IrDiagList",
+    "AssemblyError",
+    "SessionError",
+]
+level = "deny"
+
+[rules."design.repeated_type_aliases"]
+exclude_outer = [
+    "Option",
+    "Result",
+    "VmResult",
+    "ToolingResult",
+    "SyntaxTermResult",
+    "ProjectResult",
+    "TypeTermResult",
+    "RuntimeResult",
+    "ParseResult",
+    "StringLitResult",
+    "AssemblyResult",
+    "MusiResult",
+    "MusicResult",
+    "ImportResolveResult",
+    "SyntaxNode",
+]
+level = "deny"
+min_len = 32
+min_occurrences = 3
+
+[rules."design.naming_policy"]
+banned_names = [
+    "temp",
+    "info",
+    "handle",
+    "helper",
+    "item",
+    "obj",
+    "process",
+    "util",
+]
+banned_suffixes = ["Manager", "Helper", "Util"]
+level = "deny"
+
+[rules."design.god_object"]
+level = "deny"
+max_fields = 64
+max_methods = 25
+max_variants = 160
+
+[rules."perf.hot_path_allocations"]
+level = "deny"
+macros = []
+methods = ["to_string"]
+
+[rules."portability.absolute_literal_paths"]
+allow_globs = []
+allow_regex = []
+check_comments = false
+level = "deny"
+
+[rules."shape.duplicate_logic"]
+level = "deny"
+kgram = 5
+max_results = 50
+min_tokens = 500
+threshold = 1.0
+
+[rules."shape.file_complexity"]
+count_question = true
+level = "deny"
+match_arms = false
+max_file = 300
+max_fn = 30
+mode = "cyclomatic"
+
 [rules."shape.responsibility_split"]
-level = "warn"
+level = "deny"
+method_count_threshold = 25
+
+[rules."testing.external_test_modules"]
+expected_file = "tests.rs"
+level = "deny"
+module_name = "tests"
+
+[workspace]
+exclude = ["target/**", ".git/**", "**/diag_catalog_gen.rs"]
+include = ["**/*.rs"]

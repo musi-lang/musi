@@ -68,13 +68,11 @@ impl ModuleGlobals {
     }
 
     fn make_owned(&mut self) -> &mut ValueList {
-        loop {
-            match self {
-                Self::Owned(values) => return values,
-                Self::Shared(values) => {
-                    let owned = values.iter().cloned().collect();
-                    *self = Self::Owned(Box::new(owned));
-                }
+        match self {
+            Self::Owned(values) => values,
+            Self::Shared(values) => {
+                *self = Self::Owned(Box::new(values.iter().cloned().collect()));
+                self.make_owned()
             }
         }
     }

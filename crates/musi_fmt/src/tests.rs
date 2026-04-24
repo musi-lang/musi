@@ -41,9 +41,12 @@ fn token_sequence(text: &str) -> Vec<(TokenKind, String)> {
 }
 
 fn assert_format_preserves_tokens(source: &str) {
-    let result = format_source(source, &options()).unwrap();
-    assert_eq!(token_sequence(source), token_sequence(&result.text));
-    assert_formatted_text_is_stable(&result.text);
+    let formatted_result = format_source(source, &options()).unwrap();
+    assert_eq!(
+        token_sequence(source),
+        token_sequence(&formatted_result.text)
+    );
+    assert_formatted_text_is_stable(&formatted_result.text);
 }
 
 fn assert_file_format_is_stable(path: &Path, source: &str) {
@@ -56,14 +59,14 @@ fn assert_file_format_is_stable(path: &Path, source: &str) {
         lexed.errors(),
         parsed.errors()
     );
-    let result = format_source(source, &options())
+    let formatted_result = format_source(source, &options())
         .unwrap_or_else(|err| panic!("{}: {err:?}", path.display()));
-    assert_formatted_text_is_stable(&result.text);
+    assert_formatted_text_is_stable(&formatted_result.text);
 }
 
 fn assert_format_respects_width(source: &str, path: &Path) {
-    let result = format_source(source, &options()).unwrap();
-    for (line_index, line) in result.text.lines().enumerate() {
+    let formatted_result = format_source(source, &options()).unwrap();
+    for (line_index, line) in formatted_result.text.lines().enumerate() {
         if line.chars().count() <= options().line_width || line_has_unbreakable_atom(line) {
             continue;
         }
@@ -117,28 +120,28 @@ mod success {
 
     #[test]
     fn formats_basic_let_and_binary_spacing() {
-        let result =
+        let formatted_result =
             format_source("let add(left:Int,right:Int):Int:=left+right;", &options()).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "let add (left : Int, right : Int) : Int := left + right;\n"
         );
-        assert!(result.changed);
+        assert!(formatted_result.changed);
     }
 
     #[test]
     fn indents_blocks_with_two_spaces() {
-        let result = format_source("let X:=data{| A| B};", &options()).unwrap();
+        let formatted_result = format_source("let X:=data{| A| B};", &options()).unwrap();
 
-        assert_eq!(result.text, "let X := data {\n  | A\n  | B\n};\n");
+        assert_eq!(formatted_result.text, "let X := data {\n  | A\n  | B\n};\n");
     }
 
     #[test]
     fn keeps_semicolons_mandatory() {
-        let result = format_source("let x:=1;", &options()).unwrap();
+        let formatted_result = format_source("let x:=1;", &options()).unwrap();
 
-        assert_eq!(result.text, "let x := 1;\n");
+        assert_eq!(formatted_result.text, "let x := 1;\n");
     }
 
     #[test]
@@ -149,14 +152,14 @@ mod success {
         let source =
             "let value := foo(aaaaaaaaaaaaaaaaaaaaaaaaaaaa, bbbbbbbbbbbbbbbbbbbbbbbbbbbb);";
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "let value :=\n  foo(\n    aaaaaaaaaaaaaaaaaaaaaaaaaaaa,\n    bbbbbbbbbbbbbbbbbbbbbbbbbbbb\n  );\n"
         );
-        let second = format_source(&result.text, &options).unwrap();
-        assert_eq!(second.text, result.text);
+        let second = format_source(&formatted_result.text, &options).unwrap();
+        assert_eq!(second.text, formatted_result.text);
     }
 
     #[test]
@@ -166,41 +169,44 @@ mod success {
         let mut options = options();
         options.trailing_commas = TrailingCommas::Never;
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
-        assert_eq!(result.text, "let value := match input (\n| [] => 0\n);\n");
+        assert_eq!(
+            formatted_result.text,
+            "let value := match input (\n| [] => 0\n);\n"
+        );
     }
 
     #[test]
     fn keeps_empty_lambda_params_attached_to_backslash() {
         let source = r"let value := \() => 1;";
 
-        let result = format_source(source, &options()).unwrap();
+        let formatted_result = format_source(source, &options()).unwrap();
 
-        assert_eq!(result.text, "let value := \\() => 1;\n");
+        assert_eq!(formatted_result.text, "let value := \\() => 1;\n");
     }
 
     #[test]
     fn keeps_space_after_unary_not() {
         let source = "let value := not zero1();";
 
-        let result = format_source(source, &options()).unwrap();
+        let formatted_result = format_source(source, &options()).unwrap();
 
-        assert_eq!(result.text, "let value := not zero1();\n");
+        assert_eq!(formatted_result.text, "let value := not zero1();\n");
     }
 
     #[test]
     fn wraps_long_word_operator_chain_at_default_width() {
         let source = "let value := aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa and bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb and cccccccccccccccccccccccccccccccccccccccc;";
 
-        let result = format_source(source, &options()).unwrap();
+        let formatted_result = format_source(source, &options()).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "let value :=\n  aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n  and bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n  and cccccccccccccccccccccccccccccccccccccccc;\n"
         );
         assert!(
-            result
+            formatted_result
                 .text
                 .lines()
                 .all(|line| line.chars().count() <= options().line_width)
@@ -212,14 +218,14 @@ mod success {
         let source =
             "export let monotonic () : Instant := .Instant(millis := runtime.timeMonotonicMs());";
 
-        let result = format_source(source, &options()).unwrap();
+        let formatted_result = format_source(source, &options()).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "export let monotonic () : Instant :=\n  .Instant(millis := runtime.timeMonotonicMs());\n"
         );
         assert!(
-            result
+            formatted_result
                 .text
                 .lines()
                 .all(|line| line.chars().count() <= options().line_width)
@@ -232,34 +238,34 @@ mod success {
         options.trailing_commas = TrailingCommas::Never;
         let source = "let value := foo(aaaaaaaaaaaaaaaaaaaaaaaaaaaa, bbbbbbbbbbbbbbbbbbbbbbbbbbbb, cccccccccccccccccccccccccccc);";
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "let value :=\n  foo(\n    aaaaaaaaaaaaaaaaaaaaaaaaaaaa,\n    bbbbbbbbbbbbbbbbbbbbbbbbbbbb,\n    cccccccccccccccccccccccccccc\n  );\n"
         );
         assert!(
-            result
+            formatted_result
                 .text
                 .lines()
                 .all(|line| line.chars().count() <= options.line_width)
         );
-        let second = format_source(&result.text, &options).unwrap();
-        assert_eq!(second.text, result.text);
+        let second = format_source(&formatted_result.text, &options).unwrap();
+        assert_eq!(second.text, formatted_result.text);
     }
 
     #[test]
     fn keeps_call_arguments_on_one_line_when_they_fit_width() {
         let source = "let ok := testing.it(\"adds values\", testing.toBeTrue(add(1, 2)));";
 
-        let result = format_source(source, &options()).unwrap();
+        let formatted_result = format_source(source, &options()).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "let ok := testing.it(\"adds values\", testing.toBeTrue(add(1, 2)));\n"
         );
         assert!(
-            result
+            formatted_result
                 .text
                 .lines()
                 .all(|line| line.chars().count() <= options().line_width)
@@ -272,14 +278,14 @@ mod success {
         options.line_width = 64;
         let source = "export let transform [T, U] (target : List[T], mapper : T -> U, fallback : U) : List[U] := mapper(target);";
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "export let transform [T, U] (\n  target : List[T],\n  mapper : T -> U,\n  fallback : U\n) : List[U] := mapper(target);\n"
         );
         assert!(
-            result
+            formatted_result
                 .text
                 .lines()
                 .all(|line| line.chars().count() <= options.line_width)
@@ -290,14 +296,14 @@ mod success {
     fn keeps_space_after_let_for_receiver_methods() {
         let source = "export let(self : Error).message () : String := self;";
 
-        let result = format_source(source, &options()).unwrap();
+        let formatted_result = format_source(source, &options()).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "export let (self : Error).message () : String := self;\n"
         );
-        let second = format_source(&result.text, &options()).unwrap();
-        assert_eq!(second.text, result.text);
+        let second = format_source(&formatted_result.text, &options()).unwrap();
+        assert_eq!(second.text, formatted_result.text);
     }
 
     #[test]
@@ -309,10 +315,10 @@ mod success {
   fold[T, U](self, onNone, onSome);
 ";
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             r"export let (self : Option[T]).fold [T, U] (
   onNone : U,
   onSome : T -> U
@@ -320,13 +326,13 @@ mod success {
 "
         );
         assert!(
-            result
+            formatted_result
                 .text
                 .lines()
                 .all(|line| line.chars().count() <= options.line_width)
         );
-        let second = format_source(&result.text, &options).unwrap();
-        assert_eq!(second.text, result.text);
+        let second = format_source(&formatted_result.text, &options).unwrap();
+        assert_eq!(second.text, formatted_result.text);
     }
 
     #[test]
@@ -338,18 +344,18 @@ mod success {
   fold[T, E, U](self, onOk, onErr);
 ";
 
-        let result = format_source(source, &options()).unwrap();
+        let formatted_result = format_source(source, &options()).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             r"export let (self : Result[T, E]).fold [T, E, U] (
   onOk : T -> U,
   onErr : E -> U
 ) : U := fold[T, E, U](self, onOk, onErr);
 "
         );
-        let second = format_source(&result.text, &options()).unwrap();
-        assert_eq!(second.text, result.text);
+        let second = format_source(&formatted_result.text, &options()).unwrap();
+        assert_eq!(second.text, formatted_result.text);
     }
 
     #[test]
@@ -360,14 +366,14 @@ mod success {
         let source =
             "let values := [aaaaaaaaaaaaaaaaaaaa, bbbbbbbbbbbbbbbbbbbb, cccccccccccccccccccc];";
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "let values :=\n  [\n    aaaaaaaaaaaaaaaaaaaa,\n    bbbbbbbbbbbbbbbbbbbb,\n    cccccccccccccccccccc\n  ];\n"
         );
         assert!(
-            result
+            formatted_result
                 .text
                 .lines()
                 .all(|line| line.chars().count() <= options.line_width)
@@ -379,10 +385,10 @@ mod success {
         let source =
             "let add (left : Int, right : Int, carry : Int) : Int := left + right + carry;";
 
-        let result = format_source(source, &options()).unwrap();
+        let formatted_result = format_source(source, &options()).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "let add (left : Int, right : Int, carry : Int) : Int := left + right + carry;\n"
         );
     }
@@ -395,10 +401,10 @@ mod success {
   let randomIntInRange (lowerBound : Int, upperBound : Int) : Int;
 };";
 
-        let result = format_source(source, &options()).unwrap();
+        let formatted_result = format_source(source, &options()).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             r"export opaque let Runtime := effect {
   let envGet (name : String) : String;
   let envSet (name : String, value : String) : Int;
@@ -407,13 +413,13 @@ mod success {
 "
         );
         assert!(
-            result
+            formatted_result
                 .text
                 .lines()
                 .all(|line| line.chars().count() <= options().line_width)
         );
-        let second = format_source(&result.text, &options()).unwrap();
-        assert_eq!(second.text, result.text);
+        let second = format_source(&formatted_result.text, &options()).unwrap();
+        assert_eq!(second.text, formatted_result.text);
     }
 
     #[test]
@@ -422,10 +428,10 @@ mod success {
         options.line_width = 48;
         let source = "export opaque let Runtime := effect { let randomIntInRange (lowerBound : Int, upperBound : Int) : Int; };";
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             r"export opaque let Runtime := effect {
   let randomIntInRange (
     lowerBound : Int,
@@ -435,23 +441,23 @@ mod success {
 "
         );
         assert!(
-            result
+            formatted_result
                 .text
                 .lines()
                 .all(|line| line.chars().count() <= options.line_width)
         );
-        let second = format_source(&result.text, &options).unwrap();
-        assert_eq!(second.text, result.text);
+        let second = format_source(&formatted_result.text, &options).unwrap();
+        assert_eq!(second.text, formatted_result.text);
     }
 
     #[test]
     fn keeps_fitting_instance_members_inline_and_spaced() {
         let source = "export let intRangeable := given Rangeable[Int] { let next (value : Int) : Option[Int] := someOf[Int](value + 1); };";
 
-        let result = format_source(source, &options()).unwrap();
+        let formatted_result = format_source(source, &options()).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "export let intRangeable :=\n  given Rangeable[Int] {\n  let next (value : Int) : Option[Int] := someOf[Int](value + 1);\n};\n"
         );
     }
@@ -462,11 +468,11 @@ mod success {
         options.trailing_commas = TrailingCommas::Never;
         let source = "let value := foo(one, two,);";
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
-        assert_eq!(result.text, "let value := foo(one, two);\n");
-        let second = format_source(&result.text, &options).unwrap();
-        assert_eq!(second.text, result.text);
+        assert_eq!(formatted_result.text, "let value := foo(one, two);\n");
+        let second = format_source(&formatted_result.text, &options).unwrap();
+        assert_eq!(second.text, formatted_result.text);
     }
 
     #[test]
@@ -475,11 +481,11 @@ mod success {
         options.trailing_commas = TrailingCommas::Always;
         let source = "let value := foo(one, two);";
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
-        assert_eq!(result.text, "let value := foo(one, two,);\n");
-        let second = format_source(&result.text, &options).unwrap();
-        assert_eq!(second.text, result.text);
+        assert_eq!(formatted_result.text, "let value := foo(one, two,);\n");
+        let second = format_source(&formatted_result.text, &options).unwrap();
+        assert_eq!(second.text, formatted_result.text);
     }
 
     #[test]
@@ -489,14 +495,14 @@ mod success {
         options.trailing_commas = TrailingCommas::MultiLine;
         let source = "let value := foo(aaaaaaaaaaaaaaaaaaaa, bbbbbbbbbbbbbbbbbbbb);";
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "let value :=\n  foo(\n    aaaaaaaaaaaaaaaaaaaa,\n    bbbbbbbbbbbbbbbbbbbb,\n  );\n"
         );
-        let second = format_source(&result.text, &options).unwrap();
-        assert_eq!(second.text, result.text);
+        let second = format_source(&formatted_result.text, &options).unwrap();
+        assert_eq!(second.text, formatted_result.text);
     }
 
     #[test]
@@ -506,14 +512,14 @@ mod success {
         options.trailing_commas = TrailingCommas::MultiLine;
         let source = "let value := { left := 1, right := 2 };";
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "let value := {\n  left := 1,\n  right := 2,\n};\n"
         );
-        let second = format_source(&result.text, &options).unwrap();
-        assert_eq!(second.text, result.text);
+        let second = format_source(&formatted_result.text, &options).unwrap();
+        assert_eq!(second.text, formatted_result.text);
     }
 
     #[test]
@@ -526,10 +532,10 @@ mod success {
   };
 "#;
 
-        let result = format_source(source, &options()).unwrap();
+        let formatted_result = format_source(source, &options()).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             r#"export let encoding :=
   {
     base64 := import "@std/encoding/base64",
@@ -538,8 +544,8 @@ mod success {
   };
 "#
         );
-        let second = format_source(&result.text, &options()).unwrap();
-        assert_eq!(second.text, result.text);
+        let second = format_source(&formatted_result.text, &options()).unwrap();
+        assert_eq!(second.text, formatted_result.text);
     }
 
     #[test]
@@ -551,10 +557,10 @@ mod success {
   );
 ";
 
-        let result = format_source(source, &options()).unwrap();
+        let formatted_result = format_source(source, &options()).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             r"export let readNonEmptyLine () : Option[String] :=
   match readTrimmedLine() (
   | value if value.isEmpty() => option.noneOf[String]()
@@ -571,10 +577,10 @@ mod success {
     | _ => 0 = 1);
 ";
 
-        let result = format_source(source, &options()).unwrap();
+        let formatted_result = format_source(source, &options()).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             r"export let isLess (target : Ordering) : Bool :=
   match target (
   | .Less => 0 = 0
@@ -582,8 +588,8 @@ mod success {
   );
 "
         );
-        let second = format_source(&result.text, &options()).unwrap();
-        assert_eq!(second.text, result.text);
+        let second = format_source(&formatted_result.text, &options()).unwrap();
+        assert_eq!(second.text, formatted_result.text);
     }
 
     #[test]
@@ -595,10 +601,10 @@ mod success {
 | _ => 0 = 1);
 ";
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             r"export let isLess (target : Ordering) : Bool :=
   match target (
     | .Less => 0 = 0
@@ -606,8 +612,8 @@ mod success {
   );
 "
         );
-        let second = format_source(&result.text, &options).unwrap();
-        assert_eq!(second.text, result.text);
+        let second = format_source(&formatted_result.text, &options).unwrap();
+        assert_eq!(second.text, formatted_result.text);
     }
 
     #[test]
@@ -622,10 +628,10 @@ mod success {
   );
 "#;
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             r#"export let describe (target : Ordering) : String :=
   match target (
   | .Less                  => "less"
@@ -648,10 +654,10 @@ mod success {
   );
 "#;
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             r#"export let describe (target : Ordering) : String :=
   match target (
   | .Less                  => "less"
@@ -669,9 +675,9 @@ mod success {
         options.trailing_commas = TrailingCommas::Never;
         let source = "let value := foo(a, b);";
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
-        assert_eq!(result.text, "let value := foo(\n  a,\n  b\n);\n");
+        assert_eq!(formatted_result.text, "let value := foo(\n  a,\n  b\n);\n");
     }
 
     #[test]
@@ -680,10 +686,10 @@ mod success {
         options.declaration_parameter_layout = GroupLayout::Block;
         let source = "let add (left : Int, right : Int) : Int := left + right;";
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "let add (\n  left : Int,\n  right : Int\n) : Int := left + right;\n"
         );
     }
@@ -694,10 +700,10 @@ mod success {
         options.effect_member_parameter_layout = GroupLayout::Block;
         let source = "export opaque let Runtime := effect { let envSet (name : String, value : String) : Int; };";
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             r"export opaque let Runtime := effect {
   let envSet (
     name : String,
@@ -714,9 +720,12 @@ mod success {
         options.record_field_layout = GroupLayout::Auto;
         let source = "let value := { left := 1, right := 2 };";
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
-        assert_eq!(result.text, "let value := { left := 1, right := 2 };\n");
+        assert_eq!(
+            formatted_result.text,
+            "let value := { left := 1, right := 2 };\n"
+        );
     }
 
     #[test]
@@ -725,9 +734,12 @@ mod success {
         options.record_field_layout = GroupLayout::Auto;
         let source = "let p := data { x : Int; y : Int };";
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
-        assert_eq!(result.text, "let p := data { x : Int; y : Int };\n");
+        assert_eq!(
+            formatted_result.text,
+            "let p := data { x : Int; y : Int };\n"
+        );
     }
 
     #[test]
@@ -737,9 +749,12 @@ mod success {
         options.record_field_layout = GroupLayout::Auto;
         let source = "let p := data { x : Int; y : Int };";
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
-        assert_eq!(result.text, "let p := data { x : Int; y : Int };\n");
+        assert_eq!(
+            formatted_result.text,
+            "let p := data { x : Int; y : Int };\n"
+        );
     }
 
     #[test]
@@ -753,10 +768,10 @@ mod success {
 };
 ";
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             r"let p := data {
   --- x coordinate
   x : Int;
@@ -772,9 +787,12 @@ mod success {
         options.record_field_layout = GroupLayout::Block;
         let source = "let p := data { x : Int; y : Int };";
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
-        assert_eq!(result.text, "let p := data {\n  x : Int;\n  y : Int\n};\n");
+        assert_eq!(
+            formatted_result.text,
+            "let p := data {\n  x : Int;\n  y : Int\n};\n"
+        );
     }
 
     #[test]
@@ -784,10 +802,10 @@ mod success {
         options.record_field_layout = GroupLayout::Auto;
         let source = "let p := data { longLeftName : Int; longRightName : Int };";
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "let p := data {\n  longLeftName : Int;\n  longRightName : Int\n};\n"
         );
     }
@@ -799,10 +817,10 @@ mod success {
         options.operator_break = OperatorBreak::After;
         let source = "let value := aaaaaaaaaaaaaaaaa + bbbbbbbbbbbbbbbbb;";
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "let value :=\n  aaaaaaaaaaaaaaaaa +\n  bbbbbbbbbbbbbbbbb;\n"
         );
     }
@@ -818,10 +836,10 @@ mod success {
   );
 ";
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             r"export let readNonEmptyLine () : Option[String] :=
   match readTrimmedLine() (
     | value if value.isEmpty() => option.noneOf[String]()
@@ -837,14 +855,14 @@ mod success {
         options.trailing_commas = TrailingCommas::Never;
         let source = "let value := { left := 1, right := 2, };";
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "let value := {\n  left := 1,\n  right := 2\n};\n"
         );
-        let second = format_source(&result.text, &options).unwrap();
-        assert_eq!(second.text, result.text);
+        let second = format_source(&formatted_result.text, &options).unwrap();
+        assert_eq!(second.text, formatted_result.text);
     }
 
     #[test]
@@ -853,14 +871,14 @@ mod success {
         options.trailing_commas = TrailingCommas::MultiLine;
         let source = "let f () : Int require { Console, Runtime } := 1;";
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "let f () : Int require {\n  Console,\n  Runtime,\n} := 1;\n"
         );
-        let second = format_source(&result.text, &options).unwrap();
-        assert_eq!(second.text, result.text);
+        let second = format_source(&formatted_result.text, &options).unwrap();
+        assert_eq!(second.text, formatted_result.text);
     }
 
     #[test]
@@ -870,14 +888,14 @@ mod success {
         options.trailing_commas = TrailingCommas::Never;
         let source = "let value := foo(short, mediumLengthName, anotherMediumLengthName);";
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "let value :=\n  foo(\n    short,\n    mediumLengthName,\n    anotherMediumLengthName\n  );\n"
         );
         assert!(
-            result
+            formatted_result
                 .text
                 .lines()
                 .all(|line| line.chars().count() <= options.line_width)
@@ -891,14 +909,14 @@ mod success {
         let mut options = options();
         options.trailing_commas = TrailingCommas::Never;
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "@link(symbol := \"data.tag\")\nnative \"musi\" let levelTagIntrinsic (level : Level) : Int;\n"
         );
-        let second = format_source(&result.text, &options).unwrap();
-        assert_eq!(second.text, result.text);
+        let second = format_source(&formatted_result.text, &options).unwrap();
+        assert_eq!(second.text, formatted_result.text);
     }
 
     #[test]
@@ -908,10 +926,10 @@ mod success {
         let mut options = options();
         options.trailing_commas = TrailingCommas::Never;
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "@target(os := \"linux\")\n@link(name := \"c\")\nnative \"c\" let puts (msg : CString) : Int;\n"
         );
     }
@@ -920,27 +938,36 @@ mod success {
     fn removes_blank_line_between_doc_comment_and_let() {
         let source = "--- doc comment\n\nlet item := value;";
 
-        let result = format_source(source, &options()).unwrap();
+        let formatted_result = format_source(source, &options()).unwrap();
 
-        assert_eq!(result.text, "--- doc comment\nlet item := value;\n");
+        assert_eq!(
+            formatted_result.text,
+            "--- doc comment\nlet item := value;\n"
+        );
     }
 
     #[test]
     fn removes_blank_line_between_doc_comment_and_export() {
         let source = "--- doc comment\n\nexport let item := value;";
 
-        let result = format_source(source, &options()).unwrap();
+        let formatted_result = format_source(source, &options()).unwrap();
 
-        assert_eq!(result.text, "--- doc comment\nexport let item := value;\n");
+        assert_eq!(
+            formatted_result.text,
+            "--- doc comment\nexport let item := value;\n"
+        );
     }
 
     #[test]
     fn keeps_doc_attribute_and_declaration_attached() {
         let source = "--- doc comment\n\n@tag\n\nlet item := value;";
 
-        let result = format_source(source, &options()).unwrap();
+        let formatted_result = format_source(source, &options()).unwrap();
 
-        assert_eq!(result.text, "--- doc comment\n@tag\nlet item := value;\n");
+        assert_eq!(
+            formatted_result.text,
+            "--- doc comment\n@tag\nlet item := value;\n"
+        );
     }
 
     #[test]
@@ -950,23 +977,23 @@ mod success {
             char::from(b'/')
         );
 
-        let result = format_source(&source, &options()).unwrap();
+        let formatted_result = format_source(&source, &options()).unwrap();
 
         let expected = format!(
             "{}-- doc comment -/\nlet item := value;\n",
             char::from(b'/')
         );
-        assert_eq!(result.text, expected);
+        assert_eq!(formatted_result.text, expected);
     }
 
     #[test]
     fn keeps_module_docs_separate_from_declaration() {
         let source = "--! module docs\n\n/-! block module docs -/\n\nlet item := value;";
 
-        let result = format_source(source, &options()).unwrap();
+        let formatted_result = format_source(source, &options()).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "--! module docs\n\n/-! block module docs -/\n\nlet item := value;\n"
         );
     }
@@ -981,10 +1008,10 @@ let local := import "./local";
         let mut options = options();
         options.trailing_commas = TrailingCommas::Never;
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             r#"let local := import "./local";
 let a := import "@std/io";
 let z := import "@std/testing";
@@ -1001,10 +1028,10 @@ import "@std/io";
         let mut options = options();
         options.trailing_commas = TrailingCommas::Never;
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             r#"import "@std/io";
 import "@std/testing";
 "#
@@ -1015,10 +1042,10 @@ import "@std/testing";
     fn sorts_import_destructure_fields() {
         let source = r#"let { writeLine, readText, append } := import "@std/io";"#;
 
-        let result = format_source(source, &options()).unwrap();
+        let formatted_result = format_source(source, &options()).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "let {\n  append,\n  readText,\n  writeLine,\n} := import \"@std/io\";\n"
         );
     }
@@ -1027,10 +1054,10 @@ import "@std/testing";
     fn sorts_aliased_import_destructure_fields_by_imported_name() {
         let source = r#"let { writeLine: line, append, readText: read } := import "@std/io";"#;
 
-        let result = format_source(source, &options()).unwrap();
+        let formatted_result = format_source(source, &options()).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "let {\n  append,\n  readText : read,\n  writeLine : line,\n} := import \"@std/io\";\n"
         );
     }
@@ -1045,10 +1072,10 @@ export let b := import "@std/testing";
         let mut options = options();
         options.trailing_commas = TrailingCommas::Never;
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             r#"let z := import path;
 let a := import "@std/io";
 
@@ -1065,10 +1092,10 @@ let testing := import "@std/testing";
 let io := import "@std/io";
 "#;
 
-        let result = format_source(source, &options()).unwrap();
+        let formatted_result = format_source(source, &options()).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             r#"-- io helpers
 let io := import "@std/io";
 -- testing helpers
@@ -1085,10 +1112,10 @@ let testing := import "@std/testing";
 let io := import "@std/io";
 "#;
 
-        let result = format_source(source, &options()).unwrap();
+        let formatted_result = format_source(source, &options()).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             r#"let testing := import "@std/testing";
 
 -- local group
@@ -1101,10 +1128,10 @@ let io := import "@std/io";
     fn markdown_fences_sort_imports() {
         let markdown = "# Example\n\n```musi\nlet testing:=import \"@std/testing\";\nlet io:=import \"@std/io\";\n```\n";
 
-        let result = format_markdown(markdown, &options()).unwrap();
+        let formatted_result = format_markdown(markdown, &options()).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "# Example\n\n```musi\nlet io := import \"@std/io\";\nlet testing := import \"@std/testing\";\n```\n"
         );
     }
@@ -1114,10 +1141,10 @@ let io := import "@std/io";
         let source =
             "let io := import \"@std/io\";\n\nlet message := \"Hello\";\nio.writeLine(message);\n";
 
-        let result = format_source(source, &options()).unwrap();
+        let formatted_result = format_source(source, &options()).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "let io := import \"@std/io\";\n\nlet message := \"Hello\";\nio.writeLine(message);\n"
         );
     }
@@ -1126,10 +1153,10 @@ let io := import "@std/io";
     fn collapses_repeated_top_level_blank_lines() {
         let source = "let io := import \"@std/io\";\n\n\n\nlet message := \"Hello\";\n";
 
-        let result = format_source(source, &options()).unwrap();
+        let formatted_result = format_source(source, &options()).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "let io := import \"@std/io\";\n\nlet message := \"Hello\";\n"
         );
     }
@@ -1138,39 +1165,46 @@ let io := import "@std/io";
     fn removes_blank_lines_inside_sequence_expr() {
         let source = "let value := (\n  1;\n\n  2\n);\n";
 
-        let result = format_source(source, &options()).unwrap();
+        let formatted_result = format_source(source, &options()).unwrap();
 
-        assert_eq!(result.text, "let value :=\n  (\n    1;\n    2\n  );\n");
+        assert_eq!(
+            formatted_result.text,
+            "let value :=\n  (\n    1;\n    2\n  );\n"
+        );
     }
 
     #[test]
     fn ignore_file_preserves_text_with_final_newline() {
-        let result = format_source("-- musi-fmt-ignore-file\nlet   x:=1;", &options()).unwrap();
+        let formatted_result =
+            format_source("-- musi-fmt-ignore-file\nlet   x:=1;", &options()).unwrap();
 
-        assert_eq!(result.text, "-- musi-fmt-ignore-file\nlet   x:=1;\n");
+        assert_eq!(
+            formatted_result.text,
+            "-- musi-fmt-ignore-file\nlet   x:=1;\n"
+        );
     }
 
     #[test]
     fn ignore_preserves_next_source_line() {
-        let result =
+        let formatted_result =
             format_source("-- musi-fmt-ignore\nlet   x:=1;\nlet y:=2;", &options()).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "-- musi-fmt-ignore\nlet   x:=1;\nlet y := 2;\n"
         );
     }
 
     #[test]
     fn ignore_range_preserves_source_lines() {
-        let result = format_source(
+        let formatted_result = format_source(
             "-- musi-fmt-ignore-start\nlet   x:=1;\n-- musi-fmt-ignore-end\nlet y:=2;",
             &options(),
         )
         .unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "-- musi-fmt-ignore-start\nlet   x:=1;\n-- musi-fmt-ignore-end\nlet y := 2;\n"
         );
     }
@@ -1178,10 +1212,10 @@ let io := import "@std/io";
     #[test]
     fn formats_musi_markdown_fences() {
         let markdown = "# Example\n\n```musi\nlet x:=1;\n```\n\n```ts\nlet x=1\n```\n";
-        let result = format_markdown(markdown, &options()).unwrap();
+        let formatted_result = format_markdown(markdown, &options()).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "# Example\n\n```musi\nlet x := 1;\n```\n\n```ts\nlet x=1\n```\n"
         );
     }
@@ -1189,10 +1223,10 @@ let io := import "@std/io";
     #[test]
     fn markdown_ignore_skips_next_musi_fence() {
         let markdown = "<!-- musi-fmt-ignore -->\n```musi\nlet x:=1;\n```\n";
-        let result = format_markdown(markdown, &options()).unwrap();
+        let formatted_result = format_markdown(markdown, &options()).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             "<!-- musi-fmt-ignore -->\n```musi\nlet x:=1;\n```\n"
         );
     }
@@ -1272,10 +1306,10 @@ export let test () :=
         let mut options = options();
         options.trailing_commas = TrailingCommas::Never;
 
-        let result = format_source(source, &options).unwrap();
+        let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
-            result.text,
+            formatted_result.text,
             r#"let array := import "./std.ms";
 let testing := import "@std/testing";
 
@@ -1315,7 +1349,7 @@ export let test () :=
 "#
         );
         assert!(
-            result
+            formatted_result
                 .text
                 .lines()
                 .all(|line| line.chars().count() <= options.line_width)

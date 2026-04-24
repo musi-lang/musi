@@ -649,8 +649,8 @@ fn helper_bindings(case_index: usize, build: &SampleCaseBuild<'_>) -> BindingLis
         .member_bindings
         .iter()
         .map(|binding| {
-            let helper = law_helper_name(case_index, &binding.name);
-            replace_member_decl_name(&binding.source, &binding.name, &helper)
+            let helper_name = law_helper_name(case_index, &binding.name);
+            replace_member_decl_name(&binding.source, &binding.name, &helper_name)
         })
         .collect()
 }
@@ -686,10 +686,10 @@ fn member_body_text(
     source: &str,
     member: &HirMemberDef,
 ) -> Result<String, SessionError> {
-    let value = member
+    let body_expr = member
         .value
         .ok_or_else(|| law_suite_error(module_key, "law body is missing"))?;
-    let span = sema.module().store.exprs.get(value).origin.span;
+    let span = sema.module().store.exprs.get(body_expr).origin.span;
     snippet_for_span(module_key, source, span)
 }
 

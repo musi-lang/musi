@@ -35,13 +35,13 @@ impl Runtime {
         vm.initialize()?;
         self.host.begin_test_session();
         self.clear_output();
-        let result = vm.call_export(export_name, &[]);
+        let export_result = vm.call_export(export_name, &[]);
         let output = self.take_output();
         let report = self
             .host
             .finish_test_session(spec)
             .with_output(output.stdout, output.stderr);
-        let _ = result?;
+        let _ = export_result?;
         Ok(report)
     }
 

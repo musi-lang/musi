@@ -59,15 +59,15 @@ fn lower_item_temp(
     expr_id: HirExprId,
     prelude: &mut Vec<IrExpr>,
 ) -> IrExpr {
-    let temp = fresh_temp(ctx);
+    let temp_id = fresh_temp(ctx);
     prelude.push(IrExpr::new(
         origin,
         IrExprKind::TempLet {
-            temp,
+            temp: temp_id,
             value: Box::new(lower_expr(ctx, expr_id)),
         },
     ));
-    IrExpr::new(origin, IrExprKind::Temp { temp })
+    IrExpr::new(origin, IrExprKind::Temp { temp: temp_id })
 }
 
 fn append_array_spread_parts(

@@ -166,15 +166,15 @@ fn lower_item_temp(
     value_expr: HirExprId,
     prelude: &mut Vec<IrExpr>,
 ) -> IrExpr {
-    let temp = fresh_temp(ctx);
+    let temp_id = fresh_temp(ctx);
     prelude.push(IrExpr::new(
         origin,
         IrExprKind::TempLet {
-            temp,
+            temp: temp_id,
             value: Box::new(lower_expr(ctx, value_expr)),
         },
     ));
-    IrExpr::new(origin, IrExprKind::Temp { temp })
+    IrExpr::new(origin, IrExprKind::Temp { temp: temp_id })
 }
 
 fn lower_ordered_record_fields(

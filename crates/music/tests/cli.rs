@@ -91,10 +91,14 @@ mod success {
 
     #[test]
     fn info_prints_built_artifact_metadata() {
-        let temp = TempDir::new();
-        let source_path = temp.path().join("main.ms");
-        let artifact_path = temp.path().join("main.seam");
-        write_file(temp.path(), "main.ms", "export let main () : Int := 42;\n");
+        let test_dir = TempDir::new();
+        let source_path = test_dir.path().join("main.ms");
+        let artifact_path = test_dir.path().join("main.seam");
+        write_file(
+            test_dir.path(),
+            "main.ms",
+            "export let main () : Int := 42;\n",
+        );
 
         let build_output = run_music(&[
             "build",
@@ -114,9 +118,13 @@ mod success {
 
     #[test]
     fn info_accepts_source_file() {
-        let temp = TempDir::new();
-        let source_path = temp.path().join("main.ms");
-        write_file(temp.path(), "main.ms", "export let main () : Int := 42;\n");
+        let test_dir = TempDir::new();
+        let source_path = test_dir.path().join("main.ms");
+        write_file(
+            test_dir.path(),
+            "main.ms",
+            "export let main () : Int := 42;\n",
+        );
 
         let output = run_music(&["info", source_path.to_str().expect("utf-8 source path")]);
 
@@ -128,9 +136,13 @@ mod success {
 
     #[test]
     fn info_accepts_extensionless_source_file() {
-        let temp = TempDir::new();
-        let source_stem = temp.path().join("main");
-        write_file(temp.path(), "main.ms", "export let main () : Int := 42;\n");
+        let test_dir = TempDir::new();
+        let source_stem = test_dir.path().join("main");
+        write_file(
+            test_dir.path(),
+            "main.ms",
+            "export let main () : Int := 42;\n",
+        );
 
         let output = run_music(&["info", source_stem.to_str().expect("utf-8 source stem")]);
 
@@ -142,9 +154,13 @@ mod success {
 
     #[test]
     fn disasm_accepts_source_file() {
-        let temp = TempDir::new();
-        let source_path = temp.path().join("main.ms");
-        write_file(temp.path(), "main.ms", "export let main () : Int := 42;\n");
+        let test_dir = TempDir::new();
+        let source_path = test_dir.path().join("main.ms");
+        write_file(
+            test_dir.path(),
+            "main.ms",
+            "export let main () : Int := 42;\n",
+        );
 
         let output = run_music(&["disasm", source_path.to_str().expect("utf-8 source path")]);
 
@@ -157,11 +173,15 @@ mod success {
 
     #[test]
     fn disasm_accepts_extensionless_artifact_file() {
-        let temp = TempDir::new();
-        let source_path = temp.path().join("main.ms");
-        let source_stem = temp.path().join("main");
-        let artifact_path = temp.path().join("main.seam");
-        write_file(temp.path(), "main.ms", "export let main () : Int := 42;\n");
+        let test_dir = TempDir::new();
+        let source_path = test_dir.path().join("main.ms");
+        let source_stem = test_dir.path().join("main");
+        let artifact_path = test_dir.path().join("main.seam");
+        write_file(
+            test_dir.path(),
+            "main.ms",
+            "export let main () : Int := 42;\n",
+        );
 
         let build_output = run_music(&[
             "build",
@@ -183,9 +203,13 @@ mod success {
 
     #[test]
     fn disasm_seam_level_prints_lowered_seam_il() {
-        let temp = TempDir::new();
-        let source_path = temp.path().join("main.ms");
-        write_file(temp.path(), "main.ms", "export let main () : Int := 42;\n");
+        let test_dir = TempDir::new();
+        let source_path = test_dir.path().join("main.ms");
+        write_file(
+            test_dir.path(),
+            "main.ms",
+            "export let main () : Int := 42;\n",
+        );
 
         let output = run_music(&[
             "disasm",
@@ -202,12 +226,20 @@ mod success {
 
     #[test]
     fn json_check_success_writes_only_json_to_stdout() {
-        let temp = TempDir::new();
-        write_file(temp.path(), "main.ms", "export let main () : Int := 42;\n");
+        let test_dir = TempDir::new();
+        write_file(
+            test_dir.path(),
+            "main.ms",
+            "export let main () : Int := 42;\n",
+        );
 
         let output = run_music(&[
             "check",
-            temp.path().join("main.ms").to_str().expect("utf-8 path"),
+            test_dir
+                .path()
+                .join("main.ms")
+                .to_str()
+                .expect("utf-8 path"),
             "--diagnostics-format",
             "json",
         ]);
@@ -225,16 +257,20 @@ mod failure {
 
     #[test]
     fn json_check_tooling_failure_writes_only_json_to_stdout() {
-        let temp = TempDir::new();
+        let test_dir = TempDir::new();
         write_file(
-            temp.path(),
+            test_dir.path(),
             "main.ms",
             "import \"@std/math\"; export let main () : Int := 42;\n",
         );
 
         let output = run_music(&[
             "check",
-            temp.path().join("main.ms").to_str().expect("utf-8 path"),
+            test_dir
+                .path()
+                .join("main.ms")
+                .to_str()
+                .expect("utf-8 path"),
             "--diagnostics-format",
             "json",
         ]);
@@ -252,12 +288,16 @@ mod failure {
 
     #[test]
     fn json_check_parse_failure_writes_only_json_to_stdout() {
-        let temp = TempDir::new();
-        write_file(temp.path(), "main.ms", "let x := 1");
+        let test_dir = TempDir::new();
+        write_file(test_dir.path(), "main.ms", "let x := 1");
 
         let output = run_music(&[
             "check",
-            temp.path().join("main.ms").to_str().expect("utf-8 path"),
+            test_dir
+                .path()
+                .join("main.ms")
+                .to_str()
+                .expect("utf-8 path"),
             "--diagnostics-format",
             "json",
         ]);

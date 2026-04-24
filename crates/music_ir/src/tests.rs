@@ -830,13 +830,13 @@ mod success {
     ",
         );
 
-        let result = ir
+        let result_callable = ir
             .callables()
             .iter()
             .find(|callable| callable.name.as_ref() == "result")
             .expect("result callable");
         assert!(
-            contains_named_value_ref(&result.body, "Result"),
+            contains_named_value_ref(&result_callable.body, "Result"),
             "capitalized local binding should lower as a value reference"
         );
     }
@@ -909,12 +909,12 @@ mod success {
     ",
         );
 
-        let result = ir
+        let result_callable = ir
             .callables()
             .iter()
             .find(|callable| callable.name.as_ref() == "result")
             .expect("result callable");
-        assert!(contains_record_pattern(&result.body));
+        assert!(contains_record_pattern(&result_callable.body));
 
         let loop_fn = ir
             .callables()
@@ -938,10 +938,10 @@ mod success {
     ",
         );
 
-        let helper = callable(&ir, "helper");
+        let helper_callable = callable(&ir, "helper");
         assert!(
-            contains_named_value_ref_with_prefix(&helper.body, "__answer::"),
-            "helper callable: {helper:?}",
+            contains_named_value_ref_with_prefix(&helper_callable.body, "__answer::"),
+            "helper callable: {helper_callable:?}",
         );
     }
 
@@ -964,10 +964,10 @@ mod success {
     ",
         );
 
-        let helper = callable(&ir, "helper");
+        let helper_callable = callable(&ir, "helper");
         assert!(
-            contains_named_value_ref_with_prefix(&helper.body, "__answer::"),
-            "helper callable: {helper:?}",
+            contains_named_value_ref_with_prefix(&helper_callable.body, "__answer::"),
+            "helper callable: {helper_callable:?}",
         );
     }
 }

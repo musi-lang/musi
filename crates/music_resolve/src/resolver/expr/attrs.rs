@@ -97,11 +97,11 @@ where
         } else {
             None
         };
-        let value = match node.child_nodes().find(|n| n.kind().is_expr()) {
+        let arg_value = match node.child_nodes().find(|n| n.kind().is_expr()) {
             Some(expr) => self.lower_expr(expr),
             None => self.error_expr(self.origin_node(node)),
         };
-        HirAttrArg::new(name, value)
+        HirAttrArg::new(name, arg_value)
     }
 
     fn parse_export_mod(

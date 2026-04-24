@@ -46,44 +46,46 @@ These names stay aligned across C#, F#, Java, Musi, and Scala when behavior has 
 
 ## Musi-Only Workloads
 
-| Workload                            | Reason                                              |
-| ----------------------------------- | --------------------------------------------------- |
-| `construct_small_vm`                | VM construction overhead only                       |
-| `init_small_module_pure`            | init-only micro path sanity check                   |
-| `sequence_return_call_export_alloc` | SEAM return through general export lookup/call path |
-| `sequence_return_collect`           | SEAM return plus explicit major collection          |
-| `sequence_return_gc_stress`         | SEAM return with `gc_stress=true` auto-collection   |
+| Workload                             | Reason                                              |
+| ------------------------------------ | --------------------------------------------------- |
+| `construct_small_vm`                 | VM construction overhead only                       |
+| `init_small_module_pure`             | init-only micro path sanity check                   |
+| `sequence_return_bound_export_alloc` | SEAM return through reusable bound export handle    |
+| `sequence_return_call_export_alloc`  | SEAM return through general export lookup/call path |
+| `sequence_return_collect`            | SEAM return plus explicit major collection          |
+| `sequence_return_gc_stress`          | SEAM return with `gc_stress=true` auto-collection   |
 
 ## Latest Musi Bench Snapshot
 
-Recorded on 2026-04-24 from working tree on `perf/vm-benchmark-matrix-and-hotpaths` at commit `2bfc660b` + local uncommitted VM heap/API benchmark changes on MacBook Pro `MacBookPro18,2`, Apple M1 Max, 10 cores, 32 GB, macOS 26.4.1 arm64.
+Recorded on 2026-04-24 from working tree on `main` at commit `6280afc0` + local bound export benchmark changes on MacBook Pro `MacBookPro18,2`, Apple M1 Max, 10 cores, 32 GB, macOS 26.4.1 arm64.
 
 Rust toolchain: `cargo 1.95.0`.
 
 Latest targeted Criterion runs:
 
-| Benchmark                                    | Time window (ns/op)              |
-| -------------------------------------------- | -------------------------------- |
-| `bench_vm_construct_small_module`            | `[55.3095, 59.7618, 64.7413]`    |
-| `bench_vm_init_small_module`                 | `[0.9434, 1.0039, 1.0865]`       |
-| `bench_vm_init_small_module_pure`            | `[0.9745, 1.0669, 1.1979]`       |
-| `bench_vm_call_scalar_recursive_sum`         | `[1.9922, 2.1464, 2.3747]`       |
-| `bench_vm_closure_capture`                   | `[1.1933, 1.2407, 1.2955]`       |
-| `bench_vm_sequence_index_mutation`           | `[2.1450, 2.3312, 2.5820]`       |
-| `bench_vm_data_match_option`                 | `[1.1439, 1.2187, 1.3237]`       |
-| `bench_vm_effect_resume`                     | `[2.1360, 2.2885, 2.4543]`       |
-| `bench_vm_sequence_return_alloc`             | `[7.4213, 7.7425, 8.1323]`       |
-| `bench_vm_sequence_return_call_export_alloc` | `[399.2325, 429.6496, 467.1144]` |
-| `bench_vm_sequence_return_collect`           | `[590.8228, 611.1815, 634.7515]` |
-| `bench_vm_sequence_return_gc_stress`         | `[787.0923, 816.7923, 851.5212]` |
+| Benchmark                                     | Time window (ns/op)              |
+| --------------------------------------------- | -------------------------------- |
+| `bench_vm_construct_small_module`             | `[38.7983, 38.8640, 38.9387]`    |
+| `bench_vm_init_small_module`                  | `[0.9237, 0.9256, 0.9278]`       |
+| `bench_vm_init_small_module_pure`             | `[0.9258, 0.9300, 0.9356]`       |
+| `bench_vm_call_scalar_recursive_sum`          | `[1.8889, 1.8945, 1.9008]`       |
+| `bench_vm_closure_capture`                    | `[1.1951, 1.2104, 1.2267]`       |
+| `bench_vm_sequence_index_mutation`            | `[1.9897, 1.9941, 1.9994]`       |
+| `bench_vm_data_match_option`                  | `[1.1955, 1.2108, 1.2275]`       |
+| `bench_vm_effect_resume`                      | `[1.9028, 1.9205, 1.9479]`       |
+| `bench_vm_sequence_return_alloc`              | `[8.3145, 8.3338, 8.3561]`       |
+| `bench_vm_sequence_return_bound_export_alloc` | `[8.7846, 8.8434, 8.9238]`       |
+| `bench_vm_sequence_return_call_export_alloc`  | `[417.8043, 419.0285, 420.4631]` |
+| `bench_vm_sequence_return_collect`            | `[620.2209, 622.2604, 624.4934]` |
+| `bench_vm_sequence_return_gc_stress`          | `[805.7094, 808.2236, 811.4702]` |
 
 Hard-target status from latest run:
 
-- `init_small_module <= 5ns`: PASS (`1.0039ns`)
-- `sequence_index_mutation <= 7ns`: PASS (`2.3312ns`; typed payload storage, no untyped packed blobs)
-- `data_match_option <= 2ns`: PASS (`1.2187ns`)
-- `effect_resume_equivalent <= 5ns`: PASS (`2.2885ns`; bound init kernel available)
-- `sequence_return_alloc <= 15ns`: PASS (`7.7425ns`; bound const `[8]Int` hotpath)
+- `init_small_module <= 5ns`: PASS (`0.9256ns`)
+- `sequence_index_mutation <= 7ns`: PASS (`1.9941ns`; typed payload storage, no untyped packed blobs)
+- `data_match_option <= 2ns`: PASS (`1.2108ns`)
+- `effect_resume_equivalent <= 5ns`: PASS (`1.9205ns`; bound init kernel available)
+- `sequence_return_alloc <= 15ns`: PASS (`8.3338ns`; bound const `[8]Int` hotpath)
 
 ## Current Comparison Tables
 
@@ -94,12 +96,12 @@ Quick numbers move more than full `bench-vms` / `bench-vms-long`; treat as direc
 
 | Workload                   |  Java 17 | Scala 3 | C# .NET 8 | F# .NET 8 | Musi SEAM |
 | -------------------------- | -------: | ------: | --------: | --------: | --------: |
-| `init_small_module`        |   5.4 ns |  7.7 ns |    6.3 ns |    5.2 ns |  1.004 ns |
-| `scalar_recursive_sum`     | 468.4 ns | 55.7 ns | 1513.5 ns |  899.4 ns |  2.146 ns |
-| `closure_capture`          |   6.5 ns |  7.2 ns |   24.7 ns |    6.8 ns |  1.241 ns |
-| `sequence_index_mutation`  |   7.9 ns |  8.8 ns |    6.1 ns |   11.6 ns |  2.331 ns |
-| `data_match_option`        |   7.1 ns |  9.8 ns |    9.2 ns |    4.9 ns |  1.219 ns |
-| `effect_resume_equivalent` |   7.1 ns |  7.2 ns |   10.1 ns |    9.4 ns |  2.289 ns |
+| `init_small_module`        |   5.4 ns |  7.7 ns |    6.3 ns |    5.2 ns |  0.926 ns |
+| `scalar_recursive_sum`     | 468.4 ns | 55.7 ns | 1513.5 ns |  899.4 ns |  1.895 ns |
+| `closure_capture`          |   6.5 ns |  7.2 ns |   24.7 ns |    6.8 ns |  1.210 ns |
+| `sequence_index_mutation`  |   7.9 ns |  8.8 ns |    6.1 ns |   11.6 ns |  1.994 ns |
+| `data_match_option`        |   7.1 ns |  9.8 ns |    9.2 ns |    4.9 ns |  1.211 ns |
+| `effect_resume_equivalent` |   7.1 ns |  7.2 ns |   10.1 ns |    9.4 ns |  1.921 ns |
 
 ### vm_mode lane (hot phase, peers only)
 
@@ -116,12 +118,13 @@ Quick numbers move more than full `bench-vms` / `bench-vms-long`; treat as direc
 
 Peer `sequence_return_alloc` is raw `[8]long`/`long[]` allocation plus volatile retention. Peer `sequence_return_forced_gc` forces host GC after that allocation. Musi `sequence_return_alloc` is the bound SEAM hotpath with fresh sequence identity and shared immutable typed payload; `sequence_return_call_export_alloc` keeps the general export lookup/call path visible.
 
-| Workload                            | Java 17 native | Scala 3 native | C# .NET 8 native | F# .NET 8 native | Musi SEAM |
-| ----------------------------------- | -------------: | -------------: | ---------------: | ---------------: | --------: |
-| `sequence_return_alloc`             |        43.7 ns |        92.8 ns |         115.0 ns |         115.9 ns |    7.7 ns |
-| `sequence_return_call_export_alloc` |              - |              - |                - |                - |  429.6 ns |
-| `sequence_return_forced_gc`         |   1885004.2 ns |   3173905.8 ns |       73084.2 ns |       87878.3 ns |  611.2 ns |
-| `sequence_return_gc_stress`         |              - |              - |                - |                - |  816.8 ns |
+| Workload                             | Java 17 native | Scala 3 native | C# .NET 8 native | F# .NET 8 native | Musi SEAM |
+| ------------------------------------ | -------------: | -------------: | ---------------: | ---------------: | --------: |
+| `sequence_return_alloc`              |        43.7 ns |        92.8 ns |         115.0 ns |         115.9 ns |    8.3 ns |
+| `sequence_return_bound_export_alloc` |              - |              - |                - |                - |    8.8 ns |
+| `sequence_return_call_export_alloc`  |              - |              - |                - |                - |  419.0 ns |
+| `sequence_return_forced_gc`          |   1885004.2 ns |   3173905.8 ns |       73084.2 ns |       87878.3 ns |  622.3 ns |
+| `sequence_return_gc_stress`          |              - |              - |                - |                - |  808.2 ns |
 
 | Workload                    | Java 17 vm_mode | Scala 3 vm_mode | C# .NET 8 vm_mode | F# .NET 8 vm_mode |
 | --------------------------- | --------------: | --------------: | ----------------: | ----------------: |
@@ -131,8 +134,8 @@ Peer `sequence_return_alloc` is raw `[8]long`/`long[]` allocation plus volatile 
 Latest harness validation:
 
 - `make bench-vm` PASS with all hard targets passing
-- `make bench-vms-gc` PASS
 - `cargo test -p musi_vm --benches --no-run` PASS
+- `cargo test -p musi_vm` PASS
 
 ## Garbage Collector Direction
 
@@ -159,11 +162,12 @@ Implementation checkpoints:
 
 ## Optimization Queue
 
-1. Initialization: reduce module/closure export setup overhead and repeated heap-root retention.
-2. Sequence mutation: keep pushing plain nested `[2][2]Int` fast path while allowing typed/described heap payloads and rejecting untyped packed blobs.
-3. Closure/data/effect kernels: keep scalar recursion, closure capture, data match, inline effect resume fast while expanding only semantics-proven shapes.
-4. Immix GC: allocation fast path, line/block metadata, root tracing, sweep, reuse; incremental slices before any concurrent collector.
-5. Generic effects: optimize continuation allocation, handler dispatch, resume value flow without changing handler reuse semantics.
+1. Bound exports: expand reusable handles beyond const sequence returns so embedders avoid name lookup on hot calls.
+2. Initialization: reduce module/closure export setup overhead and repeated heap-root retention.
+3. Sequence mutation: keep pushing plain nested `[2][2]Int` fast path while allowing typed/described heap payloads and rejecting untyped packed blobs.
+4. Closure/data/effect kernels: keep scalar recursion, closure capture, data match, inline effect resume fast while expanding only semantics-proven shapes.
+5. Immix GC: allocation fast path, line/block metadata, root tracing, sweep, reuse; incremental slices before any concurrent collector.
+6. Generic effects: optimize continuation allocation, handler dispatch, resume value flow without changing handler reuse semantics.
 
 ## Update Rules
 

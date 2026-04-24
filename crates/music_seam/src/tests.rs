@@ -220,18 +220,25 @@ mod success {
         let spec = include_str!("../../../specs/seam/bytecode.md");
         let mut expected = Vec::new();
         for line in spec.lines() {
-            let cells = line.split('|').map(str::trim).collect::<Vec<_>>();
-            if cells.len() < 4 || !cells[1].starts_with('`') || cells[2] == "reserved" {
+            let mut cells = line.split('|').map(str::trim);
+            let _ = cells.next();
+            let Some(hex_cell) = cells.next() else {
+                continue;
+            };
+            let Some(mnemonic_cell) = cells.next() else {
+                continue;
+            };
+            if !hex_cell.starts_with('`') || mnemonic_cell == "reserved" {
                 continue;
             }
-            let hex = cells[1].trim_matches('`');
+            let hex = hex_cell.trim_matches('`');
             if hex.contains('-') || hex == "Hex" {
                 continue;
             }
             let Ok(code) = u16::from_str_radix(hex, 16) else {
                 continue;
             };
-            let mnemonic = cells[2].trim_matches('`');
+            let mnemonic = mnemonic_cell.trim_matches('`');
             if mnemonic.is_empty() {
                 continue;
             }

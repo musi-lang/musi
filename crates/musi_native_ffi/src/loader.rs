@@ -15,20 +15,20 @@ unsafe extern "C" {
 }
 
 pub fn resolve_symbol(foreign: &ForeignCall) -> VmResult<*mut c_void> {
-    let symbol = CString::new(foreign.symbol()).map_err(|_| {
+    let symbol_name = CString::new(foreign.symbol()).map_err(|_| {
         native_symbol_load_failed(
             foreign,
             foreign.symbol().into(),
             "symbol contains interior NUL".into(),
         )
     })?;
-    let handle = match foreign.link() {
+    let library_handle = match foreign.link() {
         Some(link) => open_library(foreign, link)?,
         None => open_current_process(foreign)?,
     };
     let symbol_ptr = {
-        // SAFETY: `handle` is a live loader handle and `symbol` is a NUL-terminated C string.
-        unsafe { dlsym(handle, symbol.as_ptr()) }
+        // SAFETY: `library_handle` is a live loader handle and `symbol_name` is a NUL-terminated C string.
+        unsafe { dlsym(library_handle, symbol_name.as_ptr()) }
     };
     if symbol_ptr.is_null() {
         return Err(native_symbol_load_failed(
@@ -41,18 +41,18 @@ pub fn resolve_symbol(foreign: &ForeignCall) -> VmResult<*mut c_void> {
 }
 
 fn open_current_process(foreign: &ForeignCall) -> VmResult<*mut c_void> {
-    let handle = {
+    let process_handle = {
         // SAFETY: `dlopen(NULL, RTLD_NOW)` asks the loader for the current process symbol table.
         unsafe { dlopen(null(), RTLD_NOW) }
     };
-    if handle.is_null() {
+    if process_handle.is_null() {
         return Err(native_library_load_failed(
             foreign,
             "<process>".into(),
             dlerror_text(),
         ));
     }
-    Ok(handle)
+    Ok(process_handle)
 }
 
 fn open_library(foreign: &ForeignCall, link: &str) -> VmResult<*mut c_void> {
@@ -64,16 +64,16 @@ fn open_library(foreign: &ForeignCall, link: &str) -> VmResult<*mut c_void> {
         let library = CString::new(candidate.as_str()).map_err(|_| {
             native_library_load_failed(
                 foreign,
-                candidate.clone().into(),
+                candidate.as_str().into(),
                 "library path contains interior NUL".into(),
             )
         })?;
-        let handle = {
+        let library_handle = {
             // SAFETY: `library` is a valid NUL-terminated path string for the system loader.
             unsafe { dlopen(library.as_ptr(), RTLD_NOW) }
         };
-        if !handle.is_null() {
-            return Ok(handle);
+        if !library_handle.is_null() {
+            return Ok(library_handle);
         }
     }
     Err(native_library_load_failed(

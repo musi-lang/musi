@@ -161,15 +161,15 @@ impl HilFunction {
     fn verify_block_names(&self) -> Result<HilBlockSet, HilVerifyError> {
         if self.blocks.is_empty() {
             return Err(HilVerifyError::MissingEntryBlock {
-                function: self.name.clone(),
+                function: clone_hil_name(&self.name),
             });
         }
         let mut names = HilBlockSet::new();
         for block in &self.blocks {
-            if !names.insert(block.name.clone()) {
+            if !names.insert(clone_hil_name(&block.name)) {
                 return Err(HilVerifyError::DuplicateBlock {
-                    function: self.name.clone(),
-                    block: block.name.clone(),
+                    function: clone_hil_name(&self.name),
+                    block: clone_hil_name(&block.name),
                 });
             }
         }
@@ -179,7 +179,7 @@ impl HilFunction {
     fn param_types(&self) -> Result<HilTypeMap, HilVerifyError> {
         let mut types = HilTypeMap::new();
         for param in &self.params {
-            if types.insert(param.id, param.ty.clone()).is_some() {
+            if types.insert(param.id, clone_hil_type(&param.ty)).is_some() {
                 return Err(HilVerifyError::DuplicateValue { value: param.id });
             }
         }
@@ -541,9 +541,8 @@ fn parse_block(lines: &mut HilLineCursor<'_>) -> Result<HilBlock, AssemblyError>
             terminator = term;
             break;
         }
-        let instr = parse_instruction(line).map_err(|msg| {
-            AssemblyError::text_parse_source(format!("line {}: {msg}", line_no + 1))
-        })?;
+        let instr =
+            parse_instruction(line).map_err(|msg| hil_parse_line_error(line_no, msg.as_ref()))?;
         instructions.push(instr);
     }
     Ok(HilBlock::new(block_name, instructions, terminator))
@@ -636,11 +635,15 @@ fn parse_assigned_instruction(
     rhs: &str,
 ) -> Result<HilInstruction, Box<str>> {
     if let Some(value_text) = rhs.strip_prefix("const.int ") {
-        let value = value_text
+        let int_value = value_text
             .trim()
             .parse::<i64>()
             .map_err(|_| hil_parse_error("const.int value malformed"))?;
-        return Ok(HilInstruction::ConstInt { out, ty, value });
+        return Ok(HilInstruction::ConstInt {
+            out,
+            ty,
+            value: int_value,
+        });
     }
     if let Some(rest) = rhs.strip_prefix("call ")
         && let Some((callee, args)) = parse_named_call(rest)
@@ -713,6 +716,18 @@ fn parse_assigned_instruction(
 
 fn hil_parse_error(message: impl Into<Box<str>>) -> Box<str> {
     message.into()
+}
+
+fn clone_hil_name(name: &str) -> HilName {
+    name.to_owned().into_boxed_str()
+}
+
+fn clone_hil_type(ty: &HilType) -> HilType {
+    ty.clone()
+}
+
+fn hil_parse_line_error(line_no: usize, message: &str) -> AssemblyError {
+    AssemblyError::text_parse_source(format!("line {}: {message}", line_no + 1))
 }
 
 fn parse_terminator(line: &str) -> Result<Option<HilTerminator>, AssemblyError> {

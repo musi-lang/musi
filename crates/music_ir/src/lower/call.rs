@@ -819,12 +819,12 @@ fn ordered_call_args(
         ordered[index] = Some(arg.clone());
     }
 
-    let mut result = prefix;
+    let mut reordered_args = prefix;
     for arg in ordered.into_iter().skip(named_start).flatten() {
-        result.push(arg);
+        reordered_args.push(arg);
     }
-    if result.len() == args.len() {
-        result
+    if reordered_args.len() == args.len() {
+        reordered_args
     } else {
         args.to_vec()
     }
@@ -1021,15 +1021,15 @@ fn lower_spread_args(
     let mut parts = Vec::<IrSeqPart>::new();
     let mut has_runtime_spread = false;
     for arg in args_nodes {
-        let temp = fresh_temp(ctx);
+        let temp_id = fresh_temp(ctx);
         prelude.push(IrExpr::new(
             origin,
             IrExprKind::TempLet {
-                temp,
+                temp: temp_id,
                 value: Box::new(lower_expr(ctx, arg.expr)),
             },
         ));
-        let temp_expr = IrExpr::new(origin, IrExprKind::Temp { temp });
+        let temp_expr = IrExpr::new(origin, IrExprKind::Temp { temp: temp_id });
         if !arg.spread {
             parts.push(IrSeqPart::Expr(temp_expr));
             continue;

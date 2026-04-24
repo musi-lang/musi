@@ -158,10 +158,10 @@ mod success {
         let mut artifact = sample_artifact();
         let target = artifact.intern_string("main::answer");
         let key = artifact.intern_string("inert.attr");
-        let value = artifact.intern_string("@foo.bar(baz = \"qux\")");
+        let meta_value = artifact.intern_string("@foo.bar(baz = \"qux\")");
         let _ = artifact
             .meta
-            .alloc(MetaDescriptor::new(target, key, Box::new([value])));
+            .alloc(MetaDescriptor::new(target, key, Box::new([meta_value])));
 
         let text = format_text(&artifact);
         let parsed = parse_text(&text).unwrap();

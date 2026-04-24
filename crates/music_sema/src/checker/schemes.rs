@@ -453,8 +453,8 @@ impl PassBase<'_, '_, '_> {
         subst: &TypeSubstMap,
         ctor: impl FnOnce(HirTyId) -> HirTyKind,
     ) -> HirTyId {
-        let item = self.substitute_ty(item, subst);
-        self.alloc_ty(ctor(item))
+        let item_ty = self.substitute_ty(item, subst);
+        self.alloc_ty(ctor(item_ty))
     }
 
     fn substitute_array_ty(
@@ -463,8 +463,11 @@ impl PassBase<'_, '_, '_> {
         item: HirTyId,
         subst: &TypeSubstMap,
     ) -> HirTyId {
-        let item = self.substitute_ty(item, subst);
-        self.alloc_ty(HirTyKind::Array { dims, item })
+        let item_ty = self.substitute_ty(item, subst);
+        self.alloc_ty(HirTyKind::Array {
+            dims,
+            item: item_ty,
+        })
     }
 
     fn substitute_handler_ty(

@@ -280,12 +280,12 @@ impl Artifact {
                     let index = usize::from(*id);
                     let Some(slot) = defined.get_mut(index) else {
                         return Err(ArtifactError::MissingLabel {
-                            procedure: self.string_text(procedure.name).to_owned(),
+                            procedure: self.procedure_name_owned(procedure),
                         });
                     };
                     if *slot {
                         return Err(ArtifactError::DuplicateLabel {
-                            procedure: self.string_text(procedure.name).to_owned(),
+                            procedure: self.procedure_name_owned(procedure),
                         });
                     }
                     *slot = true;
@@ -485,6 +485,12 @@ impl Artifact {
             }
         }
         Ok(())
+    }
+}
+
+impl Artifact {
+    fn procedure_name_owned(&self, procedure: &ProcedureDescriptor) -> String {
+        self.string_text(procedure.name).to_owned()
     }
 
     fn require_string(&self, id: StringId) -> Result<(), ArtifactError> {

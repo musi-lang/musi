@@ -21,19 +21,26 @@ pub(super) fn build_procedures(artifact: &Artifact) -> VmResult<Box<[LoadedProce
         .map(|(procedure_id, procedure)| {
             let procedure_name: Box<str> = artifact.string_text(procedure.name).into();
             let mut labels = LabelIndexMap::new();
-            let mut instructions = Vec::new();
+            let mut instruction_count = 0usize;
             for entry in &procedure.code {
                 match entry {
                     CodeEntry::Label(label) => {
-                        let _ = labels.insert(label.id, instructions.len());
+                        let _ = labels.insert(label.id, instruction_count);
                     }
-                    CodeEntry::Instruction(instruction) => {
-                        let _ = &procedure_name;
-                        instructions.push(instruction.clone());
+                    CodeEntry::Instruction(_) => {
+                        instruction_count = instruction_count.saturating_add(1);
                     }
                 }
             }
-            let instructions = instructions.into_boxed_slice();
+            let instructions = procedure
+                .code
+                .iter()
+                .filter_map(|entry| match entry {
+                    CodeEntry::Instruction(instruction) => Some(instruction.clone()),
+                    CodeEntry::Label(_) => None,
+                })
+                .collect::<Vec<_>>()
+                .into_boxed_slice();
             let runtime_instructions = decode_runtime_instructions(
                 procedure_id,
                 procedure.params,

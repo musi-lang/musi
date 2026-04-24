@@ -26,7 +26,7 @@ fn register_types(state: &mut ProgramState, module: &IrModule) {
     let mut seen = BTreeSet::<String>::new();
     for ty in module.types() {
         let term = lower_surface_type_term(module.types(), ty);
-        let name = term.to_string();
+        let name = format!("{term}");
         if seen.insert(name.clone()) {
             let name_id = state.artifact.intern_string(&name);
             let term_json = term.to_json();

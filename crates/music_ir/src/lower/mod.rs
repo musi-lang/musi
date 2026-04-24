@@ -820,8 +820,8 @@ fn record_layout_for_ty(
         }
         HirTyKind::Named { name, .. } => {
             let data_name = interner.resolve(*name);
-            let data = sema.data_def(data_name)?;
-            let variant = data.record_shape_variant()?;
+            let data_def = sema.data_def(data_name)?;
+            let variant = data_def.record_shape_variant()?;
             let mut items = variant
                 .field_names()
                 .iter()
@@ -880,7 +880,7 @@ fn lower_variant_expr(
     let ty = sema
         .try_expr_ty(expr_id)
         .unwrap_or_else(|| lowering_invariant_violation("expr type missing for variant"));
-    let data = match &sema.ty(ty).kind {
+    let data_def = match &sema.ty(ty).kind {
         HirTyKind::Named { name, .. } => {
             let data_name = interner.resolve(*name);
             sema.data_def(data_name)
@@ -891,17 +891,17 @@ fn lower_variant_expr(
         }
         _ => None,
     };
-    let Some(data) = data else {
+    let Some(data_def) = data_def else {
         lowering_invariant_violation("variant without data type definition");
     };
     let tag_name = interner.resolve(tag.name);
-    let tag_index = data.variant_index(tag_name).unwrap_or(u16::MAX);
-    let variant_count = u16::try_from(data.variant_count()).unwrap_or(u16::MAX);
+    let tag_index = data_def.variant_index(tag_name).unwrap_or(u16::MAX);
+    let variant_count = u16::try_from(data_def.variant_count()).unwrap_or(u16::MAX);
     if tag_index == u16::MAX {
         lowering_invariant_violation("unknown variant tag");
     }
 
-    let Some(variant) = data.variant(tag_name) else {
+    let Some(variant) = data_def.variant(tag_name) else {
         lowering_invariant_violation("unknown variant payload metadata");
     };
     let arg_exprs = ordered_variant_arg_exprs(sema, variant, args, interner);
@@ -913,7 +913,7 @@ fn lower_variant_expr(
     let field_count = u16::try_from(lowered_args.len()).unwrap_or(u16::MAX);
     let _ = variant_count;
     IrExprKind::VariantNew {
-        data_key: data.key().clone(),
+        data_key: data_def.key().clone(),
         tag_index,
         tag_value: variant.tag(),
         field_count,
@@ -997,7 +997,7 @@ fn lower_pin_expr(
     name: Ident,
     body: HirExprId,
 ) -> IrExpr {
-    let value = IrExpr::new(
+    let binding_expr = IrExpr::new(
         origin,
         IrExprKind::Let {
             binding: decl_binding_id(ctx.sema, name),
@@ -1009,7 +1009,7 @@ fn lower_pin_expr(
     IrExpr::new(
         origin,
         IrExprKind::Sequence {
-            exprs: Box::new([value, body]),
+            exprs: Box::new([binding_expr, body]),
         },
     )
 }

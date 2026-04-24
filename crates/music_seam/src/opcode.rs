@@ -217,7 +217,7 @@ struct OpcodeInfo {
     wire: OpcodeWire,
 }
 
-const fn info(
+const fn opcode_info(
     opcode: Opcode,
     family: OpcodeFamily,
     mnemonic: &'static str,
@@ -234,910 +234,910 @@ const fn info(
 }
 
 const OPCODE_INFOS: &[OpcodeInfo] = &[
-    info(
+    opcode_info(
         Opcode::Nop,
         OpcodeFamily::Core,
         "nop",
         OperandShape::None,
         0x00,
     ),
-    info(
+    opcode_info(
         Opcode::Trap,
         OpcodeFamily::Core,
         "trap",
         OperandShape::String,
         0x01,
     ),
-    info(
+    opcode_info(
         Opcode::Pop,
         OpcodeFamily::Core,
         "pop",
         OperandShape::None,
         0x02,
     ),
-    info(
+    opcode_info(
         Opcode::Dup,
         OpcodeFamily::Core,
         "dup",
         OperandShape::None,
         0x03,
     ),
-    info(
+    opcode_info(
         Opcode::Swap,
         OpcodeFamily::Core,
         "swap",
         OperandShape::None,
         0x04,
     ),
-    info(
+    opcode_info(
         Opcode::LdUnit,
         OpcodeFamily::Core,
         "ld.unit",
         OperandShape::None,
         0x05,
     ),
-    info(
+    opcode_info(
         Opcode::LdTrue,
         OpcodeFamily::Core,
         "ld.true",
         OperandShape::None,
         0x06,
     ),
-    info(
+    opcode_info(
         Opcode::LdFalse,
         OpcodeFamily::Core,
         "ld.false",
         OperandShape::None,
         0x07,
     ),
-    info(
+    opcode_info(
         Opcode::LdNull,
         OpcodeFamily::Core,
         "ld.null",
         OperandShape::Type,
         0x08,
     ),
-    info(
+    opcode_info(
         Opcode::LdC,
         OpcodeFamily::Core,
         "ld.c",
         OperandShape::Constant,
         0x09,
     ),
-    info(
+    opcode_info(
         Opcode::LdCI4,
         OpcodeFamily::Core,
         "ld.c.i4",
         OperandShape::I16,
         0x0A,
     ),
-    info(
+    opcode_info(
         Opcode::LdCI8,
         OpcodeFamily::Core,
         "ld.c.i8",
         OperandShape::I16,
         0x0B,
     ),
-    info(
+    opcode_info(
         Opcode::LdCF4,
         OpcodeFamily::Core,
         "ld.c.f4",
         OperandShape::I16,
         0x0C,
     ),
-    info(
+    opcode_info(
         Opcode::LdCF8,
         OpcodeFamily::Core,
         "ld.c.f8",
         OperandShape::I16,
         0x0D,
     ),
-    info(
+    opcode_info(
         Opcode::LdStr,
         OpcodeFamily::Core,
         "ld.str",
         OperandShape::String,
         0x0E,
     ),
-    info(
+    opcode_info(
         Opcode::LdArg,
         OpcodeFamily::Storage,
         "ld.arg",
         OperandShape::Local,
         0x10,
     ),
-    info(
+    opcode_info(
         Opcode::StArg,
         OpcodeFamily::Storage,
         "st.arg",
         OperandShape::Local,
         0x11,
     ),
-    info(
+    opcode_info(
         Opcode::LdLoc,
         OpcodeFamily::Storage,
         "ld.loc",
         OperandShape::Local,
         0x12,
     ),
-    info(
+    opcode_info(
         Opcode::StLoc,
         OpcodeFamily::Storage,
         "st.loc",
         OperandShape::Local,
         0x13,
     ),
-    info(
+    opcode_info(
         Opcode::LdGlob,
         OpcodeFamily::Storage,
         "ld.glob",
         OperandShape::Global,
         0x14,
     ),
-    info(
+    opcode_info(
         Opcode::StGlob,
         OpcodeFamily::Storage,
         "st.glob",
         OperandShape::Global,
         0x15,
     ),
-    info(
+    opcode_info(
         Opcode::LdFld,
         OpcodeFamily::Storage,
         "ld.fld",
         OperandShape::I16,
         0x16,
     ),
-    info(
+    opcode_info(
         Opcode::StFld,
         OpcodeFamily::Storage,
         "st.fld",
         OperandShape::I16,
         0x17,
     ),
-    info(
+    opcode_info(
         Opcode::LdFldA,
         OpcodeFamily::Storage,
         "ld.fld.a",
         OperandShape::I16,
         0x18,
     ),
-    info(
+    opcode_info(
         Opcode::InitObj,
         OpcodeFamily::Storage,
         "init.obj",
         OperandShape::Type,
         0x19,
     ),
-    info(
+    opcode_info(
         Opcode::LdDflt,
         OpcodeFamily::Storage,
         "ld.dflt",
         OperandShape::Type,
         0x1A,
     ),
-    info(
+    opcode_info(
         Opcode::Neg,
         OpcodeFamily::Scalar,
         "neg",
         OperandShape::None,
         0x20,
     ),
-    info(
+    opcode_info(
         Opcode::Add,
         OpcodeFamily::Scalar,
         "add",
         OperandShape::None,
         0x21,
     ),
-    info(
+    opcode_info(
         Opcode::Sub,
         OpcodeFamily::Scalar,
         "sub",
         OperandShape::None,
         0x22,
     ),
-    info(
+    opcode_info(
         Opcode::Mul,
         OpcodeFamily::Scalar,
         "mul",
         OperandShape::None,
         0x23,
     ),
-    info(
+    opcode_info(
         Opcode::AddOvf,
         OpcodeFamily::Scalar,
         "add.ovf",
         OperandShape::None,
         0x24,
     ),
-    info(
+    opcode_info(
         Opcode::SubOvf,
         OpcodeFamily::Scalar,
         "sub.ovf",
         OperandShape::None,
         0x25,
     ),
-    info(
+    opcode_info(
         Opcode::MulOvf,
         OpcodeFamily::Scalar,
         "mul.ovf",
         OperandShape::None,
         0x26,
     ),
-    info(
+    opcode_info(
         Opcode::DivS,
         OpcodeFamily::Scalar,
         "div.s",
         OperandShape::None,
         0x27,
     ),
-    info(
+    opcode_info(
         Opcode::DivU,
         OpcodeFamily::Scalar,
         "div.u",
         OperandShape::None,
         0x28,
     ),
-    info(
+    opcode_info(
         Opcode::RemS,
         OpcodeFamily::Scalar,
         "rem.s",
         OperandShape::None,
         0x29,
     ),
-    info(
+    opcode_info(
         Opcode::RemU,
         OpcodeFamily::Scalar,
         "rem.u",
         OperandShape::None,
         0x2A,
     ),
-    info(
+    opcode_info(
         Opcode::And,
         OpcodeFamily::Scalar,
         "and",
         OperandShape::None,
         0x2B,
     ),
-    info(
+    opcode_info(
         Opcode::Or,
         OpcodeFamily::Scalar,
         "or",
         OperandShape::None,
         0x2C,
     ),
-    info(
+    opcode_info(
         Opcode::Xor,
         OpcodeFamily::Scalar,
         "xor",
         OperandShape::None,
         0x2D,
     ),
-    info(
+    opcode_info(
         Opcode::Not,
         OpcodeFamily::Scalar,
         "not",
         OperandShape::None,
         0x2E,
     ),
-    info(
+    opcode_info(
         Opcode::Shl,
         OpcodeFamily::Scalar,
         "shl",
         OperandShape::None,
         0x2F,
     ),
-    info(
+    opcode_info(
         Opcode::ShrS,
         OpcodeFamily::Scalar,
         "shr.s",
         OperandShape::None,
         0x30,
     ),
-    info(
+    opcode_info(
         Opcode::ShrU,
         OpcodeFamily::Scalar,
         "shr.u",
         OperandShape::None,
         0x31,
     ),
-    info(
+    opcode_info(
         Opcode::Rotl,
         OpcodeFamily::Scalar,
         "rotl",
         OperandShape::None,
         0x32,
     ),
-    info(
+    opcode_info(
         Opcode::Rotr,
         OpcodeFamily::Scalar,
         "rotr",
         OperandShape::None,
         0x33,
     ),
-    info(
+    opcode_info(
         Opcode::Clz,
         OpcodeFamily::Scalar,
         "clz",
         OperandShape::None,
         0x34,
     ),
-    info(
+    opcode_info(
         Opcode::Ctz,
         OpcodeFamily::Scalar,
         "ctz",
         OperandShape::None,
         0x35,
     ),
-    info(
+    opcode_info(
         Opcode::Popcnt,
         OpcodeFamily::Scalar,
         "popcnt",
         OperandShape::None,
         0x36,
     ),
-    info(
+    opcode_info(
         Opcode::Ceq,
         OpcodeFamily::Scalar,
         "ceq",
         OperandShape::None,
         0x37,
     ),
-    info(
+    opcode_info(
         Opcode::Cne,
         OpcodeFamily::Scalar,
         "cne",
         OperandShape::None,
         0x38,
     ),
-    info(
+    opcode_info(
         Opcode::CltS,
         OpcodeFamily::Scalar,
         "clt.s",
         OperandShape::None,
         0x39,
     ),
-    info(
+    opcode_info(
         Opcode::CltU,
         OpcodeFamily::Scalar,
         "clt.u",
         OperandShape::None,
         0x3A,
     ),
-    info(
+    opcode_info(
         Opcode::CgtS,
         OpcodeFamily::Scalar,
         "cgt.s",
         OperandShape::None,
         0x3B,
     ),
-    info(
+    opcode_info(
         Opcode::CgtU,
         OpcodeFamily::Scalar,
         "cgt.u",
         OperandShape::None,
         0x3C,
     ),
-    info(
+    opcode_info(
         Opcode::CleS,
         OpcodeFamily::Scalar,
         "cle.s",
         OperandShape::None,
         0x3D,
     ),
-    info(
+    opcode_info(
         Opcode::CleU,
         OpcodeFamily::Scalar,
         "cle.u",
         OperandShape::None,
         0x3E,
     ),
-    info(
+    opcode_info(
         Opcode::CgeS,
         OpcodeFamily::Scalar,
         "cge.s",
         OperandShape::None,
         0x40,
     ),
-    info(
+    opcode_info(
         Opcode::CgeU,
         OpcodeFamily::Scalar,
         "cge.u",
         OperandShape::None,
         0x41,
     ),
-    info(
+    opcode_info(
         Opcode::Br,
         OpcodeFamily::Branch,
         "br",
         OperandShape::Label,
         0x42,
     ),
-    info(
+    opcode_info(
         Opcode::BrTrue,
         OpcodeFamily::Branch,
         "br.true",
         OperandShape::Label,
         0x43,
     ),
-    info(
+    opcode_info(
         Opcode::BrFalse,
         OpcodeFamily::Branch,
         "br.false",
         OperandShape::Label,
         0x44,
     ),
-    info(
+    opcode_info(
         Opcode::BrTbl,
         OpcodeFamily::Branch,
         "br.tbl",
         OperandShape::BranchTable,
         0x45,
     ),
-    info(
+    opcode_info(
         Opcode::Leave,
         OpcodeFamily::Branch,
         "leave",
         OperandShape::Label,
         0x46,
     ),
-    info(
+    opcode_info(
         Opcode::Ret,
         OpcodeFamily::Branch,
         "ret",
         OperandShape::None,
         0x47,
     ),
-    info(
+    opcode_info(
         Opcode::Throw,
         OpcodeFamily::Branch,
         "throw",
         OperandShape::None,
         0x48,
     ),
-    info(
+    opcode_info(
         Opcode::Rethrow,
         OpcodeFamily::Branch,
         "rethrow",
         OperandShape::None,
         0x49,
     ),
-    info(
+    opcode_info(
         Opcode::Unreach,
         OpcodeFamily::Branch,
         "unreach",
         OperandShape::None,
         0x4A,
     ),
-    info(
+    opcode_info(
         Opcode::Call,
         OpcodeFamily::Call,
         "call",
         OperandShape::Procedure,
         0x50,
     ),
-    info(
+    opcode_info(
         Opcode::CallInd,
         OpcodeFamily::Call,
         "call.ind",
         OperandShape::None,
         0x51,
     ),
-    info(
+    opcode_info(
         Opcode::CallVirt,
         OpcodeFamily::Call,
         "call.virt",
         OperandShape::Procedure,
         0x52,
     ),
-    info(
+    opcode_info(
         Opcode::CallIface,
         OpcodeFamily::Call,
         "call.iface",
         OperandShape::Procedure,
         0x53,
     ),
-    info(
+    opcode_info(
         Opcode::CallDyn,
         OpcodeFamily::Call,
         "call.dyn",
         OperandShape::Procedure,
         0x54,
     ),
-    info(
+    opcode_info(
         Opcode::CallFfi,
         OpcodeFamily::Call,
         "call.ffi",
         OperandShape::Foreign,
         0x55,
     ),
-    info(
+    opcode_info(
         Opcode::TailCall,
         OpcodeFamily::Call,
         "tail.call",
         OperandShape::Procedure,
         0x56,
     ),
-    info(
+    opcode_info(
         Opcode::TailCallInd,
         OpcodeFamily::Call,
         "tail.call.ind",
         OperandShape::Procedure,
         0x57,
     ),
-    info(
+    opcode_info(
         Opcode::TailCallVirt,
         OpcodeFamily::Call,
         "tail.call.virt",
         OperandShape::Procedure,
         0x58,
     ),
-    info(
+    opcode_info(
         Opcode::TailCallIface,
         OpcodeFamily::Call,
         "tail.call.iface",
         OperandShape::Procedure,
         0x59,
     ),
-    info(
+    opcode_info(
         Opcode::TailCallDyn,
         OpcodeFamily::Call,
         "tail.call.dyn",
         OperandShape::Procedure,
         0x5A,
     ),
-    info(
+    opcode_info(
         Opcode::TailCallFfi,
         OpcodeFamily::Call,
         "tail.call.ffi",
         OperandShape::Foreign,
         0x5B,
     ),
-    info(
+    opcode_info(
         Opcode::LdFn,
         OpcodeFamily::Call,
         "ld.fn",
         OperandShape::Procedure,
         0x5C,
     ),
-    info(
+    opcode_info(
         Opcode::NewFn,
         OpcodeFamily::Call,
         "new.fn",
         OperandShape::WideProcedureCaptures,
         0x5D,
     ),
-    info(
+    opcode_info(
         Opcode::LdVirtFn,
         OpcodeFamily::Call,
         "ld.virt.fn",
         OperandShape::Procedure,
         0x5E,
     ),
-    info(
+    opcode_info(
         Opcode::LdIfaceFn,
         OpcodeFamily::Call,
         "ld.iface.fn",
         OperandShape::Procedure,
         0x5F,
     ),
-    info(
+    opcode_info(
         Opcode::LdDynFn,
         OpcodeFamily::Call,
         "ld.dyn.fn",
         OperandShape::Procedure,
         0x60,
     ),
-    info(
+    opcode_info(
         Opcode::LdFfi,
         OpcodeFamily::Call,
         "ld.ffi",
         OperandShape::Foreign,
         0x61,
     ),
-    info(
+    opcode_info(
         Opcode::NewObj,
         OpcodeFamily::Object,
         "new.obj",
         OperandShape::TypeLen,
         0x70,
     ),
-    info(
+    opcode_info(
         Opcode::NewArr,
         OpcodeFamily::Object,
         "new.arr",
         OperandShape::TypeLen,
         0x71,
     ),
-    info(
+    opcode_info(
         Opcode::ArrNew,
         OpcodeFamily::Object,
         "arr.new",
         OperandShape::Type,
         0x72,
     ),
-    info(
+    opcode_info(
         Opcode::LdElem,
         OpcodeFamily::Object,
         "ld.elem",
         OperandShape::None,
         0x73,
     ),
-    info(
+    opcode_info(
         Opcode::StElem,
         OpcodeFamily::Object,
         "st.elem",
         OperandShape::None,
         0x74,
     ),
-    info(
+    opcode_info(
         Opcode::LdElemA,
         OpcodeFamily::Object,
         "ld.elem.a",
         OperandShape::Type,
         0x75,
     ),
-    info(
+    opcode_info(
         Opcode::LdLen,
         OpcodeFamily::Object,
         "ld.len",
         OperandShape::None,
         0x76,
     ),
-    info(
+    opcode_info(
         Opcode::Slice,
         OpcodeFamily::Object,
         "slice",
         OperandShape::None,
         0x77,
     ),
-    info(
+    opcode_info(
         Opcode::CpObj,
         OpcodeFamily::Object,
         "cp.obj",
         OperandShape::Type,
         0x78,
     ),
-    info(
+    opcode_info(
         Opcode::DupObj,
         OpcodeFamily::Object,
         "dup.obj",
         OperandShape::Type,
         0x79,
     ),
-    info(
+    opcode_info(
         Opcode::DropObj,
         OpcodeFamily::Object,
         "drop.obj",
         OperandShape::Type,
         0x7A,
     ),
-    info(
+    opcode_info(
         Opcode::LdType,
         OpcodeFamily::Type,
         "ld.type",
         OperandShape::Type,
         0x80,
     ),
-    info(
+    opcode_info(
         Opcode::TypeOf,
         OpcodeFamily::Type,
         "type.of",
         OperandShape::None,
         0x81,
     ),
-    info(
+    opcode_info(
         Opcode::IsInst,
         OpcodeFamily::Type,
         "is.inst",
         OperandShape::Type,
         0x82,
     ),
-    info(
+    opcode_info(
         Opcode::Cast,
         OpcodeFamily::Type,
         "cast",
         OperandShape::Type,
         0x83,
     ),
-    info(
+    opcode_info(
         Opcode::Conv,
         OpcodeFamily::Type,
         "conv",
         OperandShape::Type,
         0x84,
     ),
-    info(
+    opcode_info(
         Opcode::ConvOvf,
         OpcodeFamily::Type,
         "conv.ovf",
         OperandShape::Type,
         0x85,
     ),
-    info(
+    opcode_info(
         Opcode::ConvS,
         OpcodeFamily::Type,
         "conv.s",
         OperandShape::Type,
         0x86,
     ),
-    info(
+    opcode_info(
         Opcode::ConvU,
         OpcodeFamily::Type,
         "conv.u",
         OperandShape::Type,
         0x87,
     ),
-    info(
+    opcode_info(
         Opcode::ConvOvfS,
         OpcodeFamily::Type,
         "conv.ovf.s",
         OperandShape::Type,
         0x88,
     ),
-    info(
+    opcode_info(
         Opcode::ConvOvfU,
         OpcodeFamily::Type,
         "conv.ovf.u",
         OperandShape::Type,
         0x89,
     ),
-    info(
+    opcode_info(
         Opcode::Box,
         OpcodeFamily::Type,
         "box",
         OperandShape::Type,
         0x8A,
     ),
-    info(
+    opcode_info(
         Opcode::Unbox,
         OpcodeFamily::Type,
         "unbox",
         OperandShape::Type,
         0x8B,
     ),
-    info(
+    opcode_info(
         Opcode::SizeOf,
         OpcodeFamily::Type,
         "size.of",
         OperandShape::Type,
         0x8C,
     ),
-    info(
+    opcode_info(
         Opcode::AlignOf,
         OpcodeFamily::Type,
         "align.of",
         OperandShape::Type,
         0x8D,
     ),
-    info(
+    opcode_info(
         Opcode::LdTok,
         OpcodeFamily::Type,
         "ld.tok",
         OperandShape::Type,
         0x8E,
     ),
-    info(
+    opcode_info(
         Opcode::LdInd,
         OpcodeFamily::Ref,
         "ld.ind",
         OperandShape::Type,
         0x90,
     ),
-    info(
+    opcode_info(
         Opcode::StInd,
         OpcodeFamily::Ref,
         "st.ind",
         OperandShape::Type,
         0x91,
     ),
-    info(
+    opcode_info(
         Opcode::RefAny,
         OpcodeFamily::Ref,
         "ref.any",
         OperandShape::None,
         0x92,
     ),
-    info(
+    opcode_info(
         Opcode::EndRef,
         OpcodeFamily::Ref,
         "end.ref",
         OperandShape::None,
         0x93,
     ),
-    info(
+    opcode_info(
         Opcode::Pin,
         OpcodeFamily::Ref,
         "pin",
         OperandShape::None,
         0x94,
     ),
-    info(
+    opcode_info(
         Opcode::Unpin,
         OpcodeFamily::Ref,
         "unpin",
         OperandShape::None,
         0x95,
     ),
-    info(
+    opcode_info(
         Opcode::LdAddr,
         OpcodeFamily::Ref,
         "ld.addr",
         OperandShape::Type,
         0x96,
     ),
-    info(
+    opcode_info(
         Opcode::PtrEq,
         OpcodeFamily::Ref,
         "ptr.eq",
         OperandShape::None,
         0x97,
     ),
-    info(
+    opcode_info(
         Opcode::PtrCast,
         OpcodeFamily::Ref,
         "ptr.cast",
         OperandShape::Type,
         0x98,
     ),
-    info(
+    opcode_info(
         Opcode::HdlPush,
         OpcodeFamily::Effect,
         "hdl.push",
         OperandShape::EffectId,
         0xA0,
     ),
-    info(
+    opcode_info(
         Opcode::HdlPop,
         OpcodeFamily::Effect,
         "hdl.pop",
         OperandShape::None,
         0xA1,
     ),
-    info(
+    opcode_info(
         Opcode::Raise,
         OpcodeFamily::Effect,
         "raise",
         OperandShape::Effect,
         0xA2,
     ),
-    info(
+    opcode_info(
         Opcode::Resume,
         OpcodeFamily::Effect,
         "resume",
         OperandShape::None,
         0xA3,
     ),
-    info(
+    opcode_info(
         Opcode::DropCont,
         OpcodeFamily::Effect,
         "drop.cont",
         OperandShape::None,
         0xA4,
     ),
-    info(
+    opcode_info(
         Opcode::LdImp,
         OpcodeFamily::Module,
         "ld.imp",
         OperandShape::String,
         0xB0,
     ),
-    info(
+    opcode_info(
         Opcode::LdExp,
         OpcodeFamily::Module,
         "ld.exp",
         OperandShape::String,
         0xB1,
     ),
-    info(
+    opcode_info(
         Opcode::MdlLoad,
         OpcodeFamily::Module,
         "mdl.load",
         OperandShape::None,
         0xB2,
     ),
-    info(
+    opcode_info(
         Opcode::MdlGet,
         OpcodeFamily::Module,
         "mdl.get",
@@ -1147,46 +1147,4 @@ const OPCODE_INFOS: &[OpcodeInfo] = &[
 ];
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::collections::BTreeSet;
-
-    mod success {
-        use super::*;
-
-        #[test]
-        fn opcode_catalog_has_unique_mnemonics_and_wire_codes() {
-            let mut mnemonics = BTreeSet::new();
-            let mut wire_codes = BTreeSet::new();
-            for info in OPCODE_INFOS {
-                let wire = match info.wire {
-                    OpcodeWire::Core(code) => u16::from(code),
-                    OpcodeWire::Extended(code) => code,
-                };
-                assert!(
-                    mnemonics.insert(info.mnemonic),
-                    "duplicate mnemonic `{}`",
-                    info.mnemonic
-                );
-                assert!(wire_codes.insert(wire), "duplicate wire code `{wire:#06x}`");
-            }
-            assert_eq!(mnemonics.len(), OPCODE_INFOS.len());
-            assert_eq!(wire_codes.len(), OPCODE_INFOS.len());
-        }
-
-        #[test]
-        fn opcode_mnemonics_fit_seam_style_constraints() {
-            for info in OPCODE_INFOS {
-                assert!(
-                    info.mnemonic
-                        .chars()
-                        .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '.'),
-                    "mnemonic has invalid chars `{}`",
-                    info.mnemonic
-                );
-            }
-        }
-    }
-
-    mod failure {}
-}
+mod tests;

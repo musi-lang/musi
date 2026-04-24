@@ -30,7 +30,7 @@ pub(super) fn register(host: &mut NativeHost) {
         foundation_env::EFFECT,
         foundation_env::SET_OP,
         |ctx, effect, args| {
-            let [name, value] = args else {
+            let [name, env_value] = args else {
                 return Err(invalid_runtime_args(
                     effect,
                     "name and value strings",
@@ -40,18 +40,18 @@ pub(super) fn register(host: &mut NativeHost) {
             let name = ctx
                 .string(name)
                 .ok_or_else(|| invalid_runtime_args(effect, "name string", name.kind()))?;
-            let value = ctx
-                .string(value)
-                .ok_or_else(|| invalid_runtime_args(effect, "value string", value.kind()))?;
+            let env_value = ctx
+                .string(env_value)
+                .ok_or_else(|| invalid_runtime_args(effect, "value string", env_value.kind()))?;
             let name = name.as_str();
-            let value = value.as_str();
-            if !valid_env_key(name) || value.contains('\0') {
+            let env_value = env_value.as_str();
+            if !valid_env_key(name) || env_value.contains('\0') {
                 return Ok(Value::Int(0));
             }
             // SAFETY: Musi's runtime executes on one VM thread; no concurrent Rust env access exists here.
             #[allow(unsafe_code)]
             unsafe {
-                set_var(name, value);
+                set_var(name, env_value);
             }
             Ok(Value::Int(1))
         },

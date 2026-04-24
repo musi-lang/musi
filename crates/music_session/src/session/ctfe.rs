@@ -55,7 +55,7 @@ impl Session {
                     module: key.clone(),
                     diags: Box::new([ctfe_diag(format!("initialization failed `{error}`"))]),
                 })?;
-            let value = vm.call_export(&job.export, &[]).map_err(|error| {
+            let export_value = vm.call_export(&job.export, &[]).map_err(|error| {
                 SessionError::ModuleLoweringFailed {
                     module: key.clone(),
                     diags: Box::new([ctfe_diag(format!(
@@ -64,7 +64,7 @@ impl Session {
                     ))]),
                 }
             })?;
-            let comptime = value_to_comptime(key, &vm, &value).map_err(|detail| {
+            let comptime = value_to_comptime(key, &vm, &export_value).map_err(|detail| {
                 SessionError::ModuleLoweringFailed {
                     module: key.clone(),
                     diags: Box::new([ctfe_diag(format!(

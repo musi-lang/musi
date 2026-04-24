@@ -191,8 +191,8 @@ fn run_target(path: &Path, args: &[String]) -> MusicResult {
 fn run_program(program: Program) -> MusicResult {
     let mut vm = Vm::with_rejecting_host(program, VmOptions);
     vm.initialize()?;
-    let value = vm.call_export("main", &[])?;
-    print_vm_value(&vm, &value);
+    let main_result = vm.call_export("main", &[])?;
+    print_vm_value(&vm, &main_result);
     Ok(())
 }
 

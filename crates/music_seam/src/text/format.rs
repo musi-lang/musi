@@ -1,4 +1,5 @@
 use super::*;
+use std::fmt::Write;
 
 fn symbol_needs_quote(text: &str) -> bool {
     text.chars().any(char::is_whitespace) || text.contains('"') || text.contains('\\')
@@ -82,7 +83,7 @@ pub fn format_hil_projection(artifact: &Artifact) -> String {
                 out.push_str(", ");
             }
             out.push('%');
-            out.push_str(&index.to_string());
+            write!(out, "{index}").expect("write to string");
             out.push_str(": _");
         }
         out.push_str(") -> _");
@@ -135,14 +136,14 @@ fn format_data(out: &mut String, artifact: &Artifact) {
         out.push_str(".data ");
         push_symbol_ref(out, artifact.string_text(descriptor.name));
         out.push_str(" variants ");
-        out.push_str(&descriptor.variant_count.to_string());
+        write!(out, "{}", descriptor.variant_count).expect("write to string");
         out.push_str(" fields ");
-        out.push_str(&descriptor.field_count.to_string());
+        write!(out, "{}", descriptor.field_count).expect("write to string");
         for variant in &descriptor.variants {
             out.push_str(" variant ");
             push_symbol_ref(out, artifact.string_text(variant.name));
             out.push_str(" tag ");
-            out.push_str(&variant.tag.to_string());
+            write!(out, "{}", variant.tag).expect("write to string");
             for ty in &variant.field_tys {
                 out.push_str(" field ");
                 push_symbol_ref(out, artifact.type_name(*ty));
@@ -154,11 +155,11 @@ fn format_data(out: &mut String, artifact: &Artifact) {
         }
         if let Some(align) = descriptor.layout_align {
             out.push_str(" align ");
-            out.push_str(&align.to_string());
+            write!(out, "{align}").expect("write to string");
         }
         if let Some(pack) = descriptor.layout_pack {
             out.push_str(" pack ");
-            out.push_str(&pack.to_string());
+            write!(out, "{pack}").expect("write to string");
         }
         if descriptor.frozen {
             out.push_str(" frozen");
@@ -174,11 +175,11 @@ fn format_constants(out: &mut String, artifact: &Artifact) {
         match descriptor.value {
             ConstantValue::Int(value) => {
                 out.push_str(" int ");
-                out.push_str(&value.to_string());
+                write!(out, "{value}").expect("write to string");
             }
             ConstantValue::Float(value) => {
                 out.push_str(" float ");
-                out.push_str(&value.to_string());
+                write!(out, "{value}").expect("write to string");
             }
             ConstantValue::Bool(value) => {
                 out.push_str(" bool ");
@@ -249,9 +250,9 @@ fn format_procedures(out: &mut String, artifact: &Artifact) {
         out.push_str(".procedure ");
         push_symbol_ref(out, artifact.string_text(procedure.name));
         out.push_str(" params ");
-        out.push_str(&procedure.params.to_string());
+        write!(out, "{}", procedure.params).expect("write to string");
         out.push_str(" locals ");
-        out.push_str(&procedure.locals.to_string());
+        write!(out, "{}", procedure.locals).expect("write to string");
         if procedure.export {
             out.push_str(" export");
         }
@@ -360,10 +361,12 @@ fn format_operand(
 ) {
     match operand {
         Operand::None => {}
-        Operand::I16(value) => out.push_str(&value.to_string()),
+        Operand::I16(value) => {
+            write!(out, "{value}").expect("write to string");
+        }
         Operand::Local(slot) => {
             out.push('%');
-            out.push_str(&slot.to_string());
+            write!(out, "{slot}").expect("write to string");
         }
         Operand::String(text) => push_quoted(out, artifact.string_text(*text)),
         Operand::Type(id) => {
@@ -384,7 +387,7 @@ fn format_operand(
         } => {
             push_symbol_ref(out, artifact.string_text(artifact.procedures.get(*id).name));
             out.push(' ');
-            out.push_str(&captures.to_string());
+            write!(out, "{captures}").expect("write to string");
         }
         Operand::Foreign(id) => {
             push_symbol_ref(out, artifact.string_text(artifact.foreigns.get(*id).name));
@@ -405,7 +408,7 @@ fn format_operand(
         Operand::TypeLen { ty, len } => {
             push_symbol_ref(out, artifact.string_text(artifact.types.get(*ty).name));
             out.push(' ');
-            out.push_str(&len.to_string());
+            write!(out, "{len}").expect("write to string");
         }
         Operand::BranchTable(labels) => {
             for (idx, label) in labels.iter().copied().enumerate() {

@@ -838,6 +838,39 @@ mod success {
     }
 
     #[test]
+    fn bound_export_call_reuses_const_i64_array8_return() {
+        let program = compile_program(
+            &[(
+                "main",
+                r"
+            export let result () : [8]Int := [0, 1, 2, 3, 4, 5, 6, 7];
+        ",
+            )],
+            "main",
+        );
+        let mut vm = Vm::with_rejecting_host(program, VmOptions);
+        let bound = vm
+            .bind_export_call("result")
+            .expect("const sequence export should bind");
+        let first = vm
+            .call_bound_export(&bound, &[])
+            .expect("first bound export call should run");
+        let second = vm
+            .call_bound_export(&bound, &[])
+            .expect("second bound export call should run");
+
+        let (Value::Seq(first_ref), Value::Seq(second_ref)) = (&first, &second) else {
+            panic!("calls should return sequences");
+        };
+        assert_ne!(first_ref, second_ref);
+        let ValueView::Seq(sequence) = vm.inspect(&second) else {
+            panic!("second should inspect as sequence");
+        };
+        assert_eq!(sequence.len(), 8);
+        assert_eq!(sequence.get(7), Some(Value::Int(7)));
+    }
+
+    #[test]
     fn fuses_data_match_option_path() {
         let program = compile_program(
             &[(

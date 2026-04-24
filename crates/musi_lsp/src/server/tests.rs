@@ -36,41 +36,49 @@ mod success {
 
     #[test]
     fn initialize_result_advertises_full_sync_and_hover() {
-        let result = MusiLanguageServer::initialize_result();
+        let initialize_result = MusiLanguageServer::initialize_result();
 
-        assert_eq!(result.server_info.expect("server info").name, "musi_lsp");
         assert_eq!(
-            result.capabilities.text_document_sync,
+            initialize_result.server_info.expect("server info").name,
+            "musi_lsp"
+        );
+        assert_eq!(
+            initialize_result.capabilities.text_document_sync,
             Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL))
         );
         assert_eq!(
-            result.capabilities.hover_provider,
+            initialize_result.capabilities.hover_provider,
             Some(HoverProviderCapability::Simple(true))
         );
         assert_eq!(
-            result.capabilities.document_formatting_provider,
+            initialize_result.capabilities.document_formatting_provider,
             Some(OneOf::Left(true))
         );
-        assert!(result.capabilities.semantic_tokens_provider.is_some());
-        assert!(result.capabilities.inlay_hint_provider.is_some());
-        assert!(result.capabilities.completion_provider.is_some());
-        assert_eq!(
-            result.capabilities.definition_provider,
-            Some(OneOf::Left(true))
+        assert!(
+            initialize_result
+                .capabilities
+                .semantic_tokens_provider
+                .is_some()
         );
+        assert!(initialize_result.capabilities.inlay_hint_provider.is_some());
+        assert!(initialize_result.capabilities.completion_provider.is_some());
         assert_eq!(
-            result.capabilities.references_provider,
-            Some(OneOf::Left(true))
-        );
-        assert_eq!(
-            result.capabilities.document_symbol_provider,
+            initialize_result.capabilities.definition_provider,
             Some(OneOf::Left(true))
         );
         assert_eq!(
-            result.capabilities.workspace_symbol_provider,
+            initialize_result.capabilities.references_provider,
             Some(OneOf::Left(true))
         );
-        assert!(result.capabilities.rename_provider.is_some());
+        assert_eq!(
+            initialize_result.capabilities.document_symbol_provider,
+            Some(OneOf::Left(true))
+        );
+        assert_eq!(
+            initialize_result.capabilities.workspace_symbol_provider,
+            Some(OneOf::Left(true))
+        );
+        assert!(initialize_result.capabilities.rename_provider.is_some());
     }
 
     #[test]

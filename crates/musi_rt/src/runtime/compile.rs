@@ -118,7 +118,7 @@ pub(super) fn compile_synthetic_program_from_store(
             continue;
         }
         session
-            .set_module_text(&ModuleKey::new(module.as_ref()), text.clone())
+            .set_module_text(&ModuleKey::new(module.as_ref()), text.as_str())
             .map_err(runtime_session_error)?;
     }
     session
@@ -157,7 +157,7 @@ fn compile_registered_texts(spec: &str, store: &RuntimeStore) -> RuntimeProgramR
     register_modules(&mut session).map_err(runtime_session_error)?;
     for (module, text) in &module_texts {
         session
-            .set_module_text(&ModuleKey::new(module.as_ref()), text.clone())
+            .set_module_text(&ModuleKey::new(module.as_ref()), text.as_str())
             .map_err(runtime_session_error)?;
     }
     let output = session
@@ -173,7 +173,7 @@ fn compile_registered_texts_for_vm(spec: &str, store: &RuntimeStore) -> VmResult
     register_modules(&mut session).map_err(|err| vm_session_error(&err))?;
     for (module, text) in &module_texts {
         session
-            .set_module_text(&ModuleKey::new(module.as_ref()), text.clone())
+            .set_module_text(&ModuleKey::new(module.as_ref()), text.as_str())
             .map_err(|err| vm_session_error(&err))?;
     }
     let output = session

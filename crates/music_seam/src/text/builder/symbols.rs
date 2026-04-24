@@ -1,4 +1,5 @@
 use super::*;
+use std::mem::take;
 
 impl TextBuilder {
     pub(crate) fn ensure_type_symbol(&mut self, name: &str, term: &str) -> TypeId {
@@ -120,24 +121,21 @@ pub(super) fn tokenize(line: &str) -> AssemblyResult<Vec<String>> {
             current.push(ch);
             if ch == '"' && !current.ends_with("\\\"") {
                 in_string = false;
-                tokens.push(current.clone());
-                current.clear();
+                tokens.push(take(&mut current));
             }
             continue;
         }
         match ch {
             '"' => {
                 if !current.is_empty() {
-                    tokens.push(current.clone());
-                    current.clear();
+                    tokens.push(take(&mut current));
                 }
                 current.push(ch);
                 in_string = true;
             }
             '$' if matches!(chars.peek().copied(), Some('"')) => {
                 if !current.is_empty() {
-                    tokens.push(current.clone());
-                    current.clear();
+                    tokens.push(take(&mut current));
                 }
                 current.push('$');
                 current.push('"');
@@ -146,8 +144,7 @@ pub(super) fn tokenize(line: &str) -> AssemblyResult<Vec<String>> {
             }
             ' ' | '\t' => {
                 if !current.is_empty() {
-                    tokens.push(current.clone());
-                    current.clear();
+                    tokens.push(take(&mut current));
                 }
             }
             _ => current.push(ch),

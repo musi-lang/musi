@@ -86,11 +86,11 @@ where
         } else {
             HirConstraintKind::Implements
         };
-        let value = match node.child_nodes().find(|n| is_expr_or_ty(n.kind())) {
+        let constraint_expr = match node.child_nodes().find(|n| is_expr_or_ty(n.kind())) {
             Some(expr) => self.lower_expr(expr),
             None => self.error_expr(self.origin_node(node)),
         };
-        HirConstraint::new(name, kind, value)
+        HirConstraint::new(name, kind, constraint_expr)
     }
 
     pub(super) fn lower_effect_set(&mut self, node: SyntaxNode<'tree, 'src>) -> HirEffectSet {

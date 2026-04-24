@@ -206,17 +206,17 @@ pub(super) fn lower_destructure_let(
     let import_record_target = ctx.sema.expr_import_record_target(value);
 
     let value_expr = lower_expr(ctx, value);
-    let temp = fresh_temp(ctx);
+    let temp_id = fresh_temp(ctx);
     let mut exprs = Vec::<IrExpr>::new();
     exprs.push(IrExpr::new(
         origin,
         IrExprKind::TempLet {
-            temp,
+            temp: temp_id,
             value: Box::new(value_expr),
         },
     ));
 
-    let base = IrExpr::new(origin, IrExprKind::Temp { temp });
+    let base = IrExpr::new(origin, IrExprKind::Temp { temp: temp_id });
     IrrefutablePatInput {
         origin,
         import_record_target,
@@ -253,13 +253,13 @@ fn store_in_temp(
     base: IrExpr,
     out: &mut Vec<IrExpr>,
 ) -> IrExpr {
-    let temp = fresh_temp(ctx);
+    let temp_id = fresh_temp(ctx);
     out.push(IrExpr::new(
         origin,
         IrExprKind::TempLet {
-            temp,
+            temp: temp_id,
             value: Box::new(base),
         },
     ));
-    IrExpr::new(origin, IrExprKind::Temp { temp })
+    IrExpr::new(origin, IrExprKind::Temp { temp: temp_id })
 }

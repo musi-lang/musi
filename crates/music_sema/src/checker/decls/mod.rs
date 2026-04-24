@@ -77,7 +77,7 @@ pub(super) fn member_signature(
         })
         .collect::<Vec<_>>()
         .into_boxed_slice();
-    let result = member.sig.map_or(builtins.unknown, |expr| {
+    let return_ty = member.sig.map_or(builtins.unknown, |expr| {
         let origin = ctx.expr(expr).origin;
         ctx.lower_type_expr(expr, origin)
     });
@@ -85,14 +85,14 @@ pub(super) fn member_signature(
         let params_list = ctx.alloc_ty_list(params.iter().copied());
         let ty = ctx.alloc_ty(HirTyKind::Arrow {
             params: params_list,
-            ret: result,
+            ret: return_ty,
             is_effectful: false,
         });
         if let Some(binding) = ctx.binding_id_for_decl(member.name) {
             ctx.insert_binding_type(binding, ty);
         }
     }
-    ShapeMemberFacts::new(member.name.name, params, result)
+    ShapeMemberFacts::new(member.name.name, params, return_ty)
 }
 
 pub(super) fn member_law_facts(ctx: &mut PassBase<'_, '_, '_>, member: &HirMemberDef) -> LawFacts {
@@ -231,14 +231,14 @@ impl CheckPass<'_, '_, '_> {
             .collect::<Vec<_>>()
             .into_boxed_slice();
         let params = self.lower_params(params);
-        let result = sig.map_or(builtins.unknown, |sig| {
+        let return_ty = sig.map_or(builtins.unknown, |sig| {
             let origin = self.expr(sig).origin;
             self.lower_type_expr(sig, origin)
         });
         let params = self.alloc_ty_list(params.iter().copied());
         let ty = self.alloc_ty(HirTyKind::Arrow {
             params,
-            ret: result,
+            ret: return_ty,
             is_effectful: false,
         });
         if let Some((binding, _)) = self.native_binding_from_let(expr_id) {
@@ -315,7 +315,7 @@ impl CheckPass<'_, '_, '_> {
                 "feature" => values.iter().any(|v| target.features.contains(v.as_str())),
                 "pointerWidth" => target
                     .pointer_width
-                    .is_some_and(|width| values.iter().any(|value| value == &width.to_string())),
+                    .is_some_and(|width| values.iter().any(|value| value == &format!("{width}"))),
                 "endian" => matches_target_value(target.endian.as_deref(), &values),
                 "jit" => {
                     target.jit.supported

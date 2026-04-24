@@ -103,10 +103,10 @@ impl Parser<'_> {
     fn parse_attr_record_field(&mut self) -> ParseResult<SyntaxNodeId> {
         let ident = self.expect_ident_element()?;
         let bind = self.expect_token(TokenKind::ColonEq)?;
-        let value = self.parse_attr_value()?;
+        let attr_value = self.parse_attr_value()?;
         Ok(self.builder.push_node_from_children(
             SyntaxNodeKind::RecordItem,
-            vec![ident, bind, SyntaxElementId::Node(value)],
+            vec![ident, bind, SyntaxElementId::Node(attr_value)],
         ))
     }
 

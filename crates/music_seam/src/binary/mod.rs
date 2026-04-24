@@ -462,8 +462,7 @@ fn decode_strings(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> AssemblyR
     require_section(cursor, SectionTag::Strings)?;
     for _ in 0..cursor.read_u32()? {
         let bytes = cursor.read_bytes()?;
-        let text = String::from_utf8(bytes)
-            .map_err(|err| AssemblyError::text_parse_source(err.to_string()))?;
+        let text = String::from_utf8(bytes).map_err(AssemblyError::text_parse_source)?;
         let _ = artifact.push_string_record(&text);
     }
     Ok(())
@@ -484,7 +483,7 @@ fn decode_constants(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Assembl
     for _ in 0..cursor.read_u32()? {
         let name = cursor.read_idx()?;
         let kind = cursor.read_u8()?;
-        let value = match kind {
+        let constant_value = match kind {
             0 => ConstantValue::Int(cursor.read_i64()?),
             1 => ConstantValue::Float(f64::from_bits(cursor.read_u64()?)),
             2 => ConstantValue::Bool(cursor.read_u8()? != 0),
@@ -505,7 +504,7 @@ fn decode_constants(cursor: &mut Cursor<'_>, artifact: &mut Artifact) -> Assembl
         };
         let _ = artifact
             .constants
-            .alloc(ConstantDescriptor::new(name, value));
+            .alloc(ConstantDescriptor::new(name, constant_value));
     }
     Ok(())
 }
@@ -887,12 +886,12 @@ impl<'bytes> Cursor<'bytes> {
     }
 
     fn read_u8(&mut self) -> AssemblyResult<u8> {
-        let value = *self
+        let byte = *self
             .bytes
             .get(self.offset)
             .ok_or(AssemblyError::BinaryPayloadTruncated)?;
         self.offset = self.offset.saturating_add(1);
-        Ok(value)
+        Ok(byte)
     }
 
     fn read_u16(&mut self) -> AssemblyResult<u16> {

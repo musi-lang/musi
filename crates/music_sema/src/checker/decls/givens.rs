@@ -43,10 +43,10 @@ impl CheckPass<'_, '_, '_> {
                     .map(|param| self.substitute_ty(param, &subst))
                     .collect::<Vec<_>>()
                     .into_boxed_slice();
-                let result = self.substitute_ty(member.result, &subst);
+                let result_ty = self.substitute_ty(member.result, &subst);
                 (
                     member.name,
-                    ShapeMemberFacts::new(member.name, params, result),
+                    ShapeMemberFacts::new(member.name, params, result_ty),
                 )
             })
             .collect::<HashMap<_, _>>()
