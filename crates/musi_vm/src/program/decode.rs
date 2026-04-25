@@ -2,11 +2,12 @@ use music_seam::{Artifact, CodeEntry, Instruction, Opcode, Operand, ProcedureId}
 
 use crate::program_kernel::decode_runtime_kernel;
 
-use super::{
-    CompareOp, LabelIndexMap, LoadedProcedure, RuntimeBranchTable, RuntimeBranchTableList,
-    RuntimeCallMode, RuntimeCallShape, RuntimeFusedOp, RuntimeInstruction, RuntimeInstructionList,
-    VmResult,
+use super::model::{LabelIndexMap, LoadedProcedure, RuntimeBranchTableList};
+use super::runtime::{
+    CompareOp, RuntimeBranchTable, RuntimeCallMode, RuntimeCallShape, RuntimeFusedOp,
+    RuntimeInstruction, RuntimeInstructionList,
 };
+use crate::VmResult;
 
 pub(super) fn build_procedures(artifact: &Artifact) -> VmResult<Box<[LoadedProcedure]>> {
     let procedure_shapes = artifact

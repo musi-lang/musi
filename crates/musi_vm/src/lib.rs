@@ -15,8 +15,8 @@ mod vm;
 
 pub use api::{
     BitsValue, BoundExportCall, BoundI64Call, BoundInitCall, BoundSeq2x2Arg, BoundSeq2x2Call,
-    BoundSeq8Call, ClosureView, ForeignView, HeapCollectionStats, IsolateId, ModuleView,
-    MvmFeatures, MvmMode, MvmOptionsParseError, Program, ProgramDataLayout,
+    BoundSeq8Call, ClosureView, ForeignView, HeapCollectionStats, HeapValueKind, IsolateId,
+    ModuleView, MvmFeatures, MvmMode, MvmOptionsParseError, Program, ProgramDataLayout,
     ProgramDataVariantLayout, ProgramExport, ProgramExportKind, ProgramTypeAbiKind, RecordView,
     RejectingHost, RejectingLoader, SeqView, StringView, Value, ValueView, Vm, VmHost,
     VmHostCallContext, VmHostContext, VmLoader, VmOptimizationLevel, VmOptions, VmRuntime,
