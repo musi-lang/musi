@@ -1,33 +1,33 @@
-# Known Items, Intrinsics, And Attributes
+# Builtin Items, Intrinsics, And Attributes
 
 Status: proposed
 
-This spec defines final source-facing contract for compiler-owned known items, compiler-owned intrinsics, and public attributes.
+This spec defines final source-facing contract for compiler-owned builtin items, compiler-owned intrinsics, and public attributes.
 
 `known` as a source keyword is documented in `specs/language/type-core.md`. It describes compile-time availability for user-authored bindings and parameters.
 
-`@musi.known` is different. It marks compiler-owned foundation names. It is not the general source spelling for compile-time values.
+`@musi.builtin` is different. It marks compiler-owned foundation names. It is not source spelling for compile-time values.
 
-## Known Items
+## Builtin Items
 
 Musi does not use old lang-item role spelling in source.
 
-Compiler-owned known bindings use reserved namespaced attribute:
+Compiler-owned builtin bindings use reserved namespaced attribute:
 
 ```musi
-@musi.known(name := "Type")
+@musi.builtin(name := "Type")
 export let Type := Type;
 ```
 
 Rules:
 
-- `@musi.known` is valid only on exported plain-bind `let` in `musi:*`
-- source names compiler-known item only by `name`
-- compiler derives ownership and semantics from internal known-item registry
-- ordinary library items such as `Option`, `Result`, `Rangeable`, `RangeBounds`, and `Abort` are not known items
-- optional and fallible sugar (`?T`, `E!T`) lowers through ordinary `Option` and `Result` types, not known-item hooks
+- `@musi.builtin` is valid only on exported plain-bind `let` in `musi:*`
+- source names compiler builtin only by `name`
+- compiler derives ownership and semantics from internal builtin registry
+- ordinary library items such as `Option`, `Result`, `Rangeable`, `RangeBounds`, and `Abort` are not builtin items
+- optional and fallible sugar (`?T`, `E!T`) lowers through ordinary `Option` and `Result` types, not builtin hooks
 
-Current known-item set includes core semantic and runtime-boundary names such as:
+Current builtin item set includes core semantic and runtime-boundary names such as:
 
 - `Type`
 - `Array`
@@ -65,7 +65,7 @@ Rules:
 - intrinsics are reserved for irreducible runtime leaves such as pointer load/store/cast or boundary conversion
 - source-facing APIs should wrap intrinsic-backed leaves in ordinary Musi code
 
-`@musi.known` and `@musi.intrinsic` are compile-time only. They do not survive as public reflection metadata.
+`@musi.builtin` and `@musi.intrinsic` are compile-time only. They do not survive as public reflection metadata.
 
 ## Public Attributes
 
@@ -93,7 +93,7 @@ Rules:
 
 Reserved attribute space:
 
-- `@musi.known`
+- `@musi.builtin`
 - `@musi.intrinsic`
 - `@musi.*`
 
@@ -160,7 +160,7 @@ Rules:
 
 ## Lowering
 
-- `@musi.known` and `@musi.intrinsic` disappear before `.seam`
+- `@musi.builtin` and `@musi.intrinsic` disappear before `.seam`
 - `@frozen` lowers into type metadata and verification data
 - `@profile` lowers into callable metadata flags
 - `@lifecycle` lowers into public metadata

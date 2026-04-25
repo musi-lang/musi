@@ -13,7 +13,8 @@ Current public entrypoints by crate. Keep this list high-signal. Do not mirror e
 - `music_builtin` — builtin type and intrinsic catalog used by compiler/runtime layers
 - `music_resolve` — resolved module model
 - `music_sema` — `check_module`, semantic surface, diagnostics, effect rows
-- `music_ir` — IR model and sema-to-IR lowering
+- `music_ir` — IR model and diagnostics
+- `music_ir_lower` — sema-to-IR lowering
 - `music_emit` — IR-to-SEAM lowering
 - `music_session` — `Session`, `CompiledOutput`, session diagnostics/options, CTFE host configuration
 

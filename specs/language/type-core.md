@@ -140,7 +140,7 @@ value :? T as refined;
 
 `known` does not mean contextual. `given` owns contextual search.
 
-`known` is distinct from `@musi.known`. The keyword describes user-authored compile-time availability. The attribute marks compiler-owned known items in foundation modules.
+`known` is distinct from `@musi.builtin`. The keyword describes user-authored compile-time availability. The attribute marks compiler-owned builtin items in foundation modules.
 
 ## Proof Evidence
 
