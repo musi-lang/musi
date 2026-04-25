@@ -2,7 +2,8 @@
 
 use music_base::SourceId;
 use music_base::diag::{Diag, DiagCode};
-use music_ir::{IrModule, lower_module};
+use music_ir::IrModule;
+use music_ir_lower::lower_module;
 use music_module::ModuleKey;
 use music_names::Interner;
 use music_resolve::{ResolveOptions, resolve_module};

@@ -1,29 +1,25 @@
 [package]
-name = "music_emit"
+name = "music_ir_lower"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-description.workspace = true
-readme.workspace = true
-homepage.workspace = true
-repository.workspace = true
+description = "Sema-to-IR lowering for Musi"
 license.workspace = true
-keywords.workspace = true
-categories.workspace = true
 publish.workspace = true
 
 [dependencies]
+music_arena = { path = "../music_arena" }
 music_base = { path = "../music_base" }
-music_seam = { path = "../music_seam" }
+music_hir = { path = "../music_hir" }
 music_ir = { path = "../music_ir" }
 music_module = { path = "../music_module" }
 music_names = { path = "../music_names" }
+music_sema = { path = "../music_sema" }
 music_term = { path = "../music_term" }
 
 [dev-dependencies]
-music_ir_lower = { path = "../music_ir_lower" }
+musi_foundation = { path = "../musi_foundation" }
 music_resolve = { path = "../music_resolve" }
-music_sema = { path = "../music_sema" }
 music_syntax = { path = "../music_syntax" }
 
 [lints]
