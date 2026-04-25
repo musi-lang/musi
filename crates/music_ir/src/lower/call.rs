@@ -361,19 +361,10 @@ fn ensure_specialized_callable(
         .mods
         .attrs
         .clone();
+    let profile = toplevel::profile_attrs(ctx.sema, ctx.interner, attrs);
     let callable = IrCallable::new(name, lowered_params.into_boxed_slice(), body)
-        .with_hot(toplevel::attrs_have_name(
-            ctx.sema,
-            ctx.interner,
-            attrs.clone(),
-            "hot",
-        ))
-        .with_cold(toplevel::attrs_have_name(
-            ctx.sema,
-            ctx.interner,
-            attrs,
-            "cold",
-        ))
+        .with_hot(profile.hot)
+        .with_cold(profile.cold)
         .with_effects(effects)
         .with_import_record_target(ctx.module_key.clone());
     ctx.extra_callables.push(callable);

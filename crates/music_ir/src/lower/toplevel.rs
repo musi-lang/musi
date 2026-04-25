@@ -763,14 +763,15 @@ fn lower_callable_item(ctx: &mut LowerCtx<'_>, input: CallableItemInput) -> IrCa
         .mods
         .attrs
         .clone();
+    let profile = profile_attrs(ctx.sema, ctx.interner, attrs);
     let mut callable = IrCallable::new(
         interner.resolve(input.name.name),
         params.into_boxed_slice(),
         body,
     )
     .with_exported(input.exported)
-    .with_hot(attrs_have_name(ctx.sema, interner, attrs.clone(), "hot"))
-    .with_cold(attrs_have_name(ctx.sema, interner, attrs, "cold"))
+    .with_hot(profile.hot)
+    .with_cold(profile.cold)
     .with_effects(input.effects);
     if let Some(binding) = input.binding {
         callable = callable.with_binding(binding);
@@ -851,16 +852,45 @@ fn skip_module_value(sema: &SemaModule, value: HirExprId, binding: Option<NameBi
         || binding.is_some_and(|binding| sema.binding_import_record_target(binding).is_some())
 }
 
-pub(super) fn attrs_have_name(
+#[derive(Debug, Clone, Copy, Default)]
+pub(super) struct ProfileAttrs {
+    pub(super) hot: bool,
+    pub(super) cold: bool,
+}
+
+pub(super) fn profile_attrs(
     sema: &SemaModule,
     interner: &Interner,
     attrs: SliceRange<HirAttr>,
-    name: &str,
-) -> bool {
-    sema.module().store.attrs.get(attrs).iter().any(|attr| {
+) -> ProfileAttrs {
+    let mut profile = ProfileAttrs::default();
+    for attr in sema.module().store.attrs.get(attrs) {
         let parts = sema.module().store.idents.get(attr.path);
-        parts.len() == 1 && interner.resolve(parts[0].name) == name
-    })
+        if parts.len() != 1 || interner.resolve(parts[0].name) != "profile" {
+            continue;
+        }
+        for arg in sema.module().store.attr_args.get(attr.args.clone()) {
+            let Some(name) = arg.name else {
+                continue;
+            };
+            if interner.resolve(name.name) != "level" {
+                continue;
+            }
+            let HirExprKind::Variant { tag, args } = &sema.module().store.exprs.get(arg.value).kind
+            else {
+                continue;
+            };
+            if !sema.module().store.args.get(args.clone()).is_empty() {
+                continue;
+            }
+            match interner.resolve(tag.name) {
+                "hot" => profile.hot = true,
+                "cold" => profile.cold = true,
+                _ => {}
+            }
+        }
+    }
+    profile
 }
 
 fn lower_params(ctx: &LowerCtx<'_>, params: SliceRange<HirParam>) -> Box<[IrParam]> {

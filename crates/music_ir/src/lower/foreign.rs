@@ -32,22 +32,13 @@ pub(super) fn lower_foreign_let(
         .and_then(|foreign| foreign.abi)
         .map_or("c", |sym| interner.resolve(sym));
     let (param_tys, result_ty) = foreign_signature_tys(sema, interner, binding, expr_id, params);
+    let profile = super::toplevel::profile_attrs(sema, interner, expr.mods.attrs.clone());
     IrForeignDef::new(name_text, abi, symbol, param_tys, result_ty)
         .with_binding_opt(binding)
         .with_link_opt(link)
         .with_exported(exported)
-        .with_hot(super::toplevel::attrs_have_name(
-            sema,
-            interner,
-            expr.mods.attrs.clone(),
-            "hot",
-        ))
-        .with_cold(super::toplevel::attrs_have_name(
-            sema,
-            interner,
-            expr.mods.attrs.clone(),
-            "cold",
-        ))
+        .with_hot(profile.hot)
+        .with_cold(profile.cold)
 }
 
 fn foreign_signature_tys(

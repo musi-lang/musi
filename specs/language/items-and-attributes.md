@@ -76,7 +76,8 @@ Stable public attrs are behavior-first and short:
 - `@repr(kind := "...")`
 - `@layout(align := N, pack := N)`
 - `@frozen`
-- `@profile(level := .hot | .cold)`
+- `@profile(level := .hot)`
+- `@profile(level := .cold)`
 - `@lifecycle(since := "...", deprecated := { message := "...", replace := "...", version := "..." })`
 - `@axiom(reason := "...")`
 
@@ -110,7 +111,7 @@ It is not:
 
 ## `@profile`
 
-`@profile(level := .hot | .cold)` is optimizer hint metadata.
+`@profile(level := .hot)` and `@profile(level := .cold)` are optimizer hint metadata.
 
 They do not change:
 
