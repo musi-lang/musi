@@ -839,7 +839,7 @@ export let test () := 0;
         let manifest = fs::read_to_string(repo_root.join("packages/std/musi.json"))
             .expect("std manifest should be readable");
 
-        for legacy in [
+        for removed_path in [
             "\"./array\"",
             "\"./list\"",
             "\"./slice\"",
@@ -849,8 +849,8 @@ export let test () := 0;
             "\"./sys\"",
         ] {
             assert!(
-                !manifest.contains(legacy),
-                "legacy std export remains: {legacy}"
+                !manifest.contains(removed_path),
+                "removed std export remains: {removed_path}"
             );
         }
         for current in [
@@ -1286,7 +1286,7 @@ mod failure {
     }
 
     #[test]
-    fn manifest_rejects_legacy_private_field() {
+    fn manifest_rejects_removed_private_field() {
         let error = serde_json::from_str::<PackageManifest>(
             r#"{
   "name": "app",
