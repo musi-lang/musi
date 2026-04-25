@@ -1867,15 +1867,15 @@ mod failure {
     use super::*;
 
     #[test]
-    fn known_attr_requires_foundation_module() {
+    fn builtin_attr_requires_foundation_module() {
         let sema = check(
             r#"
-        @musi.known(name := "Type")
+        @musi.builtin(name := "Type")
         export let Type := Type;
     "#,
         );
         assert!(
-            has_diag(&sema, SemaDiagKind::AttrKnownRequiresFoundationModule),
+            has_diag(&sema, SemaDiagKind::AttrBuiltinRequiresFoundationModule),
             "{:?}",
             sema.diags()
         );

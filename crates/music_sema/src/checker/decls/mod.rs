@@ -193,7 +193,7 @@ impl CheckPass<'_, '_, '_> {
             .map_or_else(|| "c".into(), |sym| self.resolve_symbol(sym).into());
         let attrs = self.attrs(self.expr(expr_id).mods.attrs);
         for attr in &attrs {
-            let path = super::attrs::attr_path(self, attr);
+            let path = self.attr_path(attr);
             match path.as_slice() {
                 ["link"] => self.validate_link_attr(attr, self.expr(expr_id).origin),
                 ["target"] => self.validate_when_attr(attr, self.expr(expr_id).origin),
@@ -276,7 +276,7 @@ impl CheckPass<'_, '_, '_> {
     fn when_attrs_match(&self, attrs: &[HirAttr]) -> bool {
         let target = self.target();
         for attr in attrs {
-            let path = super::attrs::attr_path(self, attr);
+            let path = self.attr_path(attr);
             if path.as_slice() != ["target"] {
                 continue;
             }
@@ -371,7 +371,7 @@ impl CheckPass<'_, '_, '_> {
     fn link_info_from_attrs(&self, attrs: &[HirAttr]) -> ForeignLinkInfo {
         let mut out = ForeignLinkInfo::new();
         for attr in attrs {
-            let path = super::attrs::attr_path(self, attr);
+            let path = self.attr_path(attr);
             if path.as_slice() != ["link"] {
                 continue;
             }
