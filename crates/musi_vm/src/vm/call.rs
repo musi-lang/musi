@@ -180,7 +180,11 @@ impl Vm {
         }
     }
 
-    fn finish_call_value(&mut self, base_depth: usize, result: Value) -> VmResult<Value> {
+    pub(super) fn finish_call_value(
+        &mut self,
+        base_depth: usize,
+        result: Value,
+    ) -> VmResult<Value> {
         self.retain_external_value(&result)?;
         if base_depth == 0 && self.should_collect_after_call() {
             let _ = self.collect_garbage();

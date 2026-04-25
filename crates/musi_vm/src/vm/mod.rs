@@ -35,6 +35,7 @@ mod value_support;
 
 use self::state::{
     CallFrame, CallFrameList, EffectHandlerList, LoadedModuleList, ModuleSlotMap, ResumeList,
+    Seq8ExportCache, Seq8ExportCacheList,
 };
 
 mod boundary;
@@ -66,5 +67,6 @@ pub struct Vm {
     heap_dirty: bool,
     executed_instructions: u64,
     external_roots: Vec<Value>,
+    seq8_export_cache: Seq8ExportCacheList,
     root_initialized: bool,
 }

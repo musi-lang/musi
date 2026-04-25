@@ -130,7 +130,7 @@ impl RuntimeHeap {
             ty, buffer, len,
         )));
         target.survive_count = 0;
-        target.is_marked = false;
+        target.mark_epoch = 0;
         if was_free {
             self.allocated_bytes = self.allocated_bytes.saturating_add(bytes);
             self.young_allocated_bytes = self.young_allocated_bytes.saturating_add(bytes);

@@ -5,7 +5,7 @@ use std::ptr::null;
 use std::slice::Iter;
 use std::sync::Arc;
 
-use music_seam::{EffectId, ProcedureId};
+use music_seam::{EffectId, ProcedureId, TypeId};
 use smallvec::SmallVec;
 
 use super::{GcRef, Program, RuntimeInstruction, RuntimeInstructionList, Value, ValueList};
@@ -17,6 +17,27 @@ type RuntimeInstructionPtr = *const RuntimeInstruction;
 pub type CallFrameList = Vec<CallFrame>;
 pub type EffectHandlerList = Vec<EffectHandler>;
 pub type ResumeList = Vec<GcRef>;
+pub type Seq8ExportCacheList = Vec<Seq8ExportCache>;
+
+#[derive(Debug, Clone)]
+pub struct Seq8ExportCache {
+    pub(crate) module_slot: usize,
+    pub(crate) name: Box<str>,
+    pub(crate) ty: TypeId,
+    pub(crate) buffer: GcRef,
+}
+
+impl Seq8ExportCache {
+    #[must_use]
+    pub fn new(module_slot: usize, name: impl Into<Box<str>>, ty: TypeId, buffer: GcRef) -> Self {
+        Self {
+            module_slot,
+            name: name.into(),
+            ty,
+            buffer,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModuleState {

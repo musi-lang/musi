@@ -17,10 +17,13 @@ pub struct BoundExportCall {
 #[derive(Debug, Clone)]
 enum BoundExportCallKind {
     Value(Value),
-    ConstI64Array8 {
+    InlineEffectResume {
         value: Value,
-        ty: TypeId,
-        buffer: GcRef,
+        result: i64,
+    },
+    ConstSeq8 {
+        value: Value,
+        call: BoundSeq8Call,
     },
     Seq2Mutation2x2 {
         value: Value,
@@ -73,8 +76,7 @@ pub struct BoundInitCall {
 #[derive(Debug, Clone, Copy)]
 enum BoundInitCallKind {
     InlineEffectResume {
-        resume_value: i16,
-        value_add: i16,
+        result: i64,
     },
     Kernel {
         module_slot: usize,
@@ -96,12 +98,20 @@ impl Vm {
             Some(RuntimeKernel::ConstI64Array8Return { ty, cells }) => {
                 let (prototype, buffer) = self.alloc_shared_i64_array8_sequence(ty, cells)?;
                 self.retain_external_value(&prototype)?;
-                BoundExportCallKind::ConstI64Array8 {
+                BoundExportCallKind::ConstSeq8 {
                     value: export_value,
-                    ty,
-                    buffer,
+                    call: BoundSeq8Call { ty, buffer },
                 }
             }
+            Some(RuntimeKernel::InlineEffectResume {
+                resume_value,
+                value_add,
+            }) => BoundExportCallKind::InlineEffectResume {
+                value: export_value,
+                result: i64::from(resume_value)
+                    .checked_add(i64::from(value_add))
+                    .ok_or_else(int_overflow_error)?,
+            },
             Some(RuntimeKernel::Seq2Mutation2x2 {
                 grid_local: 0,
                 init_value,
@@ -125,8 +135,11 @@ impl Vm {
     #[inline(always)]
     pub fn call_bound_export(&mut self, call: &BoundExportCall, args: &[Value]) -> VmResult<Value> {
         match &call.kind {
-            BoundExportCallKind::ConstI64Array8 { ty, buffer, .. } if args.is_empty() => {
-                self.call_seq8_shared_buffer(*ty, *buffer)
+            BoundExportCallKind::InlineEffectResume { result, .. } if args.is_empty() => {
+                Ok(Value::Int(*result))
+            }
+            BoundExportCallKind::ConstSeq8 { call, .. } if args.is_empty() => {
+                self.call_seq8_i64(*call)
             }
             BoundExportCallKind::Seq2Mutation2x2 {
                 init_value,
@@ -255,20 +268,26 @@ impl Vm {
 
     #[allow(clippy::inline_always)]
     #[inline(always)]
-    fn call_seq8_shared_buffer(&mut self, ty: TypeId, buffer: GcRef) -> VmResult<super::Value> {
+    pub(super) fn call_seq8_shared_buffer(
+        &mut self,
+        ty: TypeId,
+        buffer: GcRef,
+    ) -> VmResult<super::Value> {
         if self.options.max_object_bytes.is_none() {
             let pool_full = self.heap.has_full_seq8_fast_pool();
             let sequence_value = self
                 .heap
                 .alloc_sequence_with_i64_array_pooled_unchecked(ty, buffer, 8);
-            if pool_full && !self.options.gc_stress && self.options.heap_limit_bytes.is_none() {
+            if pool_full && self.options.heap_limit_bytes.is_none() {
                 return Ok(sequence_value);
             }
             self.heap_dirty = true;
-            if self.heap.should_collect_young() {
+            if self.heap.should_collect_young()
+                || (self.options.gc_stress && self.options.heap_limit_bytes.is_none())
+            {
                 let _ = self.collect_minor_with_extra(Some(&sequence_value));
             }
-            if self.options.gc_stress || self.options.heap_limit_bytes.is_some() {
+            if self.options.heap_limit_bytes.is_some() {
                 self.enforce_heap_limit_with_extra(Some(&sequence_value))?;
             }
             return Ok(sequence_value);
@@ -319,8 +338,9 @@ impl Vm {
                 resume_value,
                 value_add,
             } => BoundInitCallKind::InlineEffectResume {
-                resume_value,
-                value_add,
+                result: i64::from(resume_value)
+                    .checked_add(i64::from(value_add))
+                    .ok_or_else(int_overflow_error)?,
             },
             _ => BoundInitCallKind::Kernel {
                 module_slot: procedure.module_slot,
@@ -340,12 +360,7 @@ impl Vm {
     pub fn call_init0_i64(&mut self, call: BoundInitCall) -> VmResult<i64> {
         self.count_instruction();
         match call.kind {
-            BoundInitCallKind::InlineEffectResume {
-                resume_value,
-                value_add,
-            } => i64::from(resume_value)
-                .checked_add(i64::from(value_add))
-                .ok_or_else(int_overflow_error),
+            BoundInitCallKind::InlineEffectResume { result } => Ok(result),
             BoundInitCallKind::Kernel {
                 module_slot,
                 kernel,
@@ -477,7 +492,8 @@ impl BoundExportCall {
     const fn value(&self) -> &Value {
         match &self.kind {
             BoundExportCallKind::Value(value)
-            | BoundExportCallKind::ConstI64Array8 { value, .. }
+            | BoundExportCallKind::InlineEffectResume { value, .. }
+            | BoundExportCallKind::ConstSeq8 { value, .. }
             | BoundExportCallKind::Seq2Mutation2x2 { value, .. } => value,
         }
     }

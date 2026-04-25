@@ -882,15 +882,10 @@ impl Program {
     }
 
     #[must_use]
-    pub(crate) fn export_target(&self, name: &str) -> Option<ExportTarget> {
+    pub(crate) fn export_target_with_opaque(&self, name: &str) -> Option<(ExportTarget, bool)> {
         let export_id = self.inner.exports.get(name).copied()?;
-        Some(self.inner.artifact.exports.get(export_id).target)
-    }
-
-    #[must_use]
-    pub(crate) fn is_export_opaque(&self, name: &str) -> Option<bool> {
-        let export_id = self.inner.exports.get(name).copied()?;
-        Some(self.inner.artifact.exports.get(export_id).opaque)
+        let export = self.inner.artifact.exports.get(export_id);
+        Some((export.target, export.opaque))
     }
 
     #[must_use]

@@ -27,6 +27,14 @@ Rules:
 - Use `debug_interpreter_vm_mode` for no-kernel/no-fused-dispatch diagnostics.
 - Use `generic_vm_mode` for Musi optimized peer-style VM mode.
 
+## Why These Targets Are Low
+
+Musi is not a clone of loop-heavy host languages. Its own language surface makes VM overhead visible in places that other runtimes often hide behind `for`, `while`, or host-native callbacks. The grammar has `rec` as the only direct repetition modifier, `resume` as effect-continuation control flow, and no `for`, `while`, or `continue` keyword forms in the canonical lexer/parser. That means recursive calls and effect resume are not benchmark curiosities; they are core language paths.
+
+The low nanosecond and sub-nanosecond targets exist for Musi's market: small embeddable programs, generated programs, and agent-written code that may lean on the language's own control forms instead of host loops. When an embedder calls Musi in a tight path, export lookup, sequence return, GC barriers, recursive kernels, and effect resume can dominate the whole interaction.
+
+For AI agents updating this file: inspect `grammar/MusiLexer.g4`, `grammar/MusiParser.g4`, and `grammar/Musi.abnf` before changing rationale. Do not loosen targets by comparing Musi to languages with different loop/control constructs. Start from Musi semantics, then classify each row as exact peer, close family, selective path, or diagnostic-only.
+
 ## Commands
 
 Run from repository root on the same machine before updating numbers.
@@ -119,7 +127,7 @@ These names stay aligned across C#, F#, Java, Lua, Musi, and Scala when behavior
 
 ## Latest Run
 
-Recorded on 2026-04-25 from working tree on `main` at commit `063c88c1` plus local VM runtime changes.
+Recorded on 2026-04-25 from working tree on `main` at commit `7f943e9e` plus local VM runtime changes.
 
 Machine: MacBook Pro `MacBookPro18,2`, Apple M1 Max, 10 cores, 32 GB, macOS 26.4.1 arm64.
 
@@ -133,12 +141,12 @@ Use this table for broad scripting/runtime comparison. It excludes Musi selectiv
 
 | Workload                   | Lua 5.5 native | Java 17 native | Scala 3 native | C# .NET 8 native | F# .NET 8 native | Musi normal VM |
 | -------------------------- | -------------: | -------------: | -------------: | ---------------: | ---------------: | -------------: |
-| `init_small_module`        |        62.6 ns |         5.4 ns |         7.7 ns |           6.3 ns |           5.2 ns |       0.876 ns |
-| `scalar_recursive_sum`     |      5407.5 ns |       468.4 ns |        55.7 ns |        1513.5 ns |         899.4 ns |       1.378 ns |
-| `closure_capture`          |       177.7 ns |         6.5 ns |         7.2 ns |          24.7 ns |           6.8 ns |       1.100 ns |
-| `sequence_index_mutation`  |        74.5 ns |         7.9 ns |         8.8 ns |           6.1 ns |          11.6 ns |       0.683 ns |
-| `data_match_option`        |       168.8 ns |         7.1 ns |         9.8 ns |           9.2 ns |           4.9 ns |       1.073 ns |
-| `effect_resume_equivalent` |       202.0 ns |         7.1 ns |         7.2 ns |          10.1 ns |           9.4 ns |       1.942 ns |
+| `init_small_module`        |        62.6 ns |         5.4 ns |         7.7 ns |           6.3 ns |           5.2 ns |       1.001 ns |
+| `scalar_recursive_sum`     |      5407.5 ns |       468.4 ns |        55.7 ns |        1513.5 ns |         899.4 ns |       1.523 ns |
+| `closure_capture`          |       177.7 ns |         6.5 ns |         7.2 ns |          24.7 ns |           6.8 ns |       1.193 ns |
+| `sequence_index_mutation`  |        74.5 ns |         7.9 ns |         8.8 ns |           6.1 ns |          11.6 ns |       0.772 ns |
+| `data_match_option`        |       168.8 ns |         7.1 ns |         9.8 ns |           9.2 ns |           4.9 ns |       1.196 ns |
+| `effect_resume_equivalent` |       202.0 ns |         7.1 ns |         7.2 ns |          10.1 ns |           9.4 ns |       1.845 ns |
 
 Notes:
 
@@ -154,12 +162,12 @@ Use it to see dispatch overhead and interpreter behavior. Do not use it as a bes
 
 | Workload                   | Java 17 `vm_mode` | Scala 3 `vm_mode` | C# .NET 8 `vm_mode` | F# .NET 8 `vm_mode` | Musi `interpreter_vm_mode` |
 | -------------------------- | ----------------: | ----------------: | ------------------: | ------------------: | -------------------------: |
-| `init_small_module`        |          104.1 ns |          279.5 ns |              6.3 ns |              8.6 ns |                   0.925 ns |
-| `scalar_recursive_sum`     |         5881.4 ns |         3144.1 ns |           1452.7 ns |            163.2 ns |                   1.372 ns |
-| `closure_capture`          |          445.5 ns |          627.6 ns |             19.2 ns |             13.0 ns |                   1.078 ns |
-| `sequence_index_mutation`  |          124.8 ns |          286.9 ns |              3.1 ns |              5.7 ns |                   0.685 ns |
-| `data_match_option`        |          249.2 ns |          408.4 ns |              6.4 ns |              8.9 ns |                   1.125 ns |
-| `effect_resume_equivalent` |          387.4 ns |          618.3 ns |              6.7 ns |             11.5 ns |                   1.713 ns |
+| `init_small_module`        |          104.1 ns |          279.5 ns |              6.3 ns |              8.6 ns |                   1.008 ns |
+| `scalar_recursive_sum`     |         5881.4 ns |         3144.1 ns |           1452.7 ns |            163.2 ns |                   1.529 ns |
+| `closure_capture`          |          445.5 ns |          627.6 ns |             19.2 ns |             13.0 ns |                   1.224 ns |
+| `sequence_index_mutation`  |          124.8 ns |          286.9 ns |              3.1 ns |              5.7 ns |                   0.763 ns |
+| `data_match_option`        |          249.2 ns |          408.4 ns |              6.4 ns |              8.9 ns |                   1.194 ns |
+| `effect_resume_equivalent` |          387.4 ns |          618.3 ns |              6.7 ns |             11.5 ns |                   1.872 ns |
 
 Notes:
 
@@ -175,46 +183,46 @@ Use it for embedder APIs and runtime specialization work. Do not compare it with
 
 | Workload                   | Musi `generic_vm_mode` | Musi `hot_vm_mode` | Why selective                    |
 | -------------------------- | ---------------------: | -----------------: | -------------------------------- |
-| `init_small_module`        |               0.873 ns |           0.863 ns | Prewarmed VM path                |
-| `scalar_recursive_sum`     |               1.348 ns |           1.360 ns | Runtime triangular-sum kernel    |
-| `closure_capture`          |               1.111 ns |           1.168 ns | Bound integer call path          |
-| `sequence_index_mutation`  |               0.738 ns |           0.698 ns | Bound typed sequence mutation    |
-| `data_match_option`        |               1.094 ns |           1.078 ns | Runtime data-match kernel        |
-| `effect_resume_equivalent` |               1.720 ns |           1.719 ns | Inline effect-resume kernel      |
-| `sequence_return_alloc`    |               7.590 ns |           7.223 ns | Bound const `[8]Int` return path |
+| `init_small_module`        |               1.004 ns |           1.039 ns | Prewarmed VM path                |
+| `scalar_recursive_sum`     |               1.534 ns |           1.525 ns | Runtime triangular-sum kernel    |
+| `closure_capture`          |               1.192 ns |           1.263 ns | Bound integer call path          |
+| `sequence_index_mutation`  |               0.765 ns |           0.810 ns | Bound typed sequence mutation    |
+| `data_match_option`        |               1.183 ns |           1.199 ns | Runtime data-match kernel        |
+| `effect_resume_equivalent` |               1.989 ns |           1.819 ns | Inline effect-resume kernel      |
+| `sequence_return_alloc`    |               8.454 ns |           8.679 ns | Bound const `[8]Int` return path |
 
 Hard-target status from latest run:
 
 Normal VM targets:
 
-- `normal_vm_mode/scalar_recursive_sum <= 50ns`: PASS (`1.378ns`)
-- `normal_vm_mode/closure_capture <= 6ns`: PASS (`1.100ns`)
-- `normal_vm_mode/sequence_index_mutation <= 70ns`: PASS (`682.9ps`)
-- `normal_vm_mode/data_match_option <= 5ns`: PASS (`1.073ns`)
-- `normal_vm_mode/effect_resume_equivalent <= 7ns`: PASS (`1.942ns`)
-- `normal_vm_mode/sequence_return_alloc <= 150ns`: PASS (`7.877ns`)
+- `normal_vm_mode/scalar_recursive_sum <= 1.55ns`: PASS (`1.523ns`)
+- `normal_vm_mode/closure_capture <= 1.25ns`: PASS (`1.193ns`)
+- `normal_vm_mode/sequence_index_mutation <= 800ps`: PASS (`771.8ps`)
+- `normal_vm_mode/data_match_option <= 1.22ns`: PASS (`1.196ns`)
+- `normal_vm_mode/effect_resume_equivalent <= 1.90ns`: PASS (`1.845ns`)
+- `normal_vm_mode/sequence_return_alloc <= 9.5ns`: PASS (`9.196ns`)
 
 Interpreter VM targets:
 
-- `interpreter_vm_mode/scalar_recursive_sum <= 155ns`: PASS (`1.372ns`)
-- `interpreter_vm_mode/closure_capture <= 12ns`: PASS (`1.078ns`)
-- `interpreter_vm_mode/sequence_index_mutation <= 2.5ns`: PASS (`685.2ps`)
-- `interpreter_vm_mode/data_match_option <= 6ns`: PASS (`1.125ns`)
-- `interpreter_vm_mode/effect_resume_equivalent <= 6ns`: PASS (`1.713ns`)
-- `interpreter_vm_mode/sequence_return_alloc <= 15ns`: PASS (`7.275ns`)
+- `interpreter_vm_mode/scalar_recursive_sum <= 1.55ns`: PASS (`1.529ns`)
+- `interpreter_vm_mode/closure_capture <= 1.25ns`: PASS (`1.224ns`)
+- `interpreter_vm_mode/sequence_index_mutation <= 800ps`: PASS (`763.3ps`)
+- `interpreter_vm_mode/data_match_option <= 1.22ns`: PASS (`1.194ns`)
+- `interpreter_vm_mode/effect_resume_equivalent <= 1.90ns`: PASS (`1.872ns`)
+- `interpreter_vm_mode/sequence_return_alloc <= 9.2ns`: PASS (`8.974ns`)
 
 Generic VM targets:
 
-- `generic_vm_mode/scalar_recursive_sum <= 150ns`: PASS (`1.348ns`)
-- `generic_vm_mode/closure_capture <= 10ns`: PASS (`1.111ns`)
-- `generic_vm_mode/sequence_index_mutation <= 2.5ns`: PASS (`738.2ps`)
-- `generic_vm_mode/data_match_option <= 5.5ns`: PASS (`1.094ns`)
-- `generic_vm_mode/effect_resume_equivalent <= 6ns`: PASS (`1.720ns`)
-- `generic_vm_mode/sequence_return_alloc <= 15ns`: PASS (`7.590ns`)
+- `generic_vm_mode/scalar_recursive_sum <= 1.55ns`: PASS (`1.534ns`)
+- `generic_vm_mode/closure_capture <= 1.22ns`: PASS (`1.192ns`)
+- `generic_vm_mode/sequence_index_mutation <= 800ps`: PASS (`764.6ps`)
+- `generic_vm_mode/data_match_option <= 1.20ns`: PASS (`1.183ns`)
+- `generic_vm_mode/effect_resume_equivalent <= 2.05ns`: PASS (`1.989ns`)
+- `generic_vm_mode/sequence_return_alloc <= 8.7ns`: PASS (`8.454ns`)
 
 Allocation target:
 
-- peer-native `sequence_return_alloc <= 40ns where semantics match`: PASS (`7.877ns` normal, `7.590ns` generic, `7.275ns` interpreter; hot measured `7.223ns`)
+- peer-native `sequence_return_alloc <= 40ns where semantics match`: PASS (`9.196ns` normal, `8.454ns` generic, `8.974ns` interpreter; hot measured `8.679ns`)
 
 ## Close Family: Allocation and GC
 
@@ -231,17 +239,20 @@ Use this table for direction only.
 
 | Workload                    | Lua 5.5 native | Java 17 native | Scala 3 native | C# .NET 8 native | F# .NET 8 native | Musi normal VM | Musi generic VM | Musi hot VM | Musi interpreter VM | Musi cold VM |
 | --------------------------- | -------------: | -------------: | -------------: | ---------------: | ---------------: | -------------: | --------------: | ----------: | ------------------: | -----------: |
-| `sequence_return_alloc`     |       162.7 ns |        43.7 ns |        92.8 ns |         115.0 ns |         115.9 ns |       7.877 ns |        7.590 ns |    7.223 ns |            7.275 ns |     4.609 µs |
-| `sequence_return_forced_gc` |      4796.7 ns |   1885004.2 ns |   3173905.8 ns |       73084.2 ns |       87878.3 ns |              - |               - |    538.4 ns |                   - |            - |
+| `sequence_return_alloc`     |       162.7 ns |        43.7 ns |        92.8 ns |         115.0 ns |         115.9 ns |       9.196 ns |        8.454 ns |    8.679 ns |            8.974 ns |     5.099 µs |
+| `sequence_return_forced_gc` |      4796.7 ns |   1885004.2 ns |   3173905.8 ns |       73084.2 ns |       87878.3 ns |              - |               - |    434.6 ns |                   - |            - |
 
 Musi-only GC and call-overhead diagnostics:
 
-| Workload                             | Musi hot VM | Meaning                               |
-| ------------------------------------ | ----------: | ------------------------------------- |
-| `sequence_return_bound_export_alloc` |    8.086 ns | Bound export path                     |
-| `sequence_return_call_export_alloc`  |  369.770 ns | General export lookup and call path   |
-| `sequence_return_collect`            |  538.360 ns | Return plus explicit major collection |
-| `sequence_return_gc_stress`          |  716.490 ns | Return plus stress auto-collection    |
+| Workload                                   | Musi hot VM |      Goal | Meaning                                   |
+| ------------------------------------------ | ----------: | --------: | ----------------------------------------- |
+| `sequence_return_bound_export_alloc`       |    9.211 ns | <= 9.3 ns | Bound export path                         |
+| `sequence_return_call_export_alloc`        |  348.870 ns | <= 350 ns | General export lookup and call path       |
+| `sequence_return_call_export_alloc_reused` |   15.604 ns |  <= 16 ns | Prewarmed general export call path        |
+| `sequence_return_collect`                  |  434.580 ns | <= 450 ns | Return plus explicit major collection     |
+| `sequence_return_collect_reused`           |  559.260 ns | <= 575 ns | Prewarmed return plus explicit collection |
+| `sequence_return_gc_stress`                |  501.890 ns | <= 510 ns | Return plus stress auto-collection        |
+| `sequence_return_gc_stress_reused`         |   14.359 ns |  <= 15 ns | Prewarmed return with stress mode         |
 
 ## Full Musi Snapshot
 
@@ -249,80 +260,83 @@ These rows are Musi-only. Use them to track regressions inside one mode.
 
 ### Hot VM mode
 
-| Benchmark                                                                    | Time window                   |
-| ---------------------------------------------------------------------------- | ----------------------------- |
-| `bench_vm_hot_vm_mode_construct_small_vm`                                    | `[34.324, 34.982, 35.788] ns` |
-| `bench_vm_hot_vm_mode_init_small_module`                                     | `[851.37, 862.73, 877.13] ps` |
-| `bench_vm_hot_vm_mode_init_small_module_pure`                                | `[853.46, 860.95, 868.53] ps` |
-| `bench_vm_hot_vm_mode_scalar_recursive_sum`                                  | `[1.3278, 1.3602, 1.4000] ns` |
-| `bench_vm_hot_vm_mode_closure_capture`                                       | `[1.1014, 1.1684, 1.2741] ns` |
-| `bench_vm_hot_vm_mode_sequence_index_mutation`                               | `[683.90, 697.90, 715.86] ps` |
-| `bench_vm_hot_vm_mode_data_match_option`                                     | `[1.0477, 1.0777, 1.1183] ns` |
-| `bench_vm_hot_vm_mode_effect_resume_equivalent`                              | `[1.6877, 1.7192, 1.7600] ns` |
-| `bench_vm_sequence_return_gc/hot_vm_mode_sequence_return_alloc`              | `[7.1008, 7.2227, 7.3779] ns` |
-| `bench_vm_sequence_return_gc/hot_vm_mode_sequence_return_bound_export_alloc` | `[7.8523, 8.0855, 8.3796] ns` |
-| `bench_vm_sequence_return_gc/hot_vm_mode_sequence_return_call_export_alloc`  | `[362.50, 369.77, 379.73] ns` |
-| `bench_vm_sequence_return_gc/hot_vm_mode_sequence_return_collect`            | `[530.37, 538.36, 547.69] ns` |
-| `bench_vm_sequence_return_gc/hot_vm_mode_sequence_return_gc_stress`          | `[701.03, 716.49, 736.04] ns` |
+| Benchmark                                                                          | Time window                   |
+| ---------------------------------------------------------------------------------- | ----------------------------- |
+| `bench_vm_hot_vm_mode_construct_small_vm`                                          | `[41.019, 41.265, 41.695] ns` |
+| `bench_vm_hot_vm_mode_init_small_module`                                           | `[1.0007, 1.0391, 1.1043] ns` |
+| `bench_vm_hot_vm_mode_init_small_module_pure`                                      | `[1.0012, 1.0173, 1.0441] ns` |
+| `bench_vm_hot_vm_mode_scalar_recursive_sum`                                        | `[1.5060, 1.5251, 1.5542] ns` |
+| `bench_vm_hot_vm_mode_closure_capture`                                             | `[1.1920, 1.2626, 1.3857] ns` |
+| `bench_vm_hot_vm_mode_sequence_index_mutation`                                     | `[777.81, 809.81, 855.63] ps` |
+| `bench_vm_hot_vm_mode_data_match_option`                                           | `[1.1810, 1.1986, 1.2255] ns` |
+| `bench_vm_hot_vm_mode_effect_resume_equivalent`                                    | `[1.7997, 1.8185, 1.8469] ns` |
+| `bench_vm_sequence_return_gc/hot_vm_mode_sequence_return_alloc`                    | `[8.5364, 8.6791, 8.8656] ns` |
+| `bench_vm_sequence_return_gc/hot_vm_mode_sequence_return_bound_export_alloc`       | `[9.0638, 9.2113, 9.3986] ns` |
+| `bench_vm_sequence_return_gc/hot_vm_mode_sequence_return_call_export_alloc`        | `[348.16, 348.87, 350.28] ns` |
+| `bench_vm_sequence_return_gc/hot_vm_mode_sequence_return_call_export_alloc_reused` | `[15.291, 15.604, 15.986] ns` |
+| `bench_vm_sequence_return_gc/hot_vm_mode_sequence_return_collect`                  | `[424.54, 434.58, 443.99] ns` |
+| `bench_vm_sequence_return_gc/hot_vm_mode_sequence_return_collect_reused`           | `[553.08, 559.26, 568.27] ns` |
+| `bench_vm_sequence_return_gc/hot_vm_mode_sequence_return_gc_stress`                | `[496.00, 501.89, 510.31] ns` |
+| `bench_vm_sequence_return_gc/hot_vm_mode_sequence_return_gc_stress_reused`         | `[14.094, 14.359, 14.850] ns` |
 
 ### Normal VM mode
 
-| Benchmark                                                          | Time window                   |
-| ------------------------------------------------------------------ | ----------------------------- |
-| `bench_vm_normal_vm_mode_init_small_module`                        | `[834.03, 875.76, 952.68] ps` |
-| `bench_vm_normal_vm_mode_scalar_recursive_sum`                     | `[1.3572, 1.3779, 1.4057] ns` |
-| `bench_vm_normal_vm_mode_closure_capture`                          | `[1.0724, 1.0995, 1.1339] ns` |
-| `bench_vm_normal_vm_mode_sequence_index_mutation`                  | `[669.07, 682.92, 700.04] ps` |
-| `bench_vm_normal_vm_mode_data_match_option`                        | `[1.0531, 1.0734, 1.0991] ns` |
-| `bench_vm_normal_vm_mode_effect_resume_equivalent`                 | `[1.8194, 1.9419, 2.1035] ns` |
-| `bench_vm_sequence_return_gc/normal_vm_mode_sequence_return_alloc` | `[7.6742, 7.8768, 8.0742] ns` |
+| Benchmark                                                          | Time window                         |
+| ------------------------------------------------------------------ | ----------------------------------- |
+| `bench_vm_normal_vm_mode_init_small_module`                        | `[997.03 ps, 1.0009 ns, 1.0058 ns]` |
+| `bench_vm_normal_vm_mode_scalar_recursive_sum`                     | `[1.5118, 1.5232, 1.5383] ns`       |
+| `bench_vm_normal_vm_mode_closure_capture`                          | `[1.1837, 1.1928, 1.2063] ns`       |
+| `bench_vm_normal_vm_mode_sequence_index_mutation`                  | `[764.68, 771.81, 783.36] ps`       |
+| `bench_vm_normal_vm_mode_data_match_option`                        | `[1.1833, 1.1955, 1.2171] ns`       |
+| `bench_vm_normal_vm_mode_effect_resume_equivalent`                 | `[1.7996, 1.8445, 1.9016] ns`       |
+| `bench_vm_sequence_return_gc/normal_vm_mode_sequence_return_alloc` | `[9.0456, 9.1959, 9.4024] ns`       |
 
 ### Generic VM mode
 
-| Benchmark                                                           | Time window                   |
-| ------------------------------------------------------------------- | ----------------------------- |
-| `bench_vm_generic_vm_mode_init_small_module`                        | `[834.58, 872.85, 925.08] ps` |
-| `bench_vm_generic_vm_mode_scalar_recursive_sum`                     | `[1.3290, 1.3475, 1.3723] ns` |
-| `bench_vm_generic_vm_mode_closure_capture`                          | `[1.0799, 1.1105, 1.1518] ns` |
-| `bench_vm_generic_vm_mode_sequence_index_mutation`                  | `[706.46, 738.19, 778.34] ps` |
-| `bench_vm_generic_vm_mode_data_match_option`                        | `[1.0690, 1.0935, 1.1240] ns` |
-| `bench_vm_generic_vm_mode_effect_resume_equivalent`                 | `[1.6921, 1.7201, 1.7519] ns` |
-| `bench_vm_sequence_return_gc/generic_vm_mode_sequence_return_alloc` | `[7.3450, 7.5901, 7.8908] ns` |
+| Benchmark                                                           | Time window                         |
+| ------------------------------------------------------------------- | ----------------------------------- |
+| `bench_vm_generic_vm_mode_init_small_module`                        | `[998.71 ps, 1.0042 ns, 1.0100 ns]` |
+| `bench_vm_generic_vm_mode_scalar_recursive_sum`                     | `[1.5113, 1.5337, 1.5630] ns`       |
+| `bench_vm_generic_vm_mode_closure_capture`                          | `[1.1811, 1.1922, 1.2091] ns`       |
+| `bench_vm_generic_vm_mode_sequence_index_mutation`                  | `[762.06, 764.60, 769.13] ps`       |
+| `bench_vm_generic_vm_mode_data_match_option`                        | `[1.1793, 1.1826, 1.1867] ns`       |
+| `bench_vm_generic_vm_mode_effect_resume_equivalent`                 | `[1.8421, 1.9888, 2.2080] ns`       |
+| `bench_vm_sequence_return_gc/generic_vm_mode_sequence_return_alloc` | `[8.4203, 8.4542, 8.5085] ns`       |
 
 ### Interpreter VM mode
 
 | Benchmark                                                               | Time window                         |
 | ----------------------------------------------------------------------- | ----------------------------------- |
-| `bench_vm_interpreter_vm_mode_init_small_module`                        | `[862.66 ps, 924.66 ps, 1.0274 ns]` |
-| `bench_vm_interpreter_vm_mode_scalar_recursive_sum`                     | `[1.3346, 1.3723, 1.4214] ns`       |
-| `bench_vm_interpreter_vm_mode_closure_capture`                          | `[1.0581, 1.0781, 1.1030] ns`       |
-| `bench_vm_interpreter_vm_mode_sequence_index_mutation`                  | `[671.98, 685.23, 702.46] ps`       |
-| `bench_vm_interpreter_vm_mode_data_match_option`                        | `[1.0811, 1.1248, 1.1888] ns`       |
-| `bench_vm_interpreter_vm_mode_effect_resume_equivalent`                 | `[1.6887, 1.7132, 1.7450] ns`       |
-| `bench_vm_sequence_return_gc/interpreter_vm_mode_sequence_return_alloc` | `[7.0390, 7.2745, 7.5177] ns`       |
+| `bench_vm_interpreter_vm_mode_init_small_module`                        | `[998.40 ps, 1.0075 ns, 1.0209 ns]` |
+| `bench_vm_interpreter_vm_mode_scalar_recursive_sum`                     | `[1.5148, 1.5289, 1.5498] ns`       |
+| `bench_vm_interpreter_vm_mode_closure_capture`                          | `[1.1954, 1.2238, 1.2600] ns`       |
+| `bench_vm_interpreter_vm_mode_sequence_index_mutation`                  | `[758.39, 763.28, 773.82] ps`       |
+| `bench_vm_interpreter_vm_mode_data_match_option`                        | `[1.1813, 1.1937, 1.2140] ns`       |
+| `bench_vm_interpreter_vm_mode_effect_resume_equivalent`                 | `[1.8371, 1.8719, 1.9108] ns`       |
+| `bench_vm_sequence_return_gc/interpreter_vm_mode_sequence_return_alloc` | `[8.4143, 8.9738, 9.7954] ns`       |
 
 ### Debug interpreter VM mode
 
 | Benchmark                                                                     | Time window                   |
 | ----------------------------------------------------------------------------- | ----------------------------- |
-| `bench_vm_debug_interpreter_vm_mode_scalar_recursive_sum`                     | `[436.06, 451.03, 464.46] µs` |
-| `bench_vm_debug_interpreter_vm_mode_closure_capture`                          | `[3.4380, 3.6600, 3.9129] µs` |
-| `bench_vm_debug_interpreter_vm_mode_sequence_index_mutation`                  | `[1.0928, 1.1107, 1.1340] µs` |
-| `bench_vm_debug_interpreter_vm_mode_data_match_option`                        | `[3.3255, 3.4891, 3.6339] µs` |
-| `bench_vm_debug_interpreter_vm_mode_effect_resume_equivalent`                 | `[4.7244, 4.9020, 5.0738] µs` |
-| `bench_vm_sequence_return_gc/debug_interpreter_vm_mode_sequence_return_alloc` | `[767.92, 805.30, 877.93] ns` |
+| `bench_vm_debug_interpreter_vm_mode_scalar_recursive_sum`                     | `[510.16, 532.26, 554.74] µs` |
+| `bench_vm_debug_interpreter_vm_mode_closure_capture`                          | `[3.6789, 3.8568, 4.0457] µs` |
+| `bench_vm_debug_interpreter_vm_mode_sequence_index_mutation`                  | `[1.1965, 1.2089, 1.2316] µs` |
+| `bench_vm_debug_interpreter_vm_mode_data_match_option`                        | `[3.5730, 3.7370, 3.8785] µs` |
+| `bench_vm_debug_interpreter_vm_mode_effect_resume_equivalent`                 | `[5.0970, 5.2107, 5.3117] µs` |
+| `bench_vm_sequence_return_gc/debug_interpreter_vm_mode_sequence_return_alloc` | `[879.95, 894.61, 912.00] ns` |
 
 ### Cold VM mode
 
 | Benchmark                                                        | Time window                   |
 | ---------------------------------------------------------------- | ----------------------------- |
-| `bench_vm_cold_vm_mode_init_small_module`                        | `[7.1256, 7.2663, 7.4358] µs` |
-| `bench_vm_cold_vm_mode_scalar_recursive_sum`                     | `[6.4363, 6.5798, 6.7510] µs` |
-| `bench_vm_cold_vm_mode_closure_capture`                          | `[6.2380, 6.5764, 7.1102] µs` |
-| `bench_vm_cold_vm_mode_sequence_index_mutation`                  | `[6.4004, 6.5164, 6.6659] µs` |
-| `bench_vm_cold_vm_mode_data_match_option`                        | `[7.4586, 7.6063, 7.7958] µs` |
-| `bench_vm_cold_vm_mode_effect_resume_equivalent`                 | `[10.115, 10.381, 10.769] µs` |
-| `bench_vm_sequence_return_gc/cold_vm_mode_sequence_return_alloc` | `[4.4673, 4.6088, 4.7686] µs` |
+| `bench_vm_cold_vm_mode_init_small_module`                        | `[7.7452, 8.0267, 8.6082] µs` |
+| `bench_vm_cold_vm_mode_scalar_recursive_sum`                     | `[6.8467, 6.9688, 7.1520] µs` |
+| `bench_vm_cold_vm_mode_closure_capture`                          | `[6.6917, 6.7697, 6.8751] µs` |
+| `bench_vm_cold_vm_mode_sequence_index_mutation`                  | `[6.9495, 6.9971, 7.0945] µs` |
+| `bench_vm_cold_vm_mode_data_match_option`                        | `[8.0813, 8.1398, 8.2456] µs` |
+| `bench_vm_cold_vm_mode_effect_resume_equivalent`                 | `[11.328, 12.016, 13.150] µs` |
+| `bench_vm_sequence_return_gc/cold_vm_mode_sequence_return_alloc` | `[4.9987, 5.0993, 5.1923] µs` |
 
 ## Latest Validation
 
@@ -359,13 +373,14 @@ Implementation checkpoints:
 
 ## Optimization Queue
 
-1. Bound exports: expand reusable handles beyond const sequence returns so embedders avoid name lookup on hot calls.
-2. Normal VM mode: reduce general export/dynamic call overhead so default scripting calls approach Lua on all common workloads.
-3. Sequence return: add safe external-result release/lease API so long-lived normal calls can return heap values without benchmark-only fresh VM setup.
-4. Sequence mutation: keep pushing plain nested `[2][2]Int` fast path while allowing typed/described heap payloads and rejecting untyped packed blobs.
-5. Closure/data/effect kernels: keep scalar recursion, closure capture, data match, inline effect resume fast while expanding only semantics-proven shapes.
-6. Immix GC: allocation fast path, line/block metadata, root tracing, sweep, reuse; incremental slices before any concurrent collector.
-7. Generic effects: optimize continuation allocation, handler dispatch, resume value flow without changing handler reuse semantics.
+1. Recursion: keep `rec` fast because Musi has no `for`, `while`, or `continue` constructs; expand tail-recursive and structurally-recursive kernels only when semantics prove the shape.
+2. General export calls: reduce lookup, retain, and dynamic call overhead so default `call_export` can approach bound handles without requiring embedder-only APIs.
+3. Effects: optimize continuation allocation, handler dispatch, and `resume` value flow without changing handler reuse semantics.
+4. Sequence return and GC diagnostics: cut explicit collection, stress collection, and returned-sequence root handling while preserving precise roots.
+5. Bound exports: expand reusable handles beyond const sequence returns so embedders avoid name lookup on hot calls.
+6. Sequence mutation: keep pushing plain nested `[2][2]Int` fast path while allowing typed/described heap payloads and rejecting untyped packed blobs.
+7. Closure/data kernels: keep closure capture and data match fast while expanding only semantics-proven shapes.
+8. Immix GC: allocation fast path, line/block metadata, root tracing, sweep, reuse; incremental slices before any concurrent collector.
 
 ## Update Rules
 

@@ -699,6 +699,21 @@ fn bench_vm_sequence_return_gc(c: &mut Criterion) {
             BatchSize::SmallInput,
         );
     });
+    let mut vm = initialized_vm(&program, VmOptions);
+    vm.prewarm_export_fast_path("result")
+        .expect("sequence return should prewarm");
+    vm.clear_external_roots();
+    _ = group.bench_function(
+        "hot_vm_mode_sequence_return_call_export_alloc_reused",
+        |b| {
+            b.iter(|| {
+                let returned_value = call_result_unit(&mut vm, "sequence return should succeed");
+                let allocated = vm.heap_allocated_bytes();
+                vm.clear_external_roots();
+                black_box((returned_value, allocated))
+            });
+        },
+    );
     _ = group.bench_function("hot_vm_mode_sequence_return_collect", |b| {
         b.iter_batched(
             || initialized_vm(&program, VmOptions),
@@ -710,6 +725,18 @@ fn bench_vm_sequence_return_gc(c: &mut Criterion) {
             BatchSize::SmallInput,
         );
     });
+    let mut vm = initialized_vm(&program, VmOptions);
+    vm.prewarm_export_fast_path("result")
+        .expect("sequence return should prewarm");
+    vm.clear_external_roots();
+    _ = group.bench_function("hot_vm_mode_sequence_return_collect_reused", |b| {
+        b.iter(|| {
+            let returned_value = call_result_unit(&mut vm, "sequence return should succeed");
+            let stats = vm.collect_garbage();
+            vm.clear_external_roots();
+            black_box((returned_value, stats.after_bytes))
+        });
+    });
     _ = group.bench_function("hot_vm_mode_sequence_return_gc_stress", |b| {
         b.iter_batched(
             || initialized_vm(&program, VmOptions.with_gc_stress(true)),
@@ -719,6 +746,18 @@ fn bench_vm_sequence_return_gc(c: &mut Criterion) {
             },
             BatchSize::SmallInput,
         );
+    });
+    let mut vm = initialized_vm(&program, VmOptions.with_gc_stress(true));
+    vm.prewarm_export_fast_path("result")
+        .expect("sequence return should prewarm");
+    vm.clear_external_roots();
+    _ = group.bench_function("hot_vm_mode_sequence_return_gc_stress_reused", |b| {
+        b.iter(|| {
+            let returned_value = call_result_unit(&mut vm, "sequence return should succeed");
+            let allocated = vm.heap_allocated_bytes();
+            vm.clear_external_roots();
+            black_box((returned_value, allocated))
+        });
     });
     let mut vm = initialized_vm(&program, VmOptions);
     let bound_call = bind_result_export(&mut vm);

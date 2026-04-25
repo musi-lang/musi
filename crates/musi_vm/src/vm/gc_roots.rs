@@ -2,6 +2,14 @@ use super::state::{CallFrameList, EffectHandlerList, LoadedModuleList, ResumeLis
 use super::{GcRef, HeapCollectionStats, HeapOptions, Value, Vm, VmError, VmErrorKind, VmResult};
 
 impl Vm {
+    /// Clears heap values retained from previous public VM calls.
+    ///
+    /// Callers that no longer need previously returned heap values can release
+    /// those roots before hot-loop calls or explicit collection.
+    pub fn clear_external_roots(&mut self) {
+        self.external_roots.clear();
+    }
+
     pub(crate) fn observe_heap_value(&self, value: &Value) -> VmResult {
         if let Some(reference) = value.gc_ref() {
             self.heap.validate_ref(reference)?;
