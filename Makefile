@@ -1,10 +1,11 @@
-.PHONY: check lint fmt test rscheck bench-vm bench-musi bench-csharp bench-csharp-smoke bench-csharp-vm-mode bench-csharp-smoke-vm-mode bench-fsharp bench-fsharp-smoke bench-fsharp-vm-mode bench-fsharp-smoke-vm-mode bench-java bench-java-smoke bench-java-vm-mode bench-java-smoke-vm-mode bench-scala bench-scala-smoke bench-scala-vm-mode bench-scala-smoke-vm-mode bench-vms bench-vms-smoke bench-vms-quick bench-vms-long bench-vms-gc bench-vms-peers install-local
+.PHONY: check lint fmt test rscheck bench-vm bench-musi bench-csharp bench-csharp-smoke bench-csharp-vm-mode bench-csharp-smoke-vm-mode bench-fsharp bench-fsharp-smoke bench-fsharp-vm-mode bench-fsharp-smoke-vm-mode bench-java bench-java-smoke bench-java-vm-mode bench-java-smoke-vm-mode bench-lua bench-lua-smoke bench-scala bench-scala-smoke bench-scala-vm-mode bench-scala-smoke-vm-mode bench-vms bench-vms-smoke bench-vms-quick bench-vms-long bench-vms-gc bench-vms-peers install-local
 
 RUST_TOOLCHAIN := 1.95.0
 CARGO := rustup run $(RUST_TOOLCHAIN) cargo
 JAVA17_HOME ?= /opt/homebrew/opt/openjdk@17
 JAVA17_BIN := $(JAVA17_HOME)/bin
 JAVA_BENCH_OUT := target/bench-java
+LUA ?= lua
 SCALA_CACHE_DIR := target/bench-scala-cache
 VM_BENCH_PHASE ?= both
 VM_BENCH_ROUNDS ?= 5
@@ -89,6 +90,12 @@ bench-java-smoke-vm-mode:
 	$(JAVA17_BIN)/javac -d $(JAVA_BENCH_OUT) benches/vm/java/Program.java
 	$(JAVA17_BIN)/java -Xint -cp $(JAVA_BENCH_OUT) Program --smoke --profile vm_mode
 
+bench-lua:
+	$(LUA) benches/vm/lua/Program.lua $(VM_BENCH_ARGS) --profile native
+
+bench-lua-smoke:
+	$(LUA) benches/vm/lua/Program.lua --smoke --profile native
+
 bench-scala:
 	mkdir -p $(SCALA_CACHE_DIR)
 	JAVA_HOME=$(JAVA17_HOME) COURSIER_CACHE=$(CURDIR)/$(SCALA_CACHE_DIR)/coursier SCALA_CLI_HOME=$(CURDIR)/$(SCALA_CACHE_DIR)/scala-cli scala run --server=false benches/vm/scala/Program.scala -- $(VM_BENCH_ARGS) --profile native
@@ -108,6 +115,7 @@ bench-scala-smoke-vm-mode:
 bench-vms-peers:
 	$(MAKE) bench-java
 	$(MAKE) bench-java-vm-mode
+	$(MAKE) bench-lua
 	$(MAKE) bench-scala
 	$(MAKE) bench-scala-vm-mode
 	$(MAKE) bench-csharp
@@ -122,6 +130,7 @@ bench-vms:
 bench-vms-smoke:
 	$(MAKE) bench-java-smoke
 	$(MAKE) bench-java-smoke-vm-mode
+	$(MAKE) bench-lua-smoke
 	$(MAKE) bench-scala-smoke
 	$(MAKE) bench-scala-smoke-vm-mode
 	$(MAKE) bench-csharp-smoke

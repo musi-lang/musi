@@ -335,7 +335,7 @@ mod success {
                   Test.suiteEnd()
                 );
             "#,
-            spec = test::SPEC,
+            spec = "musi:test",
         );
 
         let program = compile_program(&[("main", source.as_str())], "main");
@@ -439,7 +439,7 @@ mod failure {
         let Test := import "{spec}";
         export let result () := Test.testCase("first", 1 = 1);
         "#,
-            spec = test::SPEC,
+            spec = "musi:test",
         );
         let err = call_export_with_host(NativeHost::new(), source.as_str())
             .expect_err("inactive test session should reject");

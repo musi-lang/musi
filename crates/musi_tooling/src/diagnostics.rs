@@ -274,13 +274,13 @@ pub fn render_session_error(session: &Session, error: &SessionError) -> ToolingR
     let mut output = Vec::new();
     let diags = session_error_diags(error);
     if diags.is_empty() {
-        output.extend_from_slice(error.to_string().as_bytes());
+        output.extend_from_slice(format!("{error}").as_bytes());
         output.push(b'\n');
         return Ok(String::from_utf8_lossy(&output).into_owned());
     }
     for diag in diags {
         if emit(&mut output, diag, session.source_map(), supports_color()).is_err() {
-            output.extend_from_slice(error.to_string().as_bytes());
+            output.extend_from_slice(format!("{error}").as_bytes());
             output.push(b'\n');
             break;
         }

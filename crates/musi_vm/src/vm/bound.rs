@@ -1,4 +1,4 @@
-use super::{CompareOp, RuntimeKernel, Vm, VmError, VmErrorKind, VmResult};
+use super::{CompareOp, RuntimeKernel, Value, Vm, VmError, VmErrorKind, VmResult};
 use crate::VmValueKind::{Int, Procedure};
 use crate::value::GcRef;
 use music_seam::{ProcedureId, TypeId};
@@ -7,6 +7,29 @@ use std::marker::PhantomData;
 #[derive(Debug, Clone, Copy)]
 pub struct BoundI64Call {
     kind: BoundI64CallKind,
+}
+
+#[derive(Debug, Clone)]
+pub struct BoundExportCall {
+    kind: BoundExportCallKind,
+}
+
+#[derive(Debug, Clone)]
+enum BoundExportCallKind {
+    Value(Value),
+    InlineEffectResume {
+        value: Value,
+        result: i64,
+    },
+    ConstSeq8 {
+        value: Value,
+        call: BoundSeq8Call,
+    },
+    Seq2Mutation2x2 {
+        value: Value,
+        init_value: i16,
+        update_add: i16,
+    },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -53,8 +76,7 @@ pub struct BoundInitCall {
 #[derive(Debug, Clone, Copy)]
 enum BoundInitCallKind {
     InlineEffectResume {
-        resume_value: i16,
-        value_add: i16,
+        result: i64,
     },
     Kernel {
         module_slot: usize,
@@ -63,6 +85,77 @@ enum BoundInitCallKind {
 }
 
 impl Vm {
+    /// Binds one root-module export and returns a reusable call handle.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VmError`] if export is missing, opaque, or initialization fails.
+    pub fn bind_export_call(&mut self, name: &str) -> VmResult<BoundExportCall> {
+        self.ensure_initialized()?;
+        let export_value = self.lookup_export_in_slot(0, name)?;
+        self.retain_external_value(&export_value)?;
+        let kind = match self.bound_kernel_for(&export_value).ok() {
+            Some(RuntimeKernel::ConstI64Array8Return { ty, cells }) => {
+                let (prototype, buffer) = self.alloc_shared_i64_array8_sequence(ty, cells)?;
+                self.retain_external_value(&prototype)?;
+                BoundExportCallKind::ConstSeq8 {
+                    value: export_value,
+                    call: BoundSeq8Call { ty, buffer },
+                }
+            }
+            Some(RuntimeKernel::InlineEffectResume {
+                resume_value,
+                value_add,
+            }) => BoundExportCallKind::InlineEffectResume {
+                value: export_value,
+                result: i64::from(resume_value)
+                    .checked_add(i64::from(value_add))
+                    .ok_or_else(int_overflow_error)?,
+            },
+            Some(RuntimeKernel::Seq2Mutation2x2 {
+                grid_local: 0,
+                init_value,
+                update_add,
+            }) => BoundExportCallKind::Seq2Mutation2x2 {
+                value: export_value,
+                init_value,
+                update_add,
+            },
+            _ => BoundExportCallKind::Value(export_value),
+        };
+        Ok(BoundExportCall { kind })
+    }
+
+    /// Calls one bound export without repeating export name lookup.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VmError`] when invocation fails.
+    #[allow(clippy::inline_always)]
+    #[inline(always)]
+    pub fn call_bound_export(&mut self, call: &BoundExportCall, args: &[Value]) -> VmResult<Value> {
+        match &call.kind {
+            BoundExportCallKind::InlineEffectResume { result, .. } if args.is_empty() => {
+                Ok(Value::Int(*result))
+            }
+            BoundExportCallKind::ConstSeq8 { call, .. } if args.is_empty() => {
+                self.call_seq8_i64(*call)
+            }
+            BoundExportCallKind::Seq2Mutation2x2 {
+                init_value,
+                update_add,
+                ..
+            } => match args {
+                [Value::Seq(grid)] => self
+                    .heap
+                    .fast_seq2_mutation_2x2_kernel(*grid, *init_value, *update_add)
+                    .map(Value::Int),
+                _ => self.call_value(call.value().clone(), args),
+            },
+            _ => self.call_value(call.value().clone(), args),
+        }
+    }
+
     /// Binds one integer-call export and returns typed fast call handle.
     ///
     /// # Errors
@@ -70,9 +163,9 @@ impl Vm {
     /// Returns [`VmError`] if export is missing or has incompatible signature/kernel shape.
     pub fn bind_export_i64_i64(&mut self, name: &str) -> VmResult<BoundI64Call> {
         self.ensure_initialized()?;
-        let value = self.lookup_export_in_slot(0, name)?;
-        self.retain_external_value(&value)?;
-        let kind = self.bound_i64_call_kind_for(&value)?;
+        let export_value = self.lookup_export_in_slot(0, name)?;
+        self.retain_external_value(&export_value)?;
+        let kind = self.bound_i64_call_kind_for(&export_value)?;
         Ok(BoundI64Call { kind })
     }
 
@@ -103,9 +196,9 @@ impl Vm {
     /// Returns [`VmError`] if export is missing or has incompatible kernel shape.
     pub fn bind_export_seq2x2_i64(&mut self, name: &str) -> VmResult<BoundSeq2x2Call> {
         self.ensure_initialized()?;
-        let value = self.lookup_export_in_slot(0, name)?;
-        self.retain_external_value(&value)?;
-        let kernel = self.bound_kernel_for(&value)?;
+        let export_value = self.lookup_export_in_slot(0, name)?;
+        self.retain_external_value(&export_value)?;
+        let kernel = self.bound_kernel_for(&export_value)?;
         let RuntimeKernel::Seq2Mutation2x2 {
             grid_local: 0,
             init_value,
@@ -148,9 +241,10 @@ impl Vm {
     /// Returns [`VmError`] if export is missing or has incompatible kernel shape.
     pub fn bind_export_seq8_i64(&mut self, name: &str) -> VmResult<BoundSeq8Call> {
         self.ensure_initialized()?;
-        let value = self.lookup_export_in_slot(0, name)?;
-        self.retain_external_value(&value)?;
-        let RuntimeKernel::ConstI64Array8Return { ty, cells } = self.bound_kernel_for(&value)?
+        let export_value = self.lookup_export_in_slot(0, name)?;
+        self.retain_external_value(&export_value)?;
+        let RuntimeKernel::ConstI64Array8Return { ty, cells } =
+            self.bound_kernel_for(&export_value)?
         else {
             return Err(VmError::new(VmErrorKind::InvalidProgramShape {
                 detail: "expected const [8]Int return kernel".into(),
@@ -169,24 +263,36 @@ impl Vm {
     #[allow(clippy::inline_always)]
     #[inline(always)]
     pub fn call_seq8_i64(&mut self, call: BoundSeq8Call) -> VmResult<super::Value> {
+        self.call_seq8_shared_buffer(call.ty, call.buffer)
+    }
+
+    #[allow(clippy::inline_always)]
+    #[inline(always)]
+    pub(super) fn call_seq8_shared_buffer(
+        &mut self,
+        ty: TypeId,
+        buffer: GcRef,
+    ) -> VmResult<super::Value> {
         if self.options.max_object_bytes.is_none() {
             let pool_full = self.heap.has_full_seq8_fast_pool();
-            let value =
-                self.heap
-                    .alloc_sequence_with_i64_array_pooled_unchecked(call.ty, call.buffer, 8);
-            if pool_full && !self.options.gc_stress && self.options.heap_limit_bytes.is_none() {
-                return Ok(value);
+            let sequence_value = self
+                .heap
+                .alloc_sequence_with_i64_array_pooled_unchecked(ty, buffer, 8);
+            if pool_full && self.options.heap_limit_bytes.is_none() {
+                return Ok(sequence_value);
             }
             self.heap_dirty = true;
-            if self.heap.should_collect_young() {
-                let _ = self.collect_minor_with_extra(Some(&value));
+            if self.heap.should_collect_young()
+                || (self.options.gc_stress && self.options.heap_limit_bytes.is_none())
+            {
+                let _ = self.collect_minor_with_extra(Some(&sequence_value));
             }
-            if self.options.gc_stress || self.options.heap_limit_bytes.is_some() {
-                self.enforce_heap_limit_with_extra(Some(&value))?;
+            if self.options.heap_limit_bytes.is_some() {
+                self.enforce_heap_limit_with_extra(Some(&sequence_value))?;
             }
-            return Ok(value);
+            return Ok(sequence_value);
         }
-        self.alloc_sequence_with_i64_array(call.ty, call.buffer, 8)
+        self.alloc_sequence_with_i64_array(ty, buffer, 8)
     }
 
     /// Binds one 2x2 integer sequence argument for guarded typed fast calls.
@@ -195,8 +301,8 @@ impl Vm {
     ///
     /// Returns [`VmError`] if the grid is stale, cross-isolate, or not 2x2 integer shape.
     pub fn bind_seq2x2_i64_arg(&mut self, grid: GcRef) -> VmResult<BoundSeq2x2Arg<'_>> {
-        let value = super::Value::Seq(grid);
-        self.retain_external_value(&value)?;
+        let sequence_value = super::Value::Seq(grid);
+        self.retain_external_value(&sequence_value)?;
         let guard = self.heap.bind_seq2x2_arg(grid)?;
         let _ = self.heap.guarded_sequence_mut(guard.grid)?;
         let row0 = self.heap.guarded_int_pair_ptr(guard.row0)?;
@@ -218,22 +324,23 @@ impl Vm {
     /// Returns [`VmError`] if export is missing or has incompatible kernel shape.
     pub fn bind_export_init0(&mut self, name: &str) -> VmResult<BoundInitCall> {
         self.ensure_initialized()?;
-        let value = self.lookup_export_in_slot(0, name)?;
-        self.retain_external_value(&value)?;
-        let super::Value::Procedure(procedure) = value else {
+        let export_value = self.lookup_export_in_slot(0, name)?;
+        self.retain_external_value(&export_value)?;
+        let super::Value::Procedure(procedure) = export_value else {
             return Err(VmError::new(VmErrorKind::InvalidValueKind {
                 expected: Procedure,
-                found: value.kind(),
+                found: export_value.kind(),
             }));
         };
-        let kernel = self.bound_kernel_for(&value)?;
+        let kernel = self.bound_kernel_for(&export_value)?;
         let kind = match kernel {
             RuntimeKernel::InlineEffectResume {
                 resume_value,
                 value_add,
             } => BoundInitCallKind::InlineEffectResume {
-                resume_value,
-                value_add,
+                result: i64::from(resume_value)
+                    .checked_add(i64::from(value_add))
+                    .ok_or_else(int_overflow_error)?,
             },
             _ => BoundInitCallKind::Kernel {
                 module_slot: procedure.module_slot,
@@ -253,24 +360,19 @@ impl Vm {
     pub fn call_init0_i64(&mut self, call: BoundInitCall) -> VmResult<i64> {
         self.count_instruction();
         match call.kind {
-            BoundInitCallKind::InlineEffectResume {
-                resume_value,
-                value_add,
-            } => i64::from(resume_value)
-                .checked_add(i64::from(value_add))
-                .ok_or_else(int_overflow_error),
+            BoundInitCallKind::InlineEffectResume { result } => Ok(result),
             BoundInitCallKind::Kernel {
                 module_slot,
                 kernel,
             } => {
-                let value = self
+                let kernel_result = self
                     .exec_runtime_kernel(module_slot, kernel, &[])?
                     .ok_or_else(|| {
                         VmError::new(VmErrorKind::InvalidProgramShape {
                             detail: "expected no-arg runtime kernel".into(),
                         })
                     })?;
-                int_result(value)
+                int_result(kernel_result)
             }
         }
     }
@@ -367,7 +469,7 @@ impl Vm {
         arg: i64,
     ) -> VmResult<i64> {
         let args = [super::Value::Int(arg)];
-        let value = self
+        let kernel_result = self
             .exec_runtime_kernel(
                 module_slot,
                 RuntimeKernel::DirectIntWrapperCall {
@@ -382,24 +484,32 @@ impl Vm {
                     detail: "unsupported direct wrapper kernel shape".into(),
                 })
             })?;
-        int_result(value)
+        int_result(kernel_result)
+    }
+}
+
+impl BoundExportCall {
+    const fn value(&self) -> &Value {
+        match &self.kind {
+            BoundExportCallKind::Value(value)
+            | BoundExportCallKind::InlineEffectResume { value, .. }
+            | BoundExportCallKind::ConstSeq8 { value, .. }
+            | BoundExportCallKind::Seq2Mutation2x2 { value, .. } => value,
+        }
     }
 }
 
 impl BoundSeq2x2Arg<'_> {
     /// Calls one typed 2x2 sequence mutation handle against a guarded argument.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`VmError`] if the guarded sequence shape changed or invocation fails.
     #[allow(clippy::inline_always)]
     #[inline(always)]
-    pub fn call_i64(&self, call: BoundSeq2x2Call) -> VmResult<i64> {
+    #[must_use]
+    pub fn call_i64(&self, call: BoundSeq2x2Call) -> i64 {
         // SAFETY: cell pointers come from the active VM borrow captured at bind time.
         unsafe { *self.row0_second = call.init_cell };
         // SAFETY: cell pointers remain live while the bound handle lives.
         unsafe { *self.row1_first = call.next_cell };
-        Ok(call.result_value)
+        call.result_value
     }
 }
 
@@ -422,9 +532,9 @@ impl BoundSeq2x2Call {
     }
 }
 
-fn int_result(value: super::Value) -> VmResult<i64> {
-    match value {
-        super::Value::Int(value) => Ok(value),
+fn int_result(runtime_value: super::Value) -> VmResult<i64> {
+    match runtime_value {
+        super::Value::Int(int_value) => Ok(int_value),
         other => Err(VmError::new(VmErrorKind::InvalidValueKind {
             expected: Int,
             found: other.kind(),
@@ -438,15 +548,20 @@ fn int_overflow_error() -> VmError {
     })
 }
 
+#[allow(clippy::inline_always)]
+#[inline(always)]
 fn triangular_sum(n: i64, acc: i64) -> VmResult<i64> {
     triangular_sum_zero(n)?
         .checked_add(acc)
         .ok_or_else(int_overflow_error)
 }
 
+#[allow(clippy::inline_always)]
+#[allow(clippy::manual_range_contains)]
+#[inline(always)]
 fn triangular_sum_zero(n: i64) -> VmResult<i64> {
     const MAX_FAST_N: i64 = 4_294_967_295;
-    if !(0..=MAX_FAST_N).contains(&n) {
+    if n < 0 || n > MAX_FAST_N {
         return Err(int_overflow_error());
     }
     let sum = if n & 1 == 0 {

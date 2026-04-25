@@ -1,0 +1,70 @@
+use crate::instruction::OperandShape;
+
+use super::super::{Opcode, OpcodeFamily};
+use super::info::{OpcodeInfo, opcode_info};
+
+pub(super) const OPCODES: &[OpcodeInfo] = &[
+    opcode_info(
+        Opcode::Br,
+        OpcodeFamily::Branch,
+        "br",
+        OperandShape::Label,
+        0x42,
+    ),
+    opcode_info(
+        Opcode::BrTrue,
+        OpcodeFamily::Branch,
+        "br.true",
+        OperandShape::Label,
+        0x43,
+    ),
+    opcode_info(
+        Opcode::BrFalse,
+        OpcodeFamily::Branch,
+        "br.false",
+        OperandShape::Label,
+        0x44,
+    ),
+    opcode_info(
+        Opcode::BrTbl,
+        OpcodeFamily::Branch,
+        "br.tbl",
+        OperandShape::BranchTable,
+        0x45,
+    ),
+    opcode_info(
+        Opcode::Leave,
+        OpcodeFamily::Branch,
+        "leave",
+        OperandShape::Label,
+        0x46,
+    ),
+    opcode_info(
+        Opcode::Ret,
+        OpcodeFamily::Branch,
+        "ret",
+        OperandShape::None,
+        0x47,
+    ),
+    opcode_info(
+        Opcode::Throw,
+        OpcodeFamily::Branch,
+        "throw",
+        OperandShape::None,
+        0x48,
+    ),
+    opcode_info(
+        Opcode::Rethrow,
+        OpcodeFamily::Branch,
+        "rethrow",
+        OperandShape::None,
+        0x49,
+    ),
+    opcode_info(
+        Opcode::Unreach,
+        OpcodeFamily::Branch,
+        "unreach",
+        OperandShape::None,
+        0x4A,
+    ),
+];

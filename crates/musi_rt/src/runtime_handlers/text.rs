@@ -10,8 +10,10 @@ pub(super) fn register(host: &mut NativeHost) {
         foundation_text::EFFECT,
         foundation_text::LENGTH_OP,
         |ctx, effect, args| {
-            let value = string_arg(ctx, effect, args, "textLength")?;
-            Ok(Value::Int(saturating_usize_to_i64(value.chars().count())))
+            let text_arg = string_arg(ctx, effect, args, "textLength")?;
+            Ok(Value::Int(saturating_usize_to_i64(
+                text_arg.chars().count(),
+            )))
         },
     );
     host.register_effect_handler_with_context(
@@ -42,36 +44,36 @@ pub(super) fn register(host: &mut NativeHost) {
         foundation_text::EFFECT,
         foundation_text::SLICE_OP,
         |ctx, effect, args| {
-            let [value, Value::Int(start), Value::Int(end)] = args else {
+            let [text_value, Value::Int(start), Value::Int(end)] = args else {
                 return Err(invalid_runtime_args(
                     effect,
                     "value string and integer bounds",
                     args.len(),
                 ));
             };
-            let value = ctx
-                .string(value)
-                .ok_or_else(|| invalid_runtime_args(effect, "value string", value.kind()))?;
-            ctx.alloc_string(text_slice(value.as_str(), *start, *end))
+            let text_value = ctx
+                .string(text_value)
+                .ok_or_else(|| invalid_runtime_args(effect, "value string", text_value.kind()))?;
+            ctx.alloc_string(text_slice(text_value.as_str(), *start, *end))
         },
     );
     host.register_effect_handler_with_context(
         foundation_text::EFFECT,
         foundation_text::BYTE_AT_OP,
         |ctx, effect, args| {
-            let [value, Value::Int(index)] = args else {
+            let [text_value, Value::Int(index)] = args else {
                 return Err(invalid_runtime_args(
                     effect,
                     "value string and integer index",
                     args.len(),
                 ));
             };
-            let value = ctx
-                .string(value)
-                .ok_or_else(|| invalid_runtime_args(effect, "value string", value.kind()))?;
+            let text_value = ctx
+                .string(text_value)
+                .ok_or_else(|| invalid_runtime_args(effect, "value string", text_value.kind()))?;
             let byte = usize::try_from(*index)
                 .ok()
-                .and_then(|index| value.as_str().as_bytes().get(index).copied())
+                .and_then(|index| text_value.as_str().as_bytes().get(index).copied())
                 .map_or(-1, i64::from);
             Ok(Value::Int(byte))
         },
@@ -80,10 +82,10 @@ pub(super) fn register(host: &mut NativeHost) {
         foundation_text::EFFECT,
         foundation_text::FROM_BYTE_OP,
         |ctx, effect, args| {
-            let [Value::Int(value)] = args else {
+            let [Value::Int(byte_code)] = args else {
                 return Err(invalid_runtime_args(effect, "integer byte", args.len()));
             };
-            let byte = u8::try_from((*value).clamp(0, 127)).unwrap_or(0);
+            let byte = u8::try_from((*byte_code).clamp(0, 127)).unwrap_or(0);
             ctx.alloc_string(char::from(byte).to_string())
         },
     );

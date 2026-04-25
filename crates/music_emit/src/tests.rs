@@ -2,7 +2,8 @@
 
 use music_base::SourceId;
 use music_base::diag::{Diag, DiagCode};
-use music_ir::{IrModule, lower_module};
+use music_ir::IrModule;
+use music_ir_lower::lower_module;
 use music_module::ModuleKey;
 use music_names::Interner;
 use music_resolve::{ResolveOptions, resolve_module};
@@ -207,6 +208,81 @@ mod success {
                 Opcode::BrFalse,
             ],
         );
+    }
+
+    #[test]
+    fn emits_generic_callable_param_name_refs() {
+        let emitted = emit_module(
+            r"
+        export let equal [T] (actual : T, expected : T) : Bool :=
+          actual = expected;
+    ",
+        )
+        .expect("emit should succeed");
+
+        assert!(emitted.artifact.validate().is_ok());
+        let opcodes = emitted_opcodes(&emitted);
+        assert!(opcodes.contains(&Opcode::LdLoc));
+        assert!(opcodes.contains(&Opcode::Ceq));
+    }
+
+    #[test]
+    fn emits_generic_callable_param_refs_through_type_apply_call() {
+        let emitted = emit_module(
+            r"
+        let equal [T] (actual : T, expected : T) : Bool :=
+          actual = expected;
+        export let toBe (actual : Int, expected : Int) : Bool :=
+          equal[Int](actual, expected);
+    ",
+        )
+        .expect("emit should succeed");
+
+        assert!(emitted.artifact.validate().is_ok());
+        let opcodes = emitted_opcodes(&emitted);
+        assert!(opcodes.contains(&Opcode::LdLoc));
+        assert!(opcodes.contains(&Opcode::Ceq));
+    }
+
+    #[test]
+    fn emits_param_name_refs_inside_match_guards() {
+        let emitted = emit_module(
+            r#"
+        let fail (message : String) : Bool := 0 = 1;
+        export let equal [T] (actual : T, expected : T) : Bool :=
+          match () (
+          | _ if actual = expected => 0 = 0
+          | _ => fail("expected values to be equal")
+          );
+    "#,
+        )
+        .expect("emit should succeed");
+
+        assert!(emitted.artifact.validate().is_ok());
+        let opcodes = emitted_opcodes(&emitted);
+        assert!(opcodes.contains(&Opcode::LdLoc));
+        assert!(opcodes.contains(&Opcode::Ceq));
+    }
+
+    #[test]
+    fn emits_local_callable_captures_outer_param_in_call_args() {
+        let emitted = emit_module(
+            r"
+        let equal [T] (actual : T, expected : T) : Bool :=
+          actual = expected;
+        export let expectInt (actual : Int) :=
+          (
+            let shouldEqual (expected : Int) := equal[Int](actual, expected);
+            { equal := shouldEqual }
+          );
+    ",
+        )
+        .expect("emit should succeed");
+
+        assert!(emitted.artifact.validate().is_ok());
+        let opcodes = emitted_opcodes(&emitted);
+        assert!(opcodes.contains(&Opcode::NewFn));
+        assert!(opcodes.contains(&Opcode::LdLoc));
     }
 
     #[test]

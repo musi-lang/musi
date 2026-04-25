@@ -45,8 +45,8 @@ impl DiagCode {
     #[must_use]
     pub fn parse(raw: &str) -> Option<Self> {
         let digits = raw.strip_prefix("ms")?;
-        let value = digits.parse::<u16>().ok()?;
-        Some(Self(value))
+        let numeric_code = digits.parse::<u16>().ok()?;
+        Some(Self(numeric_code))
     }
 }
 

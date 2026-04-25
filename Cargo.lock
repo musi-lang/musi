@@ -84,9 +84,9 @@ checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
 name = "async-lsp"
-version = "0.2.3"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1aa3be9cb3e4959184a598f9874641d297fb45f09940ac0e8326574a7cb81940"
+checksum = "c8b8fd1e175c5ee3108095da452e816519de618beccea23aa053c00cf5e344b9"
 dependencies = [
  "futures",
  "lsp-types",
@@ -911,6 +911,7 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "music_base",
  "music_ir",
+ "music_ir_lower",
  "music_module",
  "music_names",
  "music_resolve",
@@ -937,6 +938,23 @@ dependencies = [
  "music_arena",
  "music_base",
  "music_hir",
+ "music_module",
+ "music_names",
+ "music_resolve",
+ "music_sema",
+ "music_syntax",
+ "music_term",
+]
+
+[[package]]
+name = "music_ir_lower"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "musi_foundation",
+ "music_arena",
+ "music_base",
+ "music_hir",
+ "music_ir",
  "music_module",
  "music_names",
  "music_resolve",
@@ -1008,6 +1026,7 @@ dependencies = [
  "music_emit",
  "music_hir",
  "music_ir",
+ "music_ir_lower",
  "music_module",
  "music_names",
  "music_resolve",

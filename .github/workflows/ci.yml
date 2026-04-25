@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
-    branches: [main]
+    branches: [ main ]
 
 permissions:
   contents: read
@@ -38,7 +38,9 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-
 
       - name: Check formatting
-        run: cargo fmt --check
+        run: |
+          git ls-files -z "*.rs" ":!:crates/**/diag_catalog_gen.rs" \
+            | xargs -0 rustfmt --edition 2024 --check --config skip_children=true
 
       - name: Clippy
         run: cargo clippy --locked --workspace --tests -- -D warnings

@@ -91,16 +91,31 @@ impl RuntimeHeap {
 
     fn fast_seq2_mutation_2x2(&mut self, grid: GcRef, plan: RuntimeSeq2Mutation) -> VmResult<i64> {
         let (row0, row1) = self.seq2_rows_2x2(grid)?;
-        if self.sequence_int_pair(row0).is_ok() && self.sequence_int_pair(row1).is_ok() {
-            self.sequence_set_int_pair_cell(row0, 1, i64::from(plan.init_value))?;
-            let source = self.sequence_int_pair(row0)?[1];
+        if row0 == row1 {
+            if let Ok(pair) = self.sequence_int_pair_mut_ptr(row0) {
+                let source = i64::from(plan.init_value);
+                let next = source
+                    .checked_add(i64::from(plan.update_add))
+                    .ok_or_else(arithmetic_overflow)?;
+                // SAFETY: pointer came from one live int-pair sequence object.
+                unsafe { (*pair)[1] = source };
+                // SAFETY: pointer came from one live int-pair sequence object.
+                unsafe { (*pair)[0] = next };
+                return source.checked_add(next).ok_or_else(arithmetic_overflow);
+            }
+        } else if let (Ok(row0_pair), Ok(row1_pair)) = (
+            self.sequence_int_pair_mut_ptr(row0),
+            self.sequence_int_pair_mut_ptr(row1),
+        ) {
+            let source = i64::from(plan.init_value);
             let next = source
                 .checked_add(i64::from(plan.update_add))
                 .ok_or_else(arithmetic_overflow)?;
-            self.sequence_set_int_pair_cell(row1, 0, next)?;
-            let left = self.sequence_int_pair(row0)?[1];
-            let right = self.sequence_int_pair(row1)?[0];
-            return left.checked_add(right).ok_or_else(arithmetic_overflow);
+            // SAFETY: pointer came from a live row0 int-pair sequence object.
+            unsafe { (*row0_pair)[1] = source };
+            // SAFETY: pointer came from a distinct live row1 int-pair sequence object.
+            unsafe { (*row1_pair)[0] = next };
+            return source.checked_add(next).ok_or_else(arithmetic_overflow);
         }
         let (row0_items, row0_len) = self.sequence_items_mut_ptr(row0)?;
         let (row1_items, row1_len) = self.sequence_items_mut_ptr(row1)?;

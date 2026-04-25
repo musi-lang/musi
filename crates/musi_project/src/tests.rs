@@ -9,6 +9,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use music_base::diag::{DiagCode, DiagContext};
+use music_builtin::all_std_package_files;
 use music_module::ModuleKey;
 use music_seam::Artifact;
 
@@ -78,11 +79,15 @@ fn assert_manifest_validation_error(
     kind: ProjectDiagKind,
     context: &DiagContext,
 ) {
-    let temp = TempDir::new();
-    write_file(temp.path(), "musi.json", manifest);
-    write_file(temp.path(), "index.ms", r"export let result : Int := 42;");
+    let test_dir = TempDir::new();
+    write_file(test_dir.path(), "musi.json", manifest);
+    write_file(
+        test_dir.path(),
+        "index.ms",
+        r"export let result : Int := 42;",
+    );
 
-    let error = Project::load(temp.path(), ProjectOptions::default()).expect_err(load_note);
+    let error = Project::load(test_dir.path(), ProjectOptions::default()).expect_err(load_note);
 
     let expected_message = kind.message_with(context);
     assert_eq!(error.diag_code(), Some(kind.code()));
@@ -102,8 +107,8 @@ export let result () : Option[Int] := someOf[Int](1);
     );
 }
 
-fn check_root_entry(temp: &TempDir) -> Result<(), String> {
-    let project = Project::load(temp.path(), ProjectOptions::default())
+fn check_root_entry(test_dir: &TempDir) -> Result<(), String> {
+    let project = Project::load(test_dir.path(), ProjectOptions::default())
         .map_err(|error| format!("{error:?}"))?;
     let entry = project.root_entry().map_err(|error| format!("{error:?}"))?;
     let mut session = project
@@ -116,10 +121,10 @@ fn check_root_entry(temp: &TempDir) -> Result<(), String> {
 }
 
 fn assert_builtin_std_root_compiles(manifest: &str, suite_name: &str) {
-    let temp = TempDir::new();
-    write_file(temp.path(), "musi.json", manifest);
+    let test_dir = TempDir::new();
+    write_file(test_dir.path(), "musi.json", manifest);
     write_file(
-        temp.path(),
+        test_dir.path(),
         "index.ms",
         &format!(
             r#"
@@ -134,7 +139,7 @@ export let test () :=
         ),
     );
 
-    let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
+    let project = Project::load(test_dir.path(), ProjectOptions::default()).expect("project loads");
     assert!(project.package("@std").is_some());
     let output = project.compile_root_entry().expect("root entry compiles");
 
@@ -194,7 +199,7 @@ mod success {
     #[test]
     fn builtin_std_file_paths_match_builtin_catalog() {
         let std_paths = STD_FILES.iter().map(|(path, _)| *path).collect::<Vec<_>>();
-        let catalog_paths = music_builtin::all_std_package_files()
+        let catalog_paths = all_std_package_files()
             .iter()
             .map(|file| file.path)
             .collect::<Vec<_>>();
@@ -203,9 +208,9 @@ mod success {
 
     #[test]
     fn compiles_root_package_with_workspace_member_dependency() {
-        let temp = TempDir::new();
+        let test_dir = TempDir::new();
         write_file(
-            temp.path(),
+            test_dir.path(),
             "musi.json",
             r#"{
   "name": "app",
@@ -215,12 +220,12 @@ mod success {
 }"#,
         );
         write_file(
-            temp.path(),
+            test_dir.path(),
             "index.ms",
             r#"import "util"; export let result : Int := 42;"#,
         );
         write_file(
-            temp.path(),
+            test_dir.path(),
             "packages/util/musi.json",
             r#"{
   "name": "util",
@@ -229,12 +234,13 @@ mod success {
 }"#,
         );
         write_file(
-            temp.path(),
+            test_dir.path(),
             "packages/util/index.ms",
             r"export let base : Int := 41;",
         );
 
-        let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
+        let project =
+            Project::load(test_dir.path(), ProjectOptions::default()).expect("project loads");
         let output = project.compile_root_entry().expect("root entry compiles");
 
         assert!(output.artifact.validate().is_ok());
@@ -246,31 +252,36 @@ mod success {
 
     #[test]
     fn loads_project_from_nearest_manifest_ancestor() {
-        let temp = TempDir::new();
+        let test_dir = TempDir::new();
         write_file(
-            temp.path(),
+            test_dir.path(),
             "musi.json",
             r#"{
   "name": "app",
   "version": "1.0.0"
 }"#,
         );
-        write_file(temp.path(), "index.ms", "export let result : Int := 42;");
         write_file(
-            temp.path(),
+            test_dir.path(),
+            "index.ms",
+            "export let result : Int := 42;",
+        );
+        write_file(
+            test_dir.path(),
             "src/main.ms",
             "export let main () : Int := 42;",
         );
 
         let project = crate::load_project_ancestor(
-            temp.path().join("src/main.ms"),
+            test_dir.path().join("src/main.ms"),
             ProjectOptions::default(),
         )
         .expect("ancestor project should load");
 
         assert_eq!(
             project.root_dir(),
-            temp.path()
+            test_dir
+                .path()
                 .canonicalize()
                 .expect("temp path should canonicalize")
         );
@@ -278,12 +289,12 @@ mod success {
 
     #[test]
     fn resolves_registry_dependency_and_caches_it_locally() {
-        let temp = TempDir::new();
-        let registry_root = temp.path().join("registry");
-        let global_cache_root = temp.path().join("global-cache");
+        let test_dir = TempDir::new();
+        let registry_root = test_dir.path().join("registry");
+        let global_cache_root = test_dir.path().join("global-cache");
 
         write_file(
-            temp.path(),
+            test_dir.path(),
             "musi.json",
             r#"{
   "name": "app",
@@ -292,7 +303,7 @@ mod success {
 }"#,
         );
         write_file(
-            temp.path(),
+            test_dir.path(),
             "index.ms",
             r#"import "ext"; export let result : Int := 42;"#,
         );
@@ -312,7 +323,7 @@ mod success {
         );
 
         let project = Project::load(
-            temp.path(),
+            test_dir.path(),
             ProjectOptions::new()
                 .with_registry_root(registry_root)
                 .with_global_cache_root(global_cache_root),
@@ -370,12 +381,12 @@ mod success {
 
     #[test]
     fn modules_dir_false_resolves_from_global_cache_only() {
-        let temp = TempDir::new();
-        let registry_root = temp.path().join("registry");
-        let global_cache_root = temp.path().join("global-cache");
+        let test_dir = TempDir::new();
+        let registry_root = test_dir.path().join("registry");
+        let global_cache_root = test_dir.path().join("global-cache");
 
         write_file(
-            temp.path(),
+            test_dir.path(),
             "musi.json",
             r#"{
   "name": "app",
@@ -384,7 +395,7 @@ mod success {
   "dependencies": { "ext": "1.0.0" }
 }"#,
         );
-        write_file(temp.path(), "index.ms", r#"import "ext";"#);
+        write_file(test_dir.path(), "index.ms", r#"import "ext";"#);
         write_file(
             &registry_root,
             "ext/1.0.0/musi.json",
@@ -397,7 +408,7 @@ mod success {
         write_file(&registry_root, "ext/1.0.0/index.ms", "");
 
         let project = Project::load(
-            temp.path(),
+            test_dir.path(),
             ProjectOptions::new()
                 .with_registry_root(registry_root)
                 .with_global_cache_root(global_cache_root),
@@ -405,16 +416,16 @@ mod success {
         .expect("project loads");
 
         assert_eq!(project.modules_dir(), None);
-        assert!(!temp.path().join("musi_modules").exists());
+        assert!(!test_dir.path().join("musi_modules").exists());
         let ext = project.package("ext").expect("dependency should resolve");
         assert!(ext.root_dir.starts_with(project.global_cache_dir()));
     }
 
     #[test]
     fn resolves_git_dependency_through_global_cache_and_modules_dir() {
-        let temp = TempDir::new();
-        let git_root = temp.path().join("git-ext");
-        let global_cache_root = temp.path().join("global-cache");
+        let test_dir = TempDir::new();
+        let git_root = test_dir.path().join("git-ext");
+        let global_cache_root = test_dir.path().join("global-cache");
         fs::create_dir_all(&git_root).expect("git package dir should exist");
         write_file(
             &git_root,
@@ -443,7 +454,7 @@ mod success {
 
         let git_url = format!("git+file://{}#main", git_root.display());
         write_file(
-            temp.path(),
+            test_dir.path(),
             "musi.json",
             &format!(
                 r#"{{
@@ -453,10 +464,10 @@ mod success {
 }}"#
             ),
         );
-        write_file(temp.path(), "index.ms", r#"import "ext";"#);
+        write_file(test_dir.path(), "index.ms", r#"import "ext";"#);
 
         let project = Project::load(
-            temp.path(),
+            test_dir.path(),
             ProjectOptions::new().with_global_cache_root(global_cache_root),
         )
         .expect("project loads");
@@ -547,9 +558,9 @@ mod success {
 
     #[test]
     fn task_plan_is_returned_in_dependency_order() {
-        let temp = TempDir::new();
+        let test_dir = TempDir::new();
         write_file(
-            temp.path(),
+            test_dir.path(),
             "musi.json",
             r#"{
   "name": "app",
@@ -561,9 +572,14 @@ mod success {
   }
 }"#,
         );
-        write_file(temp.path(), "index.ms", r"export let result : Int := 42;");
+        write_file(
+            test_dir.path(),
+            "index.ms",
+            r"export let result : Int := 42;",
+        );
 
-        let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
+        let project =
+            Project::load(test_dir.path(), ProjectOptions::default()).expect("project loads");
         let plan = project.task_plan("test").expect("task plan should resolve");
 
         assert_eq!(plan.len(), 3);
@@ -574,9 +590,9 @@ mod success {
 
     #[test]
     fn manifest_imports_remap_specifiers_before_project_resolution() {
-        let temp = TempDir::new();
+        let test_dir = TempDir::new();
         write_file(
-            temp.path(),
+            test_dir.path(),
             "musi.json",
             r#"{
   "name": "app",
@@ -587,12 +603,12 @@ mod success {
 }"#,
         );
         write_file(
-            temp.path(),
+            test_dir.path(),
             "index.ms",
             r#"import "alias"; export let result : Int := 42;"#,
         );
         write_file(
-            temp.path(),
+            test_dir.path(),
             "packages/util/musi.json",
             r#"{
   "name": "util",
@@ -601,12 +617,12 @@ mod success {
 }"#,
         );
         write_file(
-            temp.path(),
+            test_dir.path(),
             "packages/util/index.ms",
             r"export let base : Int := 41;",
         );
 
-        let artifact: Artifact = Project::load(temp.path(), ProjectOptions::default())
+        let artifact: Artifact = Project::load(test_dir.path(), ProjectOptions::default())
             .expect("project loads")
             .compile_root_entry_artifact()
             .expect("artifact compiles");
@@ -616,9 +632,9 @@ mod success {
 
     #[test]
     fn manifest_imports_resolve_relative_targets_from_package_root() {
-        let temp = TempDir::new();
+        let test_dir = TempDir::new();
         write_file(
-            temp.path(),
+            test_dir.path(),
             "musi.json",
             r##"{
   "name": "app",
@@ -628,19 +644,19 @@ mod success {
 }"##,
         );
         write_file(
-            temp.path(),
+            test_dir.path(),
             "features/root.ms",
             r##"let Internal := import "#internal";
 export let result : Int := Internal.value;
 "##,
         );
         write_file(
-            temp.path(),
+            test_dir.path(),
             "internal/index.ms",
             r"export let value : Int := 42;",
         );
 
-        let output = Project::load(temp.path(), ProjectOptions::default())
+        let output = Project::load(test_dir.path(), ProjectOptions::default())
             .expect("project loads")
             .compile_root_entry()
             .expect("module compiles");
@@ -650,9 +666,9 @@ export let result : Int := Internal.value;
 
     #[test]
     fn discovers_nested_project_test_targets() {
-        let temp = TempDir::new();
+        let test_dir = TempDir::new();
         write_file(
-            temp.path(),
+            test_dir.path(),
             "musi.json",
             r#"{
   "name": "app",
@@ -661,9 +677,13 @@ export let result : Int := Internal.value;
   "workspace": ["packages/std"]
 }"#,
         );
-        write_file(temp.path(), "index.ms", r"export let result : Int := 42;");
         write_file(
-            temp.path(),
+            test_dir.path(),
+            "index.ms",
+            r"export let result : Int := 42;",
+        );
+        write_file(
+            test_dir.path(),
             "packages/std/musi.json",
             r#"{
   "name": "@std",
@@ -673,14 +693,14 @@ export let result : Int := Internal.value;
 }"#,
         );
         write_file(
-            temp.path(),
+            test_dir.path(),
             "packages/std/std.ms",
             r#"
 export let version := "0.1.0";
 "#,
         );
         write_file(
-            temp.path(),
+            test_dir.path(),
             "packages/std/testing.ms",
             r#"
 export let pass := { passed := .True, message := "" };
@@ -689,14 +709,15 @@ export let it (_name, _body) : Unit ~> Unit := _body();
 "#,
         );
         write_file(
-            temp.path(),
+            test_dir.path(),
             "packages/std/__tests__/math.test.ms",
             r"
 export let test () : Unit := 0;
 ",
         );
 
-        let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
+        let project =
+            Project::load(test_dir.path(), ProjectOptions::default()).expect("project loads");
         let tests = project.test_targets().expect("test targets should resolve");
 
         assert!(tests.iter().any(|test| test.package.name == "@std"));
@@ -709,9 +730,9 @@ export let test () : Unit := 0;
 
     #[test]
     fn merges_synthetic_law_suites_into_project_test_targets() {
-        let temp = TempDir::new();
+        let test_dir = TempDir::new();
         write_file(
-            temp.path(),
+            test_dir.path(),
             "musi.json",
             r#"{
   "name": "app",
@@ -719,7 +740,7 @@ export let test () : Unit := 0;
 }"#,
         );
         write_file(
-            temp.path(),
+            test_dir.path(),
             "index.ms",
             r"
 native let musi_true () : Bool;
@@ -731,14 +752,15 @@ export let Console := effect {
 ",
         );
         write_file(
-            temp.path(),
+            test_dir.path(),
             "laws.test.ms",
             r"
 export let test () := 0;
 ",
         );
 
-        let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
+        let project =
+            Project::load(test_dir.path(), ProjectOptions::default()).expect("project loads");
         let targets = project
             .test_targets()
             .expect("test targets should synthesize");
@@ -817,7 +839,7 @@ export let test () := 0;
         let manifest = fs::read_to_string(repo_root.join("packages/std/musi.json"))
             .expect("std manifest should be readable");
 
-        for legacy in [
+        for removed_path in [
             "\"./array\"",
             "\"./list\"",
             "\"./slice\"",
@@ -827,8 +849,8 @@ export let test () := 0;
             "\"./sys\"",
         ] {
             assert!(
-                !manifest.contains(legacy),
-                "legacy std export remains: {legacy}"
+                !manifest.contains(removed_path),
+                "removed std export remains: {removed_path}"
             );
         }
         for current in [
@@ -849,9 +871,9 @@ export let test () := 0;
 
     #[test]
     fn std_sys_is_private_implementation_module() {
-        let temp = TempDir::new();
+        let test_dir = TempDir::new();
         write_file(
-            temp.path(),
+            test_dir.path(),
             "musi.json",
             r#"{
   "name": "app",
@@ -860,14 +882,14 @@ export let test () := 0;
 }"#,
         );
         write_file(
-            temp.path(),
+            test_dir.path(),
             "index.ms",
             r#"let Sys := import "@std/sys";
 export let result : Int := 1;
 "#,
         );
 
-        let error = Project::load(temp.path(), ProjectOptions::default())
+        let error = Project::load(test_dir.path(), ProjectOptions::default())
             .expect_err("@std/sys should not resolve as public export");
 
         assert_eq!(
@@ -878,9 +900,9 @@ export let result : Int := 1;
 
     #[test]
     fn compiles_static_reexport_chain_across_packages() {
-        let temp = TempDir::new();
+        let test_dir = TempDir::new();
         write_file(
-            temp.path(),
+            test_dir.path(),
             "musi.json",
             r#"{
   "name": "app",
@@ -890,7 +912,7 @@ export let result : Int := 1;
 }"#,
         );
         write_file(
-            temp.path(),
+            test_dir.path(),
             "index.ms",
             r#"
 let Hub := import "hub";
@@ -898,7 +920,7 @@ export let result () : Bool := Hub.Dep.equals([1, 2], [1, 2]);
 "#,
         );
         write_file(
-            temp.path(),
+            test_dir.path(),
             "packages/hub/musi.json",
             r#"{
   "name": "hub",
@@ -910,14 +932,14 @@ export let result () : Bool := Hub.Dep.equals([1, 2], [1, 2]);
 }"#,
         );
         write_file(
-            temp.path(),
+            test_dir.path(),
             "packages/hub/index.ms",
             r#"
 export let Dep := import "dep";
 "#,
         );
         write_file(
-            temp.path(),
+            test_dir.path(),
             "packages/dep/musi.json",
             r#"{
   "name": "dep",
@@ -929,14 +951,15 @@ export let Dep := import "dep";
 }"#,
         );
         write_file(
-            temp.path(),
+            test_dir.path(),
             "packages/dep/index.ms",
             r"
 export let equals (left : []Int, right : []Int) : Bool := left = right;
 ",
         );
 
-        let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
+        let project =
+            Project::load(test_dir.path(), ProjectOptions::default()).expect("project loads");
         let artifact = project
             .compile_root_entry_artifact()
             .expect("root entry compiles through static reexport chain");
@@ -1015,9 +1038,9 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
 
     #[test]
     fn std_root_member_alias_keeps_import_record_target() {
-        let temp = TempDir::new();
+        let test_dir = TempDir::new();
         write_file(
-            temp.path(),
+            test_dir.path(),
             "musi.json",
             r#"{
   "name": "app",
@@ -1027,7 +1050,7 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
 }"#,
         );
         write_file(
-            temp.path(),
+            test_dir.path(),
             "index.ms",
             r#"
 let Std := import "@std";
@@ -1035,7 +1058,7 @@ export let bytes := Std.bytes;
 "#,
         );
         write_file(
-            temp.path(),
+            test_dir.path(),
             "packages/std/musi.json",
             r#"{
   "name": "@std",
@@ -1048,21 +1071,22 @@ export let bytes := Std.bytes;
 }"#,
         );
         write_file(
-            temp.path(),
+            test_dir.path(),
             "packages/std/std.ms",
             r#"
 export let bytes := import "@std/bytes";
 "#,
         );
         write_file(
-            temp.path(),
+            test_dir.path(),
             "packages/std/bytes.ms",
             r"
 export let equals (left : []Int, right : []Int) : Bool := left = right;
 ",
         );
 
-        let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
+        let project =
+            Project::load(test_dir.path(), ProjectOptions::default()).expect("project loads");
         let mut session = project.build_session().expect("project session builds");
         let entry = project.root_entry().expect("root entry resolves");
         let sema = session
@@ -1081,9 +1105,9 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
 
     #[test]
     fn root_package_gets_auto_std_prelude() {
-        let temp = TempDir::new();
+        let test_dir = TempDir::new();
         write_file(
-            temp.path(),
+            test_dir.path(),
             "musi.json",
             r#"{
   "name": "app",
@@ -1092,9 +1116,9 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
   "workspace": ["packages/std"]
 }"#,
         );
-        write_option_prelude_entry(temp.path());
+        write_option_prelude_entry(test_dir.path());
         write_file(
-            temp.path(),
+            test_dir.path(),
             "packages/std/musi.json",
             r#"{
   "name": "@std",
@@ -1108,7 +1132,7 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
 }"#,
         );
         write_file(
-            temp.path(),
+            test_dir.path(),
             "packages/std/std.ms",
             r#"
 export let Prelude := import "@std/prelude";
@@ -1116,7 +1140,7 @@ export let Option := import "@std/option";
 "#,
         );
         write_file(
-            temp.path(),
+            test_dir.path(),
             "packages/std/prelude.ms",
             r#"
 let OptionPkg := import "@std/option";
@@ -1127,7 +1151,7 @@ export let none := OptionPkg.none;
 "#,
         );
         write_file(
-            temp.path(),
+            test_dir.path(),
             "packages/std/option.ms",
             r"
 export opaque let Option[T] := data {
@@ -1139,7 +1163,7 @@ export let none[T] () : Option[T] := .None;
 ",
         );
 
-        check_root_entry(&temp).expect("root module should typecheck with auto prelude");
+        check_root_entry(&test_dir).expect("root module should typecheck with auto prelude");
     }
 
     #[test]
@@ -1158,9 +1182,9 @@ export let none[T] () : Option[T] := .None;
 
     #[test]
     fn empty_lib_disables_builtin_std() {
-        let temp = TempDir::new();
+        let test_dir = TempDir::new();
         write_file(
-            temp.path(),
+            test_dir.path(),
             "musi.json",
             r#"{
   "name": "app",
@@ -1169,14 +1193,14 @@ export let none[T] () : Option[T] := .None;
 }"#,
         );
         write_file(
-            temp.path(),
+            test_dir.path(),
             "index.ms",
             r#"let Testing := import "@std/testing";
 export let test () := Testing.it("adds values", Testing.toBe(1 + 2, 3));
 "#,
         );
 
-        let error = Project::load(temp.path(), ProjectOptions::default())
+        let error = Project::load(test_dir.path(), ProjectOptions::default())
             .expect_err("std should be disabled");
 
         assert_eq!(error.diag_code(), Some(DiagCode::new(5044)));
@@ -1193,9 +1217,9 @@ export let test () := Testing.it("adds values", Testing.toBe(1 + 2, 3));
 
     #[test]
     fn empty_lib_disables_auto_std_prelude() {
-        let temp = TempDir::new();
+        let test_dir = TempDir::new();
         write_file(
-            temp.path(),
+            test_dir.path(),
             "musi.json",
             r#"{
   "name": "app",
@@ -1203,9 +1227,9 @@ export let test () := Testing.it("adds values", Testing.toBe(1 + 2, 3));
   "lib": []
 }"#,
         );
-        write_option_prelude_entry(temp.path());
+        write_option_prelude_entry(test_dir.path());
 
-        let _error = check_root_entry(&temp).expect_err("std prelude should be disabled");
+        let _error = check_root_entry(&test_dir).expect_err("std prelude should be disabled");
     }
 }
 
@@ -1214,9 +1238,9 @@ mod failure {
 
     #[test]
     fn frozen_lock_requires_existing_lockfile() {
-        let temp = TempDir::new();
+        let test_dir = TempDir::new();
         write_file(
-            temp.path(),
+            test_dir.path(),
             "musi.json",
             r#"{
   "name": "app",
@@ -1224,10 +1248,14 @@ mod failure {
   "lock": { "frozen": true }
 }"#,
         );
-        write_file(temp.path(), "index.ms", r"export let result : Int := 42;");
+        write_file(
+            test_dir.path(),
+            "index.ms",
+            r"export let result : Int := 42;",
+        );
 
-        let error =
-            Project::load(temp.path(), ProjectOptions::default()).expect_err("load should fail");
+        let error = Project::load(test_dir.path(), ProjectOptions::default())
+            .expect_err("load should fail");
         assert!(matches!(error, ProjectError::MissingFrozenLockfile { .. }));
         assert_eq!(
             error.diag_code(),
@@ -1258,7 +1286,7 @@ mod failure {
     }
 
     #[test]
-    fn manifest_rejects_legacy_private_field() {
+    fn manifest_rejects_removed_private_field() {
         let error = serde_json::from_str::<PackageManifest>(
             r#"{
   "name": "app",
@@ -1405,9 +1433,9 @@ mod failure {
 
     #[test]
     fn unresolved_static_import_carries_source_diag() {
-        let temp = TempDir::new();
+        let test_dir = TempDir::new();
         write_file(
-            temp.path(),
+            test_dir.path(),
             "musi.json",
             r#"{
   "name": "app",
@@ -1415,13 +1443,13 @@ mod failure {
 }"#,
         );
         write_file(
-            temp.path(),
+            test_dir.path(),
             "index.ms",
             "let Missing := import \"missing\";\nexport let result : Int := 42;\n",
         );
 
-        let error =
-            Project::load(temp.path(), ProjectOptions::default()).expect_err("load should fail");
+        let error = Project::load(test_dir.path(), ProjectOptions::default())
+            .expect_err("load should fail");
         assert_eq!(
             error.diag_code(),
             Some(ProjectDiagKind::SourceImportUnresolved.code())
@@ -1451,18 +1479,23 @@ mod failure {
 
     #[test]
     fn missing_package_entry_uses_unknown_package_code() {
-        let temp = TempDir::new();
+        let test_dir = TempDir::new();
         write_file(
-            temp.path(),
+            test_dir.path(),
             "musi.json",
             r#"{
   "name": "app",
   "version": "1.0.0"
 }"#,
         );
-        write_file(temp.path(), "index.ms", "export let result : Int := 42;\n");
+        write_file(
+            test_dir.path(),
+            "index.ms",
+            "export let result : Int := 42;\n",
+        );
 
-        let project = Project::load(temp.path(), ProjectOptions::default()).expect("project loads");
+        let project =
+            Project::load(test_dir.path(), ProjectOptions::default()).expect("project loads");
         let error = project
             .package_entry("missing")
             .expect_err("package should be missing");

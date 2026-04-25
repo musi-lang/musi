@@ -8,7 +8,9 @@ use crate::descriptor::{
 };
 use crate::instruction::{CodeEntry, Instruction, Label, Operand};
 use crate::opcode::Opcode;
-use crate::{AssemblyError, decode_binary, encode_binary, format_text, parse_text};
+use crate::{
+    AssemblyError, decode_binary, encode_binary, format_hil_projection, format_text, parse_text,
+};
 
 mod success {
     use super::*;
@@ -220,18 +222,25 @@ mod success {
         let spec = include_str!("../../../specs/seam/bytecode.md");
         let mut expected = Vec::new();
         for line in spec.lines() {
-            let cells = line.split('|').map(str::trim).collect::<Vec<_>>();
-            if cells.len() < 4 || !cells[1].starts_with('`') || cells[2] == "reserved" {
+            let mut cells = line.split('|').map(str::trim);
+            let _ = cells.next();
+            let Some(hex_cell) = cells.next() else {
+                continue;
+            };
+            let Some(mnemonic_cell) = cells.next() else {
+                continue;
+            };
+            if !hex_cell.starts_with('`') || mnemonic_cell == "reserved" {
                 continue;
             }
-            let hex = cells[1].trim_matches('`');
+            let hex = hex_cell.trim_matches('`');
             if hex.contains('-') || hex == "Hex" {
                 continue;
             }
             let Ok(code) = u16::from_str_radix(hex, 16) else {
                 continue;
             };
-            let mnemonic = cells[2].trim_matches('`');
+            let mnemonic = mnemonic_cell.trim_matches('`');
             if mnemonic.is_empty() {
                 continue;
             }
@@ -362,6 +371,23 @@ mod success {
                 ".native $main::puts param $Int result $Int abi \"c\" symbol \"puts\" cold"
             )
         );
+    }
+
+    #[test]
+    fn hil_projection_uses_profile_attribute_spelling() {
+        let mut artifact = Artifact::new();
+        let procedure_name = artifact.intern_string("main::work");
+        let _ = artifact.procedures.alloc(
+            ProcedureDescriptor::new(procedure_name, 0, 0, Box::new([]))
+                .with_hot(true)
+                .with_cold(true),
+        );
+
+        let projection = format_hil_projection(&artifact);
+        assert!(projection.contains("@profile(level := .hot)"));
+        assert!(projection.contains("@profile(level := .cold)"));
+        assert!(!projection.contains(concat!("@", "hot")));
+        assert!(!projection.contains(concat!("@", "cold")));
     }
 }
 

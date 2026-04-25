@@ -7,14 +7,16 @@ pub fn protected_line_ranges(source: &str, tree: &SyntaxTree) -> Vec<Range<usize
     let mut protected = Vec::new();
     let mut in_range = false;
     for (index, line_range) in lines.iter().enumerate() {
-        let line = source.get(line_range.clone()).unwrap_or_default();
+        let line = source
+            .get(line_range.start..line_range.end)
+            .unwrap_or_default();
         if line.contains("musi-fmt-ignore-start") {
             in_range = true;
-            protected.push(line_range.clone());
+            protected.push(line_range.start..line_range.end);
             continue;
         }
         if in_range {
-            protected.push(line_range.clone());
+            protected.push(line_range.start..line_range.end);
             if line.contains("musi-fmt-ignore-end") {
                 in_range = false;
             }
@@ -40,12 +42,12 @@ fn next_syntax_item_lines(
     after: usize,
 ) -> Option<Range<usize>> {
     let after = u32::try_from(after).ok()?;
-    let item = tree
+    let syntax_item = tree
         .root()
         .children()
         .find(|item| item.span().start >= after)?;
-    let start = usize::try_from(item.span().start).ok()?;
-    let end = usize::try_from(item.span().end).ok()?;
+    let start = usize::try_from(syntax_item.span().start).ok()?;
+    let end = usize::try_from(syntax_item.span().end).ok()?;
     line_range_covering_span(lines, start, end)
 }
 

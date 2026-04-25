@@ -213,7 +213,7 @@ impl<'a> JsonSpanIndexer<'a> {
         }
         let mut index = 0usize;
         loop {
-            let item_pointer = join_pointer(pointer, &index.to_string());
+            let item_pointer = join_pointer(pointer, &format!("{index}"));
             let _ = self.parse_value(&item_pointer)?;
             index = index.saturating_add(1);
             self.skip_ws();

@@ -8,9 +8,9 @@ use music_base::{
     diag::{Diag, DiagContext},
 };
 use music_ir::{
-    DefinitionKey, IrArg, IrAssignTarget, IrBinaryOp, IrCasePattern, IrCaseRecordField,
-    IrEffectDef, IrExpr, IrExprKind, IrHandleOp, IrLit, IrMatchArm, IrModule, IrModuleInitPart,
-    IrNameRef, IrOrigin, IrParam, IrRecordField, IrRecordLayoutField, IrSeqPart, IrTempId,
+    DefinitionKey, IrArg, IrAssignTarget, IrEffectDef, IrExpr, IrExprKind, IrHandleOp, IrLit,
+    IrMatchArm, IrModule, IrModuleInitPart, IrNameRef, IrOrigin, IrParam, IrRecordField,
+    IrRecordLayoutField, IrSeqPart, IrTempId,
 };
 use music_module::ModuleKey;
 use music_names::NameBindingId;

@@ -12,7 +12,7 @@ pub fn call_musi_pointer_intrinsic(
     if foreign.abi() != "musi" {
         return None;
     }
-    let result = match foreign.symbol() {
+    let intrinsic_result = match foreign.symbol() {
         "ffi.ptr.read.i8" => {
             ptr_read::<i8>(ctx, foreign, args).map(|value| Value::Int(value.into()))
         }
@@ -51,7 +51,7 @@ pub fn call_musi_pointer_intrinsic(
         "ffi.ptr.write.ptr" => ptr_write_ptr(ctx, foreign, args),
         _ => return None,
     };
-    Some(result)
+    Some(intrinsic_result)
 }
 
 fn ptr_read<T: Copy>(
@@ -75,11 +75,11 @@ fn ptr_write_int<T>(
 where
     T: TryFrom<i64>,
 {
-    let value = int_arg(foreign, args, 1)?;
-    let value = T::try_from(value).map_err(|_| {
+    let source_int = int_arg(foreign, args, 1)?;
+    let typed_int = T::try_from(source_int).map_err(|_| {
         pointer_intrinsic_failed(foreign, "integer value out of pointer storage range")
     })?;
-    ptr_write_raw(ctx, foreign, args, value)
+    ptr_write_raw(ctx, foreign, args, typed_int)
 }
 
 fn ptr_write_nat<T>(
@@ -90,11 +90,11 @@ fn ptr_write_nat<T>(
 where
     T: TryFrom<u64>,
 {
-    let value = nat_arg(foreign, args, 1)?;
-    let value = T::try_from(value).map_err(|_| {
+    let source_nat = nat_arg(foreign, args, 1)?;
+    let typed_nat = T::try_from(source_nat).map_err(|_| {
         pointer_intrinsic_failed(foreign, "integer value out of pointer storage range")
     })?;
-    ptr_write_raw(ctx, foreign, args, value)
+    ptr_write_raw(ctx, foreign, args, typed_nat)
 }
 
 fn ptr_write_float<T>(
@@ -105,8 +105,8 @@ fn ptr_write_float<T>(
 where
     T: FromF64,
 {
-    let value = float_arg(foreign, args, 1)?;
-    ptr_write_raw(ctx, foreign, args, T::from_f64(value))
+    let source_float = float_arg(foreign, args, 1)?;
+    ptr_write_raw(ctx, foreign, args, T::from_f64(source_float))
 }
 
 fn ptr_write_ptr(
@@ -114,8 +114,8 @@ fn ptr_write_ptr(
     foreign: &ForeignCall,
     args: &[Value],
 ) -> VmResult<Value> {
-    let value = ptr_arg(ctx, foreign, args, 1)?;
-    ptr_write_raw(ctx, foreign, args, value)
+    let pointer_address = ptr_arg(ctx, foreign, args, 1)?;
+    ptr_write_raw(ctx, foreign, args, pointer_address)
 }
 
 fn ptr_write_raw<T>(

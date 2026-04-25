@@ -3,10 +3,7 @@
 use music_module::{ImportMap, ModuleKey};
 use music_session::{Session, SessionOptions};
 
-use crate::{
-    core, env, extend_import_map, intrinsics, module_source, process, register_modules,
-    resolve_spec, syntax, test, time,
-};
+use crate::{extend_import_map, module_source, register_modules, resolve_spec};
 
 fn compile_main_entry_with_source(source: &str) {
     let mut options = SessionOptions::default();
@@ -29,56 +26,84 @@ mod success {
         extend_import_map(&mut import_map);
 
         assert_eq!(
-            import_map.imports.get(test::SPEC).map(String::as_str),
-            Some(test::SPEC)
+            import_map.imports.get("musi:test").map(String::as_str),
+            Some("musi:test")
         );
         assert_eq!(
-            import_map.imports.get(core::SPEC).map(String::as_str),
-            Some(core::SPEC)
+            import_map.imports.get("musi:core").map(String::as_str),
+            Some("musi:core")
         );
-        assert_eq!(import_map.imports.get(intrinsics::SPEC), None);
+        assert_eq!(import_map.imports.get("musi:intrinsics"), None);
         assert_eq!(
-            import_map.imports.get(env::SPEC).map(String::as_str),
-            Some(env::SPEC)
-        );
-        assert_eq!(
-            import_map.imports.get(process::SPEC).map(String::as_str),
-            Some(process::SPEC)
+            import_map.imports.get("musi:env").map(String::as_str),
+            Some("musi:env")
         );
         assert_eq!(
-            import_map.imports.get(syntax::SPEC).map(String::as_str),
-            Some(syntax::SPEC)
+            import_map.imports.get("musi:process").map(String::as_str),
+            Some("musi:process")
+        );
+        assert_eq!(
+            import_map.imports.get("musi:syntax").map(String::as_str),
+            Some("musi:syntax")
         );
     }
 
     #[test]
     fn resolve_spec_maps_known_specs() {
-        assert_eq!(resolve_spec(core::SPEC), Some(ModuleKey::new(core::SPEC)));
-        assert_eq!(resolve_spec(intrinsics::SPEC), None);
-        assert_eq!(resolve_spec(env::SPEC), Some(ModuleKey::new(env::SPEC)));
-        assert_eq!(resolve_spec(test::SPEC), Some(ModuleKey::new(test::SPEC)));
+        assert_eq!(resolve_spec("musi:core"), Some(ModuleKey::new("musi:core")));
+        assert_eq!(resolve_spec("musi:intrinsics"), None);
+        assert_eq!(resolve_spec("musi:env"), Some(ModuleKey::new("musi:env")));
+        assert_eq!(resolve_spec("musi:test"), Some(ModuleKey::new("musi:test")));
         assert_eq!(
-            resolve_spec(syntax::SPEC),
-            Some(ModuleKey::new(syntax::SPEC))
+            resolve_spec("musi:syntax"),
+            Some(ModuleKey::new("musi:syntax"))
         );
         assert_eq!(resolve_spec("musi:missing"), None);
     }
 
     #[test]
     fn module_source_maps_known_specs() {
-        assert_eq!(module_source(core::SPEC), Some(core::MODULE));
-        assert_eq!(module_source(intrinsics::SPEC), Some(intrinsics::MODULE));
-        assert_eq!(module_source(env::SPEC), Some(env::MODULE));
-        assert_eq!(module_source(test::SPEC), Some(test::MODULE));
-        assert_eq!(module_source(syntax::SPEC), Some(syntax::MODULE));
+        assert!(module_source("musi:core").is_some());
+        assert!(module_source("musi:intrinsics").is_some());
+        assert!(module_source("musi:env").is_some());
+        assert!(module_source("musi:test").is_some());
+        assert!(module_source("musi:syntax").is_some());
         assert_eq!(module_source("musi:missing"), None);
-        assert!(core::MODULE.contains("export opaque let Rangeable [T] := shape"));
-        assert!(core::MODULE.contains("export opaque let Option [T] := data"));
-        assert!(env::MODULE.contains("export opaque let Env := effect"));
-        assert!(process::MODULE.contains("let argCount () : Int;"));
-        assert!(test::MODULE.contains("export opaque let Sample [T] := shape"));
-        assert!(test::MODULE.contains("export opaque let SampleList [T] := data"));
-        assert!(test::MODULE.contains("export opaque let SampleCase [T] := data"));
+        assert!(
+            module_source("musi:core")
+                .unwrap()
+                .contains("export opaque let Rangeable [T] := shape")
+        );
+        assert!(
+            module_source("musi:core")
+                .unwrap()
+                .contains("export opaque let Option [T] := data")
+        );
+        assert!(
+            module_source("musi:env")
+                .unwrap()
+                .contains("export opaque let Env := effect")
+        );
+        assert!(
+            module_source("musi:process")
+                .unwrap()
+                .contains("let argCount () : Int;")
+        );
+        assert!(
+            module_source("musi:test")
+                .unwrap()
+                .contains("export opaque let Sample [T] := shape")
+        );
+        assert!(
+            module_source("musi:test")
+                .unwrap()
+                .contains("export opaque let SampleList [T] := data")
+        );
+        assert!(
+            module_source("musi:test")
+                .unwrap()
+                .contains("export opaque let SampleCase [T] := data")
+        );
     }
 
     #[test]

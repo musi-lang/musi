@@ -120,7 +120,7 @@ where
             .child_nodes()
             .filter(|child| is_expr_or_ty(child.kind()));
         let sig = self.lower_optional_expr_clause(node, TokenKind::Colon, &mut exprs);
-        let value = self
+        let body_expr = self
             .lower_optional_expr_clause(node, TokenKind::ColonEq, &mut exprs)
             .unwrap_or_else(|| self.error_expr(origin));
         self.pop_scope();
@@ -137,7 +137,7 @@ where
                 constraints,
                 effects: None,
                 sig,
-                value,
+                value: body_expr,
             },
         );
         self.apply_mods(expr_id, mods);
@@ -189,8 +189,8 @@ where
             .find(|child| child.kind() == SyntaxNodeKind::VariantPayloadList)
             .map_or_else(Vec::new, |list| self.lower_variant_field_defs(list));
         let fields = self.store.variant_fields.alloc_from_iter(fields);
-        let mut result = None;
-        let mut value = None;
+        let mut result_ty = None;
+        let mut default_value = None;
         let mut pending_clause = None;
         for child in node.children() {
             if let Some(token) = child.into_token() {
@@ -207,12 +207,12 @@ where
                 continue;
             }
             match pending_clause.take() {
-                Some(TokenKind::MinusGt) => result = Some(self.lower_expr(child)),
-                Some(TokenKind::ColonEq) => value = Some(self.lower_expr(child)),
+                Some(TokenKind::MinusGt) => result_ty = Some(self.lower_expr(child)),
+                Some(TokenKind::ColonEq) => default_value = Some(self.lower_expr(child)),
                 _ => {}
             }
         }
-        HirVariantDef::new(origin, attrs, name, fields, result, value)
+        HirVariantDef::new(origin, attrs, name, fields, result_ty, default_value)
     }
 
     fn lower_variant_field_defs(
@@ -258,8 +258,8 @@ where
             .child_nodes()
             .filter(|child| is_expr_or_ty(child.kind()));
         let ty = self.lower_opt_expr(origin, exprs.next());
-        let value = self.lower_optional_expr_clause(node, TokenKind::ColonEq, &mut exprs);
-        HirFieldDef::new(origin, attrs, name, ty, value)
+        let default_value = self.lower_optional_expr_clause(node, TokenKind::ColonEq, &mut exprs);
+        HirFieldDef::new(origin, attrs, name, ty, default_value)
     }
 
     pub(super) fn lower_effect_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
@@ -341,10 +341,10 @@ where
             .child_nodes()
             .filter(|child| is_expr_or_ty(child.kind()));
         let sig = self.lower_optional_expr_clause(node, TokenKind::Colon, &mut exprs);
-        let value = self.lower_optional_expr_clause(node, TokenKind::ColonEq, &mut exprs);
+        let body_expr = self.lower_optional_expr_clause(node, TokenKind::ColonEq, &mut exprs);
         self.pop_scope();
 
-        HirMemberDef::new(origin, attrs, kind, name, params, sig, value)
+        HirMemberDef::new(origin, attrs, kind, name, params, sig, body_expr)
     }
 
     pub(super) fn lower_let_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
@@ -389,7 +389,7 @@ where
             .child_nodes()
             .filter(|child| is_expr_or_ty(child.kind()));
         let sig = self.lower_optional_expr_clause(node, TokenKind::Colon, &mut exprs);
-        let value = match exprs.last() {
+        let value_expr = match exprs.last() {
             Some(expr) => self.lower_expr(expr),
             None => self.error_expr(origin),
         };
@@ -420,7 +420,7 @@ where
                 constraints,
                 effects,
                 sig,
-                value,
+                value: value_expr,
             },
         )
     }
@@ -454,7 +454,7 @@ where
             .child_nodes()
             .filter(|child| is_expr_or_ty(child.kind()));
         let sig = self.lower_optional_expr_clause(node, TokenKind::Colon, &mut exprs);
-        let value = match exprs.last() {
+        let value_expr = match exprs.last() {
             Some(expr) => self.lower_expr(expr),
             None => self.error_expr(origin),
         };
@@ -480,7 +480,7 @@ where
                 constraints,
                 effects,
                 sig,
-                value,
+                value: value_expr,
             },
         )
     }

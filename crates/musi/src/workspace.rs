@@ -27,11 +27,8 @@ fn selected_package_ids(project: &Project) -> Vec<PackageId> {
     if let Some(root) = &project.workspace().root_package {
         ids.push(root.clone());
     }
-    for member in &project.workspace().members {
-        if !ids.contains(member) {
-            ids.push(member.clone());
-        }
-    }
+    ids.extend(project.workspace().members.iter().cloned());
     ids.sort();
+    ids.dedup();
     ids
 }

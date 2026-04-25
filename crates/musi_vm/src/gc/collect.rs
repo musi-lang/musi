@@ -25,7 +25,7 @@ impl RuntimeHeap {
         &mut self,
         roots: impl IntoIterator<Item = GcRef>,
     ) -> HeapCollectionStats {
-        self.clear_marks();
+        self.begin_mark_epoch();
         for reference in roots {
             self.mark_ref_young(reference);
         }
@@ -40,7 +40,7 @@ impl RuntimeHeap {
         &mut self,
         roots: impl IntoIterator<Item = GcRef>,
     ) -> HeapCollectionStats {
-        self.clear_marks();
+        self.begin_mark_epoch();
         for reference in roots {
             self.mark_ref_all(reference);
         }
@@ -61,13 +61,13 @@ impl RuntimeHeap {
             if slot.space != HeapSpace::Young {
                 continue;
             }
-            let should_reclaim = slot.object.is_some() && !slot.is_marked;
+            let should_reclaim = slot.object.is_some() && !self.slot_is_marked(slot);
             if should_reclaim {
                 reclaimed_objects += self.reclaim_slot(slot_index);
                 continue;
             }
             let should_promote =
-                slot.object.is_some() && slot.is_marked && Self::should_promote(slot);
+                slot.object.is_some() && self.slot_is_marked(slot) && Self::should_promote(slot);
             if should_promote {
                 self.promote_slot(slot_index);
             } else if let Some(slot) = self.slots.get_mut(slot_index)
@@ -75,7 +75,6 @@ impl RuntimeHeap {
                 && slot.space == HeapSpace::Young
             {
                 slot.survive_count = slot.survive_count.saturating_add(1);
-                slot.is_marked = false;
             }
         }
         self.finish_line_sweep();
@@ -98,21 +97,26 @@ impl RuntimeHeap {
         let mut reclaimed_objects = 0;
         for slot_index in 0..self.slots.len() {
             let should_reclaim =
-                self.slots[slot_index].object.is_some() && !self.slots[slot_index].is_marked;
+                self.slots[slot_index].object.is_some() && !self.slot_index_is_marked(slot_index);
             if !should_reclaim {
-                if let Some(slot) = self.slots.get_mut(slot_index) {
-                    slot.is_marked = false;
-                }
                 continue;
             }
             reclaimed_objects += self.reclaim_slot(slot_index);
         }
+        if reclaimed_objects == 0 {
+            return HeapCollectionStats {
+                before_bytes,
+                after_bytes: self.allocated_bytes,
+                before_objects,
+                after_objects: before_objects,
+                reclaimed_bytes: 0,
+                reclaimed_objects: 0,
+                free_blocks: 0,
+                evacuated_objects: 0,
+            };
+        }
         self.finish_line_sweep();
-        let evacuated_objects = if reclaimed_objects == 0 {
-            0
-        } else {
-            self.evacuate_fragmented_blocks()
-        };
+        let evacuated_objects = self.evacuate_fragmented_blocks();
         let free_blocks = self.free_blocks();
         HeapCollectionStats {
             before_bytes,
@@ -126,21 +130,35 @@ impl RuntimeHeap {
         }
     }
 
-    fn clear_marks(&mut self) {
-        for slot in &mut self.slots {
-            slot.is_marked = false;
+    fn begin_mark_epoch(&mut self) {
+        self.mark_epoch = self.mark_epoch.wrapping_add(1);
+        if self.mark_epoch == 0 {
+            for slot in &mut self.slots {
+                slot.mark_epoch = 0;
+            }
+            self.mark_epoch = 1;
         }
     }
 
+    const fn slot_is_marked(&self, slot: &super::space::HeapSlot) -> bool {
+        slot.mark_epoch == self.mark_epoch
+    }
+
+    #[allow(clippy::missing_const_for_fn)]
+    fn slot_index_is_marked(&self, slot_index: usize) -> bool {
+        self.slots[slot_index].mark_epoch == self.mark_epoch
+    }
+
     fn mark_ref_young(&mut self, reference: GcRef) {
+        let mark_epoch = self.mark_epoch;
         let (allocation, children) = {
             let Ok(slot) = self.slot_mut(reference) else {
                 return;
             };
-            if slot.space != HeapSpace::Young || slot.is_marked {
+            if slot.space != HeapSpace::Young || slot.mark_epoch == mark_epoch {
                 return;
             }
-            slot.is_marked = true;
+            slot.mark_epoch = mark_epoch;
             let allocation = slot.allocation;
             let mut children = SmallVec::<[GcRef; 8]>::new();
             if let Some(object) = slot.object.as_ref()
@@ -157,14 +175,15 @@ impl RuntimeHeap {
     }
 
     fn mark_ref_all(&mut self, reference: GcRef) {
+        let mark_epoch = self.mark_epoch;
         let (allocation, children) = {
             let Ok(slot) = self.slot_mut(reference) else {
                 return;
             };
-            if slot.is_marked {
+            if slot.mark_epoch == mark_epoch {
                 return;
             }
-            slot.is_marked = true;
+            slot.mark_epoch = mark_epoch;
             let allocation = slot.allocation;
             let mut children = SmallVec::<[GcRef; 8]>::new();
             if let Some(object) = slot.object.as_ref()
@@ -344,7 +363,7 @@ impl RuntimeHeap {
         self.slots[slot_index].object = None;
         self.slots[slot_index].generation = self.slots[slot_index].generation.wrapping_add(1);
         self.slots[slot_index].survive_count = 0;
-        self.slots[slot_index].is_marked = false;
+        self.slots[slot_index].mark_epoch = 0;
         self.allocated_bytes = self.allocated_bytes.saturating_sub(bytes);
         self.free_slots.push(slot_index);
         1
@@ -375,7 +394,7 @@ impl RuntimeHeap {
         if let Some(slot) = self.slots.get_mut(slot_index) {
             slot.space = HeapSpace::Mature;
             slot.survive_count = 0;
-            slot.is_marked = false;
+            slot.mark_epoch = 0;
             slot.allocation = new_allocation;
         }
         self.young_allocated_bytes = self.young_allocated_bytes.saturating_sub(bytes);

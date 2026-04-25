@@ -21,6 +21,7 @@ music_names = { path = "../music_names" }
 music_term = { path = "../music_term" }
 
 [dev-dependencies]
+music_ir_lower = { path = "../music_ir_lower" }
 music_resolve = { path = "../music_resolve" }
 music_sema = { path = "../music_sema" }
 music_syntax = { path = "../music_syntax" }

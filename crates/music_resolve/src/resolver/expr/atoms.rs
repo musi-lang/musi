@@ -54,13 +54,20 @@ where
             return self.error_expr(origin);
         };
 
-        let value = self.lower_expr(value_node);
+        let pinned_expr = self.lower_expr(value_node);
         self.push_scope();
         let _binding = self.insert_binding(name, NameBindingKind::Pin);
         let body = self.lower_expr(body_node);
         self.pop_scope();
 
-        self.alloc_expr(origin, HirExprKind::Pin { value, name, body })
+        self.alloc_expr(
+            origin,
+            HirExprKind::Pin {
+                value: pinned_expr,
+                name,
+                body,
+            },
+        )
     }
 
     pub(super) fn lower_name_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {

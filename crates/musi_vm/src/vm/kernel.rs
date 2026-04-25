@@ -2,8 +2,8 @@ use crate::{VmIndexSpace, VmValueKind};
 use music_seam::{ProcedureId, TypeId};
 
 use super::{
-    CompareOp, GcRef, RuntimeKernel, RuntimeSeq2Mutation, Value, Vm, VmError, VmErrorKind,
-    VmOptimizationLevel, VmResult,
+    CompareOp, GcRef, MvmMode, RuntimeKernel, RuntimeSeq2Mutation, Value, Vm, VmError, VmErrorKind,
+    VmResult,
 };
 
 impl Vm {
@@ -29,7 +29,8 @@ impl Vm {
     }
 
     const fn kernels_enabled(&self) -> bool {
-        matches!(self.options.optimization_level, VmOptimizationLevel::Tiered)
+        self.options.features.has_runtime_kernels()
+            && !matches!(self.options.mode, MvmMode::DebugInterpreter)
             && self.options.instruction_budget.is_none()
             && self.options.stack_frame_limit.is_none()
     }
@@ -206,6 +207,8 @@ impl Vm {
 }
 
 fn sum_kernel_result(locals: &[i64], kernel: IntTailAccumulatorKernel) -> VmResult<Option<i64>> {
+    const MAX_FAST_N: i64 = 4_294_967_295;
+
     if kernel.compare != CompareOp::Eq
         || kernel.compare_smi != 0
         || kernel.dec_smi != 1
@@ -219,10 +222,14 @@ fn sum_kernel_result(locals: &[i64], kernel: IntTailAccumulatorKernel) -> VmResu
         return Ok(None);
     }
     let acc = locals[usize::from(kernel.acc_local)];
-    let sum = n
-        .checked_mul(n.checked_add(1).ok_or_else(int_overflow_error)?)
-        .and_then(|value| value.checked_div(2))
-        .ok_or_else(int_overflow_error)?;
+    if n > MAX_FAST_N {
+        return Err(int_overflow_error());
+    }
+    let sum = if n & 1 == 0 {
+        (n / 2) * (n + 1)
+    } else {
+        n * ((n + 1) / 2)
+    };
     Ok(Some(acc.checked_add(sum).ok_or_else(int_overflow_error)?))
 }
 

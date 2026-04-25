@@ -27,7 +27,7 @@ pub(super) fn register(host: &mut NativeHost) {
             let [Value::Int(index)] = args else {
                 return Err(invalid_runtime_args(effect, "integer index", args.len()));
             };
-            let value = usize::try_from(*index).map_or_else(
+            let arg_value = usize::try_from(*index).map_or_else(
                 |_| String::new(),
                 |index| {
                     args_os()
@@ -36,7 +36,7 @@ pub(super) fn register(host: &mut NativeHost) {
                         .unwrap_or_default()
                 },
             );
-            ctx.alloc_string(value)
+            ctx.alloc_string(arg_value)
         },
     );
 

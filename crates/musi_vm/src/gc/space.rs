@@ -35,7 +35,7 @@ pub(super) struct HeapSlot {
     pub(super) object: Option<HeapObject>,
     pub(super) allocation: HeapAllocation,
     pub(super) bytes: usize,
-    pub(super) is_marked: bool,
+    pub(super) mark_epoch: u32,
 }
 
 impl HeapSlot {
@@ -53,7 +53,7 @@ impl HeapSlot {
             object: Some(object),
             allocation,
             bytes,
-            is_marked: false,
+            mark_epoch: 0,
         }
     }
 

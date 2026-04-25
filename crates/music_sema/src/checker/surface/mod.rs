@@ -1,3 +1,4 @@
+mod attrs;
 mod exports;
 mod types;
 

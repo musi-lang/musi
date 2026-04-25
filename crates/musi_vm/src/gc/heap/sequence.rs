@@ -4,6 +4,7 @@ use crate::VmValueKind::Seq;
 use crate::error::{VmError, VmErrorKind};
 use crate::types::VmResult;
 use crate::value::{GcRef, I64ArrayValue, SequenceValue, Value, ValueList};
+use std::ptr::from_mut;
 
 use super::super::error::invalid_heap_ref;
 use super::super::object::HeapObject;
@@ -144,16 +145,15 @@ impl RuntimeHeap {
         }
     }
 
-    pub(crate) fn sequence_set_int_pair_cell(
+    pub(crate) fn sequence_int_pair_mut_ptr(
         &mut self,
         reference: GcRef,
-        index: usize,
-        value: i64,
-    ) -> VmResult {
+    ) -> VmResult<*mut [i64; 2]> {
         self.mark_write_barrier(reference)?;
         match self.object_mut(reference)? {
             HeapObject::Seq(sequence) => sequence
-                .set_int_pair_cell(index, value)
+                .int_pair_mut()
+                .map(from_mut)
                 .ok_or_else(|| invalid_heap_ref(reference, "int pair sequence")),
             _ => Err(invalid_heap_ref(reference, "sequence")),
         }

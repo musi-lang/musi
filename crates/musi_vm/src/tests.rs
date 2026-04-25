@@ -8,7 +8,7 @@ use std::thread::spawn;
 
 use crate::gc::{HeapOptions, RuntimeHeap};
 use crate::value::SequenceValue;
-use crate::vm::{RuntimeFusedOp, RuntimeKernel};
+use crate::vm::{MvmMode, RuntimeFusedOp, RuntimeKernel};
 use musi_foundation::register_modules;
 use music_module::ModuleKey;
 use music_seam::descriptor::{
@@ -838,6 +838,39 @@ mod success {
     }
 
     #[test]
+    fn bound_export_call_reuses_const_i64_array8_return() {
+        let program = compile_program(
+            &[(
+                "main",
+                r"
+            export let result () : [8]Int := [0, 1, 2, 3, 4, 5, 6, 7];
+        ",
+            )],
+            "main",
+        );
+        let mut vm = Vm::with_rejecting_host(program, VmOptions);
+        let bound = vm
+            .bind_export_call("result")
+            .expect("const sequence export should bind");
+        let first = vm
+            .call_bound_export(&bound, &[])
+            .expect("first bound export call should run");
+        let second = vm
+            .call_bound_export(&bound, &[])
+            .expect("second bound export call should run");
+
+        let (Value::Seq(first_ref), Value::Seq(second_ref)) = (&first, &second) else {
+            panic!("calls should return sequences");
+        };
+        assert_ne!(first_ref, second_ref);
+        let ValueView::Seq(sequence) = vm.inspect(&second) else {
+            panic!("second should inspect as sequence");
+        };
+        assert_eq!(sequence.len(), 8);
+        assert_eq!(sequence.get(7), Some(Value::Int(7)));
+    }
+
+    #[test]
     fn fuses_data_match_option_path() {
         let program = compile_program(
             &[(
@@ -949,6 +982,112 @@ mod success {
     }
 
     #[test]
+    fn debug_interpreter_mode_uses_general_dispatch() {
+        let program = compile_program(
+            &[(
+                "main",
+                r"
+            let rec sum (n : Int, acc : Int) : Int :=
+              match n (
+              | 0 => acc
+              | _ => sum(n - 1, acc + n)
+            );
+            export let result (n : Int) : Int := sum(n, 0);
+        ",
+            )],
+            "main",
+        );
+        let options = VmOptions.with_mode(MvmMode::DebugInterpreter);
+        let mut vm = Vm::with_rejecting_host(program, options);
+        vm.initialize().expect("vm init should succeed");
+
+        let before = vm.executed_instructions();
+        let value = vm
+            .call_export("result", &[Value::Int(200)])
+            .expect("sum should run");
+        let executed = vm.executed_instructions() - before;
+
+        assert_eq!(value, Value::Int(20_100));
+        assert!(
+            executed > 220,
+            "debug interpreter mode should skip runtime kernel/fused dispatch: {executed}"
+        );
+    }
+
+    #[test]
+    fn interpreter_mode_uses_runtime_kernels() {
+        let program = compile_program(
+            &[(
+                "main",
+                r"
+            let rec sum (n : Int, acc : Int) : Int :=
+              match n (
+              | 0 => acc
+              | _ => sum(n - 1, acc + n)
+            );
+            export let result (n : Int) : Int := sum(n, 0);
+        ",
+            )],
+            "main",
+        );
+        let mut vm = Vm::with_rejecting_host(program, VmOptions.with_mode(MvmMode::Interpreter));
+        vm.initialize().expect("vm init should succeed");
+
+        let before = vm.executed_instructions();
+        let value = vm
+            .call_export("result", &[Value::Int(200)])
+            .expect("sum should run");
+        let executed = vm.executed_instructions() - before;
+
+        assert_eq!(value, Value::Int(20_100));
+        assert!(
+            executed <= 4,
+            "interpreter mode should allow runtime kernel dispatch: {executed}"
+        );
+    }
+
+    #[test]
+    fn parses_mvm_options_from_env_and_args() {
+        let args = [
+            "-Xmvm:Tier=Debug".to_owned(),
+            "-Xmvm:+UseKernels".to_owned(),
+            "-Xmvm:HeapLimit=4096".to_owned(),
+        ];
+        let options =
+            VmOptions::parse_mvm_options(Some("-Xmvm:Tier=Interp -Xmvm:-UseKernels"), &args)
+                .expect("MVM options should parse");
+
+        assert_eq!(options.mode, MvmMode::DebugInterpreter);
+        assert_eq!(options.heap_limit_bytes, Some(4096));
+        assert!(options.features.has_runtime_kernels());
+        assert!(options.features.has_fused_dispatch());
+    }
+
+    #[test]
+    fn rejects_unknown_mvm_options() {
+        let error = VmOptions::parse_mvm_options(None, &["-Xmvm:+unknown".to_owned()])
+            .expect_err("unknown MVM option should fail");
+
+        assert!(error.message().contains("unknown MVM option"));
+    }
+
+    #[test]
+    fn rejects_old_mvm_option_spellings() {
+        for option in [
+            "-Xmvm:mode=interpreter",
+            "-Xmvm:+kernels",
+            "-Xmvm:-quickening",
+            "-Xmvm:heap=4096",
+            "-Xmvm:stack-frames=64",
+            "-Xmvm:instruction-budget=100",
+            "-Xmvm:gc=stress",
+        ] {
+            let _error = VmOptions::parse_mvm_options(None, &[option.to_owned()])
+                .expect_err("old MVM option spelling should fail");
+        }
+    }
+
+    #[test]
     fn bound_sequence_call_matches_dynamic_call() {
         let program = compile_program(
             &[(
@@ -1014,9 +1153,7 @@ mod success {
             let bound_grid_arg = vm
                 .bind_seq2x2_i64_arg(bound_grid_ref)
                 .expect("grid arg should bind");
-            bound_grid_arg
-                .call_i64(bound)
-                .expect("bound sequence arg should run")
+            bound_grid_arg.call_i64(bound)
         };
         assert_eq!(typed, 85);
         let ValueView::Seq(first) = vm.inspect(&first) else {

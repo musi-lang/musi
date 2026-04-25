@@ -3,7 +3,7 @@ name = "music_names"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-description = "Interning, identifiers, known symbols, and name-resolution data structures"
+description = "Interning, identifiers, compiler symbols, and name-resolution data structures"
 license.workspace = true
 publish.workspace = true
 

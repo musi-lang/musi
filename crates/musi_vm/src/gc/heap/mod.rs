@@ -34,6 +34,7 @@ pub struct RuntimeHeap {
     pub(super) seq8_fast_slots: Vec<usize>,
     pub(super) seq8_fast_cursor: usize,
     pub(super) seq8_fast_generation: u32,
+    pub(super) mark_epoch: u32,
     single_thread_marker: PhantomData<Cell<()>>,
 }
 
@@ -80,6 +81,7 @@ impl RuntimeHeap {
             seq8_fast_slots: Vec::new(),
             seq8_fast_cursor: 0,
             seq8_fast_generation: 0,
+            mark_epoch: 0,
             single_thread_marker: PhantomData,
         }
     }

@@ -24,20 +24,20 @@ diag AttrLayoutPackRequiresU32 3006
 diag AttrUnknownArg 3007
   message "attribute argument `{argument}` unknown"
 
-diag AttrKnownRequiresPlainBindLet 3008
-  message "`@musi.known` needs plain bind `let` target"
+diag AttrBuiltinRequiresPlainBindLet 3008
+  message "`@musi.builtin` needs plain bind `let` target"
 
-diag AttrKnownRequiresNameString 3009
-  message "`@musi.known` needs string `name` argument"
+diag AttrBuiltinRequiresNameString 3009
+  message "`@musi.builtin` needs string `name` argument"
 
-diag AttrKnownRequiresFoundationModule 3010
-  message "`@musi.known` needs `musi:*` module"
+diag AttrBuiltinRequiresFoundationModule 3010
+  message "`@musi.builtin` needs `musi:*` module"
 
-diag AttrKnownRequiresExport 3011
-  message "`@musi.known` needs exported binding"
+diag AttrBuiltinRequiresExport 3011
+  message "`@musi.builtin` needs exported binding"
 
-diag AttrKnownUnknownName 3012
-  message "`@musi.known` name unknown"
+diag AttrBuiltinUnknownName 3012
+  message "`@musi.builtin` name unknown"
 
 diag AttrIntrinsicRequiresNameString 3013
   message "`@musi.intrinsic` needs string `name` argument"
@@ -71,6 +71,9 @@ diag AttrSinceRequiresVersionString 3305
 
 diag AttrOpaqueRequiresStructuralExport 3306
   message "`opaque` needs exported structural target"
+
+diag AttrIntrinsicUnknownName 3308
+  message "`@musi.intrinsic` name unknown"
 
 diag AttrForeignRequiresForeignLet 3017
   message "native member needs `let` target"

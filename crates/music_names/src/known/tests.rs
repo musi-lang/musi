@@ -19,7 +19,7 @@ mod success {
     }
 
     #[test]
-    fn compiler_known_type_names_match_builtin_catalog() {
+    fn compiler_builtin_type_names_match_builtin_catalog() {
         let mut interner = Interner::new();
         let known = KnownSymbols::new(&mut interner);
         let prelude = known.compiler_prelude();

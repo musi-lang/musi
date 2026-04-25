@@ -102,20 +102,20 @@ mod success {
 
     #[test]
     fn failed_artifact_write_removes_empty_created_parent() {
-        let temp = TempDir::new();
-        let target = temp.path().join("target/debug/out.seam");
+        let test_dir = TempDir::new();
+        let target = test_dir.path().join("target/debug/out.seam");
 
         let err = write_output(&target, |_| Err(io::Error::other("write failed")))
             .expect_err("write should fail");
 
         assert!(matches!(err, ToolingError::ToolingIoFailed { .. }));
-        assert!(!temp.path().join("target").exists());
+        assert!(!test_dir.path().join("target").exists());
     }
 
     #[test]
     fn failed_artifact_write_keeps_existing_parent() {
-        let temp = TempDir::new();
-        let parent = temp.path().join("target");
+        let test_dir = TempDir::new();
+        let parent = test_dir.path().join("target");
         fs::create_dir_all(&parent).expect("target dir should be created");
 
         let err = write_output(&parent.join("out.seam"), |_| {
@@ -129,20 +129,20 @@ mod success {
 
     #[test]
     fn loads_direct_graph_with_relative_imports() {
-        let temp = TempDir::new();
+        let test_dir = TempDir::new();
         write_file(
-            temp.path(),
+            test_dir.path(),
             "main.ms",
             r#"
         import "./dep";
         export let main () : Int := 42;
         "#,
         );
-        write_file(temp.path(), "dep.ms", "export let base : Int := 41;");
+        write_file(test_dir.path(), "dep.ms", "export let base : Int := 41;");
 
-        let graph = load_direct_graph(&temp.path().join("main.ms")).expect("graph should load");
+        let graph = load_direct_graph(&test_dir.path().join("main.ms")).expect("graph should load");
         let texts = graph.module_texts();
-        let expected = temp
+        let expected = test_dir
             .path()
             .join("main.ms")
             .canonicalize()
@@ -157,15 +157,15 @@ mod success {
 
     #[test]
     fn completions_include_current_terms_and_visible_bindings() {
-        let temp = TempDir::new();
-        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let test_dir = TempDir::new();
+        write_file(test_dir.path(), "musi.json", APP_MANIFEST);
         let source = r"let before := 1;
 let current := bef;
 ";
-        write_file(temp.path(), "index.ms", source);
+        write_file(test_dir.path(), "index.ms", source);
 
         let completions = completions_for_project_file_with_overlay(
-            &temp.path().join("index.ms"),
+            &test_dir.path().join("index.ms"),
             Some(source),
             2,
             19,
@@ -177,15 +177,15 @@ let current := bef;
 
     #[test]
     fn completions_replace_current_identifier_prefix() {
-        let temp = TempDir::new();
-        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let test_dir = TempDir::new();
+        write_file(test_dir.path(), "musi.json", APP_MANIFEST);
         let source = r"let before := 1;
 let current := bef;
 ";
-        write_file(temp.path(), "index.ms", source);
+        write_file(test_dir.path(), "index.ms", source);
 
         let completions = completions_for_project_file_with_overlay(
-            &temp.path().join("index.ms"),
+            &test_dir.path().join("index.ms"),
             Some(source),
             2,
             19,
@@ -203,15 +203,15 @@ let current := bef;
 
     #[test]
     fn completions_after_dot_return_record_members_without_keywords() {
-        let temp = TempDir::new();
-        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let test_dir = TempDir::new();
+        write_file(test_dir.path(), "musi.json", APP_MANIFEST);
         let source = r"let point := { x := 1, y := 2 };
 point.
 ";
-        write_file(temp.path(), "index.ms", source);
+        write_file(test_dir.path(), "index.ms", source);
 
         let completions = completions_for_project_file_with_overlay(
-            &temp.path().join("index.ms"),
+            &test_dir.path().join("index.ms"),
             Some(source),
             2,
             7,
@@ -224,15 +224,15 @@ point.
 
     #[test]
     fn completions_after_dot_filter_member_prefix() {
-        let temp = TempDir::new();
-        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let test_dir = TempDir::new();
+        write_file(test_dir.path(), "musi.json", APP_MANIFEST);
         let source = r"let span := 1 .. 4;
 span.lower
 ";
-        write_file(temp.path(), "index.ms", source);
+        write_file(test_dir.path(), "index.ms", source);
 
         let completions = completions_for_project_file_with_overlay(
-            &temp.path().join("index.ms"),
+            &test_dir.path().join("index.ms"),
             Some(source),
             2,
             11,
@@ -248,20 +248,20 @@ span.lower
 
     #[test]
     fn definition_resolves_local_binding_from_reference() {
-        let temp = TempDir::new();
-        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let test_dir = TempDir::new();
+        write_file(test_dir.path(), "musi.json", APP_MANIFEST);
         let source = "let before := 1;\nlet after := before;\n";
-        write_file(temp.path(), "index.ms", source);
+        write_file(test_dir.path(), "index.ms", source);
 
         let location = definition_for_project_file_with_overlay(
-            &temp.path().join("index.ms"),
+            &test_dir.path().join("index.ms"),
             Some(source),
             2,
             14,
         )
         .expect("definition should resolve");
 
-        assert_eq!(location.path, temp.path().join("index.ms"));
+        assert_eq!(location.path, test_dir.path().join("index.ms"));
         assert_eq!(location.range.start_line, 1);
         assert_eq!(location.range.start_col, 5);
         assert_eq!(location.range.end_col, 11);
@@ -269,13 +269,13 @@ span.lower
 
     #[test]
     fn references_include_definition_when_requested() {
-        let temp = TempDir::new();
-        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let test_dir = TempDir::new();
+        write_file(test_dir.path(), "musi.json", APP_MANIFEST);
         let source = "let before := 1;\nlet after := before;\n";
-        write_file(temp.path(), "index.ms", source);
+        write_file(test_dir.path(), "index.ms", source);
 
         let references = references_for_project_file_with_overlay(
-            &temp.path().join("index.ms"),
+            &test_dir.path().join("index.ms"),
             Some(source),
             2,
             14,
@@ -289,20 +289,20 @@ span.lower
 
     #[test]
     fn rename_returns_workspace_edits_for_definition_and_references() {
-        let temp = TempDir::new();
-        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let test_dir = TempDir::new();
+        write_file(test_dir.path(), "musi.json", APP_MANIFEST);
         let source = "let before := 1;\nlet after := before;\n";
-        write_file(temp.path(), "index.ms", source);
+        write_file(test_dir.path(), "index.ms", source);
 
         let prepared = prepare_rename_for_project_file_with_overlay(
-            &temp.path().join("index.ms"),
+            &test_dir.path().join("index.ms"),
             Some(source),
             2,
             14,
         )
         .expect("rename should prepare");
         let edit = rename_for_project_file_with_overlay(
-            &temp.path().join("index.ms"),
+            &test_dir.path().join("index.ms"),
             Some(source),
             2,
             14,
@@ -311,7 +311,7 @@ span.lower
         .expect("rename should produce edits");
         let edits = edit
             .changes
-            .get(&temp.path().join("index.ms"))
+            .get(&test_dir.path().join("index.ms"))
             .expect("file edits should exist");
 
         assert_eq!(prepared.1, "before");
@@ -321,17 +321,17 @@ span.lower
 
     #[test]
     fn document_and_workspace_symbols_include_local_defs() {
-        let temp = TempDir::new();
-        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let test_dir = TempDir::new();
+        write_file(test_dir.path(), "musi.json", APP_MANIFEST);
         let source = "let before := 1;\nlet after := before;\n";
-        write_file(temp.path(), "index.ms", source);
+        write_file(test_dir.path(), "index.ms", source);
 
         let document_symbols = document_symbols_for_project_file_with_overlay(
-            &temp.path().join("index.ms"),
+            &test_dir.path().join("index.ms"),
             Some(source),
         );
         let workspace_symbols = workspace_symbols_for_project_file_with_overlay(
-            &temp.path().join("index.ms"),
+            &test_dir.path().join("index.ms"),
             Some(source),
             "bef",
         );
@@ -350,13 +350,13 @@ span.lower
 
     #[test]
     fn semantic_tokens_complete_textmate_without_lexical_overrides() {
-        let temp = TempDir::new();
-        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let test_dir = TempDir::new();
+        write_file(test_dir.path(), "musi.json", APP_MANIFEST);
         let source = "--- greeting value\nlet message : String := \"Hello\";\nmessage;\n";
-        write_file(temp.path(), "index.ms", source);
+        write_file(test_dir.path(), "index.ms", source);
 
         let tokens = semantic_tokens_for_project_file_with_overlay(
-            &temp.path().join("index.ms"),
+            &test_dir.path().join("index.ms"),
             Some(source),
         );
 
@@ -387,13 +387,13 @@ span.lower
 
     #[test]
     fn semantic_tokens_mark_attribute_names_as_decorators() {
-        let temp = TempDir::new();
-        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let test_dir = TempDir::new();
+        write_file(test_dir.path(), "musi.json", APP_MANIFEST);
         let source = "@link(symbol := \"data.tag\")\nlet message : String := \"Hello\";\n";
-        write_file(temp.path(), "index.ms", source);
+        write_file(test_dir.path(), "index.ms", source);
 
         let tokens = semantic_tokens_for_project_file_with_overlay(
-            &temp.path().join("index.ms"),
+            &test_dir.path().join("index.ms"),
             Some(source),
         );
 
@@ -406,13 +406,13 @@ span.lower
 
     #[test]
     fn semantic_tokens_mark_law_names_as_functions() {
-        let temp = TempDir::new();
-        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let test_dir = TempDir::new();
+        write_file(test_dir.path(), "musi.json", APP_MANIFEST);
         let source = "let Eq[T] := shape { law reflexive(value : T) := eq(value, value); };\n";
-        write_file(temp.path(), "index.ms", source);
+        write_file(test_dir.path(), "index.ms", source);
 
         let tokens = semantic_tokens_for_project_file_with_overlay(
-            &temp.path().join("index.ms"),
+            &test_dir.path().join("index.ms"),
             Some(source),
         );
 
@@ -430,17 +430,17 @@ span.lower
 
     #[test]
     fn semantic_tokens_mark_variants_as_enum_members() {
-        let temp = TempDir::new();
-        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let test_dir = TempDir::new();
+        write_file(test_dir.path(), "musi.json", APP_MANIFEST);
         let source = "\
 let Option := data { | Some(value : Int) | None };
 let value := .Some(value := 1);
 match value (| .Some(inner) => inner | .None => 0);
 ";
-        write_file(temp.path(), "index.ms", source);
+        write_file(test_dir.path(), "index.ms", source);
 
         let tokens = semantic_tokens_for_project_file_with_overlay(
-            &temp.path().join("index.ms"),
+            &test_dir.path().join("index.ms"),
             Some(source),
         );
 
@@ -463,16 +463,16 @@ match value (| .Some(inner) => inner | .None => 0);
 
     #[test]
     fn hover_uses_resolved_symbol_range_and_markdown_shape() {
-        let temp = TempDir::new();
-        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let test_dir = TempDir::new();
+        write_file(test_dir.path(), "musi.json", APP_MANIFEST);
         write_file(
-            temp.path(),
+            test_dir.path(),
             "index.ms",
             "--- greeting value\nlet message : String := \"Hello\";\nmessage;\n",
         );
 
         let hover = hover_for_project_file_with_overlay(
-            &temp.path().join("index.ms"),
+            &test_dir.path().join("index.ms"),
             Some("--- greeting value\nlet message : String := \"Hello\";\nmessage;\n"),
             3,
             2,
@@ -492,20 +492,26 @@ match value (| .Some(inner) => inner | .None => 0);
 
     #[test]
     fn hover_uses_block_doc_but_not_module_doc() {
-        let temp = TempDir::new();
-        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let test_dir = TempDir::new();
+        write_file(test_dir.path(), "musi.json", APP_MANIFEST);
         let source =
             "--! module docs\n/-- item docs -/\nlet message : String := \"Hello\";\nmessage;\n";
-        write_file(temp.path(), "index.ms", source);
+        write_file(test_dir.path(), "index.ms", source);
 
-        let module_docs =
-            module_docs_for_project_file_with_overlay(&temp.path().join("index.ms"), Some(source))
-                .expect("module docs should be extracted");
+        let module_docs = module_docs_for_project_file_with_overlay(
+            &test_dir.path().join("index.ms"),
+            Some(source),
+        )
+        .expect("module docs should be extracted");
         assert!(module_docs.contains("module docs"));
 
-        let hover =
-            hover_for_project_file_with_overlay(&temp.path().join("index.ms"), Some(source), 4, 2)
-                .expect("message hover should resolve");
+        let hover = hover_for_project_file_with_overlay(
+            &test_dir.path().join("index.ms"),
+            Some(source),
+            4,
+            2,
+        )
+        .expect("message hover should resolve");
 
         assert!(hover.contents.contains("item docs"));
         assert!(!hover.contents.contains("module docs"));
@@ -513,14 +519,18 @@ match value (| .Some(inner) => inner | .None => 0);
 
     #[test]
     fn hover_uses_member_facts_for_record_properties() {
-        let temp = TempDir::new();
-        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let test_dir = TempDir::new();
+        write_file(test_dir.path(), "musi.json", APP_MANIFEST);
         let source = "let record := { result := 42 };\nrecord.result;\n";
-        write_file(temp.path(), "index.ms", source);
+        write_file(test_dir.path(), "index.ms", source);
 
-        let hover =
-            hover_for_project_file_with_overlay(&temp.path().join("index.ms"), Some(source), 2, 9)
-                .expect("field hover should resolve");
+        let hover = hover_for_project_file_with_overlay(
+            &test_dir.path().join("index.ms"),
+            Some(source),
+            2,
+            9,
+        )
+        .expect("field hover should resolve");
 
         assert_eq!(hover.range.start_line, 2);
         assert_eq!(hover.range.start_col, 8);
@@ -529,18 +539,22 @@ match value (| .Some(inner) => inner | .None => 0);
 
     #[test]
     fn hover_uses_member_facts_for_dot_callable_procedures() {
-        let temp = TempDir::new();
-        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let test_dir = TempDir::new();
+        write_file(test_dir.path(), "musi.json", APP_MANIFEST);
         let source = "\
 let inc (self : Int, by : Int) : Int := self + by;
 let one : Int := 1;
 one.inc(2);
 ";
-        write_file(temp.path(), "index.ms", source);
+        write_file(test_dir.path(), "index.ms", source);
 
-        let hover =
-            hover_for_project_file_with_overlay(&temp.path().join("index.ms"), Some(source), 3, 6)
-                .expect("dot-callable hover should resolve");
+        let hover = hover_for_project_file_with_overlay(
+            &test_dir.path().join("index.ms"),
+            Some(source),
+            3,
+            6,
+        )
+        .expect("dot-callable hover should resolve");
 
         assert_eq!(hover.range.start_line, 3);
         assert_eq!(hover.range.start_col, 5);
@@ -549,19 +563,23 @@ one.inc(2);
 
     #[test]
     fn hover_renders_imported_attached_method_return_type() {
-        let temp = TempDir::new();
-        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let test_dir = TempDir::new();
+        write_file(test_dir.path(), "musi.json", APP_MANIFEST);
         write_file(
-            temp.path(),
+            test_dir.path(),
             "methods.ms",
             "export let(self : String).byteSize () : Int := 1;\n",
         );
         let source = "import \"./methods.ms\";\n\"abc\".byteSize();\n";
-        write_file(temp.path(), "index.ms", source);
+        write_file(test_dir.path(), "index.ms", source);
 
-        let hover =
-            hover_for_project_file_with_overlay(&temp.path().join("index.ms"), Some(source), 2, 8)
-                .expect("attached method hover should resolve");
+        let hover = hover_for_project_file_with_overlay(
+            &test_dir.path().join("index.ms"),
+            Some(source),
+            2,
+            8,
+        )
+        .expect("attached method hover should resolve");
 
         assert_eq!(hover.range.start_line, 2);
         assert_eq!(hover.range.start_col, 7);
@@ -577,8 +595,8 @@ one.inc(2);
 
     #[test]
     fn semantic_tokens_use_member_facts_for_properties_and_dot_callables() {
-        let temp = TempDir::new();
-        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let test_dir = TempDir::new();
+        write_file(test_dir.path(), "musi.json", APP_MANIFEST);
         let source = "\
 let record := { result := 42 };
 record.result;
@@ -586,10 +604,10 @@ let inc (self : Int, by : Int) : Int := self + by;
 let one : Int := 1;
 one.inc(2);
 ";
-        write_file(temp.path(), "index.ms", source);
+        write_file(test_dir.path(), "index.ms", source);
 
         let tokens = semantic_tokens_for_project_file_with_overlay(
-            &temp.path().join("index.ms"),
+            &test_dir.path().join("index.ms"),
             Some(source),
         );
 
@@ -607,13 +625,13 @@ one.inc(2);
 
     #[test]
     fn semantic_tokens_classify_type_context_without_variable_override() {
-        let temp = TempDir::new();
-        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let test_dir = TempDir::new();
+        write_file(test_dir.path(), "musi.json", APP_MANIFEST);
         let source = "let id[T] (value : T) : T := value;\nlet message : String := \"Hello\";\n";
-        write_file(temp.path(), "index.ms", source);
+        write_file(test_dir.path(), "index.ms", source);
 
         let tokens = semantic_tokens_for_project_file_with_overlay(
-            &temp.path().join("index.ms"),
+            &test_dir.path().join("index.ms"),
             Some(source),
         );
 
@@ -636,17 +654,17 @@ one.inc(2);
 
     #[test]
     fn semantic_tokens_classify_generic_apply_args_as_types() {
-        let temp = TempDir::new();
-        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let test_dir = TempDir::new();
+        write_file(test_dir.path(), "musi.json", APP_MANIFEST);
         let source = "\
 let ptr := import \"@std/ffi\";
 let pointer := ptr.null[Int]();
 let samePointer := ptr.offset[Int](pointer, 0);
 ";
-        write_file(temp.path(), "index.ms", source);
+        write_file(test_dir.path(), "index.ms", source);
 
         let tokens = semantic_tokens_for_project_file_with_overlay(
-            &temp.path().join("index.ms"),
+            &test_dir.path().join("index.ms"),
             Some(source),
         );
 
@@ -669,17 +687,21 @@ let samePointer := ptr.offset[Int](pointer, 0);
 
     #[test]
     fn hover_classifies_generic_apply_args_as_types() {
-        let temp = TempDir::new();
-        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let test_dir = TempDir::new();
+        write_file(test_dir.path(), "musi.json", APP_MANIFEST);
         let source = "\
 let ptr := import \"@std/ffi\";
 let pointer := ptr.null[Int]();
 ";
-        write_file(temp.path(), "index.ms", source);
+        write_file(test_dir.path(), "index.ms", source);
 
-        let hover =
-            hover_for_project_file_with_overlay(&temp.path().join("index.ms"), Some(source), 2, 25)
-                .expect("type arg should hover");
+        let hover = hover_for_project_file_with_overlay(
+            &test_dir.path().join("index.ms"),
+            Some(source),
+            2,
+            25,
+        )
+        .expect("type arg should hover");
 
         assert!(
             hover.contents.starts_with("```musi\n(type) Int"),
@@ -690,12 +712,12 @@ let pointer := ptr.null[Int]();
 
     #[test]
     fn semantic_tokens_work_for_direct_file_outside_package() {
-        let temp = TempDir::new();
+        let test_dir = TempDir::new();
         let source = "let id (value : String) : String := value;\nlet message : String := \"Hello\";\nmessage;\n";
-        write_file(temp.path(), "index.ms", source);
+        write_file(test_dir.path(), "index.ms", source);
 
         let tokens = semantic_tokens_for_project_file_with_overlay(
-            &temp.path().join("index.ms"),
+            &test_dir.path().join("index.ms"),
             Some(source),
         );
 
@@ -729,12 +751,14 @@ let pointer := ptr.null[Int]();
 
     #[test]
     fn diagnostics_work_for_direct_file_outside_package() {
-        let temp = TempDir::new();
+        let test_dir = TempDir::new();
         let source = "missing;\n";
-        write_file(temp.path(), "index.ms", source);
+        write_file(test_dir.path(), "index.ms", source);
 
-        let diagnostics =
-            collect_project_diagnostics_with_overlay(&temp.path().join("index.ms"), Some(source));
+        let diagnostics = collect_project_diagnostics_with_overlay(
+            &test_dir.path().join("index.ms"),
+            Some(source),
+        );
 
         assert!(!diagnostics.is_empty());
         assert_eq!(diagnostics[0].phase, "resolve");
@@ -748,18 +772,20 @@ let pointer := ptr.null[Int]();
 
     #[test]
     fn foundation_core_path_uses_canonical_module_identity() {
-        let temp = TempDir::new();
+        let test_dir = TempDir::new();
         let source = r#"
 let Intrinsics := import "musi:intrinsics";
-@musi.known(name := "Type")
+@musi.builtin(name := "Type")
 export let Type := Type;
 "#;
         write_file(
-            temp.path(),
+            test_dir.path(),
             "crates/musi_foundation/modules/core.ms",
             source,
         );
-        let path = temp.path().join("crates/musi_foundation/modules/core.ms");
+        let path = test_dir
+            .path()
+            .join("crates/musi_foundation/modules/core.ms");
 
         let diagnostics = collect_project_diagnostics_with_overlay(&path, Some(source));
 
@@ -767,7 +793,7 @@ export let Type := Type;
             diagnostics.iter().all(|diag| {
                 !diag
                     .message
-                    .contains(SemaDiagKind::AttrKnownRequiresFoundationModule.message())
+                    .contains(SemaDiagKind::AttrBuiltinRequiresFoundationModule.message())
                     && !diag.message.contains(
                         ProjectDiagKind::SourceImportUnresolved
                             .message_with(&DiagContext::new().with("spec", "musi:intrinsics"))
@@ -780,7 +806,7 @@ export let Type := Type;
 
     #[test]
     fn semantic_tokens_mark_foundation_effect_members_as_functions() {
-        let temp = TempDir::new();
+        let test_dir = TempDir::new();
         let source = r#"
 let Core := import "musi:core";
 let Int := Core.Int;
@@ -792,8 +818,14 @@ export opaque let Env := effect {
   let envSet (name : String, value : String) : Int;
 };
 "#;
-        write_file(temp.path(), "crates/musi_foundation/modules/env.ms", source);
-        let path = temp.path().join("crates/musi_foundation/modules/env.ms");
+        write_file(
+            test_dir.path(),
+            "crates/musi_foundation/modules/env.ms",
+            source,
+        );
+        let path = test_dir
+            .path()
+            .join("crates/musi_foundation/modules/env.ms");
 
         let tokens = semantic_tokens_for_project_file_with_overlay(&path, Some(source));
 
@@ -836,7 +868,7 @@ export opaque let Env := effect {
 
     #[test]
     fn semantic_tokens_mark_foundation_builtin_return_annotations_as_types() {
-        let temp = TempDir::new();
+        let test_dir = TempDir::new();
         let source = "\
 let Core := import \"musi:core\";
 let Int := Core.Int;
@@ -851,8 +883,14 @@ export opaque let Env := effect {
 
 export let float01 () : Float := ask Env.float01();
 ";
-        write_file(temp.path(), "crates/musi_foundation/modules/env.ms", source);
-        let path = temp.path().join("crates/musi_foundation/modules/env.ms");
+        write_file(
+            test_dir.path(),
+            "crates/musi_foundation/modules/env.ms",
+            source,
+        );
+        let path = test_dir
+            .path()
+            .join("crates/musi_foundation/modules/env.ms");
 
         let tokens = semantic_tokens_for_project_file_with_overlay(&path, Some(source));
 
@@ -875,20 +913,22 @@ export let float01 () : Float := ask Env.float01();
 
     #[test]
     fn semantic_tokens_mark_foundation_builtin_rhs_names_as_types() {
-        let temp = TempDir::new();
+        let test_dir = TempDir::new();
         let source = "\
 let Intrinsics := import \"musi:intrinsics\";
-@musi.known(name := \"Type\")
+@musi.builtin(name := \"Type\")
 export let Type := Type;
-@musi.known(name := \"Float\")
+@musi.builtin(name := \"Float\")
 export let Float := Float;
 ";
         write_file(
-            temp.path(),
+            test_dir.path(),
             "crates/musi_foundation/modules/core.ms",
             source,
         );
-        let path = temp.path().join("crates/musi_foundation/modules/core.ms");
+        let path = test_dir
+            .path()
+            .join("crates/musi_foundation/modules/core.ms");
 
         let tokens = semantic_tokens_for_project_file_with_overlay(&path, Some(source));
 
@@ -911,18 +951,20 @@ export let Float := Float;
 
     #[test]
     fn hover_marks_foundation_builtin_type_references_as_types() {
-        let temp = TempDir::new();
+        let test_dir = TempDir::new();
         let source = "\
 let Intrinsics := import \"musi:intrinsics\";
-@musi.known(name := \"Type\")
+@musi.builtin(name := \"Type\")
 export let Type := Type;
 ";
         write_file(
-            temp.path(),
+            test_dir.path(),
             "crates/musi_foundation/modules/core.ms",
             source,
         );
-        let path = temp.path().join("crates/musi_foundation/modules/core.ms");
+        let path = test_dir
+            .path()
+            .join("crates/musi_foundation/modules/core.ms");
 
         let hover = hover_for_project_file_with_overlay(&path, Some(source), 3, 20)
             .expect("builtin type reference should hover");
@@ -936,7 +978,7 @@ export let Type := Type;
 
     #[test]
     fn hover_marks_foundation_return_annotations_as_types() {
-        let temp = TempDir::new();
+        let test_dir = TempDir::new();
         let source = "\
 let Core := import \"musi:core\";
 let Int := Core.Int;
@@ -947,8 +989,14 @@ export opaque let Env := effect {
   let float01 () : Float;
 };
 ";
-        write_file(temp.path(), "crates/musi_foundation/modules/env.ms", source);
-        let path = temp.path().join("crates/musi_foundation/modules/env.ms");
+        write_file(
+            test_dir.path(),
+            "crates/musi_foundation/modules/env.ms",
+            source,
+        );
+        let path = test_dir
+            .path()
+            .join("crates/musi_foundation/modules/env.ms");
 
         let hover = hover_for_project_file_with_overlay(&path, Some(source), 7, 20)
             .expect("return annotation should hover");
@@ -962,16 +1010,16 @@ export opaque let Env := effect {
 
     #[test]
     fn inlay_hints_include_parameter_names_and_inferred_types() {
-        let temp = TempDir::new();
-        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let test_dir = TempDir::new();
+        write_file(test_dir.path(), "musi.json", APP_MANIFEST);
         write_file(
-            temp.path(),
+            test_dir.path(),
             "index.ms",
             "let add (left : Int, right : Int) : Int := left + right;\nlet result := add(1, 2);\n",
         );
 
         let hints = inlay_hints_for_project_file_with_overlay(
-            &temp.path().join("index.ms"),
+            &test_dir.path().join("index.ms"),
             Some(
                 "let add (left : Int, right : Int) : Int := left + right;\nlet result := add(1, 2);\n",
             ),
@@ -998,9 +1046,9 @@ mod failure {
 
     #[test]
     fn direct_graph_rejects_package_imports() {
-        let temp = TempDir::new();
+        let test_dir = TempDir::new();
         write_file(
-            temp.path(),
+            test_dir.path(),
             "main.ms",
             r#"
         import "@std/math";
@@ -1008,7 +1056,7 @@ mod failure {
         "#,
         );
 
-        let err = load_direct_graph(&temp.path().join("main.ms"))
+        let err = load_direct_graph(&test_dir.path().join("main.ms"))
             .expect_err("package import should fail");
         assert!(matches!(
             err,
@@ -1019,13 +1067,15 @@ mod failure {
 
     #[test]
     fn project_diagnostics_use_file_paths_instead_of_module_keys() {
-        let temp = TempDir::new();
-        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let test_dir = TempDir::new();
+        write_file(test_dir.path(), "musi.json", APP_MANIFEST);
         let source = "missing;\n";
-        write_file(temp.path(), "index.ms", source);
+        write_file(test_dir.path(), "index.ms", source);
 
-        let diagnostics =
-            collect_project_diagnostics_with_overlay(&temp.path().join("index.ms"), Some(source));
+        let diagnostics = collect_project_diagnostics_with_overlay(
+            &test_dir.path().join("index.ms"),
+            Some(source),
+        );
 
         assert!(!diagnostics.is_empty());
         assert!(
@@ -1117,9 +1167,9 @@ mod failure {
 
     #[test]
     fn project_error_report_carries_manifest_source_range() {
-        let temp = TempDir::new();
+        let test_dir = TempDir::new();
         write_file(
-            temp.path(),
+            test_dir.path(),
             "musi.json",
             r#"{
   "exports": {
@@ -1128,7 +1178,7 @@ mod failure {
 }"#,
         );
 
-        let error = load_project_error(temp.path());
+        let error = load_project_error(test_dir.path());
         let report = project_error_report("musi", "check", None, None, &error);
 
         assert_eq!(report.diagnostics[0].phase, "project");
@@ -1143,15 +1193,15 @@ mod failure {
 
     #[test]
     fn project_error_report_carries_unresolved_import_range() {
-        let temp = TempDir::new();
-        write_file(temp.path(), "musi.json", APP_MANIFEST);
+        let test_dir = TempDir::new();
+        write_file(test_dir.path(), "musi.json", APP_MANIFEST);
         write_file(
-            temp.path(),
+            test_dir.path(),
             "index.ms",
             "let Missing := import \"missing\";\nexport let result : Int := 42;\n",
         );
 
-        let error = load_project_error(temp.path());
+        let error = load_project_error(test_dir.path());
         let report = project_error_report("musi", "check", None, None, &error);
 
         assert_eq!(report.diagnostics[0].phase, "project");

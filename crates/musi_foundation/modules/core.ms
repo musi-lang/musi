@@ -1,85 +1,85 @@
-@musi.known(name := "Type")
+@musi.builtin(name := "Type")
 export let Type := Type;
 
-@musi.known(name := "Array")
+@musi.builtin(name := "Array")
 export let Array := Array;
 
-@musi.known(name := "Any")
+@musi.builtin(name := "Any")
 export let Any := Any;
 
-@musi.known(name := "Unknown")
+@musi.builtin(name := "Unknown")
 export let Unknown := Unknown;
 
-@musi.known(name := "Syntax")
+@musi.builtin(name := "Syntax")
 export let Syntax := Syntax;
 
-@musi.known(name := "Empty")
+@musi.builtin(name := "Empty")
 export let Empty := Empty;
 
-@musi.known(name := "Unit")
+@musi.builtin(name := "Unit")
 export let Unit := Unit;
 
-@musi.known(name := "Bool")
+@musi.builtin(name := "Bool")
 export let Bool := Bool;
 
-@musi.known(name := "Nat")
+@musi.builtin(name := "Nat")
 export let Nat := Nat;
 
-@musi.known(name := "Int")
+@musi.builtin(name := "Int")
 export let Int := Int;
 
-@musi.known(name := "Int8")
+@musi.builtin(name := "Int8")
 export let Int8 := Int8;
 
-@musi.known(name := "Int16")
+@musi.builtin(name := "Int16")
 export let Int16 := Int16;
 
-@musi.known(name := "Int32")
+@musi.builtin(name := "Int32")
 export let Int32 := Int32;
 
-@musi.known(name := "Int64")
+@musi.builtin(name := "Int64")
 export let Int64 := Int64;
 
-@musi.known(name := "Nat8")
+@musi.builtin(name := "Nat8")
 export let Nat8 := Nat8;
 
-@musi.known(name := "Nat16")
+@musi.builtin(name := "Nat16")
 export let Nat16 := Nat16;
 
-@musi.known(name := "Nat32")
+@musi.builtin(name := "Nat32")
 export let Nat32 := Nat32;
 
-@musi.known(name := "Nat64")
+@musi.builtin(name := "Nat64")
 export let Nat64 := Nat64;
 
-@musi.known(name := "Float")
+@musi.builtin(name := "Float")
 export let Float := Float;
 
-@musi.known(name := "Float32")
+@musi.builtin(name := "Float32")
 export let Float32 := Float32;
 
-@musi.known(name := "Float64")
+@musi.builtin(name := "Float64")
 export let Float64 := Float64;
 
-@musi.known(name := "String")
+@musi.builtin(name := "String")
 export let String := String;
 
-@musi.known(name := "Rune")
+@musi.builtin(name := "Rune")
 export let Rune := Rune;
 
-@musi.known(name := "Bits")
+@musi.builtin(name := "Bits")
 export let Bits := Bits;
 
-@musi.known(name := "Range")
+@musi.builtin(name := "Range")
 export let Range := Range;
 
-@musi.known(name := "Pin")
+@musi.builtin(name := "Pin")
 export let Pin := Pin;
 
-@musi.known(name := "CString")
+@musi.builtin(name := "CString")
 export let CString := CString;
 
-@musi.known(name := "CPtr")
+@musi.builtin(name := "CPtr")
 export let CPtr := CPtr;
 
 export opaque let Option [T] := data {

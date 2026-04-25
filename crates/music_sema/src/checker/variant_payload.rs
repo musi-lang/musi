@@ -46,14 +46,14 @@ pub(super) fn lower_data_variant(
     let tag_value = data_variant_tag(ctx, variant.value, default_tag);
     let variant_fields = ctx.variant_fields(variant.fields);
     let (payload, field_tys, field_names) = lower_variant_payload(ctx, &variant_fields);
-    let result = variant
+    let result_ty = variant
         .result
         .map(|expr| ctx.lower_type_expr(expr, variant.origin));
     LoweredDataVariant {
         tag,
         tag_value,
         origin: variant.origin,
-        def: DataVariantDef::new(tag_value, payload, result, field_tys, field_names),
+        def: DataVariantDef::new(tag_value, payload, result_ty, field_tys, field_names),
     }
 }
 

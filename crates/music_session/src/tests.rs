@@ -429,8 +429,8 @@ mod success {
         let program = Program::from_bytes(&output.bytes).expect("program should load");
         let mut vm = Vm::with_rejecting_host(program, VmOptions);
         vm.initialize().expect("program should initialize");
-        let value = vm.call_export("result", &[]).expect("export should run");
-        let ValueView::Seq(seq) = vm.inspect(&value) else {
+        let result_value = vm.call_export("result", &[]).expect("export should run");
+        let ValueView::Seq(seq) = vm.inspect(&result_value) else {
             panic!("result should return sequence");
         };
         assert_eq!(seq.len(), 3);
@@ -879,6 +879,74 @@ mod success {
     }
 
     #[test]
+    fn lowers_profile_attrs_into_callable_descriptors() {
+        let mut session = session();
+        session
+            .set_module_text(
+                &ModuleKey::new("main"),
+                r"
+            @profile(level := .hot)
+            export let hotWork () : Int := 1;
+
+            @profile(level := .cold)
+            export let coldWork () : Int := 2;
+        ",
+            )
+            .unwrap();
+
+        let output = session.compile_module(&ModuleKey::new("main")).unwrap();
+        assert!(output.artifact.validate().is_ok());
+        assert!(
+            output
+                .text
+                .contains(".procedure $main::hotWork params 0 locals 1 export hot"),
+            "{}",
+            output.text
+        );
+        assert!(
+            output
+                .text
+                .contains(".procedure $main::coldWork params 0 locals 1 export cold"),
+            "{}",
+            output.text
+        );
+    }
+
+    #[test]
+    fn lowers_profile_attrs_into_native_descriptors() {
+        let mut session = session();
+        session
+            .set_module_text(
+                &ModuleKey::new("main"),
+                r"
+            @profile(level := .hot)
+            native let fastClock () : Nat64;
+
+            @profile(level := .cold)
+            native let slowPath () : Int;
+        ",
+            )
+            .unwrap();
+
+        let output = session.compile_module(&ModuleKey::new("main")).unwrap();
+        assert!(output.artifact.validate().is_ok());
+        assert!(
+            output.text.contains(
+                ".native $main::fastClock result $Nat64 abi \"c\" symbol \"fastClock\" hot"
+            ),
+            "{}",
+            output.text
+        );
+        assert!(
+            output
+                .text
+                .contains(".native $main::slowPath result $Int abi \"c\" symbol \"slowPath\" cold"),
+            "{}",
+            output.text
+        );
+    }
+
+    #[test]
     fn skips_gated_native_declarations_for_target() {
         let mut session =
             session_with_target(TargetInfo::new().with_os("linux").with_arch("x86_64"));
@@ -943,7 +1011,7 @@ mod success {
                 r#"
             native let musi_true () : Bool;
 
-            @foo.bar(baz := "qux")
+            @foo.bar(baz := "qux", items := ["a", "b"])
             export let result : Int := 42;
 
             @musi.codegen(mode := "test")
@@ -987,7 +1055,8 @@ mod success {
             meta.iter().any(|(target, key, values)| {
                 target == "main::result"
                     && key == "inert.attr"
-                    && values == &vec!["@foo.bar(baz := \"qux\")".to_owned()]
+                    && values
+                        == &vec!["@foo.bar(baz := \"qux\", items := [\"a\", \"b\"])".to_owned()]
             }),
             "{meta:?}"
         );

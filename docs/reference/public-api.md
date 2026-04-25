@@ -13,14 +13,15 @@ Current public entrypoints by crate. Keep this list high-signal. Do not mirror e
 - `music_builtin` — builtin type and intrinsic catalog used by compiler/runtime layers
 - `music_resolve` — resolved module model
 - `music_sema` — `check_module`, semantic surface, diagnostics, effect rows
-- `music_ir` — IR model and sema-to-IR lowering
+- `music_ir` — IR model and diagnostics
+- `music_ir_lower` — sema-to-IR lowering
 - `music_emit` — IR-to-SEAM lowering
 - `music_session` — `Session`, `CompiledOutput`, session diagnostics/options, CTFE host configuration
 
 ## Runtime libraries
 
 - `music_seam` — SEAM artifact encode/decode, SEAM HIL model/verifier, lowered `.seam` text, instruction/types surface
-- `musi_vm` — `Program`, `Vm`, runtime `Value`, value inspection views, host/loader traits, VM errors
+- `musi_vm` — `Program`, `Vm`, `VmOptions`, `MvmMode`, `MvmFeatures`, `VmOptimizationLevel`, `MvmOptionsParseError`, runtime `Value`, bound call handles, value inspection views, host/loader traits, VM errors
 - `musi_native` — `NativeHost`, native test report types
 - `musi_rt` — `Runtime`, `RuntimeOptions`, runtime errors
 - `musi_foundation` — compiler-owned foundation/runtime module registration helpers

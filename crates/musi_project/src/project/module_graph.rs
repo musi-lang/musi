@@ -9,12 +9,12 @@ use music_base::diag::{Diag, DiagContext, OwnedSourceDiag};
 use music_module::{ImportMap, ImportSiteKind, ModuleKey, ModuleSpecifier, collect_import_sites};
 use music_syntax::{Lexer, parse};
 
-use super::{
-    DependencyPackageMap, LoadedImportSite, LoadedModule, PackageId, PackageRecord, PackageSource,
-};
 use crate::errors::ProjectError;
 use crate::lock::{LockedPackage, LockedPackageSource, Lockfile};
 use crate::manifest::CompilerOptions;
+use crate::project::model::{
+    DependencyPackageMap, LoadedImportSite, LoadedModule, PackageId, PackageRecord, PackageSource,
+};
 use crate::{ProjectDiagKind, ProjectResult};
 
 type PackageRecordMap = BTreeMap<PackageId, PackageRecord>;

@@ -125,9 +125,9 @@ impl<'ctx, 'a, 'b, 'c> ConstIntEvaluator<'ctx, 'a, 'b, 'c> {
                 (SyntaxShape::Expr, raw)
             }
             HirQuoteKind::Block { exprs, raw } => {
-                let mut raw = raw.to_string();
+                let mut raw = String::from(raw.as_ref());
                 for expr in self.ctx.expr_ids(*exprs) {
-                    raw = self.replace_splices(expr, &raw)?.to_string();
+                    raw = String::from(self.replace_splices(expr, &raw)?);
                 }
                 (SyntaxShape::Module, raw.into_boxed_str())
             }
@@ -253,9 +253,9 @@ impl<'ctx, 'a, 'b, 'c> ConstIntEvaluator<'ctx, 'a, 'b, 'c> {
             let _ = self.seen.remove(&binding);
             return Err(ConstEvalError::Invalid);
         }
-        let value = self.eval(value_expr);
+        let evaluated_value = self.eval(value_expr);
         let _ = self.seen.remove(&binding);
-        value
+        evaluated_value
     }
 
     fn eval_prefix(

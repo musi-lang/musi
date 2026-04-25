@@ -130,11 +130,11 @@ fn random_seed() -> u64 {
 }
 
 fn next_random_int(state: &RandomStateCell) -> i64 {
-    let mut value = state.lock().expect("random state should lock");
-    *value = value
+    let mut state_word = state.lock().expect("random state should lock");
+    *state_word = state_word
         .wrapping_mul(6_364_136_223_846_793_005)
         .wrapping_add(1);
-    i64::from_ne_bytes(value.to_ne_bytes()) & i64::MAX
+    i64::from_ne_bytes(state_word.to_ne_bytes()) & i64::MAX
 }
 
 fn random_int_in_range(state: &RandomStateCell, lower_bound: i64, upper_bound: i64) -> i64 {

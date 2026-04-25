@@ -35,6 +35,7 @@ impl Vm {
             heap_dirty: false,
             executed_instructions: 0,
             external_roots: Vec::new(),
+            seq8_export_cache: Vec::new(),
             root_initialized,
         }
     }
@@ -62,6 +63,7 @@ impl Vm {
             heap_dirty: false,
             executed_instructions: 0,
             external_roots: Vec::new(),
+            seq8_export_cache: Vec::new(),
             root_initialized,
         }
     }
@@ -111,6 +113,16 @@ impl Vm {
     ///
     /// Returns [`VmError`] if export resolution or invocation fails.
     pub fn call_export(&mut self, name: &str, args: &[Value]) -> VmResult<Value> {
+        if args.is_empty() {
+            self.ensure_initialized()?;
+            if let Some((ty, buffer)) = self.cached_seq8_export(0, name) {
+                return self.call_seq8_shared_buffer(ty, buffer);
+            }
+            if let Some(value) = self.try_call_export_kernel_fast(0, name, args)? {
+                let base_depth = self.frames.len();
+                return self.finish_call_value(base_depth, value);
+            }
+        }
         let value = self.lookup_export(name)?;
         self.call_value(value, args)
     }
@@ -126,6 +138,17 @@ impl Vm {
         name: &str,
         args: &[Value],
     ) -> VmResult<Value> {
+        self.ensure_initialized()?;
+        if args.is_empty() {
+            let slot = self.expect_module_slot(module)?;
+            if let Some((ty, buffer)) = self.cached_seq8_export(slot, name) {
+                return self.call_seq8_shared_buffer(ty, buffer);
+            }
+            if let Some(value) = self.try_call_export_kernel_fast(slot, name, args)? {
+                let base_depth = self.frames.len();
+                return self.finish_call_value(base_depth, value);
+            }
+        }
         let value = self.lookup_module_export(module, name)?;
         self.call_value(value, args)
     }

@@ -156,7 +156,9 @@ impl MusiLanguageServer {
             self.publish_document_diagnostics(uri, &path);
         }
     }
+}
 
+impl MusiLanguageServer {
     fn completions(&self, params: CompletionParams) -> Option<CompletionResponse> {
         let text_document = params.text_document_position.text_document;
         let position = params.text_document_position.position;
@@ -457,88 +459,88 @@ impl LanguageServer for MusiLanguageServer {
     }
 
     fn completion(&mut self, params: CompletionParams) -> ServerFuture<Option<CompletionResponse>> {
-        let result = self.completions(params);
-        Box::pin(async move { Ok(result) })
+        let completion_response = self.completions(params);
+        Box::pin(async move { Ok(completion_response) })
     }
 
     fn hover(&mut self, params: HoverParams) -> ServerFuture<Option<Hover>> {
-        let result = self.hover_at(params);
-        Box::pin(async move { Ok(result) })
+        let hover_response = self.hover_at(params);
+        Box::pin(async move { Ok(hover_response) })
     }
 
     fn definition(
         &mut self,
         params: GotoDefinitionParams,
     ) -> ServerFuture<Option<GotoDefinitionResponse>> {
-        let result = self.definition_at(params);
-        Box::pin(async move { Ok(result) })
+        let definition_response = self.definition_at(params);
+        Box::pin(async move { Ok(definition_response) })
     }
 
     fn references(&mut self, params: ReferenceParams) -> ServerFuture<Option<Vec<Location>>> {
-        let result = self.references_at(params);
-        Box::pin(async move { Ok(result) })
+        let reference_locations = self.references_at(params);
+        Box::pin(async move { Ok(reference_locations) })
     }
 
     fn document_symbol(
         &mut self,
         params: DocumentSymbolParams,
     ) -> ServerFuture<Option<DocumentSymbolResponse>> {
-        let result = self.document_symbols(params);
-        Box::pin(async move { Ok(result) })
+        let document_symbols = self.document_symbols(params);
+        Box::pin(async move { Ok(document_symbols) })
     }
 
     fn symbol(
         &mut self,
         params: WorkspaceSymbolParams,
     ) -> ServerFuture<Option<WorkspaceSymbolResponse>> {
-        let result = self.workspace_symbols(&params);
-        Box::pin(async move { Ok(result) })
+        let workspace_symbols = self.workspace_symbols(&params);
+        Box::pin(async move { Ok(workspace_symbols) })
     }
 
     fn prepare_rename(
         &mut self,
         params: TextDocumentPositionParams,
     ) -> ServerFuture<Option<PrepareRenameResponse>> {
-        let result = self.prepare_rename_at(params);
-        Box::pin(async move { Ok(result) })
+        let prepare_rename_response = self.prepare_rename_at(params);
+        Box::pin(async move { Ok(prepare_rename_response) })
     }
 
     fn rename(&mut self, params: RenameParams) -> ServerFuture<Option<WorkspaceEdit>> {
-        let result = self.rename_at(params);
-        Box::pin(async move { Ok(result) })
+        let rename_response = self.rename_at(params);
+        Box::pin(async move { Ok(rename_response) })
     }
 
     fn formatting(
         &mut self,
         params: DocumentFormattingParams,
     ) -> ServerFuture<Option<Vec<TextEdit>>> {
-        let result = self.document_formatting(params);
-        Box::pin(async move { Ok(result) })
+        let formatting_response = self.document_formatting(params);
+        Box::pin(async move { Ok(formatting_response) })
     }
 
     fn semantic_tokens_full(
         &mut self,
         params: SemanticTokensParams,
     ) -> ServerFuture<Option<SemanticTokensResult>> {
-        let result = self
+        let semantic_tokens_response = self
             .semantic_tokens(&params)
             .map(SemanticTokensResult::Tokens);
-        Box::pin(async move { Ok(result) })
+        Box::pin(async move { Ok(semantic_tokens_response) })
     }
 
     fn semantic_tokens_range(
         &mut self,
         params: SemanticTokensRangeParams,
     ) -> ServerFuture<Option<SemanticTokensRangeResult>> {
-        let result = self
+        let semantic_range_response = self
             .semantic_range_tokens(&params)
             .map(SemanticTokensRangeResult::Tokens);
-        Box::pin(async move { Ok(result) })
+        Box::pin(async move { Ok(semantic_range_response) })
     }
 
     fn inlay_hint(&mut self, params: InlayHintParams) -> ServerFuture<Option<Vec<InlayHint>>> {
-        let result = self.inlay_hints(&params);
-        Box::pin(async move { Ok(result) })
+        let inlay_hints_response = self.inlay_hints(&params);
+        Box::pin(async move { Ok(inlay_hints_response) })
     }
 }
 

@@ -72,9 +72,9 @@ impl Parser<'_> {
     }
 
     pub(crate) fn parse_data_expr(&mut self) -> ParseResult<SyntaxNodeId> {
-        let data = self.expect_token(TokenKind::KwData)?;
+        let data_kw = self.expect_token(TokenKind::KwData)?;
         let open = self.expect_token(TokenKind::LBrace)?;
-        let mut children = vec![data, open];
+        let mut children = vec![data_kw, open];
         if self.at(TokenKind::Pipe) {
             children.push(self.advance_element());
             if !self.at(TokenKind::RBrace) {
@@ -248,9 +248,9 @@ impl Parser<'_> {
     }
 
     pub(crate) fn parse_handle_expr(&mut self) -> ParseResult<SyntaxNodeId> {
-        let handle = self.expect_token(TokenKind::KwHandle)?;
+        let handle_kw = self.expect_token(TokenKind::KwHandle)?;
         let expr = self.parse_expr(0)?;
-        let mut children = vec![handle, SyntaxElementId::Node(expr)];
+        let mut children = vec![handle_kw, SyntaxElementId::Node(expr)];
         let answer_kw = self.expect_token(TokenKind::KwAnswer)?;
         let answer = self.parse_expr(PREFIX_BP)?;
         children.push(answer_kw);

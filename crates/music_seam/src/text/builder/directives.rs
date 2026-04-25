@@ -8,8 +8,8 @@ impl TextBuilder {
         idx: &mut usize,
         implicit_tag: i64,
     ) -> AssemblyResult<DataVariantDescriptor> {
-        let value = must_get(parts.get(*idx + 1), "variant name")?;
-        let variant_name = self.intern_string(&parse_symbol(value)?);
+        let variant_token = must_get(parts.get(*idx + 1), "variant name")?;
+        let variant_name = self.intern_string(&parse_symbol(variant_token)?);
         *idx = (*idx).saturating_add(2);
         let tag = if parts.get(*idx).map(String::as_str) == Some("tag") {
             let raw_tag = must_get(parts.get(*idx + 1), "variant tag")?;
@@ -45,25 +45,25 @@ impl TextBuilder {
     ) -> AssemblyResult {
         match must_get(parts.get(*idx), "data metadata key")? {
             "repr" => {
-                let value = must_get(parts.get(*idx + 1), "data metadata value")?;
-                *repr_kind = Some(self.intern_string(&parse_quoted(value)?));
+                let repr_token = must_get(parts.get(*idx + 1), "data metadata value")?;
+                *repr_kind = Some(self.intern_string(&parse_quoted(repr_token)?));
                 *idx = (*idx).saturating_add(2);
             }
             "align" => {
-                let value = must_get(parts.get(*idx + 1), "data metadata value")?;
+                let align_token = must_get(parts.get(*idx + 1), "data metadata value")?;
                 *layout_align = Some(
-                    value
+                    align_token
                         .parse()
-                        .map_err(|_| text_invalid_operand("align", value))?,
+                        .map_err(|_| text_invalid_operand("align", align_token))?,
                 );
                 *idx = (*idx).saturating_add(2);
             }
             "pack" => {
-                let value = must_get(parts.get(*idx + 1), "data metadata value")?;
+                let pack_token = must_get(parts.get(*idx + 1), "data metadata value")?;
                 *layout_pack = Some(
-                    value
+                    pack_token
                         .parse()
-                        .map_err(|_| text_invalid_operand("pack", value))?,
+                        .map_err(|_| text_invalid_operand("pack", pack_token))?,
                 );
                 *idx = (*idx).saturating_add(2);
             }
@@ -176,7 +176,7 @@ impl TextBuilder {
         let name_id = self.intern_string(&name);
         let kind = must_get(parts.get(2), "constant kind")?;
         let raw_value = must_get(parts.get(3), "constant value")?;
-        let value = match kind {
+        let constant_value = match kind {
             "int" => ConstantValue::Int(
                 raw_value
                     .parse()
@@ -216,7 +216,7 @@ impl TextBuilder {
         let id = self
             .artifact
             .constants
-            .alloc(ConstantDescriptor::new(name_id, value));
+            .alloc(ConstantDescriptor::new(name_id, constant_value));
         let _ = self.constants.insert(name, id);
         Ok(())
     }
@@ -307,8 +307,8 @@ impl TextBuilder {
         let key_id = self.intern_string(&key);
         let mut values = Vec::new();
         for token in parts.iter().skip(3) {
-            let value = parse_meta_value(token)?;
-            values.push(self.intern_string(&value));
+            let meta_value = parse_meta_value(token)?;
+            values.push(self.intern_string(&meta_value));
         }
         let _ = self.artifact.meta.alloc(MetaDescriptor::new(
             target_id,
@@ -362,8 +362,8 @@ impl TextBuilder {
                     idx += 1;
                 }
                 "link" => {
-                    let value = must_get(parts.get(idx + 1), "foreign link")?;
-                    link = Some(parse_quoted(value)?);
+                    let link_token = must_get(parts.get(idx + 1), "foreign link")?;
+                    link = Some(parse_quoted(link_token)?);
                     idx += 2;
                 }
                 _ => {

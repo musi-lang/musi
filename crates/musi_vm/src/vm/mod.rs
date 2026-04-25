@@ -35,6 +35,7 @@ mod value_support;
 
 use self::state::{
     CallFrame, CallFrameList, EffectHandlerList, LoadedModuleList, ModuleSlotMap, ResumeList,
+    Seq8ExportCache, Seq8ExportCacheList,
 };
 
 mod boundary;
@@ -42,8 +43,10 @@ mod core;
 mod options;
 mod runtime;
 
-pub use bound::{BoundI64Call, BoundInitCall, BoundSeq2x2Arg, BoundSeq2x2Call, BoundSeq8Call};
-pub use options::{VmOptimizationLevel, VmOptions};
+pub use bound::{
+    BoundExportCall, BoundI64Call, BoundInitCall, BoundSeq2x2Arg, BoundSeq2x2Call, BoundSeq8Call,
+};
+pub use options::{MvmFeatures, MvmMode, MvmOptionsParseError, VmOptimizationLevel, VmOptions};
 pub use runtime::VmRuntime;
 
 use self::boundary::{HostState, LoaderState};
@@ -64,5 +67,6 @@ pub struct Vm {
     heap_dirty: bool,
     executed_instructions: u64,
     external_roots: Vec<Value>,
+    seq8_export_cache: Seq8ExportCacheList,
     root_initialized: bool,
 }

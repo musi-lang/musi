@@ -116,8 +116,8 @@ let base := 21;
 
 let twice (x : Int) : Int := x + x;
 
-let answer := twice(base);
-answer;
+let total := twice(base);
+total;
 ```
 
 Check it:

@@ -214,7 +214,7 @@ where
                 .copied()
                 .and_then(SyntaxElement::into_token)
                 .is_some_and(|t| t.kind() == TokenKind::Colon);
-            let value = if has_colon {
+            let field_pat = if has_colon {
                 i += 1;
                 let v = children
                     .get(i)
@@ -230,7 +230,7 @@ where
                 None
             };
 
-            fields.push(HirRecordPatField::new(name, value));
+            fields.push(HirRecordPatField::new(name, field_pat));
         }
         self.store.record_pat_fields.alloc_from_iter(fields)
     }

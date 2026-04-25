@@ -18,6 +18,7 @@ music_base = { path = "../music_base" }
 music_emit = { path = "../music_emit" }
 music_hir = { path = "../music_hir" }
 music_ir = { path = "../music_ir" }
+music_ir_lower = { path = "../music_ir_lower" }
 music_module = { path = "../music_module" }
 music_names = { path = "../music_names" }
 music_resolve = { path = "../music_resolve" }

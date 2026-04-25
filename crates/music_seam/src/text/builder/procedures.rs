@@ -42,7 +42,7 @@ impl TextBuilder {
                     &mut self.artifact,
                     &mut labels,
                     &mut label_ids,
-                    label_name.to_owned(),
+                    String::from(label_name),
                 )?;
                 code.push(CodeEntry::Label(Label { id: label_id }));
                 continue;
