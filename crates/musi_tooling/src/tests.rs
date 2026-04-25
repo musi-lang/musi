@@ -775,7 +775,7 @@ let pointer := ptr.null[Int]();
         let test_dir = TempDir::new();
         let source = r#"
 let Intrinsics := import "musi:intrinsics";
-@musi.known(name := "Type")
+@musi.builtin(name := "Type")
 export let Type := Type;
 "#;
         write_file(
@@ -793,7 +793,7 @@ export let Type := Type;
             diagnostics.iter().all(|diag| {
                 !diag
                     .message
-                    .contains(SemaDiagKind::AttrKnownRequiresFoundationModule.message())
+                    .contains(SemaDiagKind::AttrBuiltinRequiresFoundationModule.message())
                     && !diag.message.contains(
                         ProjectDiagKind::SourceImportUnresolved
                             .message_with(&DiagContext::new().with("spec", "musi:intrinsics"))
@@ -916,9 +916,9 @@ export let float01 () : Float := ask Env.float01();
         let test_dir = TempDir::new();
         let source = "\
 let Intrinsics := import \"musi:intrinsics\";
-@musi.known(name := \"Type\")
+@musi.builtin(name := \"Type\")
 export let Type := Type;
-@musi.known(name := \"Float\")
+@musi.builtin(name := \"Float\")
 export let Float := Float;
 ";
         write_file(
@@ -954,7 +954,7 @@ export let Float := Float;
         let test_dir = TempDir::new();
         let source = "\
 let Intrinsics := import \"musi:intrinsics\";
-@musi.known(name := \"Type\")
+@musi.builtin(name := \"Type\")
 export let Type := Type;
 ";
         write_file(
