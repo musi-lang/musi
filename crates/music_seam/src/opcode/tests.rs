@@ -8,7 +8,7 @@ mod success {
     fn opcode_catalog_has_unique_mnemonics_and_wire_codes() {
         let mut mnemonics = BTreeSet::new();
         let mut wire_codes = BTreeSet::new();
-        for info in OPCODE_INFOS {
+        for info in opcode_infos() {
             let wire = match info.wire {
                 OpcodeWire::Core(code) => u16::from(code),
                 OpcodeWire::Extended(code) => code,
@@ -20,13 +20,13 @@ mod success {
             );
             assert!(wire_codes.insert(wire), "duplicate wire code `{wire:#06x}`");
         }
-        assert_eq!(mnemonics.len(), OPCODE_INFOS.len());
-        assert_eq!(wire_codes.len(), OPCODE_INFOS.len());
+        assert_eq!(mnemonics.len(), opcode_info_count());
+        assert_eq!(wire_codes.len(), opcode_info_count());
     }
 
     #[test]
     fn opcode_mnemonics_fit_seam_style_constraints() {
-        for info in OPCODE_INFOS {
+        for info in opcode_infos() {
             assert!(
                 info.mnemonic
                     .chars()

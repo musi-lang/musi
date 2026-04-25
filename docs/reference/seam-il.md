@@ -19,7 +19,7 @@ BC/IL mnemonics are canonical, short, and strict:
 
 - dotted text mnemonics are canonical
 - binary opcodes stay compact numeric positions
-- no legacy aliases
+- no aliases
 - examples: `ld.loc`, `ld.c.i4`, `br.false`, `call.ind`, `call.iface`, `call.dyn`, `call.ffi`, `new.obj`, `hdl.push`, `raise`
 
 BC/IL is stack based:

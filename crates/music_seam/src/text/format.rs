@@ -88,10 +88,10 @@ pub fn format_hil_projection(artifact: &Artifact) -> String {
         }
         out.push_str(") -> _");
         if procedure.hot {
-            out.push_str(" @hot");
+            out.push_str(" @profile(level := .hot)");
         }
         if procedure.cold {
-            out.push_str(" @cold");
+            out.push_str(" @profile(level := .cold)");
         }
         out.push_str(" {\n");
         out.push_str("  entry:\n");

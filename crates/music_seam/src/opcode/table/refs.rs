@@ -1,0 +1,70 @@
+use crate::instruction::OperandShape;
+
+use super::super::{Opcode, OpcodeFamily};
+use super::info::{OpcodeInfo, opcode_info};
+
+pub(super) const OPCODES: &[OpcodeInfo] = &[
+    opcode_info(
+        Opcode::LdInd,
+        OpcodeFamily::Ref,
+        "ld.ind",
+        OperandShape::Type,
+        0x90,
+    ),
+    opcode_info(
+        Opcode::StInd,
+        OpcodeFamily::Ref,
+        "st.ind",
+        OperandShape::Type,
+        0x91,
+    ),
+    opcode_info(
+        Opcode::RefAny,
+        OpcodeFamily::Ref,
+        "ref.any",
+        OperandShape::None,
+        0x92,
+    ),
+    opcode_info(
+        Opcode::EndRef,
+        OpcodeFamily::Ref,
+        "end.ref",
+        OperandShape::None,
+        0x93,
+    ),
+    opcode_info(
+        Opcode::Pin,
+        OpcodeFamily::Ref,
+        "pin",
+        OperandShape::None,
+        0x94,
+    ),
+    opcode_info(
+        Opcode::Unpin,
+        OpcodeFamily::Ref,
+        "unpin",
+        OperandShape::None,
+        0x95,
+    ),
+    opcode_info(
+        Opcode::LdAddr,
+        OpcodeFamily::Ref,
+        "ld.addr",
+        OperandShape::Type,
+        0x96,
+    ),
+    opcode_info(
+        Opcode::PtrEq,
+        OpcodeFamily::Ref,
+        "ptr.eq",
+        OperandShape::None,
+        0x97,
+    ),
+    opcode_info(
+        Opcode::PtrCast,
+        OpcodeFamily::Ref,
+        "ptr.cast",
+        OperandShape::Type,
+        0x98,
+    ),
+];
