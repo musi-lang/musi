@@ -103,7 +103,7 @@ fn collect_bound_let_item(
         push_global_item(items, global);
         return;
     }
-    if skip_module_value(sema, value, binding) {
+    if skip_import_record_value(sema, value, binding) {
         return;
     }
     if let Some(data_def) = lower_data_item(ctx, name, value) {
@@ -534,7 +534,11 @@ fn lower_exported_import_global(
     )
 }
 
-fn skip_module_value(sema: &SemaModule, value: HirExprId, binding: Option<NameBindingId>) -> bool {
+fn skip_import_record_value(
+    sema: &SemaModule,
+    value: HirExprId,
+    binding: Option<NameBindingId>,
+) -> bool {
     sema.expr_import_record_target(value).is_some()
         || binding.is_some_and(|binding| sema.binding_import_record_target(binding).is_some())
 }

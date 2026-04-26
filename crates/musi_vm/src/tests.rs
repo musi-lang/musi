@@ -1740,7 +1740,7 @@ mod success {
             native "c" (
               let puts (value : Int) : Int;
             );
-            let Console := effect { @comptimeSafe let readLine (prompt : String) : Int; };
+            let Console := effect { @knownSafe let readLine (prompt : String) : Int; };
             export let call_puts () : Int := unsafe { puts(1); };
             export let call_readLine () : Int := ask Console.readLine(">");
         "#,

@@ -26,7 +26,7 @@ pub(super) fn lower_comptime_call_expr(
     }
     let Some(definition) = local_callable_definition(ctx, binding) else {
         return Err(format!(
-            "comptime callable `{}` cannot be specialized outside its defining module",
+            "known-parameter callable `{}` cannot be specialized outside its defining module",
             ctx.interner.resolve(name.name)
         )
         .into());
@@ -38,7 +38,7 @@ pub(super) fn lower_comptime_call_expr(
         if is_comptime {
             let Some(value) = ctx.sema.expr_comptime_value(arg.expr).cloned() else {
                 return Err(super::lower_errors::lowering_error(
-                    "comptime call argument missing sema value",
+                    "known call argument missing sema value",
                 ));
             };
             comptime_values.push((index, value));

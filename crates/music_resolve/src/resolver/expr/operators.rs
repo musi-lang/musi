@@ -31,7 +31,7 @@ where
         }
         let op = match kind {
             TokenKind::Minus => HirPrefixOp::Neg,
-            TokenKind::KwComptime => HirPrefixOp::Comptime,
+            TokenKind::KwKnown => HirPrefixOp::Known,
             TokenKind::KwMut => HirPrefixOp::Mut,
             TokenKind::KwAny => HirPrefixOp::Any,
             TokenKind::KwSome => HirPrefixOp::Some,

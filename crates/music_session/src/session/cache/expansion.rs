@@ -24,19 +24,19 @@ pub(super) fn expand_comptime_module_quote_pass(
     let mut out = String::with_capacity(source.len());
     let mut cursor = 0;
     let mut changed = false;
-    while let Some(relative_start) = source_tail(source, cursor).find("comptime") {
+    while let Some(relative_start) = source_tail(source, cursor).find("known") {
         let start = cursor + relative_start;
         if !is_token_start_boundary(source, start)
-            || !is_token_end_boundary(source, start.saturating_add("comptime".len()))
+            || !is_token_end_boundary(source, start.saturating_add("known".len()))
             || !is_module_statement_start(source, start)
         {
-            out.push_str(source_range(source, cursor, start + "comptime".len()));
-            cursor = start + "comptime".len();
+            out.push_str(source_range(source, cursor, start + "known".len()));
+            cursor = start + "known".len();
             continue;
         }
         let Some(expansion) = parse_comptime_module_expansion(source, start, context) else {
-            out.push_str(source_range(source, cursor, start + "comptime".len()));
-            cursor = start + "comptime".len();
+            out.push_str(source_range(source, cursor, start + "known".len()));
+            cursor = start + "known".len();
             continue;
         };
         out.push_str(source_range(source, cursor, start));
@@ -66,7 +66,7 @@ fn parse_comptime_module_expansion(
 }
 
 fn parse_comptime_quote_block(source: &str, start: usize) -> Option<ModuleExpansion> {
-    let mut index = skip_ws(source, start + "comptime".len());
+    let mut index = skip_ws(source, start + "known".len());
     if !source_tail(source, index).starts_with("quote") {
         return None;
     }
@@ -92,7 +92,7 @@ fn parse_comptime_syntax_name(
     start: usize,
     context: &ModuleExpansionContext,
 ) -> Option<ModuleExpansion> {
-    let expr_start = skip_ws(source, start + "comptime".len());
+    let expr_start = skip_ws(source, start + "known".len());
     let semicolon = find_statement_semicolon(source, expr_start)?;
     let expr = source_range(source, expr_start, semicolon).trim();
     let body = context
@@ -284,8 +284,8 @@ fn parse_param_names(text: &str) -> Vec<String> {
         .into_iter()
         .filter_map(|param| {
             let trimmed = param.trim();
-            let after_comptime = trimmed.strip_prefix("comptime").map_or(trimmed, str::trim);
-            let name = after_comptime.split(':').next()?.trim();
+            let after_known = trimmed.strip_prefix("known").map_or(trimmed, str::trim);
+            let name = after_known.split(':').next()?.trim();
             is_ident(name).then(|| name.to_owned())
         })
         .collect()

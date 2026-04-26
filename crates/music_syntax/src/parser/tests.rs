@@ -43,8 +43,8 @@ mod success {
     }
 
     #[test]
-    fn parses_comptime_prefix_expr() {
-        let parsed = parse(Lexer::new("let x := comptime (1 + 2);").lex());
+    fn parses_known_prefix_expr() {
+        let parsed = parse(Lexer::new("let x := known (1 + 2);").lex());
         assert!(
             parsed.errors().is_empty(),
             "unexpected errors: {:?}",
@@ -53,9 +53,8 @@ mod success {
     }
 
     #[test]
-    fn parses_comptime_value_param() {
-        let parsed =
-            parse(Lexer::new("let scale (comptime n : Int, x : Int) : Int := x * n;").lex());
+    fn parses_known_value_param() {
+        let parsed = parse(Lexer::new("let scale (known n : Int, x : Int) : Int := x * n;").lex());
         assert!(
             parsed.errors().is_empty(),
             "unexpected errors: {:?}",

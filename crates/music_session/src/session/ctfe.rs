@@ -87,7 +87,7 @@ impl Session {
         let mut jobs = Vec::new();
         for (expr_id, expr) in &sema.module().store.exprs {
             if let HirExprKind::Prefix {
-                op: HirPrefixOp::Comptime,
+                op: HirPrefixOp::Known,
                 expr: inner,
             } = &expr.kind
             {
@@ -222,7 +222,7 @@ impl VmHost for SafeCtfeHost {
             return Err(VmError::new(VmErrorKind::EffectRejected {
                 effect: effect.effect_name().into(),
                 op: Some(effect.op_name().into()),
-                reason: "effect op lacks comptimeSafe marker".into(),
+                reason: "effect op lacks knownSafe marker".into(),
             }));
         }
         let Some(host) = &self.host else {

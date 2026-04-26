@@ -557,7 +557,7 @@ impl CheckPass<'_, '_, '_> {
                         .with_comptime_safe(member_has_attr(
                             self,
                             member,
-                            "comptimeSafe",
+                            "knownSafe",
                         )),
                     )
                 })

@@ -269,7 +269,7 @@ impl<'ctx, 'a, 'b, 'c> ConstIntEvaluator<'ctx, 'a, 'b, 'c> {
                 .checked_neg()
                 .map(ComptimeValue::Int)
                 .ok_or(ConstEvalError::Invalid),
-            HirPrefixOp::Comptime => self.eval(expr),
+            HirPrefixOp::Known => self.eval(expr),
             HirPrefixOp::Not | HirPrefixOp::Mut | HirPrefixOp::Any | HirPrefixOp::Some => {
                 Err(ConstEvalError::Invalid)
             }
@@ -315,7 +315,7 @@ impl<'ctx, 'a, 'b, 'c> ConstIntEvaluator<'ctx, 'a, 'b, 'c> {
         matches!(
             self.ctx.expr(expr).kind,
             HirExprKind::Prefix {
-                op: HirPrefixOp::Comptime,
+                op: HirPrefixOp::Known,
                 ..
             }
         )

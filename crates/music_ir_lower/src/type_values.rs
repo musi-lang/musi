@@ -64,7 +64,7 @@ pub(crate) fn is_type_value_expr(
                 && is_type_value_expr(sema, *right, interner)
         }
         HirExprKind::Prefix {
-            op: HirPrefixOp::Mut | HirPrefixOp::Comptime | HirPrefixOp::Any | HirPrefixOp::Some,
+            op: HirPrefixOp::Mut | HirPrefixOp::Known | HirPrefixOp::Any | HirPrefixOp::Some,
             expr,
         } => is_type_value_expr(sema, *expr, interner),
         HirExprKind::Record { items } => sema

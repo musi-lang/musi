@@ -1,11 +1,11 @@
---- Command-line prompt helpers module.
+--- Command-line prompt helpers surface.
 export let prompt := import "@std/cli/prompt";
 
---- Process helpers module.
+--- Process helpers surface.
 export let process := import "@std/process";
 
---- Environment variable helpers module.
+--- Environment variable helpers surface.
 export let env := import "@std/env";
 
---- Terminal I/O helpers module.
+--- Terminal I/O helpers surface.
 export let io := import "@std/io";

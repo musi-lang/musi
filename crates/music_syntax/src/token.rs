@@ -32,7 +32,6 @@ pub enum TokenKind {
     KwShape,
     KwCatch,
     KwMatch,
-    KwComptime,
     KwData,
     KwEffect,
     KwExport,
@@ -169,7 +168,7 @@ pub const TOKEN_PATTERNS: &[(&[u8], TokenKind)] = &[
     (b"_", TokenKind::Underscore),
 ];
 
-const KEYWORD_NAMES: [(&str, TokenKind, &str); 37] = [
+const KEYWORD_NAMES: [(&str, TokenKind, &str); 36] = [
     ("and", TokenKind::KwAnd, "`and`"),
     ("ask", TokenKind::KwAsk, "`ask`"),
     ("answer", TokenKind::KwAnswer, "`answer`"),
@@ -177,7 +176,6 @@ const KEYWORD_NAMES: [(&str, TokenKind, &str); 37] = [
     ("any", TokenKind::KwAny, "`any`"),
     ("catch", TokenKind::KwCatch, "`catch`"),
     ("match", TokenKind::KwMatch, "`match`"),
-    ("comptime", TokenKind::KwComptime, "`comptime`"),
     ("data", TokenKind::KwData, "`data`"),
     ("effect", TokenKind::KwEffect, "`effect`"),
     ("export", TokenKind::KwExport, "`export`"),

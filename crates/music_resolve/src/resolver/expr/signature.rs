@@ -44,10 +44,8 @@ where
     fn lower_param(&mut self, node: SyntaxNode<'tree, 'src>) -> HirParam {
         let is_comptime = node
             .child_tokens()
-            .any(|token| token.kind() == TokenKind::KwComptime);
-        let name_tok = node
-            .child_tokens()
-            .find(|t| Self::is_ident_token_kind(t.kind()));
+            .any(|token| token.kind() == TokenKind::KwKnown);
+        let name_tok = node.child_tokens().find(|t| t.kind() == TokenKind::Ident);
         let name = self.intern_ident_token_or_placeholder(name_tok, node.span());
         let _ = self.insert_binding(name, NameBindingKind::Param);
 

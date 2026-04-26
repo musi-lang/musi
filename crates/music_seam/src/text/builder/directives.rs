@@ -265,7 +265,7 @@ impl TextBuilder {
             }
             let result_ty = parse_symbol(must_get(parts.get(idx + 1), "effect op result type")?)?;
             idx += 2;
-            let is_comptime_safe = parts.get(idx).map(String::as_str) == Some("comptime-safe");
+            let is_comptime_safe = parts.get(idx).map(String::as_str) == Some("known-safe");
             if is_comptime_safe {
                 idx += 1;
             }

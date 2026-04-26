@@ -305,7 +305,7 @@ pub enum HirPrefixOp {
     Neg,
     Not,
     Mut,
-    Comptime,
+    Known,
     Any,
     Some,
 }

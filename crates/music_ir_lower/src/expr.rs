@@ -218,7 +218,7 @@ pub(crate) fn lower_prefix_expr(
     origin: IrOrigin,
 ) -> IrExprKind {
     match op {
-        HirPrefixOp::Comptime => lower_comptime_prefix_expr(ctx, expr_id, expr, origin),
+        HirPrefixOp::Known => lower_comptime_prefix_expr(ctx, expr_id, expr, origin),
         HirPrefixOp::Mut | HirPrefixOp::Any | HirPrefixOp::Some => {
             lower_expr_with_origin(ctx, expr, origin).kind
         }

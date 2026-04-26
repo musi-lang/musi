@@ -566,7 +566,7 @@ impl CheckPass<'_, '_, '_> {
         inner: HirExprId,
     ) -> ExprFacts {
         let ctx = self;
-        if matches!(op, HirPrefixOp::Comptime) {
+        if matches!(op, HirPrefixOp::Known) {
             if let Some(value) = super::const_eval::try_comptime_value(ctx, inner) {
                 let ty = if let Some(expanded) = ctx.comptime_expr_expansion(inner, &value) {
                     check_expr(ctx, expanded).ty
@@ -603,7 +603,7 @@ impl CheckPass<'_, '_, '_> {
             HirPrefixOp::Mut => ctx.alloc_ty(HirTyKind::Mut {
                 inner: inner_facts.ty,
             }),
-            HirPrefixOp::Comptime => inner_facts.ty,
+            HirPrefixOp::Known => inner_facts.ty,
             HirPrefixOp::Any | HirPrefixOp::Some => {
                 let target = ctx.expr_subject(expr_id);
                 ctx.diag_with(
