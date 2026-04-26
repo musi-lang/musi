@@ -378,7 +378,7 @@ mod success {
     }
 
     #[test]
-    fn imported_module_field_access_uses_export_surface() {
+    fn import_record_field_access_uses_export_surface() {
         let import_env = TestImportEnv::default().with_module("std/io", "std/io");
         let io = check_module_src(
             12,
@@ -410,7 +410,7 @@ mod success {
     }
 
     #[test]
-    fn imported_module_field_access_records_member_fact() {
+    fn import_record_field_access_records_member_fact() {
         let import_env = TestImportEnv::default().with_module("std/io", "std/io");
         let io = check_module_src(
             12,
@@ -838,7 +838,7 @@ mod success {
     }
 
     #[test]
-    fn imported_module_record_pattern_binds_exported_values() {
+    fn import_record_pattern_binds_exported_values() {
         let import_env = TestImportEnv::default().with_module("std/io", "std/io");
         let io = check_module_src(
             14,
@@ -963,7 +963,7 @@ mod success {
         let sema = check(
             r"
         export let Console := effect {
-          @comptimeSafe
+          @knownSafe
           let readLine (prompt : String) : String;
         };
     ",
@@ -1760,7 +1760,7 @@ mod success {
     }
 
     #[test]
-    fn comptime_diag_kind_roundtrips_code() {
+    fn known_diag_kind_roundtrips_code() {
         assert_eq!(
             SemaDiagKind::from_code(DiagCode::new(3102)),
             Some(SemaDiagKind::AmbiguousDotCallable)
@@ -1775,7 +1775,7 @@ mod success {
     fn data_variant_discriminants_accept_const_int_expressions() {
         let sema = check(
             r"
-        let base : Int := comptime 20;
+        let base : Int := known 20;
         let Level := data {
           | Debug := 10
           | Warn := base + 10
@@ -1792,53 +1792,53 @@ mod success {
     }
 
     #[test]
-    fn comptime_prefix_accepts_const_int_expressions() {
+    fn known_prefix_accepts_const_int_expressions() {
         let sema = check(
             r"
-        let x : Int := comptime (1 + 2);
+        let x : Int := known (1 + 2);
     ",
         );
         assert!(sema.diags().is_empty(), "{:?}", sema.diags());
     }
 
     #[test]
-    fn comptime_quote_expands_expression_type() {
+    fn known_quote_expands_expression_type() {
         let sema = check(
             r"
-        let value : Int := comptime quote (40 + 2);
+        let value : Int := known quote (40 + 2);
     ",
         );
         assert!(sema.diags().is_empty(), "{:?}", sema.diags());
     }
 
     #[test]
-    fn comptime_quote_splices_primitive_literals_into_syntax() {
+    fn known_quote_splices_primitive_literals_into_syntax() {
         let sema = check(
             r"
-        let base : Int := comptime 40;
-        let generated : Syntax := comptime quote (#(base) + 2);
+        let base : Int := known 40;
+        let generated : Syntax := known quote (#(base) + 2);
     ",
         );
         assert!(sema.diags().is_empty(), "{:?}", sema.diags());
     }
 
     #[test]
-    fn comptime_prefix_accepts_runtime_expressions_for_ctfe() {
+    fn known_prefix_accepts_runtime_expressions_for_ctfe() {
         let sema = check(
             r"
         let runtime () : Int := 1;
-        let x : Int := comptime runtime();
+        let x : Int := known runtime();
     ",
         );
         assert!(sema.diags().is_empty(), "{:?}", sema.diags());
     }
 
     #[test]
-    fn imported_comptime_param_metadata_accepts_runtime_arguments_for_ctfe() {
+    fn imported_known_param_metadata_accepts_runtime_arguments_for_ctfe() {
         let (_module_a, module_b) = check_with_imported_surface(
             210,
             r"
-        export let scale (comptime n : Int, x : Int) : Int := x * n;
+        export let scale (known n : Int, x : Int) : Int := x * n;
     ",
             r#"
         let A := import "a";
@@ -1851,10 +1851,10 @@ mod success {
     }
 
     #[test]
-    fn comptime_params_accept_runtime_arguments_for_ctfe() {
+    fn known_params_accept_runtime_arguments_for_ctfe() {
         let sema = check(
             r"
-        let scale (comptime n : Int, x : Int) : Int := x * n;
+        let scale (known n : Int, x : Int) : Int := x * n;
         let runtime () : Int := 3;
         let y : Int := scale(runtime(), 2);
     ",
@@ -2261,11 +2261,11 @@ mod failure {
     }
 
     #[test]
-    fn comptime_prefix_accepts_non_int_literals() {
+    fn known_prefix_accepts_non_int_literals() {
         let sema = check(
             r#"
-        let text : String := comptime "hello";
-        let unit : Unit := comptime ();
+        let text : String := known "hello";
+        let unit : Unit := known ();
     "#,
         );
         assert!(sema.diags().is_empty(), "{:?}", sema.diags());

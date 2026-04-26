@@ -40,5 +40,5 @@ Each feature should have one current-language explanation and at least one snipp
 - Effects, `effect`, `ask`, `answer`, `handle`, `resume`, and answer members: `effects-runtime/effects-and-answers.md`
 - Proofs, `law`, `Proof[P]`, contextual proof evidence, and `@axiom` trust roots: `specs/language/first-class-everything.md`, `specs/language/type-core.md`, `specs/language/syntax.md`, `specs/language/items-and-attributes.md`
 - Pin action scopes are only valid inside `unsafe` blocks; `name` has type `Pin[T]`, remains scoped to `body`, and cannot be returned from that body.
-- Foundation, runtime, stdlib layering, attributes, hygienic `quote`, `#` splices, comptime, templates, tests, and tooling: `effects-runtime/foundation.md`, `effects-runtime/runtime.md`, `effects-runtime/stdlib.md`, `advanced/attributes.md`, `advanced/quote-and-syntax.md`, `advanced/comptime.md`, `advanced/templates-and-splices.md`, `advanced/testing.md`, `advanced/running-and-tooling.md`
+- Foundation, runtime, stdlib layering, attributes, hygienic `quote`, `#` splices, known, templates, tests, and tooling: `effects-runtime/foundation.md`, `effects-runtime/runtime.md`, `effects-runtime/stdlib.md`, `advanced/attributes.md`, `advanced/quote-and-syntax.md`, `advanced/known.md`, `advanced/templates-and-splices.md`, `advanced/testing.md`, `advanced/running-and-tooling.md`
 

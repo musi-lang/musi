@@ -104,8 +104,6 @@ kw-catch    = %x63.61.74.63.68
 
 kw-match    = %x6D.61.74.63.68
 
-kw-comptime = %x63.6F.6D.70.74.69.6D.65
-
 kw-data     = %x64.61.74.61
 
 kw-effect   = %x65.66.66.65.63.74
@@ -115,6 +113,8 @@ kw-export   = %x65.78.70.6F.72.74
 kw-given    = %x67.69.76.65.6E
 
 kw-native   = %x6E.61.74.69.76.65
+
+kw-opaque   = %x6F.70.61.71.75.65
 
 kw-partial  = %x70.61.72.74.69.61.6C
 
@@ -453,7 +453,6 @@ infix-expr       = prefix-expr *(infix-op prefix-expr)
 
 prefix-op        = minus
                    / kw-any
-                   / kw-comptime
                    / kw-known
                    / kw-not
                    / kw-mut
@@ -642,7 +641,7 @@ splice          = hash ident
 with-attrs-expr = with-mods-expr
 ; `export` is a modifier that applies to an expression (like attributes), not an
 ; expression form itself.
-export-mod     = kw-export [kw-native [string-lit]]
+export-mod     = kw-export [kw-opaque] [kw-native [string-lit]]
 
 native-mod     = kw-native [string-lit]
 
@@ -762,7 +761,7 @@ params     = lparen [param-list] rparen
 
 param-list = param *(comma param)
 
-param      = [kw-comptime] ident [type-annot] [colon-eq expr]
+param      = [kw-known] ident [type-annot] [colon-eq expr]
 
 ident-list = comma-pad ident *(comma ident) comma-pad
 

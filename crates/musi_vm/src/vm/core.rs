@@ -98,7 +98,7 @@ impl Vm {
     ///
     /// # Errors
     ///
-    /// Returns [`VmError`] if handle is not one module value or export is absent.
+    /// Returns [`VmError`] if handle is not one loaded module handle or export is absent.
     pub fn lookup_module_export(&mut self, module: &Value, name: &str) -> VmResult<Value> {
         self.ensure_initialized()?;
         let slot = self.expect_module_slot(module)?;

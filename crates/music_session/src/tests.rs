@@ -240,22 +240,22 @@ mod success {
     use super::*;
 
     #[test]
-    fn compiles_vm_backed_comptime_function_call() {
+    fn compiles_vm_backed_known_function_call() {
         let output = compile_main_entry_with_source(
             r"
         let add (a : Int, b : Int) : Int := a + b;
-        export let result () : Int := comptime add(20, 22);
+        export let result () : Int := known add(20, 22);
     ",
         );
         assert_eq!(run_export(&output, "result"), Value::Int(42));
     }
 
     #[test]
-    fn compiles_vm_backed_comptime_argument_specialization() {
+    fn compiles_vm_backed_known_argument_specialization() {
         let output = compile_main_entry_with_source(
             r"
         let add (a : Int, b : Int) : Int := a + b;
-        let scale (comptime n : Int, x : Int) : Int := x * n;
+        let scale (known n : Int, x : Int) : Int := x * n;
         export let result () : Int := scale(add(20, 22), 2);
     ",
         );
@@ -263,7 +263,7 @@ mod success {
     }
 
     #[test]
-    fn compiles_comptime_data_value_as_runtime_value() {
+    fn compiles_known_data_value_as_runtime_value() {
         let output = compile_main_entry_with_source(
             r"
         let Maybe := data {
@@ -271,7 +271,7 @@ mod success {
           | None
         };
         let make () : Maybe := .Some(42);
-        export let result () : Int := match comptime make() (
+        export let result () : Int := match known make() (
           | .Some(value) => value
           | .None => 0
         );
@@ -281,10 +281,10 @@ mod success {
     }
 
     #[test]
-    fn compiles_comptime_sequence_value_as_runtime_value() {
+    fn compiles_known_sequence_value_as_runtime_value() {
         let output = compile_main_entry_with_source(
             r"
-        export let result () : Int := match comptime [40, 2] (
+        export let result () : Int := match known [40, 2] (
           | [left, right] => left + right
           | _ => 0
         );
@@ -294,11 +294,11 @@ mod success {
     }
 
     #[test]
-    fn compiles_comptime_closure_value_as_runtime_value() {
+    fn compiles_known_closure_value_as_runtime_value() {
         let output = compile_main_entry_with_source(
             r"
         let makeAdder (n : Int) := \(x : Int) => x + n;
-        let add := comptime makeAdder(40);
+        let add := known makeAdder(40);
         export let result () : Int := add(2);
     ",
         );
@@ -306,7 +306,7 @@ mod success {
     }
 
     #[test]
-    fn compiles_handled_effect_inside_comptime() {
+    fn compiles_handled_effect_inside_known() {
         let output = compile_main_entry_with_source(
             r"
         let Clock := effect {
@@ -316,24 +316,24 @@ mod success {
           value => value;
           tick(k) => resume 21;
         };
-        export let result () : Int := comptime handle ask Clock.tick() answer clockAnswer;
+        export let result () : Int := known handle ask Clock.tick() answer clockAnswer;
     ",
         );
         assert_eq!(run_export(&output, "result"), Value::Int(21));
     }
 
     #[test]
-    fn compiles_comptime_safe_host_effect_inside_comptime() {
+    fn compiles_known_safe_host_effect_inside_known() {
         let mut session = session();
         session.set_ctfe_host(CtfeTestHost);
         set_main_text(
             &mut session,
             r"
         let Clock := effect {
-          @comptimeSafe
+          @knownSafe
           let tick () : Int;
         };
-        export let result () : Int := comptime ask Clock.tick();
+        export let result () : Int := known ask Clock.tick();
     ",
         );
         let output = compile_main_entry(&mut session);
@@ -470,10 +470,10 @@ mod success {
     }
 
     #[test]
-    fn compiles_local_comptime_param_callable_specialization() {
+    fn compiles_local_known_param_callable_specialization() {
         let output = assert_main_module_compiles_with(
             r"
-            let scale (comptime n : Int, x : Int) : Int := x * n;
+            let scale (known n : Int, x : Int) : Int := x * n;
             export let result () : Int := scale(3, 14);
         ",
             &["scale$ct$0_i3", "$main::result"],
@@ -482,10 +482,10 @@ mod success {
     }
 
     #[test]
-    fn compiles_comptime_quote_expr_expansion() {
+    fn compiles_known_quote_expr_expansion() {
         let output = assert_main_module_compiles_with(
             r"
-            export let result () : Int := comptime quote (40 + 2);
+            export let result () : Int := known quote (40 + 2);
         ",
             &["$main::result", "add"],
         );
@@ -493,10 +493,10 @@ mod success {
     }
 
     #[test]
-    fn compiles_comptime_quote_item_expansion() {
+    fn compiles_known_quote_item_expansion() {
         let output = assert_main_module_compiles_with(
             r"
-            comptime quote {
+            known quote {
                 export let result () : Int := 42;
             };
         ",
@@ -506,11 +506,11 @@ mod success {
     }
 
     #[test]
-    fn compiles_nested_comptime_quote_item_expansion() {
+    fn compiles_nested_known_quote_item_expansion() {
         let output = assert_main_module_compiles_with(
             r"
-            comptime quote {
-                comptime quote {
+            known quote {
+                known quote {
                     export let result () : Int := 42;
                 };
             };
@@ -524,10 +524,10 @@ mod success {
     fn compiles_local_syntax_item_expansion() {
         let output = assert_main_module_compiles_with(
             r"
-            let generated : Syntax := comptime quote {
+            let generated : Syntax := known quote {
                 export let result () : Int := 42;
             };
-            comptime generated;
+            known generated;
         ",
             &["$main::result", "ld.c.i4 42"],
         );
@@ -538,13 +538,13 @@ mod success {
     fn compiles_imported_syntax_item_expansion() {
         let output = compile_main_entry_with_dep(
             r"
-            export let generated : Syntax := comptime quote {
+            export let generated : Syntax := known quote {
                 export let result () : Int := 42;
             };
         ",
             r#"
             let dep := import "dep";
-            comptime dep.generated;
+            known dep.generated;
         "#,
         );
         assert_output_contains(&output, &["$main::result", "ld.c.i4 42"]);
@@ -554,10 +554,10 @@ mod success {
     fn compiles_local_syntax_factory_item_expansion() {
         let output = assert_main_module_compiles_with(
             r"
-            let generated (value : Int) : Syntax := comptime quote {
+            let generated (value : Int) : Syntax := known quote {
                 export let result () : Int := #(value);
             };
-            comptime generated(42);
+            known generated(42);
         ",
             &["$main::result", "ld.c.i4 42"],
         );
@@ -568,13 +568,13 @@ mod success {
     fn compiles_imported_syntax_factory_item_expansion() {
         let output = compile_main_entry_with_dep(
             r"
-            export let generated (value : Int) : Syntax := comptime quote {
+            export let generated (value : Int) : Syntax := known quote {
                 export let result () : Int := #(value);
             };
         ",
             r#"
             let dep := import "dep";
-            comptime dep.generated(42);
+            known dep.generated(42);
         "#,
         );
         assert_output_contains(&output, &["$main::result", "ld.c.i4 42"]);
@@ -1342,16 +1342,16 @@ mod failure {
     use super::*;
 
     #[test]
-    fn rejects_unhandled_effect_inside_comptime() {
+    fn rejects_unhandled_effect_inside_known() {
         let mut session = session();
         set_main_text(
             &mut session,
             r"
         let Clock := effect {
-          @comptimeSafe
+          @knownSafe
           let tick () : Int;
         };
-        export let result () : Int := comptime ask Clock.tick();
+        export let result () : Int := known ask Clock.tick();
     ",
         );
         let error = session

@@ -1,11 +1,11 @@
 let timeHost := import "musi:time";
 
 --- Core operation for `millisPerSecond`.
-export let millisPerSecond := comptime 1000;
+export let millisPerSecond := known 1000;
 --- Core operation for `millisPerMinute`.
-export let millisPerMinute := comptime 60 * millisPerSecond;
+export let millisPerMinute := known 60 * millisPerSecond;
 --- Core operation for `millisPerHour`.
-export let millisPerHour := comptime 60 * millisPerMinute;
+export let millisPerHour := known 60 * millisPerMinute;
 
 --- Span of time in milliseconds.
 export opaque let Duration := data {

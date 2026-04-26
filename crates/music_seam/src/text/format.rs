@@ -216,7 +216,7 @@ fn format_effects(out: &mut String, artifact: &Artifact) {
             out.push_str(" result ");
             push_symbol_ref(out, artifact.type_name(op.result_ty));
             if op.is_comptime_safe {
-                out.push_str(" comptime-safe");
+                out.push_str(" known-safe");
             }
         }
         out.push('\n');

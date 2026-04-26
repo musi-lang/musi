@@ -67,7 +67,6 @@ infix_op:
 prefix_expr: (
 		MINUS
 		| KW_ANY
-		| KW_COMPTIME
 		| KW_KNOWN
 		| KW_NOT
 		| KW_MUT
@@ -303,7 +302,7 @@ modifier: attr | export_mod | partial_mod;
 
 partial_mod: KW_PARTIAL;
 
-export_mod: KW_EXPORT (KW_NATIVE STRING_LIT?)?;
+export_mod: KW_EXPORT KW_OPAQUE? (KW_NATIVE STRING_LIT?)?;
 
 let_rest:
 	let_modifier? pattern bracket_params? params? type_annot? where_clause? require_clause? (
@@ -423,7 +422,7 @@ params: LPAREN param_list? RPAREN;
 
 param_list: param (COMMA param)*;
 
-param: KW_COMPTIME? ident type_annot? (COLON_EQ expr)?;
+param: KW_KNOWN? ident type_annot? (COLON_EQ expr)?;
 
 ident_list: comma_pad ident (COMMA ident)* comma_pad;
 

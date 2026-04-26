@@ -153,11 +153,7 @@ impl CheckPass<'_, '_, '_> {
         if matches!(self.pat(pat).kind, HirPatKind::Record { .. })
             && !matches!(self.ty(value_ty).kind, HirTyKind::Record { .. })
         {
-            self.diag(
-                origin.span,
-                DiagKind::RecordDestructuringRequiresRecordOrModule,
-                "",
-            );
+            self.diag(origin.span, DiagKind::RecordDestructuringRequiresRecord, "");
         }
     }
 
@@ -645,7 +641,7 @@ fn is_explicit_comptime_expr(ctx: &CheckPass<'_, '_, '_>, expr: HirExprId) -> bo
     matches!(
         ctx.expr(expr).kind,
         HirExprKind::Prefix {
-            op: HirPrefixOp::Comptime,
+            op: HirPrefixOp::Known,
             ..
         }
     )

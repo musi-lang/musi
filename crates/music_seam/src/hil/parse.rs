@@ -204,7 +204,7 @@ fn parse_capabilities(text: &str) -> Result<Vec<HilShape>, AssemblyError> {
             "effect" => Ok(HilShape::Effect),
             "native" => Ok(HilShape::Native),
             "syntax" => Ok(HilShape::Syntax),
-            "comptime" => Ok(HilShape::Comptime),
+            "known" => Ok(HilShape::Known),
             other => Err(AssemblyError::text_parse_source(format!(
                 "unknown shape `{other}`"
             ))),

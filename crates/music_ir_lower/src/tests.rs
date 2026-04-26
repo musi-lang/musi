@@ -501,7 +501,7 @@ mod success {
             r"
         export let id[T] (x : T) : T := x;
         export let Console := effect {
-          @comptimeSafe
+          @knownSafe
           let readLine () : String;
         };
         export let Eq[T] := shape {
@@ -548,10 +548,10 @@ mod success {
     }
 
     #[test]
-    fn lowers_comptime_param_calls_to_specialized_runtime_callables() {
+    fn lowers_known_param_calls_to_specialized_runtime_callables() {
         let ir = lower(
             r"
-        let scale (comptime n : Int, x : Int) : Int := x * n;
+        let scale (known n : Int, x : Int) : Int := x * n;
         let y : Int := scale(3, 2);
     ",
         );
@@ -565,7 +565,7 @@ mod success {
         assert_eq!(specialized.params[0].name.as_ref(), "x");
         assert_global_tail_matches(
             r"
-        let scale (comptime n : Int, x : Int) : Int := x * n;
+        let scale (known n : Int, x : Int) : Int := x * n;
         let y : Int := scale(3, 2);
     ",
             "y",

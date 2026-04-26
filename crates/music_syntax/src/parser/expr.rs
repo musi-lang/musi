@@ -105,7 +105,7 @@ impl Parser<'_> {
         }
         if self.at_any(&[
             TokenKind::Minus,
-            TokenKind::KwComptime,
+            TokenKind::KwKnown,
             TokenKind::KwGiven,
             TokenKind::KwAnswer,
             TokenKind::KwNot,
@@ -239,7 +239,7 @@ impl Parser<'_> {
                 | TokenKind::KwQuote
                 | TokenKind::KwUnsafe
                 | TokenKind::KwPin
-                | TokenKind::KwComptime
+                | TokenKind::KwKnown
                 | TokenKind::KwGiven
                 | TokenKind::KwAnswer
                 | TokenKind::At

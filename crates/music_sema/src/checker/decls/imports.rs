@@ -255,11 +255,11 @@ impl CheckPass<'_, '_, '_> {
             if let Some(value) = field.value {
                 bind_pat(self, value, field_ty);
                 if let Some(alias) = bound_name_from_pat(self, value) {
-                    self.bind_imported_module_member(alias, &surface, &export);
+                    self.bind_imported_record_member(alias, &surface, &export);
                 }
             } else if let Some(binding) = self.binding_id_for_decl(field.name) {
                 self.insert_binding_type(binding, field_ty);
-                self.bind_imported_module_member(field.name, &surface, &export);
+                self.bind_imported_record_member(field.name, &surface, &export);
             }
         }
         true
@@ -274,7 +274,7 @@ impl CheckPass<'_, '_, '_> {
                 else {
                     return;
                 };
-                self.bind_imported_module_member(alias, &surface, &export);
+                self.bind_imported_record_member(alias, &surface, &export);
             }
             HirExprKind::Name { name } => {
                 let alias_text: Box<str> = self.resolve_symbol(alias.name).into();
@@ -293,7 +293,7 @@ impl CheckPass<'_, '_, '_> {
         }
     }
 
-    fn bind_imported_module_member(
+    fn bind_imported_record_member(
         &mut self,
         alias: Ident,
         surface: &ModuleSurface,

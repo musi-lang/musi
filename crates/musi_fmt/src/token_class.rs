@@ -91,7 +91,7 @@ const fn is_control_keyword(kind: TokenKind) -> bool {
 const fn is_modifier_keyword(kind: TokenKind) -> bool {
     matches!(
         kind,
-        TokenKind::KwComptime
+        TokenKind::KwKnown
             | TokenKind::KwExport
             | TokenKind::KwNative
             | TokenKind::KwMut

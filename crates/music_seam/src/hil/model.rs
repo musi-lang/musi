@@ -31,7 +31,7 @@ pub enum HilShape {
     Effect,
     Native,
     Syntax,
-    Comptime,
+    Known,
 }
 
 impl Display for HilShape {
@@ -40,7 +40,7 @@ impl Display for HilShape {
             Self::Effect => f.write_str("effect"),
             Self::Native => f.write_str("native"),
             Self::Syntax => f.write_str("syntax"),
-            Self::Comptime => f.write_str("comptime"),
+            Self::Known => f.write_str("known"),
         }
     }
 }

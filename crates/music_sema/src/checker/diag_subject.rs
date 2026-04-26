@@ -125,7 +125,7 @@ const fn prefix_op_subject(op: &HirPrefixOp) -> &'static str {
         HirPrefixOp::Neg => "-",
         HirPrefixOp::Not => "not",
         HirPrefixOp::Mut => "mut",
-        HirPrefixOp::Comptime => "comptime",
+        HirPrefixOp::Known => "known",
         HirPrefixOp::Any => "any",
         HirPrefixOp::Some => "some",
     }

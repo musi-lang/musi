@@ -393,9 +393,9 @@ fn push_property_completion(
 }
 
 const COMPLETION_KEYWORDS: &[&str] = &[
-    "answer", "any", "ask", "as", "catch", "comptime", "data", "effect", "export", "given",
-    "handle", "if", "import", "in", "known", "law", "let", "match", "mut", "native", "opaque",
-    "partial", "pin", "quote", "rec", "require", "resume", "shape", "some", "unsafe", "where",
+    "answer", "any", "ask", "as", "catch", "data", "effect", "export", "given", "handle", "if",
+    "import", "in", "known", "law", "let", "match", "mut", "native", "opaque", "partial", "pin",
+    "quote", "rec", "require", "resume", "shape", "some", "unsafe", "where",
 ];
 
 fn push_completion(

@@ -203,11 +203,11 @@ diag DuplicateGiven 3050
 diag PlainLetRequiresIrrefutablePattern 3051
   message "plain `let` needs irrefutable pattern"
 
-diag ModuleDestructuringRequiresStaticModule 3052
-  message "module destructuring needs static module value"
+diag ImportRecordDestructuringRequiresImportRecord 3052
+  message "import-record destructuring needs import record value"
 
-diag RecordDestructuringRequiresRecordOrModule 3053
-  message "record destructuring needs record or module value"
+diag RecordDestructuringRequiresRecord 3053
+  message "record destructuring needs record value"
 
 diag CallableLetRequiresSimpleBindingPattern 3054
   message "callable `let` needs simple binding pattern"
@@ -430,4 +430,4 @@ diag ExportedCallableRequiresConcreteConstraints 3101
   message "exported callable needs fully resolved constraints"
 
 diag RuntimeValueInComptimeContext 3122
-  message "runtime value in `comptime` context"
+  message "runtime value in `known` context"

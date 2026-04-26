@@ -1,4 +1,4 @@
-# Module And Native Boundaries
+# Import, Export, And Native Boundaries
 
 Status: proposed
 
@@ -13,7 +13,7 @@ Musi uses everyday boundary words:
 
 ## Exports
 
-Top-level declarations are private by default. `export` adds a declaration to the module export record.
+Top-level declarations are private by default. `export` adds a declaration to the export record.
 
 Exported and private bindings use the same binding semantics. `export` only changes module visibility.
 
@@ -27,7 +27,7 @@ Record fields are always public. Record fields have no private spelling and no v
 
 ## Imports
 
-`import` brings in a Musi source/module export record.
+`import` brings in a Musi source export record.
 
 A bound import is an ordinary binding whose value is the imported export record.
 

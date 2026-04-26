@@ -56,9 +56,9 @@ mod success {
         assert_eq!(rec_kw.tokens()[0].kind, TokenKind::KwRec);
         assert_eq!(rec_kw.tokens()[1].kind, TokenKind::Eof);
 
-        let comptime_kw = lex("comptime");
-        assert_eq!(comptime_kw.tokens()[0].kind, TokenKind::KwComptime);
-        assert_eq!(comptime_kw.tokens()[1].kind, TokenKind::Eof);
+        let known_kw = lex("known");
+        assert_eq!(known_kw.tokens()[0].kind, TokenKind::KwKnown);
+        assert_eq!(known_kw.tokens()[1].kind, TokenKind::Eof);
 
         let any_kw = lex("any");
         assert_eq!(any_kw.tokens()[0].kind, TokenKind::KwAny);
@@ -91,6 +91,10 @@ mod success {
         let of_ident = lex("of");
         assert_eq!(of_ident.tokens()[0].kind, TokenKind::Ident);
         assert_eq!(of_ident.tokens()[1].kind, TokenKind::Eof);
+
+        let comptime_ident = lex("comptime");
+        assert_eq!(comptime_ident.tokens()[0].kind, TokenKind::Ident);
+        assert_eq!(comptime_ident.tokens()[1].kind, TokenKind::Eof);
     }
 
     #[test]
