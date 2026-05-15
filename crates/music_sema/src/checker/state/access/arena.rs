@@ -1,17 +1,17 @@
 use music_arena::{Idx, SliceRange};
 use music_hir::{
-    HirArg, HirArrayItem, HirAttr, HirAttrArg, HirBinder, HirConstraint, HirDim, HirEffectSet,
-    HirExpr, HirExprId, HirFieldDef, HirHandleClause, HirLit, HirLitId, HirMatchArm, HirMemberDef,
-    HirOrigin, HirParam, HirPat, HirPatId, HirRecordItem, HirRecordPatField, HirTy, HirTyField,
-    HirTyId, HirTyKind, HirVariantDef, HirVariantFieldDef, HirVariantPatArg,
+    HirArg, HirArrayItem, HirAttr, HirAttrArg, HirBinder, HirConstraint, HirDim, HirExpr,
+    HirExprId, HirFieldDef, HirLit, HirLitId, HirMatchArm, HirMemberDef, HirOrigin, HirParam,
+    HirPat, HirPatId, HirRecordItem, HirRecordPatField, HirTy, HirTyField, HirTyId, HirTyKind,
+    HirVariantDef, HirVariantFieldDef, HirVariantPatArg,
 };
 use music_names::Ident;
 
 use crate::checker::state::aliases::{
-    ArgList, ArrayItemList, AttrArgList, AttrList, BinderList, ConstraintList, DimList,
-    EffectItemList, ExprIdList, FieldDefList, HandleClauseList, IdentList, MatchArmList,
-    MemberDefList, ParamList, PatIdList, RecordItemList, RecordPatFieldList, TyFieldList, TyIdList,
-    VariantDefList, VariantFieldDefList, VariantPatArgList,
+    ArgList, ArrayItemList, AttrArgList, AttrList, BinderList, ConstraintList, DimList, ExprIdList,
+    FieldDefList, IdentList, MatchArmList, MemberDefList, ParamList, PatIdList, RecordItemList,
+    RecordPatFieldList, TyFieldList, TyIdList, VariantDefList, VariantFieldDefList,
+    VariantPatArgList,
 };
 
 use crate::checker::state::PassBase;
@@ -117,16 +117,6 @@ impl PassBase<'_, '_, '_> {
             .to_vec()
     }
 
-    pub fn handle_clauses(&self, range: SliceRange<HirHandleClause>) -> HandleClauseList {
-        self.module
-            .resolved
-            .module
-            .store
-            .handle_clauses
-            .get(range)
-            .to_vec()
-    }
-
     pub fn match_arms(&self, range: SliceRange<HirMatchArm>) -> MatchArmList {
         self.module
             .resolved
@@ -171,18 +161,6 @@ impl PassBase<'_, '_, '_> {
         self.module.resolved.module.store.fields.get(range).to_vec()
     }
 
-    pub fn effect_items(&self, set: &HirEffectSet) -> EffectItemList {
-        self.module
-            .resolved
-            .module
-            .store
-            .effect_items
-            .get(set.items.clone())
-            .to_vec()
-    }
-}
-
-impl PassBase<'_, '_, '_> {
     pub fn pat_ids(&self, range: SliceRange<HirPatId>) -> PatIdList {
         self.module
             .resolved

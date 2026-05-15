@@ -33,16 +33,6 @@ pub(super) fn verify_instruction(
             expect_defined_many(type_map, fields)?;
             define_value(type_map, *out, ty.clone())
         }
-        HilInstruction::EffectCall {
-            out,
-            result_ty,
-            args,
-            ..
-        } => {
-            require_capability(capabilities, HilShape::Effect)?;
-            expect_defined_many(type_map, args)?;
-            define_value(type_map, *out, result_ty.clone())
-        }
         HilInstruction::ForeignCall {
             out,
             result_ty,

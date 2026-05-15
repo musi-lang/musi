@@ -5,14 +5,16 @@ mod diag;
 mod error;
 mod hil;
 mod instruction;
+mod mar;
 mod opcode;
 mod text;
 mod types;
 
 pub use artifact::{
     Artifact, ArtifactError, BINARY_MAJOR_VERSION, BINARY_MINOR_VERSION, BINARY_VERSION,
-    ConstantId, DataId, EffectId, ExportId, ForeignId, GlobalId, MetaId, ProcedureId, SEAM_MAGIC,
-    SectionTag, ShapeId, StringId, StringRecord, Table, TypeId,
+    BlockSignatureId, ClosureId, ConstantId, DataId, ExportId, ForeignId, GlobalId, MetaId,
+    ProcedureId, RootMapId, SEAM_MAGIC, SectionTag, ShapeId, StackEffectId, StringId, StringRecord,
+    Table, TypeId,
 };
 pub use binary::{decode_binary, encode_binary, validate_binary};
 pub use diag::SeamDiagKind;
@@ -22,8 +24,14 @@ pub use hil::{
     HilTerminator, HilType, HilValueId, HilVerifyError, HilVerifyResult, format_hil, parse_hil,
 };
 pub use instruction::{CodeEntry, Instruction, Label, LabelId, Operand, OperandShape};
-pub use opcode::{Opcode, OpcodeFamily};
-pub use text::{format_hil_projection, format_text, parse_text, validate_text};
+pub use mar::{
+    MAR_BINARY_MAJOR_VERSION, MAR_BINARY_MINOR_VERSION, MAR_BINARY_VERSION, MAR_MAGIC, MarArchive,
+    MarError, MarManifest, MarModuleEntry, MarModuleEntryList, MarOptimizationPolicy,
+    MarPackageKind, MarProfile, MarResult, decode_mar_archive, encode_mar_archive,
+    validate_mar_archive,
+};
+pub use opcode::{Opcode, OpcodeFamily, OpcodeVisibility};
+pub use text::{format_debug_hil, format_decomp, format_disasm, parse_disasm, validate_disasm};
 pub use types::AssemblyResult;
 
 #[cfg(test)]

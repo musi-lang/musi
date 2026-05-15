@@ -13,6 +13,7 @@ struct CatalogEntry {
     help: Option<&'static str>,
 }
 
+#[rustfmt::skip]
 const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: ProjectDiagKind::MissingManifest,
@@ -422,6 +423,7 @@ pub fn from_code(raw: u16) -> Option<ProjectDiagKind> {
         .map(|entry| entry.kind)
 }
 
+#[rustfmt::skip]
 pub const fn project_error_kind(source: &crate::ProjectError) -> Option<ProjectDiagKind> {
     match source {
         crate::ProjectError::MissingManifest { .. } => Some(ProjectDiagKind::MissingManifest),

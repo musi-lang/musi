@@ -69,7 +69,7 @@ mod success {
     }
 
     #[test]
-    fn accepts_declared_effect_capability() {
+    fn accepts_declared_native_capability() {
         let int = int_ty();
         let module = HilModule::new(
             "main",
@@ -79,20 +79,19 @@ mod success {
                 Some(int.clone()),
                 [HilBlock::new(
                     "entry",
-                    [HilInstruction::EffectCall {
-                        out: HilValueId(0),
-                        result_ty: int,
-                        effect: "Console".into(),
-                        op: "readLine".into(),
+                    [HilInstruction::ForeignCall {
+                        out: Some(HilValueId(0)),
+                        result_ty: Some(int),
+                        foreign: "musi:console::Musi__readLine".into(),
                         args: Box::new([]),
                     }],
                     HilTerminator::Return(Some(HilValueId(0))),
                 )],
             )
-            .with_capabilities([HilShape::Effect])],
+            .with_capabilities([HilShape::Native])],
         );
 
-        module.verify().expect("effect capability declared");
+        module.verify().expect("native capability declared");
     }
 }
 
@@ -158,7 +157,7 @@ mod failure {
     }
 
     #[test]
-    fn rejects_missing_effect_capability() {
+    fn rejects_missing_native_capability() {
         let int = int_ty();
         let module = HilModule::new(
             "main",
@@ -168,11 +167,10 @@ mod failure {
                 Some(int.clone()),
                 [HilBlock::new(
                     "entry",
-                    [HilInstruction::EffectCall {
-                        out: HilValueId(0),
-                        result_ty: int,
-                        effect: "Console".into(),
-                        op: "readLine".into(),
+                    [HilInstruction::ForeignCall {
+                        out: Some(HilValueId(0)),
+                        result_ty: Some(int),
+                        foreign: "musi:console::Musi__readLine".into(),
                         args: Box::new([]),
                     }],
                     HilTerminator::Return(Some(HilValueId(0))),
@@ -183,7 +181,7 @@ mod failure {
         assert!(matches!(
             module.verify(),
             Err(HilVerifyError::ShapeRequired {
-                capability: HilShape::Effect
+                capability: HilShape::Native
             })
         ));
     }

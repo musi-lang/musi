@@ -37,7 +37,6 @@ pub(crate) fn render_type_value_expr_name(
             let right = render_type_value_expr_name(sema, *right, interner);
             match op {
                 HirBinaryOp::Arrow => format!("{left} -> {right}").into(),
-                HirBinaryOp::EffectArrow => format!("{left} ~> {right}").into(),
                 HirBinaryOp::Add => format!("{left} + {right}").into(),
                 _ => lowering_invariant_violation("invalid type-value binary op"),
             }
@@ -190,17 +189,6 @@ pub(crate) fn render_ty_name(sema: &SemaModule, ty: HirTyId, interner: &Interner
             "{} + {}",
             render_ty_name(sema, *left, interner),
             render_ty_name(sema, *right, interner)
-        )
-        .into(),
-        HirTyKind::Handler {
-            effect,
-            input,
-            output,
-        } => format!(
-            "answer {} ({} -> {})",
-            render_ty_name(sema, *effect, interner),
-            render_ty_name(sema, *input, interner),
-            render_ty_name(sema, *output, interner)
         )
         .into(),
         HirTyKind::Mut { inner } => {

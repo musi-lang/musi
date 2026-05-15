@@ -39,6 +39,10 @@ impl TextBuilder {
         id
     }
 
+    pub(crate) fn procedure_symbol(&self, name: &str) -> Option<ProcedureId> {
+        self.procedures.get(name).copied()
+    }
+
     pub(crate) fn intern_string(&mut self, text: &str) -> StringId {
         if let Some(id) = self.strings.get(text).copied() {
             return id;

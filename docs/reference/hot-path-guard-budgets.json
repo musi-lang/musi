@@ -1,0 +1,40 @@
+{
+  "benchmarks": [
+    {
+      "benchmark_id": "bench_vm_hot_vm_mode_init_small_module",
+      "run_filter": "bench_vm_hot_vm_mode_init_small_module",
+      "max_ns": 1.2,
+      "sensitivity": "clone-sensitive"
+    },
+    {
+      "benchmark_id": "bench_vm_hot_vm_mode_closure_capture",
+      "run_filter": "bench_vm_hot_vm_mode_closure_capture",
+      "max_ns": 1.4,
+      "sensitivity": "dispatch-sensitive"
+    },
+    {
+      "benchmark_id": "bench_vm_sequence_return_gc/hot_vm_mode_sequence_return_alloc",
+      "run_filter": "bench_vm_sequence_return_gc",
+      "max_ns": 9.5,
+      "sensitivity": "alloc-sensitive"
+    },
+    {
+      "benchmark_id": "bench_vm_sequence_return_gc/hot_vm_mode_sequence_return_bound_export_alloc",
+      "run_filter": "bench_vm_sequence_return_gc",
+      "max_ns": 9.8,
+      "sensitivity": "dispatch+alloc-sensitive"
+    },
+    {
+      "benchmark_id": "bench_vm_sequence_return_gc/hot_vm_mode_sequence_return_call_export_alloc_reused",
+      "run_filter": "bench_vm_sequence_return_gc",
+      "max_ns": 16.5,
+      "sensitivity": "dispatch-sensitive"
+    },
+    {
+      "benchmark_id": "bench_vm_sequence_return_gc/hot_vm_mode_sequence_return_call_export_alloc",
+      "run_filter": "bench_vm_sequence_return_gc",
+      "max_ns": 420.0,
+      "sensitivity": "dispatch+lookup-sensitive"
+    }
+  ]
+}

@@ -3,7 +3,7 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use musi_foundation::{extend_import_map, register_modules, resolve_spec};
+use musi_foundation::{extend_import_map, register_modules, resolve_public_spec};
 use music_base::SourceId;
 use music_module::{ImportMap, ImportSiteKind, ModuleKey, collect_import_sites};
 use music_session::{Session, SessionOptions};
@@ -105,7 +105,7 @@ fn load_module_recursive(
     };
     let _ = modules.insert(key, module);
     for spec in imports {
-        if resolve_spec(spec.as_str()).is_some() {
+        if resolve_public_spec(spec.as_str()).is_some() {
             continue;
         }
         let target = resolve_relative_import(path, spec.as_str())?;
@@ -130,7 +130,7 @@ fn build_import_map(modules: &DirectModuleMap) -> ToolingResult<ImportMap> {
     for module in modules.values() {
         let mut scope = DirectScopeMap::new();
         for spec in &module.imports {
-            if let Some(target) = resolve_spec(spec.as_str()) {
+            if let Some(target) = resolve_public_spec(spec.as_str()) {
                 let _ = scope.insert(spec.clone(), target.as_str().to_owned());
                 continue;
             }

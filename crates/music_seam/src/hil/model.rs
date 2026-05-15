@@ -28,7 +28,6 @@ impl Display for HilType {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum HilShape {
-    Effect,
     Native,
     Syntax,
     Known,
@@ -37,7 +36,6 @@ pub enum HilShape {
 impl Display for HilShape {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
-            Self::Effect => f.write_str("effect"),
             Self::Native => f.write_str("native"),
             Self::Syntax => f.write_str("syntax"),
             Self::Known => f.write_str("known"),
@@ -240,13 +238,6 @@ pub enum HilInstruction {
         ty: HilType,
         variant: HilName,
         fields: Box<[HilValueId]>,
-    },
-    EffectCall {
-        out: HilValueId,
-        result_ty: HilType,
-        effect: HilName,
-        op: HilName,
-        args: Box<[HilValueId]>,
     },
     ForeignCall {
         out: Option<HilValueId>,

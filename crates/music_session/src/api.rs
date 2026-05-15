@@ -172,16 +172,16 @@ impl ParsedModule {
 pub struct CompiledOutput {
     pub artifact: Artifact,
     pub bytes: Vec<u8>,
-    pub text: String,
+    pub disasm: String,
 }
 
 impl CompiledOutput {
     #[must_use]
-    pub const fn new(artifact: Artifact, bytes: Vec<u8>, text: String) -> Self {
+    pub const fn new(artifact: Artifact, bytes: Vec<u8>, disasm: String) -> Self {
         Self {
             artifact,
             bytes,
-            text,
+            disasm,
         }
     }
 }

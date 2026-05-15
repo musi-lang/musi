@@ -25,14 +25,19 @@ impl TextBuilder {
         };
         match head.as_str() {
             ".type" => self.parse_type(&parts),
+            ".stack_effect" => self.parse_stack_effect(&parts),
             ".data" => self.parse_data(&parts),
             ".const" => self.parse_const(&parts),
             ".global" => self.parse_global(&parts),
-            ".effect" => self.parse_effect(&parts),
+            ".closure" => self.parse_closure(&parts),
             ".capability" => self.parse_capability(&parts),
             ".native" => self.parse_foreign(&parts),
             ".export" => self.parse_export(&parts),
             ".meta" => self.parse_meta(&parts),
+            ".manifest" => self.parse_manifest(&parts),
+            ".import" => self.parse_import(&parts),
+            ".root_map" => self.parse_root_map(&parts),
+            ".block_sig" => self.parse_block_sig(&parts),
             other => Err(text_unknown_directive(other)),
         }
     }

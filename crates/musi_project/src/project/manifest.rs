@@ -72,17 +72,17 @@ pub(super) fn validate_manifest(
     manifest: &PackageManifest,
     source: &ManifestSource,
 ) -> ProjectResult {
-    if let Some(name) = &manifest.name {
-        if name.trim().is_empty() {
-            let span = source
-                .value_span(&json_pointer(&["name"]))
-                .unwrap_or_else(|| source.insertion_span());
-            return Err(source.catalog_error(
-                ProjectDiagKind::ManifestPackageNameEmpty,
-                DiagContext::new().with("path", source.path().display()),
-                span,
-            ));
-        }
+    if let Some(name) = &manifest.name
+        && name.trim().is_empty()
+    {
+        let span = source
+            .value_span(&json_pointer(&["name"]))
+            .unwrap_or_else(|| source.insertion_span());
+        return Err(source.catalog_error(
+            ProjectDiagKind::ManifestPackageNameEmpty,
+            DiagContext::new().with("path", source.path().display()),
+            span,
+        ));
     }
     for (index, lib) in manifest.enabled_libs().into_iter().enumerate() {
         if lib != "std" {

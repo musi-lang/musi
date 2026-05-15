@@ -13,6 +13,7 @@ struct CatalogEntry {
     help: Option<&'static str>,
 }
 
+#[rustfmt::skip]
 const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: ToolingDiagKind::MissingEntrySource,
@@ -102,6 +103,7 @@ pub fn from_code(raw: u16) -> Option<ToolingDiagKind> {
         .map(|entry| entry.kind)
 }
 
+#[rustfmt::skip]
 pub const fn tooling_error_kind(source: &crate::ToolingError) -> ToolingDiagKind {
     match source {
         crate::ToolingError::MissingEntrySource { .. } => ToolingDiagKind::MissingEntrySource,

@@ -6,25 +6,24 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use music_arena::SliceRange;
 use music_base::diag::{Diag, DiagContext};
 use music_hir::{
-    HirArg, HirArrayItem, HirBinaryOp, HirDim, HirExprId, HirExprKind, HirHandleClause, HirLetMods,
-    HirLitId, HirLitKind, HirMatchArm, HirParam, HirPartialRangeKind, HirPatId, HirPatKind,
-    HirPrefixOp, HirQuoteKind, HirRecordItem, HirRecordPatField, HirSpliceKind, HirTemplatePart,
-    HirTyField, HirTyId, HirTyKind,
+    HirArg, HirArrayItem, HirBinaryOp, HirDim, HirExprId, HirExprKind, HirLetMods, HirLitId,
+    HirLitKind, HirMatchArm, HirParam, HirPartialRangeKind, HirPatId, HirPatKind, HirPrefixOp,
+    HirRecordItem, HirRecordPatField, HirTemplatePart, HirTyField, HirTyId, HirTyKind,
 };
 use music_module::ModuleKey;
 use music_names::{Ident, Interner, NameBindingId, NameSite, Symbol};
 use music_sema::{
-    ComptimeValue, ConstraintAnswer, ConstraintKey, DefinitionKey, ExportedValue, ExprMemberKind,
+    ComptimeValue, ConstraintEvidence, ConstraintKey, DefinitionKey, ExportedValue, ExprMemberKind,
     SemaDataVariantDef, SemaModule,
 };
 
 use music_ir::IrDiagKind;
 use music_ir::{
     IrArg, IrAssignTarget, IrBinaryOp, IrCallable, IrCasePattern, IrCaseRecordField, IrDataDef,
-    IrDataVariantDef, IrDiagList, IrEffectDef, IrEffectOpDef, IrExpr, IrExprKind, IrForeignDef,
-    IrGivenDef, IrGlobal, IrHandleOp, IrIntrinsicKind, IrLit, IrMatchArm as IrLoweredMatchArm,
-    IrModule, IrModuleInitPart, IrModuleParts, IrNameRef, IrOrigin, IrParam, IrRangeKind,
-    IrRecordField, IrRecordLayoutField, IrSeqPart, IrShapeDef, IrTempId,
+    IrDataVariantDef, IrDiagList, IrExpr, IrExprKind, IrForeignDef, IrGlobal, IrIntrinsicKind,
+    IrLit, IrMatchArm as IrLoweredMatchArm, IrModule, IrModuleInitPart, IrModuleParts, IrNameRef,
+    IrOrigin, IrParam, IrRangeKind, IrRecordField, IrRecordLayoutField, IrSeqPart, IrShapeDef,
+    IrStaticImport, IrTempId,
 };
 
 pub(crate) mod access;
@@ -36,10 +35,9 @@ pub(crate) mod call;
 pub(crate) mod closures;
 pub(crate) mod collect;
 pub(crate) mod comptime;
-pub(crate) mod constraint_answers;
+pub(crate) mod constraint_evidence;
 pub(crate) mod context;
 pub(crate) mod destructure;
-pub(crate) mod effects;
 pub(crate) mod expr;
 pub(crate) mod foreign;
 pub(crate) mod lower_errors;
@@ -56,21 +54,17 @@ pub(crate) mod validate;
 pub(crate) mod variants;
 
 use access::{lower_field_expr, lower_index_expr, record_layout_for_ty};
-use closures::{
-    ClosureCallableInput, lower_closure_callable, lower_lambda_expr, lower_local_callable_let,
-    lower_named_params,
-};
+use closures::{lower_lambda_expr, lower_local_callable_let};
 use comptime::lower_comptime_value;
-use constraint_answers::{
-    bind_expr_constraint_answers, hidden_constraint_answer_params_for_binding,
-    hidden_constraint_answer_params_for_keys, lower_constraint_answer_expr,
-    pop_constraint_answer_bindings, push_constraint_answer_bindings,
+use constraint_evidence::{
+    bind_expr_constraint_evidence, hidden_constraint_evidence_params_for_binding,
+    lower_constraint_evidence_expr, pop_constraint_evidence_bindings,
+    push_constraint_evidence_bindings,
 };
 use context::{
-    BoundNameSet, ConstraintAnswerBindingMap, HirParamRange, HirRecordItemRange, LetItemInput,
+    BoundNameSet, ConstraintEvidenceBindingMap, HirParamRange, HirRecordItemRange, LetItemInput,
     LowerCtx, LoweredMatchArmList, LoweringResult, RecordLayout, TopLevelItems, qualified_name,
 };
-use effects::{lower_answer_literal_expr, lower_handle_expr, lower_request_expr};
 use foreign::lower_foreign_let;
 use pats::{collect_pattern_bindings, lower_match_expr};
 use range::{lower_in_expr, lower_partial_range_expr, lower_range_expr};

@@ -5,20 +5,6 @@ use super::info::{OpcodeInfo, opcode_info};
 
 pub(super) const OPCODES: &[OpcodeInfo] = &[
     opcode_info(
-        Opcode::LdArg,
-        OpcodeFamily::Storage,
-        "ld.arg",
-        OperandShape::Local,
-        0x10,
-    ),
-    opcode_info(
-        Opcode::StArg,
-        OpcodeFamily::Storage,
-        "st.arg",
-        OperandShape::Local,
-        0x11,
-    ),
-    opcode_info(
         Opcode::LdLoc,
         OpcodeFamily::Storage,
         "ld.loc",
@@ -59,26 +45,5 @@ pub(super) const OPCODES: &[OpcodeInfo] = &[
         "st.fld",
         OperandShape::I16,
         0x17,
-    ),
-    opcode_info(
-        Opcode::LdFldA,
-        OpcodeFamily::Storage,
-        "ld.fld.a",
-        OperandShape::I16,
-        0x18,
-    ),
-    opcode_info(
-        Opcode::InitObj,
-        OpcodeFamily::Storage,
-        "init.obj",
-        OperandShape::Type,
-        0x19,
-    ),
-    opcode_info(
-        Opcode::LdDflt,
-        OpcodeFamily::Storage,
-        "ld.dflt",
-        OperandShape::Type,
-        0x1A,
     ),
 ];

@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use music_base::Span;
 use music_hir::{
     HirExprId, HirExprKind, HirMemberDef, HirMemberKind, HirPatKind, HirTyId, HirTyKind,
@@ -7,7 +5,7 @@ use music_hir::{
 };
 use music_module::ModuleKey;
 use music_names::Symbol;
-use music_sema::{SemaModule, SurfaceTyId, SurfaceTyKind};
+use music_sema::SemaModule;
 
 use crate::api::{LawSuiteModule, SessionError};
 
@@ -33,24 +31,11 @@ struct ExecutableLawCase {
 struct ShapeDecl {
     expr_id: HirExprId,
     name: String,
-    type_params: Box<[Symbol]>,
     laws: Box<[HirMemberDef]>,
 }
 
 #[derive(Debug, Clone)]
-struct ExportedEffectDecl {
-    name: String,
-    laws: Box<[HirMemberDef]>,
-}
-
-#[derive(Debug, Clone)]
-struct GivenDecl {
-    expr_id: HirExprId,
-    member_defs: Box<[HirMemberDef]>,
-}
-
-#[derive(Debug, Clone)]
-struct GivenMemberBinding {
+struct LawMemberBinding {
     name: String,
     source: String,
 }
@@ -66,13 +51,13 @@ struct SampleCaseBuild<'a> {
     prefix: &'a str,
     param_names: &'a [String],
     sample_sets: &'a [Vec<SampleCase>],
-    member_bindings: &'a [GivenMemberBinding],
+    member_bindings: &'a [LawMemberBinding],
     body: &'a str,
 }
 
 impl Session {
-    /// Synthesizes runnable runtime test modules for every registered module that exports shape or
-    /// effect laws.
+    /// Synthesizes runnable runtime test modules for every registered module that exports shape
+    /// laws.
     ///
     /// # Errors
     ///
@@ -165,38 +150,30 @@ fn executable_law_cases(
 ) -> Result<ExecutableLawCaseList, SessionError> {
     let mut cases = ExecutableLawCaseList::new();
     let shapes = shape_decls(module_key, sema, source)?;
-    let exported_effects = exported_effect_decls(module_key, sema, source)?;
-    let givens = given_decls(sema);
 
-    extend_effect_law_cases(&mut cases, module_key, sema, source, &exported_effects)?;
-    extend_shape_law_cases(&mut cases, module_key, sema, source, &shapes, &givens)?;
+    extend_shape_law_cases(&mut cases, module_key, sema, source, &shapes)?;
 
     cases.sort_by(|left, right| left.name.cmp(&right.name));
     Ok(cases)
 }
 
-fn extend_effect_law_cases(
+fn extend_shape_law_cases(
     cases: ExecutableLawCaseListMut<'_>,
     module_key: &ModuleKey,
     sema: &SemaModule,
     source: &str,
-    exported_effects: &[ExportedEffectDecl],
+    shapes: &[ShapeDecl],
 ) -> Result<(), SessionError> {
-    for effect in exported_effects {
-        let Some(surface) = sema
-            .surface()
-            .exported_effects()
-            .iter()
-            .find(|item| item.key.name.as_ref() == effect.name)
-        else {
-            continue;
-        };
-        for (law, surface_law) in effect.laws.iter().zip(surface.laws.iter()) {
+    for shape in shapes {
+        let shape_facts = sema
+            .shape_facts(shape.expr_id)
+            .expect("shape facts missing for shape-law declaration");
+        for (law, law_facts) in shape.laws.iter().zip(shape_facts.laws.iter()) {
             let body = member_body_text(module_key, sema, source, law)?;
-            let sample_sets = surface_law
+            let sample_sets = law_facts
                 .params
                 .iter()
-                .map(|param| sample_cases_for_surface_ty(module_key, sema, param.ty))
+                .map(|param| sample_cases_for_hir_ty(module_key, sema, param.ty))
                 .collect::<Result<Vec<_>, _>>()?;
             let param_names = sema
                 .module()
@@ -208,88 +185,10 @@ fn extend_effect_law_cases(
                 .collect::<Result<Vec<_>, _>>()?;
             let prefix = format!(
                 "{}.{}",
-                effect.name,
+                shape.name,
                 snippet_for_span(module_key, source, law.name.span)?
             );
             push_sampled_cases(cases, &prefix, &param_names, &sample_sets, &[], &body);
-        }
-    }
-    Ok(())
-}
-
-fn extend_shape_law_cases(
-    cases: ExecutableLawCaseListMut<'_>,
-    module_key: &ModuleKey,
-    sema: &SemaModule,
-    source: &str,
-    shapes: &[ShapeDecl],
-    givens: &[GivenDecl],
-) -> Result<(), SessionError> {
-    for shape in shapes {
-        let shape_facts = sema
-            .shape_facts(shape.expr_id)
-            .expect("shape facts missing for shape-law declaration");
-        let shape_givens = givens.iter().filter(|given| {
-            sema.given_facts(given.expr_id)
-                .is_some_and(|facts| facts.shape_key == shape_facts.key)
-        });
-        for given in shape_givens {
-            let given_facts = sema
-                .given_facts(given.expr_id)
-                .expect("given facts missing for shape-law given");
-            if !given_facts.type_params.is_empty() {
-                return Err(law_suite_error(
-                    module_key,
-                    format!(
-                        "given `{}` remains polymorphic",
-                        render_given_head(&shape.name, &given_facts.shape_args, sema)
-                    ),
-                ));
-            }
-            let subst = shape_type_subst(shape, given_facts.shape_args.as_ref());
-            let member_bindings = given
-                .member_defs
-                .iter()
-                .filter(|member| member.kind == HirMemberKind::Let)
-                .map(|member| {
-                    Ok::<GivenMemberBinding, SessionError>(GivenMemberBinding {
-                        name: snippet_for_span(module_key, source, member.name.span)?,
-                        source: snippet_for_span(module_key, source, member.origin.span)?,
-                    })
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            for (law, law_facts) in shape.laws.iter().zip(shape_facts.laws.iter()) {
-                let body = member_body_text(module_key, sema, source, law)?;
-                let sample_sets = law_facts
-                    .params
-                    .iter()
-                    .map(|param| {
-                        let ty = substitute_shape_ty(sema, param.ty, &subst);
-                        sample_cases_for_hir_ty(module_key, sema, ty)
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                let param_names = sema
-                    .module()
-                    .store
-                    .params
-                    .get(law.params.clone())
-                    .iter()
-                    .map(|param| snippet_for_span(module_key, source, param.name.span))
-                    .collect::<Result<Vec<_>, _>>()?;
-                let prefix = format!(
-                    "{}.{}",
-                    render_given_head(&shape.name, &given_facts.shape_args, sema),
-                    snippet_for_span(module_key, source, law.name.span)?
-                );
-                push_sampled_cases(
-                    cases,
-                    &prefix,
-                    &param_names,
-                    &sample_sets,
-                    &member_bindings,
-                    &body,
-                );
-            }
         }
     }
     Ok(())
@@ -309,12 +208,11 @@ fn shape_decls(
 ) -> Result<Vec<ShapeDecl>, SessionError> {
     Ok(top_level_let_bindings(module_key, sema, source, false)?
         .into_iter()
-        .filter_map(|(_expr_id, name, type_params, value)| {
+        .filter_map(|(_expr_id, name, _type_params, value)| {
             match &sema.module().store.exprs.get(value).kind {
                 HirExprKind::Shape { members, .. } => sema.shape_facts(value).map(|_| ShapeDecl {
                     expr_id: value,
                     name,
-                    type_params,
                     laws: sema
                         .module()
                         .store
@@ -330,56 +228,6 @@ fn shape_decls(
             }
         })
         .collect::<Vec<_>>())
-}
-
-fn exported_effect_decls(
-    module_key: &ModuleKey,
-    sema: &SemaModule,
-    source: &str,
-) -> Result<Vec<ExportedEffectDecl>, SessionError> {
-    Ok(top_level_let_bindings(module_key, sema, source, true)?
-        .into_iter()
-        .filter_map(
-            |(_, name, _, value)| match &sema.module().store.exprs.get(value).kind {
-                HirExprKind::Effect { members } => Some(ExportedEffectDecl {
-                    name,
-                    laws: sema
-                        .module()
-                        .store
-                        .members
-                        .get(members.clone())
-                        .iter()
-                        .filter(|member| member.kind == HirMemberKind::Law)
-                        .cloned()
-                        .collect::<Vec<_>>()
-                        .into_boxed_slice(),
-                }),
-                _ => None,
-            },
-        )
-        .collect::<Vec<_>>())
-}
-
-fn given_decls(sema: &SemaModule) -> Vec<GivenDecl> {
-    let store = &sema.module().store;
-    top_level_expr_ids(sema)
-        .into_iter()
-        .filter_map(|expr_id| {
-            let expr = store.exprs.get(expr_id);
-            let (instance_expr_id, members) = match &expr.kind {
-                HirExprKind::Let { value, .. } => match &store.exprs.get(*value).kind {
-                    HirExprKind::Given { members, .. } => (*value, members.clone()),
-                    _ => return None,
-                },
-                HirExprKind::Given { members, .. } => (expr_id, members.clone()),
-                _ => return None,
-            };
-            Some(GivenDecl {
-                expr_id: instance_expr_id,
-                member_defs: store.members.get(members).to_vec().into_boxed_slice(),
-            })
-        })
-        .collect()
 }
 
 fn top_level_let_bindings(
@@ -436,28 +284,6 @@ fn top_level_expr_ids(sema: &SemaModule) -> TopLevelExprIdList {
     }
 }
 
-fn shape_type_subst(shape: &ShapeDecl, shape_args: &[HirTyId]) -> HashMap<Symbol, HirTyId> {
-    shape
-        .type_params
-        .iter()
-        .copied()
-        .zip(shape_args.iter().copied())
-        .collect()
-}
-
-fn substitute_shape_ty(
-    sema: &SemaModule,
-    ty: HirTyId,
-    subst: &HashMap<Symbol, HirTyId>,
-) -> HirTyId {
-    match &sema.ty(ty).kind {
-        HirTyKind::Named { name, args } if args.is_empty() => {
-            subst.get(name).copied().unwrap_or(ty)
-        }
-        _ => ty,
-    }
-}
-
 fn sample_cases_for_hir_ty(
     module_key: &ModuleKey,
     sema: &SemaModule,
@@ -497,48 +323,6 @@ fn sample_cases_for_hir_ty(
             format!(
                 "law parameter type `{}` has no built-in sample set",
                 render_hir_ty(other)
-            ),
-        )),
-    }
-}
-
-fn sample_cases_for_surface_ty(
-    module_key: &ModuleKey,
-    sema: &SemaModule,
-    ty: SurfaceTyId,
-) -> Result<Vec<SampleCase>, SessionError> {
-    match &sema
-        .surface()
-        .try_ty(ty)
-        .expect("surface law param type missing")
-        .kind
-    {
-        SurfaceTyKind::Unit => Ok(vec![SampleCase {
-            label: "unit".into(),
-            expr: "()".into(),
-        }]),
-        SurfaceTyKind::Bool => Ok(vec![
-            SampleCase {
-                label: "False".into(),
-                expr: "0 = 1".into(),
-            },
-            SampleCase {
-                label: "True".into(),
-                expr: "0 = 0".into(),
-            },
-        ]),
-        SurfaceTyKind::Int => Ok(int_samples()),
-        SurfaceTyKind::Float => Ok(float_samples()),
-        SurfaceTyKind::String | SurfaceTyKind::CString => Ok(string_samples()),
-        SurfaceTyKind::Rune => Ok(vec![SampleCase {
-            label: "rune".into(),
-            expr: "'a'".into(),
-        }]),
-        other => Err(law_suite_error(
-            module_key,
-            format!(
-                "law parameter type `{}` has no built-in sample set",
-                render_surface_ty(other)
             ),
         )),
     }
@@ -587,7 +371,7 @@ fn push_sampled_cases(
     prefix: &str,
     param_names: &[String],
     sample_sets: &[Vec<SampleCase>],
-    member_bindings: &[GivenMemberBinding],
+    member_bindings: &[LawMemberBinding],
     body: &str,
 ) {
     let mut current = Vec::<SampleCase>::new();
@@ -754,47 +538,6 @@ fn render_law_suite_module_source(
     out
 }
 
-fn render_given_head(shape_name: &str, shape_args: &[HirTyId], sema: &SemaModule) -> String {
-    if shape_args.is_empty() {
-        return shape_name.to_owned();
-    }
-    let args = shape_args
-        .iter()
-        .copied()
-        .map(|ty| render_ty_id(sema, ty))
-        .collect::<Vec<_>>()
-        .join(", ");
-    format!("{shape_name}[{args}]")
-}
-
-fn render_ty_id(sema: &SemaModule, ty: HirTyId) -> String {
-    match &sema.ty(ty).kind {
-        HirTyKind::NatLit(value) => value.to_string(),
-        kind if simple_hir_ty_display_name(kind).is_some() => {
-            simple_hir_ty_display_name(kind).unwrap_or("<error>").into()
-        }
-        HirTyKind::Named { name, args } => {
-            let name = render_named_type_fallback(sema, *name);
-            if args.is_empty() {
-                name
-            } else {
-                let args = sema
-                    .module()
-                    .store
-                    .ty_ids
-                    .get(*args)
-                    .iter()
-                    .copied()
-                    .map(|arg| render_ty_id(sema, arg))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                format!("{name}[{args}]")
-            }
-        }
-        _ => "<unsupported>".into(),
-    }
-}
-
 fn render_hir_ty(kind: &HirTyKind) -> String {
     if let HirTyKind::NatLit(value) = kind {
         return value.to_string();
@@ -804,21 +547,6 @@ fn render_hir_ty(kind: &HirTyKind) -> String {
     }
     match kind {
         HirTyKind::Named { .. } => "<named>".into(),
-        _ => "<unsupported>".into(),
-    }
-}
-
-fn render_surface_ty(kind: &SurfaceTyKind) -> String {
-    match kind {
-        SurfaceTyKind::Unit => "Unit".into(),
-        SurfaceTyKind::Bool => "Bool".into(),
-        SurfaceTyKind::Int => "Int".into(),
-        SurfaceTyKind::Float => "Float".into(),
-        SurfaceTyKind::String => "String".into(),
-        SurfaceTyKind::Rune => "Rune".into(),
-        SurfaceTyKind::CString => "CString".into(),
-        SurfaceTyKind::CPtr => "CPtr".into(),
-        SurfaceTyKind::Named { name, .. } => name.to_string(),
         _ => "<unsupported>".into(),
     }
 }

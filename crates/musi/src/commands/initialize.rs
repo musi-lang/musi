@@ -7,15 +7,16 @@ use crate::error::{MusiError, MusiResult};
 use musi_tooling::ToolingError;
 
 const STARTER_INDEX: &str =
-    "let io := import \"@std/io\";\n\nlet message := \"Hello, world!\";\nio.writeLine(message);\n";
+    "let io := import \"@std/io\";\n\nlet message := \"Hello, world!\";\nio.writeLn(message);\n";
 const STARTER_TEST: &str = r#"let Testing := import "@std/testing";
+let Assert := import "@std/assert";
 
 let add (left : Int, right : Int) : Int := left + right;
 
 export let test () :=
   (
     Testing.describe("add");
-    Testing.it("adds values", Testing.toBe(add(2, 3), 5));
+    Testing.it("adds values", Assert.toBe(add(2, 3), 5));
     Testing.endDescribe()
   );
 "#;

@@ -88,18 +88,6 @@ impl Vm {
             .loaded_runtime_code(procedure)
     }
 
-    pub(crate) fn refresh_frame_runtime_codes(&mut self) -> VmResult {
-        let codes = self
-            .frames
-            .iter()
-            .map(|frame| self.runtime_code(frame.module_slot, frame.procedure))
-            .collect::<VmResult<Vec<_>>>()?;
-        for (frame, code) in self.frames.iter_mut().zip(codes) {
-            frame.set_runtime_code(code);
-        }
-        Ok(())
-    }
-
     pub(super) fn call_frame(
         &mut self,
         module_slot: usize,

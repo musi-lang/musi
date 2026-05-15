@@ -1,10 +1,5 @@
-use std::env::consts::OS;
-
 use musi_native_ffi::{call_foreign, call_musi_pointer_intrinsic};
-use musi_vm::{
-    EffectCall, ForeignCall, ProgramTypeAbiKind, Value, VmError, VmErrorKind, VmHostCallContext,
-    VmResult,
-};
+use musi_vm::{ForeignCall, ProgramTypeAbiKind, Value, VmHostCallContext, VmResult};
 use music_seam::TypeId;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -124,18 +119,6 @@ impl PlatformHost {
             | NativeAbiCallSupport::UnsupportedType { .. } => None,
         }
     }
-
-    #[must_use]
-    pub fn handle_effect(self, effect: &EffectCall, _args: &[Value]) -> Option<VmResult<Value>> {
-        if self.supported_target {
-            return None;
-        }
-        Some(Err(VmError::new(VmErrorKind::EffectRejected {
-            effect: effect.effect_name().into(),
-            op: Some(effect.op_name().into()),
-            reason: unsupported_target_reason(),
-        })))
-    }
 }
 
 fn native_abi_kind_for_type(foreign: &ForeignCall, ty: TypeId) -> ProgramTypeAbiKind {
@@ -175,8 +158,4 @@ const fn is_supported_target() -> bool {
         target_os = "linux",
         target_os = "windows"
     ))
-}
-
-fn unsupported_target_reason() -> Box<str> {
-    format!("unsupported native host target `{OS}`").into_boxed_str()
 }

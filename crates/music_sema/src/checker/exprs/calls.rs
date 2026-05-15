@@ -6,12 +6,9 @@ use music_hir::{HirArg, HirDim, HirExprId, HirExprKind, HirOrigin, HirTyId, HirT
 use music_names::{Ident, NameBindingId, Symbol};
 
 use crate::api::{ConstraintKind, ExprFacts, ExprMemberKind};
-use crate::effects::EffectRow;
 
 use super::super::const_eval::try_comptime_value;
-use super::super::decls::{
-    call_effects_for_expr, import_record_export_for_expr, import_record_target_for_expr,
-};
+use super::super::decls::{import_record_export_for_expr, import_record_target_for_expr};
 use super::super::schemes::{BindingScheme, ConstraintObligation};
 use super::super::{CheckPass, DiagKind};
 use super::{check_expr, peel_mut_ty};
@@ -35,15 +32,14 @@ pub(super) fn check_apply_expr(
     ctx.check_apply_expr_impl(expr_id, origin, callee, args)
 }
 
-struct CallArgChecker<'ctx, 'interner, 'env, 'borrow, 'filled, 'effects> {
+struct CallArgChecker<'ctx, 'interner, 'env, 'borrow, 'filled> {
     ctx: &'borrow mut CheckPass<'ctx, 'interner, 'env>,
     param_index: usize,
     filled: &'filled mut [bool],
-    effects: &'effects mut EffectRow,
     has_runtime_spread: bool,
 }
 
-impl CallArgChecker<'_, '_, '_, '_, '_, '_> {
+impl CallArgChecker<'_, '_, '_, '_, '_> {
     fn check_args(
         &mut self,
         args: &[HirArg],
@@ -105,8 +101,7 @@ impl CallArgChecker<'_, '_, '_, '_, '_, '_> {
                 DiagKind::CallNamedArgumentsAfterRuntimeSpread,
                 "",
             );
-            self.ctx
-                .check_named_call_arg(name, arg.expr, None, false, self.effects);
+            self.ctx.check_named_call_arg(name, arg.expr, None, false);
             return true;
         }
         false
@@ -130,8 +125,7 @@ impl CallArgChecker<'_, '_, '_, '_, '_, '_> {
             );
         }
         let Some(expected_index) = self.named_arg_index(name, param_names) else {
-            self.ctx
-                .check_named_call_arg(name, arg.expr, None, false, self.effects);
+            self.ctx.check_named_call_arg(name, arg.expr, None, false);
             return;
         };
         if self.filled.get(expected_index).copied().unwrap_or(false) {
@@ -144,7 +138,7 @@ impl CallArgChecker<'_, '_, '_, '_, '_, '_> {
             .copied()
             .unwrap_or(false);
         self.ctx
-            .check_named_call_arg(name, arg.expr, expected, is_comptime, self.effects);
+            .check_named_call_arg(name, arg.expr, expected, is_comptime);
         if let Some(slot) = self.filled.get_mut(expected_index) {
             *slot = true;
         }
@@ -177,12 +171,14 @@ impl CallArgChecker<'_, '_, '_, '_, '_, '_> {
             self.ctx.push_expected_ty(expected);
             let facts = check_expr(self.ctx, arg.expr);
             let _ = self.ctx.pop_expected_ty();
-            self.effects.union_with(&facts.effects);
             let arg_origin = self.ctx.expr(arg.expr).origin;
             self.ctx.type_mismatch(arg_origin, expected, facts.ty);
             if is_comptime {
                 if let Some(value) = try_comptime_value(self.ctx, arg.expr) {
                     self.ctx.set_expr_comptime_value(arg.expr, value);
+                } else {
+                    self.ctx
+                        .diag(arg_origin.span, DiagKind::RuntimeValueInComptimeContext, "");
                 }
             }
             if let Some(slot) = self.filled.get_mut(self.param_index) {
@@ -193,7 +189,6 @@ impl CallArgChecker<'_, '_, '_, '_, '_, '_> {
         }
 
         let facts = check_expr(self.ctx, arg.expr);
-        self.effects.union_with(&facts.effects);
         let spread_origin = self.ctx.expr(arg.expr).origin;
         let spread_ty = peel_mut_ty(self.ctx, facts.ty);
         self.check_spread_arg(spread_origin, arg.expr, spread_ty, params);
@@ -251,12 +246,12 @@ impl CallArgChecker<'_, '_, '_, '_, '_, '_> {
                         .shape_facts_by_name(rangeable_symbol)
                         .map(|facts| facts.key.clone()),
                 };
-                if let Some(answers) = self
+                if let Some(evidence) = self
                     .ctx
-                    .resolve_obligations_to_answers(origin, &[obligation])
-                    && !answers.is_empty()
+                    .resolve_obligations_to_evidence(origin, &[obligation])
+                    && !evidence.is_empty()
                 {
-                    self.ctx.set_expr_constraint_answers(spread_expr, answers);
+                    self.ctx.set_expr_constraint_evidence(spread_expr, evidence);
                 }
             }
             _ => self.ctx.diag(
@@ -328,13 +323,12 @@ impl CheckPass<'_, '_, '_> {
                 (self.ty_ids(params), ret)
             } else {
                 self.invalid_call_target(callee, callee_facts.ty);
-                return ExprFacts::new(builtins.unknown, callee_facts.effects);
+                return ExprFacts::new(builtins.unknown);
             };
 
         self.validate_unsafe_call(origin, callee);
 
         let args_vec = self.args(args);
-        let mut effects = callee_facts.effects;
         let mut filled = vec![false; params.len()];
         let param_names = self.call_param_names(callee, params.len());
         let comptime_params = self.call_comptime_params(callee, params.len());
@@ -343,7 +337,6 @@ impl CheckPass<'_, '_, '_> {
                 ctx: self,
                 param_index: 0,
                 filled: &mut filled,
-                effects: &mut effects,
                 has_runtime_spread: false,
             };
             state.check_args(&args_vec, &params, &param_names, &comptime_params);
@@ -358,14 +351,14 @@ impl CheckPass<'_, '_, '_> {
             self.call_arity_mismatch(origin, callee, params.len(), args_vec.len());
         }
 
-        if let Some(shape_ret) = self.resolve_shape_member_call_answers(origin, callee, &args_vec) {
+        if let Some(shape_ret) = self.resolve_shape_member_call_evidence(origin, callee, &args_vec)
+        {
             ret = shape_ret;
         }
-        self.merge_call_effects(origin, callee, &mut effects);
-        ExprFacts::new(ret, effects)
+        ExprFacts::new(ret)
     }
 
-    fn resolve_shape_member_call_answers(
+    fn resolve_shape_member_call_evidence(
         &mut self,
         origin: HirOrigin,
         callee: HirExprId,
@@ -423,10 +416,10 @@ impl CheckPass<'_, '_, '_> {
             value: shape_ty,
             shape_key: Some(shape.key),
         };
-        if let Some(answers) = self.resolve_obligations_to_answers(origin, &[obligation])
-            && !answers.is_empty()
+        if let Some(evidence) = self.resolve_obligations_to_evidence(origin, &[obligation])
+            && !evidence.is_empty()
         {
-            self.set_expr_constraint_answers(callee, answers);
+            self.set_expr_constraint_evidence(callee, evidence);
         }
         Some(self.substitute_ty(member.result, &subst))
     }
@@ -502,7 +495,6 @@ impl CheckPass<'_, '_, '_> {
     ) -> ExprFacts {
         let builtins = self.builtins();
         let callee_facts = check_expr(self, callee);
-        let effectful_eval = callee_facts.effects;
         let args = self
             .expr_ids(args)
             .into_iter()
@@ -529,19 +521,18 @@ impl CheckPass<'_, '_, '_> {
                 DiagKind::InvalidTypeApplication,
                 DiagContext::new().with("target", target),
             );
-            return ExprFacts::new(builtins.unknown, effectful_eval);
+            return ExprFacts::new(builtins.unknown);
         };
         if let Some(target) = import_record_target_for_expr(self, callee) {
             self.set_expr_import_record_target(expr_id, target);
         }
-        if let Some(answers) =
-            self.resolve_obligations_to_answers(origin, &instantiated.obligations)
-            && !answers.is_empty()
+        if let Some(evidence) =
+            self.resolve_obligations_to_evidence(origin, &instantiated.obligations)
+            && !evidence.is_empty()
         {
-            self.set_expr_constraint_answers(expr_id, answers);
+            self.set_expr_constraint_evidence(expr_id, evidence);
         }
-        self.set_expr_callable_effects(expr_id, instantiated.effects.clone());
-        ExprFacts::new(instantiated.ty, effectful_eval)
+        ExprFacts::new(instantiated.ty)
     }
 
     fn check_named_call_arg(
@@ -550,14 +541,12 @@ impl CheckPass<'_, '_, '_> {
         expr: HirExprId,
         expected: Option<HirTyId>,
         is_comptime: bool,
-        effects: &mut EffectRow,
     ) {
         let builtins = self.builtins();
         let expected = expected.unwrap_or(builtins.unknown);
         self.push_expected_ty(expected);
         let facts = check_expr(self, expr);
         let _ = self.pop_expected_ty();
-        effects.union_with(&facts.effects);
         let origin = self.expr(expr).origin;
         let name = self.resolve_symbol(name.name).to_owned();
         self.type_mismatch_for(
@@ -569,29 +558,10 @@ impl CheckPass<'_, '_, '_> {
         if is_comptime {
             if let Some(value) = try_comptime_value(self, expr) {
                 self.set_expr_comptime_value(expr, value);
+            } else {
+                self.diag(origin.span, DiagKind::RuntimeValueInComptimeContext, "");
             }
         }
-    }
-
-    fn merge_call_effects(
-        &mut self,
-        origin: HirOrigin,
-        callee: HirExprId,
-        effects: &mut EffectRow,
-    ) {
-        if let Some(extra) = call_effects_for_expr(self, callee) {
-            effects.union_with(&extra);
-            return;
-        }
-        let Some(scheme) = self.callable_scheme_for_expr(callee) else {
-            return;
-        };
-        if !scheme.type_params.is_empty() {
-            return;
-        }
-        let instantiated = self.instantiate_monomorphic_scheme(&scheme);
-        let _ = self.resolve_obligations_to_answers(origin, &instantiated.obligations);
-        effects.union_with(&instantiated.effects);
     }
 
     fn callable_scheme_for_expr(&mut self, expr: HirExprId) -> Option<BindingScheme> {
@@ -681,7 +651,6 @@ impl CheckPass<'_, '_, '_> {
     fn call_param_names(&mut self, callee: HirExprId, param_count: usize) -> Box<[Symbol]> {
         self.callable_scheme_for_expr(callee)
             .map(|scheme| scheme.param_names)
-            .or_else(|| self.effect_op_param_names(callee))
             .filter(|names| names.len() == param_count)
             .unwrap_or_default()
     }
@@ -691,18 +660,6 @@ impl CheckPass<'_, '_, '_> {
             .map(|scheme| scheme.comptime_params)
             .filter(|params| params.len() == param_count)
             .unwrap_or_default()
-    }
-
-    fn effect_op_param_names(&self, callee: HirExprId) -> Option<Box<[Symbol]>> {
-        let HirExprKind::Field { base, name, .. } = self.expr(callee).kind else {
-            return None;
-        };
-        let HirExprKind::Name { name: effect_name } = self.expr(base).kind else {
-            return None;
-        };
-        self.effect_def(self.resolve_symbol(effect_name.name))
-            .and_then(|effect| effect.op(self.resolve_symbol(name.name)))
-            .map(|op| op.param_names().to_vec().into_boxed_slice())
     }
 
     pub(super) fn dot_callable_requires_mut(&self, binding: NameBindingId) -> bool {

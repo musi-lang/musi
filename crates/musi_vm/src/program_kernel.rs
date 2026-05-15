@@ -10,7 +10,6 @@ pub fn decode_runtime_kernel(
     decode_direct_int_wrapper_call(instructions)
         .or_else(|| decode_const_i64_array8_return_kernel(param_count, instructions))
         .or_else(|| decode_int_tail_accumulator_kernel(runtime_instructions, instructions))
-        .or_else(|| decode_inline_effect_resume_kernel(instructions))
         .or_else(|| decode_seq2_mutation_kernel(runtime_instructions))
         .or_else(|| decode_data_construct_match_add_kernel(runtime_instructions))
         .or_else(|| decode_int_arg_add_smi_kernel(param_count, instructions))
@@ -231,41 +230,6 @@ const fn seq2_mutation_plan(
         finish_right_first,
         finish_right_second,
     })
-}
-
-fn decode_inline_effect_resume_kernel(instructions: &[Instruction]) -> Option<RuntimeKernel> {
-    let mut procedures = instructions.iter().filter_map(|instruction| {
-        let (
-            Opcode::NewFn,
-            Operand::WideProcedureCaptures {
-                procedure,
-                captures: 0,
-            },
-        ) = (instruction.opcode, &instruction.operand)
-        else {
-            return None;
-        };
-        Some(*procedure)
-    });
-    let value_clause = procedures.next()?;
-    let op_clause = procedures.next()?;
-    let has_handler = instructions
-        .iter()
-        .any(|instruction| instruction.opcode == Opcode::HdlPush);
-    let has_effect = instructions
-        .iter()
-        .any(|instruction| instruction.opcode == Opcode::Raise);
-    let has_pop = instructions
-        .iter()
-        .any(|instruction| instruction.opcode == Opcode::HdlPop);
-    if has_handler && has_effect && has_pop {
-        Some(RuntimeKernel::InlineEffectResumeClauses {
-            value_clause,
-            op_clause,
-        })
-    } else {
-        None
-    }
 }
 
 fn decode_int_arg_add_smi_kernel(

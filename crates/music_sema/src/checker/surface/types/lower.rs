@@ -4,30 +4,9 @@ use music_arena::SliceRange;
 use music_hir::{HirDim, HirStore, HirTyField, HirTyId, HirTyKind};
 use music_names::Interner;
 
-use crate::api::{
-    SurfaceDim, SurfaceEffectItem, SurfaceEffectRow, SurfaceTy, SurfaceTyField, SurfaceTyId,
-    SurfaceTyKind,
-};
-use crate::effects::EffectRow;
+use crate::api::{SurfaceDim, SurfaceTy, SurfaceTyField, SurfaceTyId, SurfaceTyKind};
 
 use super::simple::{hir_range_form, range_to_surface_kind, simple_surface_ty_kind};
-
-pub(in crate::checker::surface) fn lower_surface_effect_row(
-    tys: &mut SurfaceTyBuilder<'_>,
-    row: &EffectRow,
-) -> SurfaceEffectRow {
-    let items = row
-        .items
-        .iter()
-        .map(|item| SurfaceEffectItem::new(item.name.clone(), item.arg.map(|ty| tys.lower(ty))))
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
-    if let Some(open) = row.open.clone() {
-        SurfaceEffectRow::new(items).with_open(open)
-    } else {
-        SurfaceEffectRow::new(items)
-    }
-}
 
 pub(in crate::checker::surface) struct SurfaceTyBuilder<'a> {
     hir: &'a HirStore,
@@ -107,15 +86,6 @@ impl<'a> SurfaceTyBuilder<'a> {
             },
             HirTyKind::Bits { width } => SurfaceTyKind::Bits { width: *width },
             HirTyKind::Range { .. } => self.lower_range_kind(kind),
-            HirTyKind::Handler {
-                effect,
-                input,
-                output,
-            } => SurfaceTyKind::Handler {
-                effect: self.lower(*effect),
-                input: self.lower(*input),
-                output: self.lower(*output),
-            },
             HirTyKind::Mut { inner } => SurfaceTyKind::Mut {
                 inner: self.lower(*inner),
             },

@@ -63,7 +63,11 @@ impl<'a> MarkdownFormatter<'a> {
                 }
                 continue;
             };
-            if self.ignore_range || self.ignore_next_fence || !fence.is_musi() {
+            if self.ignore_range || !fence.is_musi() {
+                self.copy_fence_block(line_start, &fence);
+                continue;
+            }
+            if self.ignore_next_fence {
                 self.ignore_next_fence = false;
                 self.copy_fence_block(line_start, &fence);
                 continue;
@@ -98,7 +102,7 @@ impl<'a> MarkdownFormatter<'a> {
     fn copy_fence_block(&mut self, line_start: usize, fence: &Fence) {
         while self.offset < self.source.len() {
             let line = self.next_line();
-            if Fence::is_closing(line, fence.marker) {
+            if fence.is_closing(line) {
                 break;
             }
             if line.contains("musi-fmt-ignore-end") {
@@ -115,7 +119,7 @@ impl<'a> MarkdownFormatter<'a> {
         let mut body = String::new();
         while self.offset < self.source.len() {
             let line = self.next_line();
-            if Fence::is_closing(line, fence.marker) {
+            if fence.is_closing(line) {
                 let formatted = format_source(&body, self.options)?;
                 self.out.push_str(&formatted.text);
                 self.out.push_str(line);
@@ -131,6 +135,7 @@ impl<'a> MarkdownFormatter<'a> {
 #[derive(Debug, Clone, Copy)]
 struct Fence<'a> {
     marker: char,
+    marker_len: usize,
     tag: &'a str,
 }
 
@@ -141,20 +146,30 @@ impl<'a> Fence<'a> {
         if marker != '`' && marker != '~' {
             return None;
         }
-        if !trimmed.starts_with(&marker.to_string().repeat(3)) {
+        let marker_len = trimmed.chars().take_while(|char| *char == marker).count();
+        if marker_len < 3 {
             return None;
         }
-        let tag = trimmed
-            .trim_start_matches(marker)
-            .trim()
-            .split(|char: char| char.is_whitespace() || char == '{')
-            .next()
-            .unwrap_or_default();
-        Some(Self { marker, tag })
+        let tag = fence_tag(trimmed.trim_start_matches(marker).trim());
+        Some(Self {
+            marker,
+            marker_len,
+            tag,
+        })
     }
 
-    fn is_closing(line: &str, marker: char) -> bool {
-        line.trim_start().starts_with(&marker.to_string().repeat(3))
+    fn is_closing(self, line: &str) -> bool {
+        let trimmed = line.trim_start();
+        let marker_len = trimmed
+            .chars()
+            .take_while(|char| *char == self.marker)
+            .count();
+        if marker_len < self.marker_len {
+            return false;
+        }
+        trimmed
+            .get(marker_len..)
+            .is_some_and(|rest| rest.trim().is_empty())
     }
 
     fn is_musi(self) -> bool {
@@ -162,6 +177,17 @@ impl<'a> Fence<'a> {
             .iter()
             .any(|tag| self.tag.eq_ignore_ascii_case(tag))
     }
+}
+
+fn fence_tag(info: &str) -> &str {
+    if let Some(attributes) = info.strip_prefix('{') {
+        return attributes
+            .trim_end_matches('}')
+            .split(|char: char| char.is_whitespace())
+            .find_map(|attribute| attribute.strip_prefix('.'))
+            .unwrap_or_default();
+    }
+    info.split_whitespace().next().unwrap_or_default()
 }
 
 fn has_markdown_ignore_file(source: &str) -> bool {

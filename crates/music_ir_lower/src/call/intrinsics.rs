@@ -14,7 +14,7 @@ pub(super) fn lower_std_cmp_intrinsic(
     let HirExprKind::Name { name } = ctx.sema.module().store.exprs.get(callee).kind else {
         return None;
     };
-    if ctx.interner.resolve(name.name) != "compareFloatTotalIntrinsic" {
+    if ctx.interner.resolve(name.name) != "Musi__compareFloatTotal" {
         return None;
     }
     let lowered_args = args
@@ -27,6 +27,37 @@ pub(super) fn lower_std_cmp_intrinsic(
         symbol: "cmp.float.total_compare".into(),
         param_tys: Box::new(["Float".into(), "Float".into()]),
         result_ty: "Int".into(),
+        args: lowered_args,
+    }))
+}
+
+pub(super) fn lower_std_libm_intrinsic(
+    ctx: &mut LowerCtx<'_>,
+    callee: HirExprId,
+    args: &[HirArg],
+) -> Option<Result<IrExprKind, Box<str>>> {
+    if !is_std_libm_module(&ctx.module_key) {
+        return None;
+    }
+    let HirExprKind::Name { name } = ctx.sema.module().store.exprs.get(callee).kind else {
+        return None;
+    };
+    let target = match ctx.interner.resolve(name.name) {
+        "Musi__floatIsNan" => (IrIntrinsicKind::FloatIsNan, "float.is_nan", "Bit"),
+        "Musi__floatIsInfinite" => (IrIntrinsicKind::FloatIsInfinite, "float.is_infinite", "Bit"),
+        "Musi__floatIsFinite" => (IrIntrinsicKind::FloatIsFinite, "float.is_finite", "Bit"),
+        _ => return None,
+    };
+    let lowered_args = args
+        .iter()
+        .map(|arg| IrArg::new(false, lower_expr(ctx, arg.expr)))
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    Some(Ok(IrExprKind::IntrinsicCall {
+        kind: target.0,
+        symbol: target.1.into(),
+        param_tys: Box::new(["Float".into()]),
+        result_ty: target.2.into(),
         args: lowered_args,
     }))
 }
@@ -77,20 +108,18 @@ fn pointer_intrinsic_target(
     };
     let name = ctx.interner.resolve(name.name);
     match name {
-        "ptrNullIntrinsic" if is_std_ffi_module(&ctx.module_key) => Some(PointerIntrinsicTarget {
+        "Musi__ptrNull" if is_std_ffi_module(&ctx.module_key) => Some(PointerIntrinsicTarget {
             kind: IrIntrinsicKind::FfiPtrNull,
             symbol: "ffi.ptr.null".into(),
             param_tys: Box::default(),
             result_ty: "CPtr".into(),
         }),
-        "ptrIsNullIntrinsic" if is_std_ffi_module(&ctx.module_key) => {
-            Some(PointerIntrinsicTarget {
-                kind: IrIntrinsicKind::FfiPtrIsNull,
-                symbol: "ffi.ptr.is_null".into(),
-                param_tys: Box::new(["CPtr".into()]),
-                result_ty: "Bool".into(),
-            })
-        }
+        "Musi__ptrIsNull" if is_std_ffi_module(&ctx.module_key) => Some(PointerIntrinsicTarget {
+            kind: IrIntrinsicKind::FfiPtrIsNull,
+            symbol: "ffi.ptr.is_null".into(),
+            param_tys: Box::new(["CPtr".into()]),
+            result_ty: "Bit".into(),
+        }),
         "offset" if is_std_ffi_public_pointer_callee(ctx, callee) => {
             pointer_public_offset_target(ctx, type_arg?)
         }
@@ -163,21 +192,24 @@ fn pointer_storage_result_ty(ctx: &LowerCtx<'_>, type_arg: HirExprId) -> Option<
         "Float" | "Float32" | "Float64" | "CFloat" | "CDouble" => Some("Float".into()),
         "CPtr" => Some("CPtr".into()),
         "Nat" | "Nat8" | "Nat16" | "Nat32" | "Nat64" | "CUChar" | "CUShort" | "CUInt"
-        | "CULong" | "CULongLong" | "CSize" => Some("Nat".into()),
+        | "CULong" | "CULongLong" | "CSize" | "uint8_t" | "uint16_t" | "uint32_t" | "uint64_t"
+        | "uintptr_t" | "size_t" => Some("Nat".into()),
         _ => Some("Int".into()),
     }
 }
 
 fn pointer_storage_suffix(ctx: &LowerCtx<'_>, type_arg: HirExprId) -> Option<&'static str> {
     match pointer_storage_name(ctx, type_arg)?.as_ref() {
-        "CChar" | "CSChar" | "Int8" => Some("i8"),
-        "CUChar" | "Nat8" => Some("u8"),
-        "CShort" | "Int16" => Some("i16"),
-        "CUShort" | "Nat16" => Some("u16"),
-        "CInt" | "Int32" => Some("i32"),
-        "CUInt" | "Nat32" => Some("u32"),
-        "Int64" | "CLong" | "CLongLong" | "CSizeDiff" | "Int" => Some("i64"),
-        "Nat64" | "CULong" | "CULongLong" | "CSize" | "Nat" => Some("u64"),
+        "CChar" | "CSChar" | "Int8" | "char" | "int8_t" => Some("i8"),
+        "CUChar" | "Nat8" | "uint8_t" => Some("u8"),
+        "CShort" | "Int16" | "int16_t" => Some("i16"),
+        "CUShort" | "Nat16" | "uint16_t" => Some("u16"),
+        "CInt" | "Int32" | "int32_t" => Some("i32"),
+        "CUInt" | "Nat32" | "uint32_t" => Some("u32"),
+        "Int64" | "CLong" | "CLongLong" | "CSizeDiff" | "Int" | "int64_t" | "intptr_t"
+        | "ptrdiff_t" => Some("i64"),
+        "Nat64" | "CULong" | "CULongLong" | "CSize" | "Nat" | "uint64_t" | "uintptr_t"
+        | "size_t" => Some("u64"),
         "CFloat" | "Float32" => Some("f32"),
         "CDouble" | "Float64" | "Float" => Some("f64"),
         "CPtr" => Some("ptr"),
@@ -197,7 +229,7 @@ fn pointer_storage_name(ctx: &LowerCtx<'_>, type_arg: HirExprId) -> Option<Box<s
 
 fn is_std_ffi_module(module_key: &ModuleKey) -> bool {
     let key = module_key.as_str();
-    key == "@std/ffi" || key.ends_with("ffi.ms")
+    key == "musi:ffi" || key == "@std/ffi" || key.ends_with("ffi.ms")
 }
 
 fn is_std_cmp_module(module_key: &ModuleKey) -> bool {
@@ -207,6 +239,11 @@ fn is_std_cmp_module(module_key: &ModuleKey) -> bool {
         || key.ends_with("cmp.ms")
         || key.contains("cmp/std.ms::__laws")
         || key.contains("cmp.ms::__laws")
+}
+
+fn is_std_libm_module(module_key: &ModuleKey) -> bool {
+    let key = module_key.as_str();
+    key == "@std/libm" || key.ends_with("libm.ms")
 }
 
 fn is_std_ffi_public_pointer_callee(ctx: &LowerCtx<'_>, callee: HirExprId) -> bool {

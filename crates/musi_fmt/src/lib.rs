@@ -10,8 +10,11 @@ mod token_class;
 use std::io::Error as IoError;
 use std::path::PathBuf;
 
+pub use imports::organize_imports;
 pub use markdown::format_markdown;
-pub use paths::{FormatPathChange, FormatPathSummary, format_file, format_paths};
+pub use paths::{
+    FormatPathChange, FormatPathSummary, format_file, format_paths, format_text_for_path,
+};
 pub use source::{FormatResult, format_source};
 
 use musi_project::manifest::{
@@ -74,7 +77,7 @@ pub struct FormatOptions {
     pub call_argument_layout: GroupLayout,
     pub declaration_parameter_layout: GroupLayout,
     pub record_field_layout: GroupLayout,
-    pub effect_member_parameter_layout: GroupLayout,
+    pub member_parameter_layout: GroupLayout,
     pub operator_break: OperatorBreak,
     pub include: Vec<String>,
     pub exclude: Vec<String>,
@@ -94,7 +97,7 @@ impl Default for FormatOptions {
             call_argument_layout: GroupLayout::Auto,
             declaration_parameter_layout: GroupLayout::Auto,
             record_field_layout: GroupLayout::Auto,
-            effect_member_parameter_layout: GroupLayout::Auto,
+            member_parameter_layout: GroupLayout::Auto,
             operator_break: OperatorBreak::Before,
             include: Vec::new(),
             exclude: Vec::new(),
@@ -150,8 +153,8 @@ impl FormatOptions {
             if let Some(layout) = config.record_field_layout {
                 options.record_field_layout = GroupLayout::from_manifest_value(layout);
             }
-            if let Some(layout) = config.effect_member_parameter_layout {
-                options.effect_member_parameter_layout = GroupLayout::from_manifest_value(layout);
+            if let Some(layout) = config.member_parameter_layout {
+                options.member_parameter_layout = GroupLayout::from_manifest_value(layout);
             }
             if let Some(operator_break) = config.operator_break {
                 options.operator_break = OperatorBreak::from_manifest_value(operator_break);
@@ -176,7 +179,7 @@ impl FormatOptions {
                 self.call_argument_layout = GroupLayout::Block;
                 self.declaration_parameter_layout = GroupLayout::Block;
                 self.record_field_layout = GroupLayout::Block;
-                self.effect_member_parameter_layout = GroupLayout::Block;
+                self.member_parameter_layout = GroupLayout::Block;
             }
         }
     }

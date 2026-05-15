@@ -207,7 +207,7 @@ impl CheckPass<'_, '_, '_> {
             }
             HirTyKind::Bool => {
                 let tag_name = self.resolve_symbol(tag.name);
-                self.data_def("Bool")
+                self.data_def("Bit")
                     .and_then(|data| data.variant(tag_name))
                     .map(|variant| (variant.field_tys().to_vec(), variant.field_names().to_vec()))
                     .unwrap_or_default()

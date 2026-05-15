@@ -1,11 +1,8 @@
-use std::collections::BTreeSet;
-
 use music_arena::SliceRange;
 use music_hir::{HirDim, HirTyField, HirTyId, HirTyKind};
 use music_names::Symbol;
 
 use crate::checker::PassBase;
-use crate::effects::{EffectKey, EffectRow};
 
 use super::TypeSubstMap;
 
@@ -42,11 +39,6 @@ impl PassBase<'_, '_, '_> {
             HirTyKind::Range { bound } => {
                 self.substitute_item_ty(bound, subst, |bound| HirTyKind::Range { bound })
             }
-            HirTyKind::Handler {
-                effect,
-                input,
-                output,
-            } => self.substitute_handler_ty(effect, input, output, subst),
             HirTyKind::Mut { inner } => self.substitute_mut_ty(inner, subst),
             HirTyKind::AnyShape { capability } => self.substitute_shape_ty(capability, subst, true),
             HirTyKind::SomeShape { capability } => {
@@ -120,13 +112,12 @@ impl PassBase<'_, '_, '_> {
         let args = self.substitute_ty_list(args, subst);
         if name == self.known().bits {
             let arg_ids = self.ty_ids(args);
-            if let [width_ty] = arg_ids.as_slice() {
-                if let HirTyKind::NatLit(width) = self.ty(*width_ty).kind
-                    && width > 0
-                    && let Ok(width) = u32::try_from(width)
-                {
-                    return self.alloc_ty(HirTyKind::Bits { width });
-                }
+            if let [width_ty] = arg_ids.as_slice()
+                && let HirTyKind::NatLit(width) = self.ty(*width_ty).kind
+                && width > 0
+                && let Ok(width) = u32::try_from(width)
+            {
+                return self.alloc_ty(HirTyKind::Bits { width });
             }
         }
         self.alloc_ty(HirTyKind::Named { name, args })
@@ -157,23 +148,6 @@ impl PassBase<'_, '_, '_> {
         self.alloc_ty(HirTyKind::Array {
             dims,
             item: item_ty,
-        })
-    }
-
-    fn substitute_handler_ty(
-        &mut self,
-        effect: HirTyId,
-        input: HirTyId,
-        output: HirTyId,
-        subst: &TypeSubstMap,
-    ) -> HirTyId {
-        let effect = self.substitute_ty(effect, subst);
-        let input = self.substitute_ty(input, subst);
-        let output = self.substitute_ty(output, subst);
-        self.alloc_ty(HirTyKind::Handler {
-            effect,
-            input,
-            output,
         })
     }
 
@@ -241,24 +215,6 @@ impl PassBase<'_, '_, '_> {
             }
             _ if self.ty_ids(args).is_empty() => constructor,
             _ => constructor,
-        }
-    }
-
-    pub fn substitute_effect_row(&mut self, row: &EffectRow, subst: &TypeSubstMap) -> EffectRow {
-        let ctx = self;
-        let mut items = BTreeSet::new();
-        for item in &row.items {
-            let _ = items.insert(EffectKey {
-                name: item.name.clone(),
-                arg: item.arg.map(|arg| ctx.substitute_ty(arg, subst)),
-            });
-        }
-        EffectRow {
-            items,
-            open: row
-                .open
-                .as_deref()
-                .map(|name| ctx.fresh_open_row_name(name)),
         }
     }
 }

@@ -18,10 +18,10 @@ impl PassBase<'_, '_, '_> {
         if matches!(left, HirTyKind::Any) {
             return true;
         }
-        if let HirTyKind::Mut { inner } = right {
-            if self.ty_matches(expected, inner) {
-                return true;
-            }
+        if let HirTyKind::Mut { inner } = right
+            && self.ty_matches(expected, inner)
+        {
+            return true;
         }
         if matches!(left, HirTyKind::Error | HirTyKind::Unknown)
             || matches!(right, HirTyKind::Error | HirTyKind::Unknown)
@@ -160,22 +160,6 @@ impl PassBase<'_, '_, '_> {
 
     pub(super) fn ty_matches_handler_or_record(&self, left: &HirTyKind, right: &HirTyKind) -> bool {
         match (left, right) {
-            (
-                HirTyKind::Handler {
-                    effect: left_effect,
-                    input: left_input,
-                    output: left_output,
-                },
-                HirTyKind::Handler {
-                    effect: right_effect,
-                    input: right_input,
-                    output: right_output,
-                },
-            ) => {
-                self.ty_matches(*left_effect, *right_effect)
-                    && self.ty_matches(*left_input, *right_input)
-                    && self.ty_matches(*left_output, *right_output)
-            }
             (HirTyKind::Record { fields: left }, HirTyKind::Record { fields: right }) => {
                 self.record_tys_match(left.clone(), right.clone())
             }

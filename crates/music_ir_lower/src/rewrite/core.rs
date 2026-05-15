@@ -1,15 +1,14 @@
 use super::super::closures::lower_binding_capture_exprs;
 use super::super::{
-    DefinitionKey, IrArg, IrBinaryOp, IrExpr, IrExprKind, IrHandleOp, IrIntrinsicKind, IrNameRef,
-    IrOrigin, IrRecordField, IrRecordLayoutField, IrSeqPart, LowerCtx, NameBindingId,
+    DefinitionKey, IrArg, IrBinaryOp, IrExpr, IrExprKind, IrIntrinsicKind, IrNameRef, IrOrigin,
+    IrRecordField, IrRecordLayoutField, LowerCtx, NameBindingId,
 };
 use super::parts::{
     rewrite_array_cat_kind, rewrite_array_kind, rewrite_assign_kind, rewrite_call_args,
     rewrite_call_kind, rewrite_call_parts_kind, rewrite_case_kind, rewrite_expr_slice,
-    rewrite_handle_ops, rewrite_index_kind, rewrite_module_get_kind, rewrite_module_load_kind,
-    rewrite_not_kind, rewrite_record_fields, rewrite_record_get_kind, rewrite_resume_kind,
-    rewrite_seq_parts, rewrite_sequence_kind, rewrite_temp_let_kind, rewrite_tuple_kind,
-    rewrite_ty_cast_kind, rewrite_ty_test_kind,
+    rewrite_index_kind, rewrite_module_get_kind, rewrite_module_load_kind, rewrite_not_kind,
+    rewrite_record_fields, rewrite_record_get_kind, rewrite_sequence_kind, rewrite_temp_let_kind,
+    rewrite_tuple_kind, rewrite_ty_cast_kind, rewrite_ty_test_kind,
 };
 use music_ir::IrRangeKind;
 
@@ -176,6 +175,11 @@ impl RecursiveBindingInput<'_, '_> {
             IrExprKind::Binary { op, left, right } => self.rewrite_binary_kind(op, *left, *right),
             IrExprKind::BoolAnd { left, right } => self.rewrite_bool_and_kind(*left, *right),
             IrExprKind::BoolOr { left, right } => self.rewrite_bool_or_kind(*left, *right),
+            IrExprKind::If {
+                condition,
+                then_expr,
+                else_expr,
+            } => self.rewrite_if_kind(*condition, *then_expr, *else_expr),
             IrExprKind::Range {
                 ty_name,
                 kind,
@@ -193,6 +197,12 @@ impl RecursiveBindingInput<'_, '_> {
                 evidence,
                 result_ty_name,
             } => self.rewrite_range_materialize_kind(*range, *evidence, result_ty_name),
+            other => self.rewrite_compute_flow_kind(other),
+        }
+    }
+
+    fn rewrite_compute_flow_kind(&self, kind: IrExprKind) -> IrExprKind {
+        match kind {
             IrExprKind::Not { expr } => rewrite_not_kind(
                 self.ctx,
                 self.origin,
@@ -256,40 +266,6 @@ impl RecursiveBindingInput<'_, '_> {
                 self.origin,
                 *callee,
                 args,
-                self.binding,
-                self.callable_name,
-                self.captures,
-            ),
-            other => self.rewrite_effect_kind(other),
-        }
-    }
-
-    fn rewrite_effect_kind(&self, kind: IrExprKind) -> IrExprKind {
-        match kind {
-            IrExprKind::Request {
-                effect_key,
-                op_index,
-                args,
-            } => self.rewrite_perform_kind(effect_key, op_index, args),
-            IrExprKind::RequestSeq {
-                effect_key,
-                op_index,
-                args,
-            } => self.rewrite_perform_seq_kind(effect_key, op_index, args),
-            IrExprKind::AnswerLit {
-                effect_key,
-                value,
-                ops,
-            } => self.rewrite_answer_lit_kind(effect_key, *value, ops),
-            IrExprKind::Handle {
-                effect_key,
-                answer,
-                body,
-            } => self.rewrite_handle_kind(effect_key, *answer, *body),
-            IrExprKind::Resume { expr } => rewrite_resume_kind(
-                self.ctx,
-                self.origin,
-                expr.map(|expr| *expr),
                 self.binding,
                 self.callable_name,
                 self.captures,
@@ -455,6 +431,40 @@ impl RecursiveBindingInput<'_, '_> {
         }
     }
 
+    fn rewrite_if_kind(
+        &self,
+        condition: IrExpr,
+        then_expr: IrExpr,
+        else_expr: IrExpr,
+    ) -> IrExprKind {
+        IrExprKind::If {
+            condition: Box::new(rewrite_recursive_binding_refs(
+                self.ctx,
+                self.origin,
+                condition,
+                self.binding,
+                self.callable_name,
+                self.captures,
+            )),
+            then_expr: Box::new(rewrite_recursive_binding_refs(
+                self.ctx,
+                self.origin,
+                then_expr,
+                self.binding,
+                self.callable_name,
+                self.captures,
+            )),
+            else_expr: Box::new(rewrite_recursive_binding_refs(
+                self.ctx,
+                self.origin,
+                else_expr,
+                self.binding,
+                self.callable_name,
+                self.captures,
+            )),
+        }
+    }
+
     fn rewrite_intrinsic_call_kind(
         &self,
         kind: IrIntrinsicKind,
@@ -601,100 +611,6 @@ impl RecursiveBindingInput<'_, '_> {
                 self.callable_name,
                 self.captures,
             ),
-        }
-    }
-
-    fn rewrite_perform_kind(
-        &self,
-        effect_key: DefinitionKey,
-        op_index: u16,
-        args: Box<[IrExpr]>,
-    ) -> IrExprKind {
-        IrExprKind::Request {
-            effect_key,
-            op_index,
-            args: rewrite_expr_slice(
-                self.ctx,
-                self.origin,
-                args,
-                self.binding,
-                self.callable_name,
-                self.captures,
-            ),
-        }
-    }
-
-    fn rewrite_perform_seq_kind(
-        &self,
-        effect_key: DefinitionKey,
-        op_index: u16,
-        args: Box<[IrSeqPart]>,
-    ) -> IrExprKind {
-        IrExprKind::RequestSeq {
-            effect_key,
-            op_index,
-            args: rewrite_seq_parts(
-                self.ctx,
-                self.origin,
-                args,
-                self.binding,
-                self.callable_name,
-                self.captures,
-            ),
-        }
-    }
-
-    fn rewrite_answer_lit_kind(
-        &self,
-        effect_key: DefinitionKey,
-        value: IrExpr,
-        ops: Box<[IrHandleOp]>,
-    ) -> IrExprKind {
-        IrExprKind::AnswerLit {
-            effect_key,
-            value: Box::new(rewrite_recursive_binding_refs(
-                self.ctx,
-                self.origin,
-                value,
-                self.binding,
-                self.callable_name,
-                self.captures,
-            )),
-            ops: rewrite_handle_ops(
-                self.ctx,
-                self.origin,
-                ops,
-                self.binding,
-                self.callable_name,
-                self.captures,
-            ),
-        }
-    }
-
-    fn rewrite_handle_kind(
-        &self,
-        effect_key: DefinitionKey,
-        answer: IrExpr,
-        body: IrExpr,
-    ) -> IrExprKind {
-        IrExprKind::Handle {
-            effect_key,
-            answer: Box::new(rewrite_recursive_binding_refs(
-                self.ctx,
-                self.origin,
-                answer,
-                self.binding,
-                self.callable_name,
-                self.captures,
-            )),
-            body: Box::new(rewrite_recursive_binding_refs(
-                self.ctx,
-                self.origin,
-                body,
-                self.binding,
-                self.callable_name,
-                self.captures,
-            )),
         }
     }
 }

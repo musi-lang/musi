@@ -1,7 +1,7 @@
 use super::{
-    DefinitionKey, HirArg, HirDim, HirExprId, HirExprKind, HirTyId, HirTyKind, Interner, IrExpr,
-    IrExprKind, IrLit, IrOrigin, IrSeqPart, LowerCtx, NameSite, SemaModule, SliceRange, Symbol,
-    fresh_temp, lower_expr, lowering_invariant_violation, resolve_dot_callable_call_target,
+    HirArg, HirDim, HirExprId, HirExprKind, HirTyId, HirTyKind, Interner, IrExpr, IrExprKind,
+    IrLit, IrOrigin, IrSeqPart, LowerCtx, NameSite, SemaModule, SliceRange, Symbol, fresh_temp,
+    lower_expr, lowering_invariant_violation, resolve_dot_callable_call_target,
 };
 
 pub(super) fn ordered_call_args(
@@ -85,7 +85,7 @@ fn named_prefix_advance(sema: &SemaModule, arg: &HirArg, index: usize) -> Option
     }
 }
 
-fn call_param_names(sema: &SemaModule, interner: &Interner, callee: HirExprId) -> Box<[Symbol]> {
+fn call_param_names(sema: &SemaModule, _interner: &Interner, callee: HirExprId) -> Box<[Symbol]> {
     if let Some(target) = resolve_dot_callable_call_target(sema, callee)
         && let Some(binding) = target.binding
         && let Some(scheme) = sema.binding_scheme(binding)
@@ -103,16 +103,6 @@ fn call_param_names(sema: &SemaModule, interner: &Interner, callee: HirExprId) -
             .and_then(|binding| sema.binding_scheme(binding))
             .map(|scheme| scheme.param_names.clone())
             .unwrap_or_default(),
-        HirExprKind::Field { base, name, .. } => {
-            if let HirExprKind::Name { name: effect_name } =
-                sema.module().store.exprs.get(base).kind
-                && let Some(effect) = sema.effect_def(interner.resolve(effect_name.name))
-                && let Some(op) = effect.op(interner.resolve(name.name))
-            {
-                return op.param_names().to_vec().into_boxed_slice();
-            }
-            Box::default()
-        }
         _ => Box::default(),
     }
 }
@@ -120,28 +110,24 @@ fn call_param_names(sema: &SemaModule, interner: &Interner, callee: HirExprId) -
 #[derive(Clone, Copy)]
 pub(super) enum SpreadMode {
     Call,
-    Request,
 }
 
 impl SpreadMode {
     const fn runtime_any_message(self) -> &'static str {
         match self {
             Self::Call => "call runtime spread needs []Any",
-            Self::Request => "ask runtime spread needs []Any",
         }
     }
 
     const fn dims_message(self) -> &'static str {
         match self {
             Self::Call => "call spread needs 1D array or tuple",
-            Self::Request => "ask spread needs 1D array or tuple",
         }
     }
 
     const fn source_message(self) -> &'static str {
         match self {
             Self::Call => "call spread source is not tuple/array",
-            Self::Request => "ask spread source is not tuple/array",
         }
     }
 }
@@ -149,40 +135,6 @@ impl SpreadMode {
 pub(super) fn lower_origin(sema: &SemaModule, expr: HirExprId) -> IrOrigin {
     let origin = sema.module().store.exprs.get(expr).origin;
     IrOrigin::new(origin.source_id, origin.span)
-}
-
-pub(super) fn resolve_request_target(
-    sema: &SemaModule,
-    interner: &Interner,
-    expr: HirExprId,
-) -> Result<(DefinitionKey, u16, HirExprId, SliceRange<HirArg>), Box<str>> {
-    let HirExprKind::Call { callee, ref args } = sema.module().store.exprs.get(expr).kind else {
-        return Err(super::lower_errors::lowering_error("ask without call"));
-    };
-    let HirExprKind::Field { base, name, .. } = sema.module().store.exprs.get(callee).kind else {
-        return Err(super::lower_errors::lowering_error(
-            "ask without effect op field access",
-        ));
-    };
-    let HirExprKind::Name { name: effect_name } = sema.module().store.exprs.get(base).kind else {
-        return Err(super::lower_errors::lowering_error(
-            "ask without effect name",
-        ));
-    };
-    let effect_name = interner.resolve(effect_name.name);
-    let op_name = interner.resolve(name.name);
-    let Some(effect) = sema.effect_def(effect_name) else {
-        return Err(super::lower_errors::lowering_error(
-            "ask with unknown effect",
-        ));
-    };
-    let op_index = effect.op_index(op_name).unwrap_or(u16::MAX);
-    if op_index == u16::MAX {
-        return Err(super::lower_errors::lowering_error(
-            "ask with unknown effect op",
-        ));
-    }
-    Ok((effect.key().clone(), op_index, callee, args.clone()))
 }
 
 pub(super) fn lower_spread_args(
@@ -254,11 +206,11 @@ fn lower_spread_arg(
         HirTyKind::Range { bound } => {
             let result_ty_name =
                 format!("[]{}", super::render_ty_name(sema, *bound, ctx.interner)).into();
-            let constraint_answer = sema
-                .expr_constraint_answers(spread_expr)
+            let constraint_evidence = sema
+                .expr_constraint_evidence(spread_expr)
                 .and_then(|items| items.first())
-                .map(|item| super::lower_constraint_answer_expr(ctx, origin, item));
-            let Some(constraint_answer) = constraint_answer else {
+                .map(|item| super::lower_constraint_evidence_expr(ctx, origin, item));
+            let Some(constraint_evidence) = constraint_evidence else {
                 return Err(super::lower_errors::lowering_error(
                     "range spread evidence missing",
                 ));
@@ -267,7 +219,7 @@ fn lower_spread_arg(
                 origin,
                 IrExprKind::RangeMaterialize {
                     range: Box::new(temp_expr.clone()),
-                    evidence: Box::new(constraint_answer),
+                    evidence: Box::new(constraint_evidence),
                     result_ty_name,
                 },
             )));

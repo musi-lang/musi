@@ -1,23 +1,20 @@
 use std::collections::BTreeMap;
 
-use music_hir::{HirOrigin, HirTyId};
+use music_hir::HirTyId;
 use music_module::ModuleKey;
 use music_names::{NameBindingId, Symbol};
-
-use crate::effects::EffectRow;
 
 use super::{DefinitionKey, HirTyIdList, SymbolList};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExprFacts {
     pub ty: HirTyId,
-    pub effects: EffectRow,
 }
 
 impl ExprFacts {
     #[must_use]
-    pub const fn new(ty: HirTyId, effects: EffectRow) -> Self {
-        Self { ty, effects }
+    pub const fn new(ty: HirTyId) -> Self {
+        Self { ty }
     }
 }
 
@@ -34,12 +31,10 @@ pub enum ExprMemberKind {
     AttachedMethod,
     /// Attached method reached through receiver type namespace.
     AttachedMethodNamespace,
-    /// Member projected from contextual answer lookup.
+    /// Member projected from contextual evidence lookup.
     ShapeMember,
     /// Export reached through std FFI pointer namespace support.
     FfiPointerExport,
-    /// Operation exposed by an effect value.
-    EffectOperation,
 }
 
 /// Resolved target information for a member access expression.
@@ -86,21 +81,6 @@ impl ExprMemberFact {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SemaEffectOpDef {
-    params: HirTyIdList,
-    param_names: Box<[Symbol]>,
-    result: HirTyId,
-    is_comptime_safe: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SemaEffectDef {
-    key: DefinitionKey,
-    ops: BTreeMap<Box<str>, SemaEffectOpDef>,
-    laws: Box<[LawFacts]>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SemaDataVariantDef {
     tag: i64,
     payload: Option<HirTyId>,
@@ -121,96 +101,6 @@ pub struct SemaDataDef {
     layout_pack: Option<u32>,
     frozen: bool,
 }
-
-impl SemaEffectOpDef {
-    #[must_use]
-    pub(crate) fn new<Params, Names>(params: Params, param_names: Names, result: HirTyId) -> Self
-    where
-        Params: Into<HirTyIdList>,
-        Names: Into<Box<[Symbol]>>,
-    {
-        Self {
-            params: params.into(),
-            param_names: param_names.into(),
-            result,
-            is_comptime_safe: false,
-        }
-    }
-
-    #[must_use]
-    pub const fn with_comptime_safe(mut self, is_comptime_safe: bool) -> Self {
-        self.is_comptime_safe = is_comptime_safe;
-        self
-    }
-
-    #[must_use]
-    pub fn params(&self) -> &[HirTyId] {
-        &self.params
-    }
-
-    #[must_use]
-    pub fn param_names(&self) -> &[Symbol] {
-        &self.param_names
-    }
-
-    #[must_use]
-    pub const fn result(&self) -> HirTyId {
-        self.result
-    }
-
-    #[must_use]
-    pub const fn is_comptime_safe(&self) -> bool {
-        self.is_comptime_safe
-    }
-}
-
-impl SemaEffectDef {
-    #[must_use]
-    pub(crate) fn new(
-        key: DefinitionKey,
-        ops: impl Into<BTreeMap<Box<str>, SemaEffectOpDef>>,
-        laws: impl Into<Box<[LawFacts]>>,
-    ) -> Self {
-        Self {
-            key,
-            ops: ops.into(),
-            laws: laws.into(),
-        }
-    }
-
-    #[must_use]
-    pub const fn key(&self) -> &DefinitionKey {
-        &self.key
-    }
-
-    #[must_use]
-    pub fn op(&self, name: &str) -> Option<&SemaEffectOpDef> {
-        self.ops.get(name)
-    }
-
-    #[must_use]
-    pub fn op_index(&self, name: &str) -> Option<u16> {
-        self.ops
-            .keys()
-            .position(|entry| entry.as_ref() == name)
-            .and_then(|index| u16::try_from(index).ok())
-    }
-
-    #[must_use]
-    pub fn op_count(&self) -> usize {
-        self.ops.len()
-    }
-
-    pub fn ops(&self) -> impl Iterator<Item = (&str, &SemaEffectOpDef)> {
-        self.ops.iter().map(|(name, def)| (name.as_ref(), def))
-    }
-
-    #[must_use]
-    pub fn laws(&self) -> &[LawFacts] {
-        &self.laws
-    }
-}
-
 impl SemaDataVariantDef {
     #[must_use]
     pub(crate) fn new<FieldTys>(
@@ -386,7 +276,6 @@ impl PatFacts {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ConstraintKind {
-    Subtype,
     Implements,
     TypeEq,
 }
@@ -443,7 +332,7 @@ impl ConstraintKey {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ConstraintAnswer {
+pub enum ConstraintEvidence {
     Param {
         key: ConstraintKey,
     },
@@ -552,72 +441,6 @@ impl ShapeFacts {
     #[must_use]
     pub fn with_constraints(mut self, constraints: impl Into<Box<[ConstraintFacts]>>) -> Self {
         self.constraints = constraints.into();
-        self
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GivenFacts {
-    pub origin: HirOrigin,
-    pub type_params: Box<[Symbol]>,
-    pub type_param_kinds: HirTyIdList,
-    pub shape_key: DefinitionKey,
-    pub shape_name: Symbol,
-    pub shape_args: HirTyIdList,
-    pub constraints: Box<[ConstraintFacts]>,
-    pub evidence_keys: Box<[ConstraintKey]>,
-    pub member_names: Box<[Symbol]>,
-}
-
-impl GivenFacts {
-    #[must_use]
-    pub fn new<ShapeArgs>(
-        origin: HirOrigin,
-        shape_key: DefinitionKey,
-        shape_name: Symbol,
-        shape_args: ShapeArgs,
-        member_names: impl Into<SymbolList>,
-    ) -> Self
-    where
-        ShapeArgs: Into<HirTyIdList>,
-    {
-        Self {
-            origin,
-            type_params: Box::default(),
-            type_param_kinds: Box::default(),
-            shape_key,
-            shape_name,
-            shape_args: shape_args.into(),
-            constraints: Box::default(),
-            evidence_keys: Box::default(),
-            member_names: member_names.into(),
-        }
-    }
-
-    #[must_use]
-    pub fn with_type_params(mut self, type_params: impl Into<SymbolList>) -> Self {
-        self.type_params = type_params.into();
-        self
-    }
-
-    #[must_use]
-    pub fn with_type_param_kinds<TypeParamKinds>(mut self, type_param_kinds: TypeParamKinds) -> Self
-    where
-        TypeParamKinds: Into<HirTyIdList>,
-    {
-        self.type_param_kinds = type_param_kinds.into();
-        self
-    }
-
-    #[must_use]
-    pub fn with_constraints(mut self, constraints: impl Into<Box<[ConstraintFacts]>>) -> Self {
-        self.constraints = constraints.into();
-        self
-    }
-
-    #[must_use]
-    pub fn with_evidence_keys(mut self, evidence_keys: impl Into<Box<[ConstraintKey]>>) -> Self {
-        self.evidence_keys = evidence_keys.into();
         self
     }
 }

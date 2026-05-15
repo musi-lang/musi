@@ -27,8 +27,15 @@ impl CstFormatter<'_> {
         if self.write_ignored_token(kind, text, span) || self.skip_current_token(span, options) {
             return;
         }
+        if options.break_before_else()
+            && let Some(frame) = self.parens.last_mut()
+        {
+            frame.broke = true;
+        }
         if options.break_before_operator() {
             self.continuation_indent = self.continuation_indent.max(1);
+            self.newline();
+        } else if options.break_before_else() {
             self.newline();
         }
         self.write_token_body(kind, text, role, options);
@@ -154,6 +161,7 @@ impl CstFormatter<'_> {
             self.newline();
         }
         self.update_state(kind);
+        self.before_previous = self.previous;
         self.previous = Some(kind);
         self.update_pending_attachment(role);
         self.set_last_token_end(span);
@@ -177,10 +185,10 @@ impl CstFormatter<'_> {
     ) -> bool {
         if self.options.line_width == 0
             || self.options.trailing_commas != TrailingCommas::MultiLine
-            || !self
-                .parens
-                .last()
-                .is_some_and(|frame| matches!(frame.kind, ParenKind::Regular | ParenKind::Bracket))
+            || !self.parens.last().is_some_and(|frame| {
+                frame.allows_trailing_comma
+                    && matches!(frame.kind, ParenKind::Regular | ParenKind::Bracket)
+            })
         {
             return false;
         }
@@ -247,6 +255,29 @@ impl CstFormatter<'_> {
             .saturating_add(usize::from(next_len > 0))
             .saturating_add(next_len)
             > self.options.line_width
+    }
+
+    pub(super) fn should_break_before_current_else(
+        &self,
+        lexed: &LexedSource,
+        token_index: usize,
+    ) -> bool {
+        let token = lexed.tokens()[token_index];
+        if self.options.line_width == 0 || self.at_line_start || token.kind != TokenKind::KwElse {
+            return false;
+        }
+        let Some(text) = lexed.token_text(token_index) else {
+            return false;
+        };
+        let else_len = rhs_flat_len(lexed, token_index.saturating_add(1));
+        else_len > 0
+            && self
+                .line_len
+                .saturating_add(usize::from(self.needs_space_before(TokenKind::KwElse)))
+                .saturating_add(text.len())
+                .saturating_add(1)
+                .saturating_add(else_len)
+                > self.options.line_width
     }
 
     pub(super) fn should_break_after_current_colon_eq(
@@ -328,11 +359,28 @@ impl CstFormatter<'_> {
                 .saturating_add(text.len())
                 <= self.options.line_width;
         }
+        if token.kind == TokenKind::LParen
+            && (matches!(
+                role,
+                CstLeafRole::ParamParen | CstLeafRole::MemberParamParen
+            ) || self.declaration_state == DeclarationState::NameBeforeParams
+                || self.declaration_head_active && self.previous == Some(TokenKind::Ident))
+        {
+            return line_len.saturating_add(space_len).saturating_add(group_len)
+                > self.options.line_width
+                && line_len
+                    .saturating_add(space_len)
+                    .saturating_add(text.len())
+                    <= self.options.line_width;
+        }
         let flat_len = if matches!(
             role,
             CstLeafRole::ParamParen | CstLeafRole::MemberParamParen
-        ) || self.declaration_head_active
+        ) || self.declaration_state == DeclarationState::NameBeforeParams
+            || self.declaration_head_active && self.previous == Some(TokenKind::Ident)
         {
+            group_len
+        } else if self.declaration_head_active {
             let tail_len = declaration_tail_flat_len(lexed, token_index);
             if group_len > self.options.line_width / 2 {
                 tail_len.max(self.options.line_width.saturating_add(1))
@@ -356,7 +404,7 @@ impl CstFormatter<'_> {
                 self.options.declaration_parameter_layout == GroupLayout::Block
             }
             CstLeafRole::MemberParamParen => {
-                self.options.effect_member_parameter_layout == GroupLayout::Block
+                self.options.member_parameter_layout == GroupLayout::Block
             }
             _ => false,
         }
@@ -396,6 +444,9 @@ impl CstFormatter<'_> {
 
     fn write_open_paren(&mut self, text: &str, role: CstLeafRole, break_after_open: bool) {
         let paren = match role {
+            CstLeafRole::SequenceParen if self.previous == Some(TokenKind::KwUnsafe) => {
+                Some(ParenKind::UnsafeSequence)
+            }
             CstLeafRole::SequenceParen => Some(ParenKind::Sequence),
             CstLeafRole::MatchParen
                 if self.options.match_arm_indent == MatchArmIndent::PipeAligned =>
@@ -407,12 +458,16 @@ impl CstFormatter<'_> {
             _ => None,
         };
         if let Some(paren) = paren {
-            if matches!(paren, ParenKind::Sequence) {
+            if matches!(paren, ParenKind::Sequence | ParenKind::UnsafeSequence) {
                 self.continuation_indent = 0;
-                if !self.at_line_start {
+                if matches!(paren, ParenKind::UnsafeSequence) {
+                    self.push_space();
+                } else if !self.at_line_start {
                     self.newline();
                 }
-                self.indent = self.indent.saturating_add(1);
+                if matches!(paren, ParenKind::Sequence) {
+                    self.indent = self.indent.saturating_add(1);
+                }
             } else if !self.at_line_start {
                 self.push_space();
             }
@@ -458,18 +513,30 @@ impl CstFormatter<'_> {
     }
 
     fn write_open_bracket(&mut self, text: &str, role: CstLeafRole, break_after_open: bool) {
+        let role = if role == CstLeafRole::Regular && self.previous.is_some_and(is_word_like) {
+            CstLeafRole::ApplyBracket
+        } else {
+            role
+        };
         if matches!(
             role,
             CstLeafRole::TypeParamBracket | CstLeafRole::ArrayTypeBracket
         ) || self.previous == Some(TokenKind::ColonEq)
             || self.previous == Some(TokenKind::Pipe)
+            || self.previous.is_some_and(is_operator)
         {
             self.push_space();
         }
         self.write_punct(TokenKind::LBracket, text);
+        let allows_trailing_comma = !matches!(
+            role,
+            CstLeafRole::TypeParamBracket
+                | CstLeafRole::ApplyBracket
+                | CstLeafRole::ArrayTypeBracket
+        );
         self.parens.push(ParenFrame::with_trailing_commas(
             ParenKind::Bracket,
-            role != CstLeafRole::TypeParamBracket,
+            allows_trailing_comma,
         ));
         self.indent = self.indent.saturating_add(1);
         if break_after_open {
@@ -625,7 +692,7 @@ impl CstFormatter<'_> {
             TokenKind::Ident if self.declaration_state == DeclarationState::WaitingName => {
                 self.declaration_state = DeclarationState::NameBeforeParams;
             }
-            TokenKind::KwExport | TokenKind::KwRec | TokenKind::KwPartial => {}
+            TokenKind::KwExport => {}
             _ if kind != TokenKind::LParen
                 && !matches!(kind, TokenKind::LBracket | TokenKind::RBracket) =>
             {

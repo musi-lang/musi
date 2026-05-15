@@ -1,12 +1,11 @@
 use music_arena::SliceRange;
 use music_hir::{
-    HirArg, HirArrayItem, HirAttr, HirExprId, HirExprKind, HirFieldDef, HirHandleClause,
-    HirMatchArm, HirMemberDef, HirParam, HirPatId, HirPatKind, HirRecordItem, HirTemplatePart,
-    HirVariantDef,
+    HirArg, HirArrayItem, HirAttr, HirExprId, HirExprKind, HirFieldDef, HirMatchArm, HirMemberDef,
+    HirParam, HirPatId, HirPatKind, HirRecordItem, HirTemplatePart, HirVariantDef,
 };
 use music_names::{Ident, Interner, NameSite};
 
-use super::model::{ExportBinding, ExportGiven, ModuleExports};
+use super::model::{ExportBinding, ModuleExports};
 use crate::checker::ModuleState;
 
 pub(in crate::checker::surface) fn collect_module_exports(
@@ -113,13 +112,16 @@ fn collect_call_like_exports(
         }
         HirExprKind::Lambda { body, .. }
         | HirExprKind::Import { arg: body }
-        | HirExprKind::Request { expr: body }
         | HirExprKind::Unsafe { body } => {
             collect_expr(module, interner, *body, exports, attr_stack);
         }
         HirExprKind::Pin { value, body, .. } => {
             collect_expr(module, interner, *value, exports, attr_stack);
             collect_expr(module, interner, *body, exports, attr_stack);
+        }
+        HirExprKind::Defer { cleanup, guard } => {
+            collect_expr(module, interner, *cleanup, exports, attr_stack);
+            collect_optional_expr(module, interner, *guard, exports, attr_stack);
         }
         HirExprKind::Call { callee, args } => {
             collect_expr(module, interner, *callee, exports, attr_stack);
@@ -152,43 +154,32 @@ fn collect_decl_or_control_exports(
     attr_stack: &mut Vec<HirAttr>,
 ) -> bool {
     match kind {
-        HirExprKind::Let { value, .. } => {
+        HirExprKind::Let { mods, value, .. } => {
             collect_expr(module, interner, *value, exports, attr_stack);
+            collect_optional_expr(module, interner, mods.fallback, exports, attr_stack);
         }
         HirExprKind::Match { scrutinee, arms } => {
             collect_match_exports(module, interner, *scrutinee, arms, exports, attr_stack);
         }
+        HirExprKind::If {
+            condition,
+            then_expr,
+            else_expr,
+        } => {
+            collect_expr(module, interner, *condition, exports, attr_stack);
+            collect_expr(module, interner, *then_expr, exports, attr_stack);
+            collect_expr(module, interner, *else_expr, exports, attr_stack);
+        }
         HirExprKind::Data { variants, fields } => {
             collect_data_exports(module, interner, variants, fields, exports, attr_stack);
         }
-        HirExprKind::Effect { members } | HirExprKind::Shape { members, .. } => {
+        HirExprKind::Shape { members, .. } => {
             collect_member_exports(module, interner, members, exports, attr_stack);
         }
-        HirExprKind::Given {
-            capability,
-            members,
-            ..
-        } => {
-            collect_expr(module, interner, *capability, exports, attr_stack);
-            collect_member_exports(module, interner, members, exports, attr_stack);
-        }
-        HirExprKind::AnswerLit { clauses, .. } => {
-            collect_handle_clause_exports(module, interner, clauses, exports, attr_stack);
-        }
-        HirExprKind::Handle { expr, handler } => {
-            collect_expr(module, interner, *expr, exports, attr_stack);
-            collect_expr(module, interner, *handler, exports, attr_stack);
-        }
-        HirExprKind::Resume { expr } => {
-            collect_optional_expr(module, interner, *expr, exports, attr_stack);
-        }
-        HirExprKind::Quote { .. }
-        | HirExprKind::Splice { .. }
-        | HirExprKind::Error
+        HirExprKind::Error
         | HirExprKind::Name { .. }
         | HirExprKind::Lit { .. }
         | HirExprKind::ArrayTy { .. }
-        | HirExprKind::AnswerTy { .. }
         | HirExprKind::Variant { .. } => {}
         _ => return false,
     }
@@ -417,24 +408,6 @@ fn collect_member_exports(
     }
 }
 
-fn collect_handle_clause_exports(
-    module: &ModuleState,
-    interner: &Interner,
-    clauses: &SliceRange<HirHandleClause>,
-    exports: &mut ModuleExports,
-    attr_stack: &mut Vec<HirAttr>,
-) {
-    for clause in module
-        .resolved
-        .module
-        .store
-        .handle_clauses
-        .get(clauses.clone())
-    {
-        collect_expr(module, interner, clause.body, exports, attr_stack);
-    }
-}
-
 fn collect_direct_exports(
     module: &ModuleState,
     interner: &Interner,
@@ -443,42 +416,9 @@ fn collect_direct_exports(
     exports: &mut ModuleExports,
     attr_stack: &[HirAttr],
 ) {
-    match &module.resolved.module.store.exprs.get(expr_id).kind {
-        HirExprKind::Let { pat, value, .. } => {
-            if matches!(
-                module.resolved.module.store.exprs.get(*value).kind,
-                HirExprKind::Given { .. }
-            ) {
-                collect_exported_given(module, *value, opaque, exports, attr_stack);
-                return;
-            }
-            collect_export_bindings_from_pat(module, interner, *pat, opaque, exports, attr_stack);
-        }
-        HirExprKind::Given { .. } => {
-            collect_exported_given(module, expr_id, opaque, exports, attr_stack);
-        }
-        _ => {}
+    if let HirExprKind::Let { pat, .. } = &module.resolved.module.store.exprs.get(expr_id).kind {
+        collect_export_bindings_from_pat(module, interner, *pat, opaque, exports, attr_stack);
     }
-}
-
-fn collect_exported_given(
-    module: &ModuleState,
-    expr_id: HirExprId,
-    opaque: bool,
-    exports: &mut ModuleExports,
-    attr_stack: &[HirAttr],
-) {
-    let span = module.resolved.module.store.exprs.get(expr_id).origin.span;
-    if opaque {
-        return;
-    }
-    if exports.givens.iter().any(|export| export.span == span) {
-        return;
-    }
-    exports.givens.push(ExportGiven {
-        span,
-        attrs: attr_stack.to_vec().into_boxed_slice(),
-    });
 }
 
 fn collect_export_bindings_from_pat(

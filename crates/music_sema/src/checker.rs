@@ -17,9 +17,8 @@ mod surface;
 mod variant_payload;
 
 use state::{
-    CheckPass, CollectPass, DataDef, DataVariantDef, DeclState, EffectDef, EffectOpDef, FactState,
-    ModuleState, PassBase, PassParts, ResumeCtx, ResumeState, RuntimeEnv, TypingState,
-    finish_module, prepare_module,
+    CheckPass, CollectPass, DataDef, DataVariantDef, DeclState, FactState, ModuleState, PassBase,
+    PassParts, RuntimeEnv, TypingState, finish_module, prepare_module,
 };
 
 use crate::api::ModuleSurface;
@@ -31,7 +30,6 @@ struct Checker<'interner, 'env> {
     typing: TypingState,
     decls: DeclState,
     facts: FactState,
-    resume: ResumeState,
 }
 
 #[must_use]
@@ -43,7 +41,6 @@ pub fn check_module(
     let mut checker = Checker::new(resolved, interner, options);
     checker.collect_module();
     checker.check_root();
-    checker.check_instance_coherence();
     checker.finish()
 }
 
@@ -54,15 +51,13 @@ impl<'interner, 'env> Checker<'interner, 'env> {
         options: SemaOptions<'env>,
     ) -> Self {
         let prelude = options.prelude.cloned();
-        let (module, runtime, typing, decls, facts, resume) =
-            prepare_module(resolved, interner, options);
+        let (module, runtime, typing, decls, facts) = prepare_module(resolved, interner, options);
         let mut this = Self {
             module,
             runtime,
             typing,
             decls,
             facts,
-            resume,
         };
         this.seed_import_bindings();
         if let Some(prelude) = prelude.as_ref() {
@@ -78,7 +73,6 @@ impl<'interner, 'env> Checker<'interner, 'env> {
             typing,
             decls,
             facts,
-            resume,
         } = self;
         let base = PassBase::new(PassParts {
             module,
@@ -88,7 +82,7 @@ impl<'interner, 'env> Checker<'interner, 'env> {
             facts,
         });
         let collect = CollectPass::new(base);
-        let mut check = CheckPass::new(collect, resume);
+        let mut check = CheckPass::new(collect);
         decls::seed_import_bindings(&mut check);
     }
 
@@ -99,7 +93,6 @@ impl<'interner, 'env> Checker<'interner, 'env> {
             typing,
             decls,
             facts,
-            resume,
         } = self;
         let base = PassBase::new(PassParts {
             module,
@@ -109,7 +102,7 @@ impl<'interner, 'env> Checker<'interner, 'env> {
             facts,
         });
         let collect = CollectPass::new(base);
-        let mut check = CheckPass::new(collect, resume);
+        let mut check = CheckPass::new(collect);
         decls::seed_prelude_bindings(&mut check, prelude);
     }
 
@@ -120,7 +113,6 @@ impl<'interner, 'env> Checker<'interner, 'env> {
             typing,
             decls,
             facts,
-            ..
         } = self;
         let base = PassBase::new(PassParts {
             module,
@@ -140,7 +132,6 @@ impl<'interner, 'env> Checker<'interner, 'env> {
             typing,
             decls,
             facts,
-            resume,
         } = self;
         let base = PassBase::new(PassParts {
             module,
@@ -150,30 +141,9 @@ impl<'interner, 'env> Checker<'interner, 'env> {
             facts,
         });
         let collect = CollectPass::new(base);
-        let mut check = CheckPass::new(collect, resume);
+        let mut check = CheckPass::new(collect);
         let root = check.root_expr_id();
         let _root_facts = exprs::check_module_root(&mut check, root);
-    }
-
-    fn check_instance_coherence(&mut self) {
-        let Self {
-            module,
-            runtime,
-            typing,
-            decls,
-            facts,
-            resume,
-        } = self;
-        let base = PassBase::new(PassParts {
-            module,
-            runtime,
-            typing,
-            decls,
-            facts,
-        });
-        let collect = CollectPass::new(base);
-        let mut check = CheckPass::new(collect, resume);
-        check.check_instance_coherence();
     }
 
     fn finish(self) -> SemaModule {
@@ -183,7 +153,6 @@ impl<'interner, 'env> Checker<'interner, 'env> {
             typing,
             decls,
             facts,
-            resume: _,
         } = self;
         finish_module(module, &runtime, &typing, decls, facts)
     }

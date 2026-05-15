@@ -13,6 +13,7 @@ struct CatalogEntry {
     help: Option<&'static str>,
 }
 
+#[rustfmt::skip]
 const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: SessionDiagKind::ModuleNotRegistered,
@@ -150,6 +151,7 @@ pub fn from_code(raw: u16) -> Option<SessionDiagKind> {
         .map(|entry| entry.kind)
 }
 
+#[rustfmt::skip]
 pub const fn session_error_kind(source: &crate::SessionError) -> SessionDiagKind {
     match source {
         crate::SessionError::ModuleNotRegistered { .. } => SessionDiagKind::ModuleNotRegistered,
@@ -168,6 +170,7 @@ pub const fn session_error_kind(source: &crate::SessionError) -> SessionDiagKind
     }
 }
 
+#[rustfmt::skip]
 pub const fn session_source_map_error_kind(
     source: &crate::SessionSourceMapError,
 ) -> SessionDiagKind {

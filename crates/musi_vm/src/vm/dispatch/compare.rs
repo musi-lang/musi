@@ -47,6 +47,18 @@ impl Vm {
         let ordering = match (left, right) {
             (Value::Int(left), Value::Int(right)) => left.cmp(right),
             (Value::Nat(left), Value::Nat(right)) => left.cmp(right),
+            (Value::Nat(left), Value::Int(right)) => {
+                let Ok(right) = u64::try_from(*right) else {
+                    return Ok(op(Ordering::Greater));
+                };
+                left.cmp(&right)
+            }
+            (Value::Int(left), Value::Nat(right)) => {
+                let Ok(left) = u64::try_from(*left) else {
+                    return Ok(op(Ordering::Less));
+                };
+                left.cmp(right)
+            }
             (Value::Float(left), Value::Float(right)) => left.total_cmp(right),
             (Value::String(left), Value::String(right)) => {
                 self.heap.string(*left)?.cmp(self.heap.string(*right)?)

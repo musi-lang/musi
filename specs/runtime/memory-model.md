@@ -2,15 +2,15 @@
 
 Status: proposed
 
-This spec defines Musi's runtime memory law.
+This spec defines Musi's runtime memory rules.
 
 It does not claim current implementation completeness. Current repo facts that inform this spec include:
 
 - `Array`, `CString`, and `CPtr` already exist in `crates/musi_foundation/modules/core.ms`
-- `CString` and `CPtr` are re-exported by `packages/std/prelude.ms`
+- `CString` and `CPtr` are re-exported by `lib/std/prelude.ms`
 - current VM values include `CPtr` and heap-backed data in `crates/musi_vm/src/value.rs`
 
-## Core Law
+## Core Rules
 
 Musi uses one managed-core memory model.
 
@@ -37,7 +37,7 @@ Musi does not expose Rust lifetimes, borrow sigils, or `unsafe` block syntax as 
 - no escaping borrowed views
 - no stable managed address without runtime/native pin support
 
-Rust references may implement or protect these runtime invariants, but Musi docs must state the Musi law rather than Rust syntax.
+Rust references may implement or protect these runtime invariants, but Musi docs must state the Musi rules rather than Rust syntax.
 
 ## Nullability
 
@@ -46,7 +46,7 @@ Null is never an ambient inhabitant of reference-like types.
 Rules:
 
 - `Ref[T]`, `MutRef[T]`, `Slice[T]`, and `Ptr[T]` are non-null
-- nullable address results use `Option[...]`
+- nullable address results use `Maybe[...]`
 - C-facing nulls are translated explicitly at the interop boundary
 
 ## Ownership And Aliasing
@@ -64,13 +64,13 @@ Borrow escape is illegal in safe code. Borrowed values may not be:
 - stored in long-lived aggregates
 - returned from functions
 - captured by closures
-- retained across handler suspension or resume boundaries
+- retained across suspension boundaries
 
-Alias law:
+Alias rule:
 
 - any number of `Ref[T]` borrows may coexist
 - `MutRef[T]` is exclusive for its lifetime
-- `Slice[T]` follows same borrow law as other safe views
+- `Slice[T]` follows same borrow rule as other safe views
 - mutation through alias needs exclusive writable borrow or explicit cell/handle types defined elsewhere
 
 ## Movement And Pinning

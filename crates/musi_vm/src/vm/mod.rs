@@ -1,14 +1,13 @@
 use super::gc::{HeapCollectionStats, HeapOptions, RuntimeHeap};
-pub use super::host::{EffectCall, ForeignCall, VmHostContext};
+pub use super::host::{ForeignCall, VmHostContext};
 pub use super::loader::{RejectingLoader, VmLoader};
 pub use super::program::{
     CompareOp, RuntimeCallMode, RuntimeCallShape, RuntimeFusedOp, RuntimeInstruction,
     RuntimeInstructionList, RuntimeKernel, RuntimeOperand, RuntimeSeq2Mutation,
 };
 pub use super::value::{
-    ClosureValue, ClosureView, ContinuationFrame, ContinuationHandler, ContinuationValue,
-    DataValue, ForeignValue, GcRef, ModuleValue, ModuleView, ProcedureValue, SequenceValue,
-    SyntaxView, ValueList,
+    ClosureValue, ClosureView, DataValue, ForeignValue, GcRef, ModuleValue, ModuleView,
+    ProcedureValue, SequenceValue, SyntaxView, ValueList,
 };
 
 pub use super::{
@@ -34,8 +33,7 @@ mod state;
 mod value_support;
 
 use self::state::{
-    CallFrame, CallFrameList, EffectHandlerList, LoadedModuleList, ModuleSlotMap, ResumeList,
-    Seq8ExportCache, Seq8ExportCacheList,
+    CallFrame, CallFrameList, LoadedModuleList, ModuleSlotMap, Seq8ExportCache, Seq8ExportCacheList,
 };
 
 mod boundary;
@@ -46,7 +44,9 @@ mod runtime;
 pub use bound::{
     BoundExportCall, BoundI64Call, BoundInitCall, BoundSeq2x2Arg, BoundSeq2x2Call, BoundSeq8Call,
 };
-pub use options::{MvmFeatures, MvmMode, MvmOptionsParseError, VmOptimizationLevel, VmOptions};
+pub use options::{
+    MvmFeatures, MvmMode, MvmModeBundle, MvmOptionsParseError, VmOptimizationLevel, VmOptions,
+};
 pub use runtime::VmRuntime;
 
 use self::boundary::{HostState, LoaderState};
@@ -58,10 +58,6 @@ pub struct Vm {
     options: VmOptions,
     frames: CallFrameList,
     spare_frames: Vec<CallFrame>,
-    handlers: EffectHandlerList,
-    active_resumes: ResumeList,
-    next_handler_id: u64,
-    continuation_target_handler: Option<u64>,
     return_depth: Option<usize>,
     heap: RuntimeHeap,
     heap_dirty: bool,

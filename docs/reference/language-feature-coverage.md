@@ -6,21 +6,22 @@ Each feature should have one current-language explanation and at least one snipp
 ## Start
 
 - Files, final expressions, and direct commands: `start/getting-started.md`, `start/first-program.md`
-- `let`, `let rec`, blocks, no `return`, and no loop statements: `start/values-and-let.md`, `start/blocks-and-expressions.md`
+- `let`, `let recur`, blocks, no `return`, and no loop statements: `start/values-and-let.md`, `start/blocks-and-expressions.md`
 - `mut`, reassignment, and mutation by value: `start/mutation.md`
 
-## Syntax surface
+## Syntax
 
 - First-class everything and comparison references: `specs/language/first-class-everything.md`
-- Delimiter law, arrays, tuples, sequences, records, indexing, semicolon rules, structural `let` members, and named arguments: `specs/language/syntax.md`, `specs/language/type-core.md`
-- `:=`, `/=`, `=`, `=>`, `->`, and `~>` as source separators and operators: `core/operators.md`, `types/type-annotations.md`
-- `?T` and `E!T` as optional and error-shaped type surfaces: `types/type-annotations.md`, `types/generics.md`
+- Delimiter rules, arrays, tuples, sequences, records, indexing, semicolon rules, structural `let` members, and named arguments: `specs/language/syntax.md`, `specs/language/type-core.md`
+- `:=`, `/=`, `=`, `=>`, and `->` as source separators and operators: `core/operators.md`, `types/type-annotations.md`
+- `?T` and `E!T` as optional and error-shaped type forms: `types/type-annotations.md`, `types/generics.md`
+- Comments, item docs, and module docs with `--!` or `/-! ... -/`: `reference/comments.md`
 
 ## Core expressions
 
 - Literals, number forms, strings, booleans, runes, and templates: `core/literals.md`, `advanced/templates-and-splices.md`
 - Tuples and unit: `core/tuples-and-unit.md`
-- Operators, ranges, `.(op)`, `?.`, `!.`, `?.[i]`, `!.[i]`, `?.(op)`, `!.(op)`, `??`, and `catch`: `core/operators.md`, `core/ranges.md`, `advanced/operator-forms.md`
+- Operators, ranges, `.[i]`, `??`, and pipeline sugar: `core/operators.md`, `core/ranges.md`, `advanced/operator-forms.md`
 - Functions, mandatory-backslash lambdas, calls, named arguments, generic calls, pipelines, and procedures: `core/functions.md`, `core/lambdas.md`, `core/calls.md`, `core/procedures.md`
 
 ## Data
@@ -32,13 +33,10 @@ Each feature should have one current-language explanation and at least one snipp
 ## Organization and types
 
 - Imports, exports, packages, no import `as` aliases, and native boundaries: `organization/imports-and-exports.md`, `organization/packages.md`
-- `mut`, `known`, `Proof[P]`, annotations, constraints, callable types, inference, generics, type tests, refinement aliases with `as`, and casts: `types/type-annotations.md`, `types/callable-types.md`, `types/type-inference.md`, `types/generics.md`, `types/type-tests-and-casts.md`
+- `mut`, `known`, annotations, constraints, callable types, inference, and generics: `types/type-annotations.md`, `types/callable-types.md`, `types/type-inference.md`, `types/generics.md`
 
-## Abstractions, effects, and advanced forms
+## Abstractions, Runtime Consequences, And Advanced Forms
 
-- Contextual `shape` plus `given` values, contextual parameters, operator members, and ambiguity diagnostics: `abstractions/contextual-capabilities.md`
-- Effects, `effect`, `ask`, `answer`, `handle`, `resume`, and answer members: `effects-runtime/effects-and-answers.md`
-- Proofs, `law`, `Proof[P]`, contextual proof evidence, and `@axiom` trust roots: `specs/language/first-class-everything.md`, `specs/language/type-core.md`, `specs/language/syntax.md`, `specs/language/items-and-attributes.md`
-- Pin action scopes are only valid inside `unsafe` blocks; `name` has type `Pin[T]`, remains scoped to `body`, and cannot be returned from that body.
-- Foundation, runtime, stdlib layering, attributes, hygienic `quote`, `#` splices, known, templates, tests, and tooling: `effects-runtime/foundation.md`, `effects-runtime/runtime.md`, `effects-runtime/stdlib.md`, `advanced/attributes.md`, `advanced/quote-and-syntax.md`, `advanced/known.md`, `advanced/templates-and-splices.md`, `advanced/testing.md`, `advanced/running-and-tooling.md`
-
+- Capability objects through `shape`, `erased`, and ordinary parameters: `abstractions/contextual-capabilities.md`
+- `defer`, `yield`, and `pin` as explicit consequence-bearing forms: `runtime/runtime.md`
+- Foundation, runtime, stdlib layering, attributes, known, templates, tests, and tooling: `runtime/foundation.md`, `runtime/runtime.md`, `runtime/stdlib.md`, `advanced/attributes.md`, `advanced/known.md`, `advanced/templates-and-splices.md`, `advanced/testing.md`, `advanced/running-and-tooling.md`

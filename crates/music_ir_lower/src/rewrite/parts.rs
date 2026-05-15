@@ -1,6 +1,6 @@
 use super::super::{
-    IrArg, IrAssignTarget, IrExpr, IrExprKind, IrHandleOp, IrLoweredMatchArm, IrOrigin,
-    IrRecordField, IrSeqPart, IrTempId, LowerCtx, LoweredMatchArmList, NameBindingId,
+    IrArg, IrAssignTarget, IrExpr, IrExprKind, IrLoweredMatchArm, IrOrigin, IrRecordField,
+    IrSeqPart, IrTempId, LowerCtx, LoweredMatchArmList, NameBindingId,
     rewrite_recursive_binding_refs,
 };
 
@@ -369,28 +369,6 @@ pub(super) fn rewrite_call_parts_kind(
     }
 }
 
-pub(super) fn rewrite_resume_kind(
-    ctx: &LowerCtx<'_>,
-    origin: IrOrigin,
-    expr: Option<IrExpr>,
-    binding: NameBindingId,
-    callable_name: &str,
-    captures: &[NameBindingId],
-) -> IrExprKind {
-    IrExprKind::Resume {
-        expr: expr.map(|expr| {
-            Box::new(rewrite_recursive_binding_refs(
-                ctx,
-                origin,
-                expr,
-                binding,
-                callable_name,
-                captures,
-            ))
-        }),
-    }
-}
-
 pub(super) fn rewrite_record_fields(
     ctx: &LowerCtx<'_>,
     origin: IrOrigin,
@@ -470,34 +448,6 @@ pub(super) fn rewrite_match_arms(
                 captures,
             ),
             ..arm
-        })
-        .collect::<Vec<_>>()
-        .into_boxed_slice()
-}
-
-pub(super) fn rewrite_handle_ops(
-    ctx: &LowerCtx<'_>,
-    origin: IrOrigin,
-    ops: Box<[IrHandleOp]>,
-    binding: NameBindingId,
-    callable_name: &str,
-    captures: &[NameBindingId],
-) -> Box<[IrHandleOp]> {
-    ops.into_vec()
-        .into_iter()
-        .map(|op| {
-            IrHandleOp::new(
-                op.op_index,
-                op.name,
-                rewrite_recursive_binding_refs(
-                    ctx,
-                    origin,
-                    op.closure,
-                    binding,
-                    callable_name,
-                    captures,
-                ),
-            )
         })
         .collect::<Vec<_>>()
         .into_boxed_slice()

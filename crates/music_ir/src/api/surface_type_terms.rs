@@ -169,15 +169,6 @@ fn lower_surface_named_callable_type_term(types: &[SurfaceTy], ty: &SurfaceTy) -
             "Bits",
             vec![TypeTerm::new(TypeTermKind::NatLit(u64::from(*width)))].into_boxed_slice(),
         ),
-        SurfaceTyKind::Handler {
-            effect,
-            input,
-            output,
-        } => TypeTerm::new(TypeTermKind::Handler {
-            effect: Box::new(lower_surface_type_term_id(types, *effect)),
-            input: Box::new(lower_surface_type_term_id(types, *input)),
-            output: Box::new(lower_surface_type_term_id(types, *output)),
-        }),
         SurfaceTyKind::Mut { inner } => TypeTerm::new(TypeTermKind::Mut {
             inner: Box::new(lower_surface_type_term_id(types, *inner)),
         }),

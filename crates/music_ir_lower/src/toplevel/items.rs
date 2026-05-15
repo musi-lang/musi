@@ -1,14 +1,13 @@
 use super::super::{
-    decl_binding_id, hidden_constraint_answer_params_for_binding, lower_expr, lower_foreign_let,
-    lowering_invariant_violation, pop_constraint_answer_bindings, push_constraint_answer_bindings,
-    render_named_ty_name, render_ty_name,
+    decl_binding_id, hidden_constraint_evidence_params_for_binding, lower_expr, lower_foreign_let,
+    lowering_invariant_violation, pop_constraint_evidence_bindings,
+    push_constraint_evidence_bindings, render_named_ty_name, render_ty_name,
 };
-use super::given::{GivenLetInput, collect_given_let_item};
 use super::{
-    DefinitionKey, EffectRow, HirExprId, HirExprKind, HirParam, HirPatKind, HirTyId, HirTyKind,
-    Ident, Interner, IrCallable, IrDataDef, IrDataVariantDef, IrExpr, IrExprKind, IrForeignDef,
-    IrGlobal, IrModuleInitPart, IrParam, LetItemInput, LowerCtx, ModuleKey, NameBindingId,
-    SemaDataDef, SemaModule, SliceRange, TopLevelItems, profile_attrs, simple_hir_ty_display_name,
+    DefinitionKey, HirExprId, HirExprKind, HirParam, HirPatKind, HirTyId, HirTyKind, Ident,
+    Interner, IrCallable, IrDataDef, IrDataVariantDef, IrExpr, IrExprKind, IrForeignDef, IrGlobal,
+    IrModuleInitPart, IrParam, LetItemInput, LowerCtx, ModuleKey, NameBindingId, SemaDataDef,
+    SemaModule, SliceRange, TopLevelItems, profile_attrs, simple_hir_ty_display_name,
 };
 
 pub(super) fn collect_let_item(
@@ -85,10 +84,6 @@ fn collect_bound_let_item(
     let import_record_target = sema.expr_import_record_target(value).cloned().or_else(|| {
         binding.and_then(|binding| sema.binding_import_record_target(binding).cloned())
     });
-    let effects = sema
-        .try_expr_effects(value)
-        .unwrap_or_else(|| lowering_invariant_violation("expr effects missing for top-level value"))
-        .clone();
     if let Some(global) = lower_exported_import_global(
         ctx,
         ExportedImportGlobalInput {
@@ -96,7 +91,6 @@ fn collect_bound_let_item(
             name,
             value,
             exported,
-            effects: &effects,
             import_record_target: import_record_target.clone(),
         },
     ) {
@@ -112,21 +106,7 @@ fn collect_bound_let_item(
     }
     if matches!(
         sema.module().store.exprs.get(value).kind,
-        HirExprKind::Effect { .. } | HirExprKind::Shape { .. }
-    ) {
-        return;
-    }
-
-    if collect_given_let_item(
-        ctx,
-        GivenLetInput {
-            binding,
-            name,
-            value,
-            exported,
-            effects: &effects,
-        },
-        items,
+        HirExprKind::Shape { .. }
     ) {
         return;
     }
@@ -140,7 +120,6 @@ fn collect_bound_let_item(
             value,
             is_callable,
             exported,
-            effects: &effects,
             import_record_target: import_record_target.as_ref(),
         },
         items,
@@ -155,7 +134,6 @@ fn collect_bound_let_item(
             name,
             value,
             exported,
-            effects,
             import_record_target,
         },
         items,
@@ -218,7 +196,6 @@ struct CallableLetInput<'a> {
     value: HirExprId,
     is_callable: bool,
     exported: bool,
-    effects: &'a EffectRow,
     import_record_target: Option<&'a ModuleKey>,
 }
 
@@ -242,7 +219,6 @@ fn collect_callable_let_item(
             params: input.params.clone(),
             value: input.value,
             exported: input.exported,
-            effects: input.effects.clone(),
             import_record_target: input.import_record_target.cloned(),
         },
     ));
@@ -381,7 +357,6 @@ pub(super) fn render_hir_ty_name(sema: &SemaModule, ty: HirTyId, interner: &Inte
         | HirTyKind::Array { .. }
         | HirTyKind::Bits { .. }
         | HirTyKind::Range { .. }
-        | HirTyKind::Handler { .. }
         | HirTyKind::Pi { .. }
         | HirTyKind::Arrow { .. }
         | HirTyKind::Sum { .. }
@@ -425,20 +400,20 @@ struct CallableItemInput {
     params: SliceRange<HirParam>,
     value: HirExprId,
     exported: bool,
-    effects: EffectRow,
     import_record_target: Option<ModuleKey>,
 }
 
 fn lower_callable_item(ctx: &mut LowerCtx<'_>, input: CallableItemInput) -> IrCallable {
     let interner = ctx.interner;
-    let (hidden_params, constraint_answer_bindings) = hidden_constraint_answer_params_for_binding(
-        ctx.sema,
-        interner.resolve(input.name.name),
-        input.binding,
-    );
-    push_constraint_answer_bindings(ctx, constraint_answer_bindings);
+    let (hidden_params, constraint_evidence_bindings) =
+        hidden_constraint_evidence_params_for_binding(
+            ctx.sema,
+            interner.resolve(input.name.name),
+            input.binding,
+        );
+    push_constraint_evidence_bindings(ctx, constraint_evidence_bindings);
     let body = lower_expr(ctx, input.value);
-    pop_constraint_answer_bindings(ctx);
+    pop_constraint_evidence_bindings(ctx);
     let mut params = hidden_params;
     params.extend(lower_params(ctx, input.params));
     let attrs = ctx
@@ -458,8 +433,7 @@ fn lower_callable_item(ctx: &mut LowerCtx<'_>, input: CallableItemInput) -> IrCa
     )
     .with_exported(input.exported)
     .with_hot(profile.hot)
-    .with_cold(profile.cold)
-    .with_effects(input.effects);
+    .with_cold(profile.cold);
     if let Some(binding) = input.binding {
         callable = callable.with_binding(binding);
     }
@@ -474,7 +448,6 @@ struct GlobalItemInput {
     name: Ident,
     value: HirExprId,
     exported: bool,
-    effects: EffectRow,
     import_record_target: Option<ModuleKey>,
 }
 
@@ -484,8 +457,7 @@ fn lower_global_item(ctx: &mut LowerCtx<'_>, input: GlobalItemInput) -> IrGlobal
         interner.resolve(input.name.name),
         lower_expr(ctx, input.value),
     )
-    .with_exported(input.exported)
-    .with_effects(input.effects);
+    .with_exported(input.exported);
     if let Some(binding) = input.binding {
         global = global.with_binding(binding);
     }
@@ -495,18 +467,17 @@ fn lower_global_item(ctx: &mut LowerCtx<'_>, input: GlobalItemInput) -> IrGlobal
     global
 }
 
-struct ExportedImportGlobalInput<'a> {
+struct ExportedImportGlobalInput {
     binding: Option<NameBindingId>,
     name: Ident,
     value: HirExprId,
     exported: bool,
-    effects: &'a EffectRow,
     import_record_target: Option<ModuleKey>,
 }
 
 fn lower_exported_import_global(
     ctx: &mut LowerCtx<'_>,
-    input: ExportedImportGlobalInput<'_>,
+    input: ExportedImportGlobalInput,
 ) -> Option<IrGlobal> {
     let sema = ctx.sema;
     let interner = ctx.interner;
@@ -529,7 +500,6 @@ fn lower_exported_import_global(
         )
         .with_binding_opt(input.binding)
         .with_exported(true)
-        .with_effects(input.effects.clone())
         .with_import_record_target_opt(input.import_record_target),
     )
 }
@@ -553,11 +523,12 @@ fn lower_params(ctx: &LowerCtx<'_>, params: SliceRange<HirParam>) -> Box<[IrPara
         .iter()
         .filter(|param| !param.is_comptime)
         .map(|param| {
-            IrParam::new(
-                decl_binding_id(sema, param.name)
-                    .unwrap_or_else(|| lowering_invariant_violation("param binding missing")),
-                interner.resolve(param.name.name),
-            )
+            let binding = decl_binding_id(sema, param.name)
+                .unwrap_or_else(|| lowering_invariant_violation("param binding missing"));
+            let ty = sema
+                .binding_type(binding)
+                .map_or_else(|| "Unknown".into(), |ty| render_ty_name(sema, ty, interner));
+            IrParam::new(binding, interner.resolve(param.name.name), ty)
         })
         .collect::<Vec<_>>()
         .into_boxed_slice()

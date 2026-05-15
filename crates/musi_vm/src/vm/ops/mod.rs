@@ -1,13 +1,12 @@
-pub use super::state::{CallFrame, EffectHandler, StepOutcome};
+pub use super::state::StepOutcome;
 pub use super::{
-    ContinuationFrame, ContinuationHandler, EffectCall, ForeignCall, GcRef, RuntimeInstruction,
-    RuntimeOperand, Value, ValueList, Vm, VmError, VmErrorKind, VmResult,
+    ForeignCall, GcRef, RuntimeInstruction, RuntimeOperand, Value, ValueList, Vm, VmError,
+    VmErrorKind, VmResult,
 };
 
 mod branch;
 mod call;
 mod data;
-mod effects;
 mod host;
 mod load_store;
 mod scalar;

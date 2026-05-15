@@ -33,8 +33,6 @@ where
             TokenKind::Minus => HirPrefixOp::Neg,
             TokenKind::KwKnown => HirPrefixOp::Known,
             TokenKind::KwMut => HirPrefixOp::Mut,
-            TokenKind::KwAny => HirPrefixOp::Any,
-            TokenKind::KwSome => HirPrefixOp::Some,
             _ => HirPrefixOp::Not,
         };
         let expr = self.lower_opt_expr(origin, node.child_nodes().next());
@@ -47,13 +45,8 @@ where
         self.alloc_expr(
             origin,
             HirExprKind::PartialRange {
-                kind: match node.child_tokens().last().map(SyntaxToken::kind) {
-                    Some(TokenKind::LtDotDot) => HirPartialRangeKind::From {
-                        include_lower: false,
-                    },
-                    _ => HirPartialRangeKind::From {
-                        include_lower: true,
-                    },
+                kind: HirPartialRangeKind::From {
+                    include_lower: true,
                 },
                 expr,
             },
@@ -72,6 +65,28 @@ where
         let op_tok = node.child_tokens().find(|t| t.kind() != TokenKind::Eof);
         if matches!(op_tok.map(SyntaxToken::kind), Some(TokenKind::PipeGt)) {
             return self.alloc_call_expr_with_piped_value(origin, left, right);
+        }
+        if matches!(
+            op_tok.map(SyntaxToken::kind),
+            Some(TokenKind::ColonQuestionGt)
+        ) {
+            return self.alloc_expr(
+                origin,
+                HirExprKind::TypeTest {
+                    base: left,
+                    ty: right,
+                    as_name: None,
+                },
+            );
+        }
+        if matches!(op_tok.map(SyntaxToken::kind), Some(TokenKind::ColonGt)) {
+            return self.alloc_expr(
+                origin,
+                HirExprKind::TypeCast {
+                    base: left,
+                    ty: right,
+                },
+            );
         }
 
         let op = self.lower_binary_op(op_tok);
@@ -108,7 +123,6 @@ const fn fixed_binary_ops() -> &'static [(TokenKind, HirBinaryOp)] {
     &[
         (TokenKind::ColonEq, HirBinaryOp::Assign),
         (TokenKind::MinusGt, HirBinaryOp::Arrow),
-        (TokenKind::TildeGt, HirBinaryOp::EffectArrow),
         (TokenKind::TildeEq, HirBinaryOp::TypeEq),
         (TokenKind::KwXor, HirBinaryOp::Xor),
         (TokenKind::KwAnd, HirBinaryOp::And),
@@ -132,23 +146,7 @@ const fn fixed_binary_ops() -> &'static [(TokenKind, HirBinaryOp)] {
                 include_upper: false,
             },
         ),
-        (
-            TokenKind::LtDotDot,
-            HirBinaryOp::Range {
-                include_lower: false,
-                include_upper: true,
-            },
-        ),
-        (
-            TokenKind::LtDotDotLt,
-            HirBinaryOp::Range {
-                include_lower: false,
-                include_upper: false,
-            },
-        ),
         (TokenKind::KwIn, HirBinaryOp::In),
-        (TokenKind::KwShl, HirBinaryOp::Shl),
-        (TokenKind::KwShr, HirBinaryOp::Shr),
         (TokenKind::Plus, HirBinaryOp::Add),
         (TokenKind::Minus, HirBinaryOp::Sub),
         (TokenKind::Star, HirBinaryOp::Mul),

@@ -75,16 +75,6 @@ impl PassBase<'_, '_, '_> {
 
     pub(super) fn render_ty_special(&self, kind: &HirTyKind) -> Option<String> {
         Some(match kind {
-            HirTyKind::Handler {
-                effect,
-                input,
-                output,
-            } => format!(
-                "answer {} ({} -> {})",
-                self.render_ty(*effect),
-                self.render_ty(*input),
-                self.render_ty(*output)
-            ),
             HirTyKind::Mut { inner } => format!("mut {}", self.render_ty(*inner)),
             HirTyKind::AnyShape { capability } => {
                 format!("any {}", self.render_ty(*capability))

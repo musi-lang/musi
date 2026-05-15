@@ -4,7 +4,6 @@ use music_hir::HirTyId;
 use music_names::Symbol;
 
 use crate::api::{ConstraintFacts, ConstraintKey, ConstraintKind, DefinitionKey};
-use crate::effects::EffectRow;
 
 pub(super) type TypeSubstMap = HashMap<Symbol, HirTyId>;
 
@@ -16,7 +15,6 @@ pub struct BindingScheme {
     pub comptime_params: Box<[bool]>,
     pub constraints: Box<[ConstraintFacts]>,
     pub ty: HirTyId,
-    pub effects: EffectRow,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,7 +28,6 @@ pub struct ConstraintObligation {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstantiatedBinding {
     pub ty: HirTyId,
-    pub effects: EffectRow,
     pub obligations: Box<[ConstraintObligation]>,
 }
 

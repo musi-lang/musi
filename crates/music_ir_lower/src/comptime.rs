@@ -1,9 +1,8 @@
 use music_base::{SourceId, Span};
 use music_module::ModuleKey;
 use music_sema::{
-    ComptimeClosureValue, ComptimeDataValue, ComptimeEffectValue, ComptimeForeignValue,
-    ComptimeImportRecordValue, ComptimeSeqValue, ComptimeShapeValue, ComptimeTypeValue,
-    ComptimeValue, DefinitionKey,
+    ComptimeClosureValue, ComptimeDataValue, ComptimeForeignValue, ComptimeImportRecordValue,
+    ComptimeSeqValue, ComptimeShapeValue, ComptimeTypeValue, ComptimeValue, DefinitionKey,
 };
 use music_term::{TypeModuleRef, TypeTerm, TypeTermKind};
 
@@ -31,10 +30,6 @@ pub(crate) fn lower_comptime_value(ctx: &mut LowerCtx<'_>, value: &ComptimeValue
         ComptimeValue::Type(value) => lower_comptime_type(value),
         ComptimeValue::ImportRecord(value) => lower_comptime_import_record(value),
         ComptimeValue::Foreign(value) => lower_comptime_foreign(value),
-        ComptimeValue::Continuation(_) => {
-            lowering_invariant_violation("escaping compile-time continuation")
-        }
-        ComptimeValue::Effect(value) => lower_comptime_effect(ctx, value),
         ComptimeValue::Shape(value) => lower_comptime_shape(ctx, value),
     }
 }
@@ -131,10 +126,6 @@ pub(crate) fn lower_comptime_foreign(value: &ComptimeForeignValue) -> IrExprKind
             .collect::<Vec<_>>()
             .into_boxed_slice(),
     }
-}
-
-pub(crate) fn lower_comptime_effect(ctx: &LowerCtx<'_>, value: &ComptimeEffectValue) -> IrExprKind {
-    lower_comptime_module_export(ctx, &value.module, &value.name)
 }
 
 pub(crate) fn lower_comptime_shape(ctx: &LowerCtx<'_>, value: &ComptimeShapeValue) -> IrExprKind {

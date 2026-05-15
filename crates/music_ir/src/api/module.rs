@@ -1,15 +1,14 @@
-use music_module::ModuleKey;
-use music_sema::{DefinitionKey, ExportedValue, SurfaceTy};
-
 use super::{
-    IrCallable, IrDataDef, IrEffectDef, IrForeignDef, IrGivenDef, IrGlobal, IrMetaRecord,
-    IrModuleInitPart, IrShapeDef,
+    IrCallable, IrDataDef, IrForeignDef, IrGlobal, IrMetaRecord, IrModuleInitPart, IrShapeDef,
 };
+use music_module::ModuleKey;
+use music_sema::{ExportedValue, SurfaceTy};
 
 #[derive(Debug, Clone)]
 pub struct IrModule {
     module_key: ModuleKey,
     static_imports: Box<[ModuleKey]>,
+    static_import_edges: Box<[IrStaticImport]>,
     types: Box<[SurfaceTy]>,
     exports: Box<[ExportedValue]>,
     callables: Box<[IrCallable]>,
@@ -17,10 +16,14 @@ pub struct IrModule {
     init_parts: Box<[IrModuleInitPart]>,
     data_defs: Box<[IrDataDef]>,
     foreigns: Box<[IrForeignDef]>,
-    effects: Box<[IrEffectDef]>,
     shapes: Box<[IrShapeDef]>,
-    givens: Box<[IrGivenDef]>,
     meta: Box<[IrMetaRecord]>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IrStaticImport {
+    spec: Box<str>,
+    resolved: ModuleKey,
 }
 
 #[derive(Debug, Clone)]
@@ -31,9 +34,7 @@ pub struct IrModuleParts {
     pub init_parts: Box<[IrModuleInitPart]>,
     pub data_defs: Box<[IrDataDef]>,
     pub foreigns: Box<[IrForeignDef]>,
-    pub effects: Box<[IrEffectDef]>,
     pub shapes: Box<[IrShapeDef]>,
-    pub givens: Box<[IrGivenDef]>,
     pub meta: Box<[IrMetaRecord]>,
 }
 
@@ -42,12 +43,14 @@ impl IrModule {
     pub fn new(
         module_key: ModuleKey,
         static_imports: Box<[ModuleKey]>,
+        static_import_edges: Box<[IrStaticImport]>,
         types: Box<[SurfaceTy]>,
         parts: IrModuleParts,
     ) -> Self {
         Self {
             module_key,
             static_imports,
+            static_import_edges,
             types,
             exports: parts.exports,
             callables: parts.callables,
@@ -55,9 +58,7 @@ impl IrModule {
             init_parts: parts.init_parts,
             data_defs: parts.data_defs,
             foreigns: parts.foreigns,
-            effects: parts.effects,
             shapes: parts.shapes,
-            givens: parts.givens,
             meta: parts.meta,
         }
     }
@@ -70,6 +71,11 @@ impl IrModule {
     #[must_use]
     pub fn static_imports(&self) -> &[ModuleKey] {
         &self.static_imports
+    }
+
+    #[must_use]
+    pub fn static_import_edges(&self) -> &[IrStaticImport] {
+        &self.static_import_edges
     }
 
     #[must_use]
@@ -108,18 +114,8 @@ impl IrModule {
     }
 
     #[must_use]
-    pub fn effects(&self) -> &[IrEffectDef] {
-        &self.effects
-    }
-
-    #[must_use]
     pub fn shapes(&self) -> &[IrShapeDef] {
         &self.shapes
-    }
-
-    #[must_use]
-    pub fn givens(&self) -> &[IrGivenDef] {
-        &self.givens
     }
 
     #[must_use]
@@ -133,14 +129,24 @@ impl IrModule {
             .iter()
             .find(|value| value.name.as_ref() == name)
     }
+}
 
+impl IrStaticImport {
     #[must_use]
-    pub fn effect(&self, key: &DefinitionKey) -> Option<&IrEffectDef> {
-        self.effects.iter().find(|effect| &effect.key == key)
+    pub fn new(spec: impl Into<Box<str>>, resolved: ModuleKey) -> Self {
+        Self {
+            spec: spec.into(),
+            resolved,
+        }
     }
 
     #[must_use]
-    pub fn shape(&self, key: &DefinitionKey) -> Option<&IrShapeDef> {
-        self.shapes.iter().find(|shape| &shape.key == key)
+    pub fn spec(&self) -> &str {
+        self.spec.as_ref()
+    }
+
+    #[must_use]
+    pub const fn resolved(&self) -> &ModuleKey {
+        &self.resolved
     }
 }

@@ -246,4 +246,29 @@ mod failure {
             "{source_extension} must not be used as Musi source extension"
         );
     }
+
+    #[test]
+    fn generated_diagnostic_catalogs_are_rustfmt_skipped_at_module_boundary() {
+        let missing = rust_files_under(&repo_root().join("crates"))
+            .into_iter()
+            .filter(|path| {
+                path.file_name()
+                    .is_some_and(|name| name == "diag_catalog_gen.rs")
+            })
+            .filter_map(|catalog| {
+                let dir = catalog.parent()?;
+                let owner = ["diag.rs", "errors.rs"]
+                    .into_iter()
+                    .map(|name| dir.join(name))
+                    .find(|path| path.exists())?;
+                let text = fs::read_to_string(&owner).ok()?;
+                (!text.contains(
+                    "#[path = \"diag_catalog_gen.rs\"]\n#[rustfmt::skip]\nmod diag_catalog_gen;",
+                ))
+                .then(|| relative_to_repo(&catalog))
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(missing, Vec::<String>::new());
+    }
 }

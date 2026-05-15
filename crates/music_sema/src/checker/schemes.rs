@@ -1,7 +1,6 @@
-mod answers;
+mod evidence;
 mod instantiate;
 mod model;
-mod names;
 mod solve;
 mod substitute;
 mod surface;

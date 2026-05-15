@@ -16,7 +16,7 @@ use super::decls::{member_law_facts, member_signature};
 use super::pats::bound_name_from_pat;
 use super::surface::surface_key;
 use super::variant_payload::{lower_data_variant, variant_payload_style_is_mixed};
-use super::{CollectPass, DataDef, DataVariantDef, DiagKind, EffectDef, EffectOpDef};
+use super::{CollectPass, DataDef, DataVariantDef, DiagKind};
 
 type VariantDefRange = SliceRange<HirVariantDef>;
 type FieldDefRange = SliceRange<HirFieldDef>;
@@ -47,13 +47,6 @@ pub fn collect_module(ctx: &mut CollectPass<'_, '_, '_>) {
     ctx.collect_module();
 }
 
-fn member_has_attr(ctx: &CollectPass<'_, '_, '_>, member: &HirMemberDef, name: &str) -> bool {
-    ctx.attrs(member.attrs.clone()).iter().any(|attr| {
-        let parts = ctx.idents(attr.path);
-        parts.len() == 1 && ctx.resolve_symbol(parts[0].name) == name
-    })
-}
-
 impl CollectPass<'_, '_, '_> {
     fn collect_module(&mut self) {
         self.visit_expr(self.root_expr_id());
@@ -76,10 +69,7 @@ impl CollectPass<'_, '_, '_> {
                 | HirExprKind::Name { .. }
                 | HirExprKind::Lit { .. }
                 | HirExprKind::ArrayTy { .. }
-                | HirExprKind::AnswerTy { .. }
                 | HirExprKind::Variant { .. }
-                | HirExprKind::Quote { .. }
-                | HirExprKind::Splice { .. }
         )
     }
 
@@ -112,12 +102,18 @@ impl CollectPass<'_, '_, '_> {
                 self.visit_expr(binder_ty);
                 self.visit_expr(ret);
             }
-            HirExprKind::Lambda { body, .. }
-            | HirExprKind::Import { arg: body }
-            | HirExprKind::Request { expr: body } => self.visit_expr(body),
+            HirExprKind::Lambda { body, .. } | HirExprKind::Import { arg: body } => {
+                self.visit_expr(body);
+            }
             HirExprKind::Pin { value, body, .. } => {
                 self.visit_expr(value);
                 self.visit_expr(body);
+            }
+            HirExprKind::Defer { cleanup, guard } => {
+                self.visit_expr(cleanup);
+                if let Some(guard) = guard {
+                    self.visit_expr(guard);
+                }
             }
             HirExprKind::Call { callee, args } => self.visit_call(callee, args),
             HirExprKind::Apply { callee, args } | HirExprKind::Index { base: callee, args } => {
@@ -151,6 +147,7 @@ impl CollectPass<'_, '_, '_> {
     fn visit_expr_decls(&mut self, id: HirExprId) -> bool {
         match self.expr(id).kind {
             HirExprKind::Let {
+                mods,
                 pat,
                 value,
                 type_params,
@@ -162,19 +159,12 @@ impl CollectPass<'_, '_, '_> {
                     self.collect_bound_decl(value, name, type_params, outer_attrs.as_ref());
                 }
                 self.visit_expr(value);
-            }
-            HirExprKind::Data { variants, fields } => self.visit_data(variants, fields),
-            HirExprKind::Effect { members } | HirExprKind::Shape { members, .. } => {
-                for member in self.members(members) {
-                    self.visit_member(&member);
+                if let Some(fallback) = mods.fallback {
+                    self.visit_expr(fallback);
                 }
             }
-            HirExprKind::Given {
-                capability,
-                members,
-                ..
-            } => {
-                self.visit_expr(capability);
+            HirExprKind::Data { variants, fields } => self.visit_data(variants, fields),
+            HirExprKind::Shape { members, .. } => {
                 for member in self.members(members) {
                     self.visit_member(&member);
                 }
@@ -187,19 +177,14 @@ impl CollectPass<'_, '_, '_> {
     fn visit_expr_control(&mut self, id: HirExprId) -> bool {
         match self.expr(id).kind {
             HirExprKind::Match { scrutinee, arms } => self.visit_match(scrutinee, arms),
-            HirExprKind::AnswerLit { clauses, .. } => {
-                for clause in self.handle_clauses(clauses) {
-                    self.visit_expr(clause.body);
-                }
-            }
-            HirExprKind::Handle { expr, handler } => {
-                self.visit_expr(expr);
-                self.visit_expr(handler);
-            }
-            HirExprKind::Resume { expr } => {
-                if let Some(expr) = expr {
-                    self.visit_expr(expr);
-                }
+            HirExprKind::If {
+                condition,
+                then_expr,
+                else_expr,
+            } => {
+                self.visit_expr(condition);
+                self.visit_expr(then_expr);
+                self.visit_expr(else_expr);
             }
             _ => return false,
         }
@@ -275,7 +260,6 @@ impl CollectPass<'_, '_, '_> {
             HirExprKind::Data { variants, fields } => {
                 self.collect_data_decl(origin, &attrs, name, type_params, variants, fields);
             }
-            HirExprKind::Effect { members } => self.collect_effect_decl(name, members),
             HirExprKind::Shape {
                 constraints,
                 members,
@@ -488,77 +472,6 @@ impl CollectPass<'_, '_, '_> {
                 DataVariantDef::new(0, None, None, field_tys, field_names),
             );
         }
-    }
-}
-
-impl CollectPass<'_, '_, '_> {
-    fn collect_effect_decl(&mut self, name: Ident, members: SliceRange<HirMemberDef>) {
-        let effect_name: Box<str> = self.resolve_symbol(name.name).into();
-        if self.effect_def(&effect_name).is_some() {
-            return;
-        }
-        let members_vec = self.members(members);
-        let mut seen_ops = HashMap::new();
-        let mut seen_laws = HashMap::new();
-        for member in &members_vec {
-            match member.kind {
-                HirMemberKind::Let => {
-                    let op_name: Box<str> = self.resolve_symbol(member.name.name).into();
-                    if let Some(previous_origin) = seen_ops.insert(op_name.clone(), member.origin) {
-                        self.diag_with_previous(
-                            member.origin.span,
-                            previous_origin.span,
-                            DiagKind::CollectDuplicateEffectOp,
-                            DiagContext::new().with("operation", op_name),
-                        );
-                    }
-                }
-                HirMemberKind::Law => {
-                    let law_name = self.resolve_symbol(member.name.name).to_owned();
-                    if let Some(previous_origin) = seen_laws.insert(member.name.name, member.origin)
-                    {
-                        self.diag_with_previous(
-                            member.origin.span,
-                            previous_origin.span,
-                            DiagKind::CollectDuplicateEffectLaw,
-                            DiagContext::new().with("law", law_name),
-                        );
-                    }
-                }
-            }
-        }
-        let ops = members_vec
-            .iter()
-            .filter(|member| member.kind == HirMemberKind::Let)
-            .map(|member| {
-                let facts = member_signature(self, member, false);
-                (
-                    Box::<str>::from(self.resolve_symbol(member.name.name)),
-                    EffectOpDef::new(
-                        facts.params.clone(),
-                        self.params(member.params.clone())
-                            .into_iter()
-                            .map(|param| param.name.name)
-                            .collect::<Vec<_>>()
-                            .into_boxed_slice(),
-                        facts.result,
-                    )
-                    .with_comptime_safe(member_has_attr(
-                        self,
-                        member,
-                        "knownSafe",
-                    )),
-                )
-            })
-            .collect::<BTreeMap<_, _>>();
-        let laws = members_vec
-            .iter()
-            .filter(|member| member.kind == HirMemberKind::Law)
-            .map(|member| member_law_facts(self, member))
-            .collect::<Vec<_>>()
-            .into_boxed_slice();
-        let key = surface_key(self.module_key(), self.interner(), name.name);
-        self.insert_effect_def(effect_name, EffectDef::new(key, ops, laws));
     }
 }
 

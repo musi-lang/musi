@@ -129,7 +129,7 @@ fn decode_runtime_instruction(
         return runtime.with_fused(fused);
     }
     match instruction.opcode {
-        Opcode::Br | Opcode::BrFalse => decode_branch_target(runtime, &instruction.operand, labels),
+        Opcode::Br | Opcode::BrZ => decode_branch_target(runtime, &instruction.operand, labels),
         Opcode::Call | Opcode::TailCall => decode_call(
             runtime,
             index,
@@ -138,34 +138,11 @@ fn decode_runtime_instruction(
             labels,
             procedure_shapes,
         ),
-        Opcode::HdlPush => decode_handler_pop(runtime, index, instructions),
         Opcode::Ceq | Opcode::Cne | Opcode::CltS | Opcode::CgtS | Opcode::CleS | Opcode::CgeS => {
             decode_compare_branch(runtime, index, instructions, labels)
         }
         _ => runtime,
     }
-}
-
-fn decode_handler_pop(
-    runtime: RuntimeInstruction,
-    index: usize,
-    instructions: &[Instruction],
-) -> RuntimeInstruction {
-    find_matching_handler_pop(index.saturating_add(1), instructions)
-        .map_or(runtime, |pop_ip| runtime.with_branch_target(pop_ip))
-}
-
-fn find_matching_handler_pop(start: usize, instructions: &[Instruction]) -> Option<usize> {
-    let mut depth = 0usize;
-    for (index, instruction) in instructions.iter().enumerate().skip(start) {
-        match instruction.opcode {
-            Opcode::HdlPush => depth = depth.saturating_add(1),
-            Opcode::HdlPop if depth == 0 => return Some(index),
-            Opcode::HdlPop => depth = depth.saturating_sub(1),
-            _ => {}
-        }
-    }
-    None
 }
 
 fn decode_fused_op(
@@ -317,7 +294,7 @@ fn decode_local_smi_compare_branch(
         return None;
     };
     let compare = compare_op(compare.opcode)?;
-    let (Opcode::BrFalse, Operand::Label(label)) = (branch.opcode, &branch.operand) else {
+    let (Opcode::BrZ, Operand::Label(label)) = (branch.opcode, &branch.operand) else {
         return None;
     };
     let target = labels.get(label).copied()?;
@@ -716,7 +693,7 @@ fn decode_compare_branch(
     let Some(next) = instructions.get(index.saturating_add(1)) else {
         return runtime;
     };
-    if !matches!(next.opcode, Opcode::BrFalse) {
+    if !matches!(next.opcode, Opcode::BrZ) {
         return runtime;
     }
     let Operand::Label(label) = next.operand else {

@@ -1,10 +1,8 @@
 use music_seam::{ProcedureId, TypeId};
 use music_term::SyntaxTerm;
 
-use super::super::value::{ContinuationFrameList, ContinuationHandlerList};
 use super::{
-    ClosureValue, ContinuationValue, DataValue, GcRef, ModuleValue, SequenceValue, Value,
-    ValueList, Vm, VmResult,
+    ClosureValue, DataValue, GcRef, ModuleValue, SequenceValue, Value, ValueList, Vm, VmResult,
 };
 
 impl Vm {
@@ -155,19 +153,6 @@ impl Vm {
         let value = self
             .heap
             .alloc_module(ModuleValue::new(spec, slot), &self.heap_options())?;
-        self.after_heap_allocation(&value)?;
-        Ok(value)
-    }
-
-    pub(crate) fn alloc_continuation(
-        &mut self,
-        frames: ContinuationFrameList,
-        handlers: ContinuationHandlerList,
-    ) -> VmResult<Value> {
-        let value = self.heap.alloc_continuation(
-            ContinuationValue::new(frames, handlers),
-            &self.heap_options(),
-        )?;
         self.after_heap_allocation(&value)?;
         Ok(value)
     }

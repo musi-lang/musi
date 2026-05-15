@@ -77,7 +77,7 @@ impl Project {
     ///
     /// Returns [`ProjectError`] when the root package entry cannot be compiled to text.
     pub fn compile_root_entry_text(&self) -> ProjectResult<String> {
-        self.compile_root_entry_with(Session::compile_entry_text)
+        self.compile_root_entry_with(Session::compile_entry_disasm)
     }
 
     /// # Errors

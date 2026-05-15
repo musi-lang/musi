@@ -5,7 +5,7 @@ use std::ptr::null;
 use std::slice::Iter;
 use std::sync::Arc;
 
-use music_seam::{EffectId, ProcedureId, TypeId};
+use music_seam::{ProcedureId, TypeId};
 use smallvec::SmallVec;
 
 use super::{GcRef, Program, RuntimeInstruction, RuntimeInstructionList, Value, ValueList};
@@ -15,8 +15,6 @@ pub type ModuleSlotMap = HashMap<Box<str>, usize>;
 pub type ModuleSpec = Cow<'static, str>;
 type RuntimeInstructionPtr = *const RuntimeInstruction;
 pub type CallFrameList = Vec<CallFrame>;
-pub type EffectHandlerList = Vec<EffectHandler>;
-pub type ResumeList = Vec<GcRef>;
 pub type Seq8ExportCacheList = Vec<Seq8ExportCache>;
 
 #[derive(Debug, Clone)]
@@ -132,21 +130,10 @@ impl CallFrame {
     }
 
     #[must_use]
-    pub fn with_ip(mut self, ip: usize) -> Self {
-        self.set_ip(ip);
-        self
-    }
-
-    #[must_use]
     pub fn with_runtime_code(mut self, code: RuntimeInstructionList) -> Self {
         self.code = Some(code);
         self.rebind_ip_cache();
         self
-    }
-
-    pub(crate) fn set_runtime_code(&mut self, code: RuntimeInstructionList) {
-        self.code = Some(code);
-        self.rebind_ip_cache();
     }
 
     pub(crate) fn set_ip(&mut self, ip: usize) {
@@ -218,43 +205,6 @@ const fn advance_ptr(ptr: RuntimeInstructionPtr) -> RuntimeInstructionPtr {
 const fn read_instruction(ptr: RuntimeInstructionPtr) -> RuntimeInstruction {
     // SAFETY: caller ensures pointer is non-null and within runtime-code range.
     unsafe { ptr.read() }
-}
-
-#[derive(Debug, Clone)]
-pub struct EffectHandler {
-    pub(crate) handler_id: u64,
-    pub(crate) effect: EffectId,
-    pub(crate) handler: Value,
-    pub(crate) frame_depth: usize,
-    pub(crate) stack_depth: usize,
-    pub(crate) pop_ip: usize,
-}
-
-impl EffectHandler {
-    #[must_use]
-    pub const fn new(handler_id: u64, effect: EffectId, handler: Value) -> Self {
-        Self {
-            handler_id,
-            effect,
-            handler,
-            frame_depth: 0,
-            stack_depth: 0,
-            pop_ip: 0,
-        }
-    }
-
-    #[must_use]
-    pub const fn with_stack_state(
-        mut self,
-        frame_depth: usize,
-        stack_depth: usize,
-        pop_ip: usize,
-    ) -> Self {
-        self.frame_depth = frame_depth;
-        self.stack_depth = stack_depth;
-        self.pop_ip = pop_ip;
-        self
-    }
 }
 
 pub enum StepOutcome {

@@ -1,6 +1,6 @@
 use music_arena::SliceRange;
 use music_hir::{
-    HirBinder, HirConstraint, HirEffectSet, HirExprId, HirExprKind, HirLetMods, HirMods, HirOrigin,
+    HirAttr, HirBinder, HirConstraint, HirExprId, HirExprKind, HirLetMods, HirMods, HirOrigin,
     HirParam, HirPatId, HirPatKind, HirPrefixOp, HirReceiverDecl, HirTyId, HirTyKind,
 };
 use music_names::{Ident, NameBindingId, Symbol};
@@ -12,12 +12,10 @@ use super::super::decls::check_native_let;
 use super::super::exprs::check_expr;
 use super::super::pats::{bind_pat, bound_name_from_pat, pat_is_irrefutable};
 use super::super::schemes::BindingScheme;
-use super::effects::require_declared_effects;
 use super::imports::{
     bind_import_record_pattern, bind_structural_alias, import_record_target_for_expr,
 };
 use crate::api::{ConstraintFacts, ExprFacts};
-use crate::effects::EffectRow;
 
 type ConstraintFactsList = Box<[ConstraintFacts]>;
 
@@ -32,7 +30,6 @@ pub(in super::super) struct LetExprInput {
     pub(in super::super) has_param_clause: bool,
     pub(in super::super) params: SliceRange<HirParam>,
     pub(in super::super) constraints: SliceRange<HirConstraint>,
-    pub(in super::super) effects: Option<HirEffectSet>,
     pub(in super::super) sig: Option<HirExprId>,
     pub(in super::super) value: HirExprId,
 }
@@ -41,20 +38,18 @@ struct RecCallableSeed<'a> {
     binding: Option<NameBindingId>,
     mods: HirLetMods,
     param_types: &'a [HirTyId],
-    effects: Option<&'a HirEffectSet>,
     declared_ty: Option<HirTyId>,
     type_params: &'a [Symbol],
     type_param_kinds: &'a [HirTyId],
     constraints: &'a [ConstraintFacts],
 }
 
-struct CallableLetCheckInput<'a> {
+struct CallableLetCheckInput {
     origin: HirOrigin,
     exported: bool,
     mods: HirLetMods,
     pat: HirPatId,
     params: SliceRange<HirParam>,
-    effects: Option<&'a HirEffectSet>,
     declared_ty: Option<HirTyId>,
     value: HirExprId,
     binding: Option<NameBindingId>,
@@ -83,14 +78,13 @@ struct NonCallableLetCheckInput {
 struct LetBindingSchemeInput {
     binding: NameBindingId,
     ty: HirTyId,
-    effects: EffectRow,
     type_params: (Box<[Symbol]>, Box<[HirTyId]>),
     param_names: Box<[Symbol]>,
     comptime_params: Box<[bool]>,
     constraints: ConstraintFactsList,
 }
 
-struct LetFinalTyInput<'a> {
+struct LetFinalTyInput {
     expr_id: HirExprId,
     origin: HirOrigin,
     expr_mods: HirMods,
@@ -99,7 +93,6 @@ struct LetFinalTyInput<'a> {
     receiver: Option<HirReceiverDecl>,
     has_param_clause: bool,
     params: SliceRange<HirParam>,
-    effects: Option<&'a HirEffectSet>,
     value: HirExprId,
     binding: Option<NameBindingId>,
     bound_name: Option<Ident>,
@@ -140,10 +133,11 @@ impl CheckPass<'_, '_, '_> {
         &mut self,
         origin: HirOrigin,
         pat: HirPatId,
+        has_fallback: bool,
         _value: HirExprId,
         value_ty: HirTyId,
     ) {
-        if !pat_is_irrefutable(self, pat) {
+        if !has_fallback && !pat_is_irrefutable(self, pat) {
             self.diag(
                 origin.span,
                 DiagKind::PlainLetRequiresIrrefutablePattern,
@@ -161,7 +155,6 @@ impl CheckPass<'_, '_, '_> {
         let LetBindingSchemeInput {
             binding,
             ty,
-            effects,
             type_params,
             param_names,
             comptime_params,
@@ -174,13 +167,11 @@ impl CheckPass<'_, '_, '_> {
             comptime_params,
             constraints,
             ty,
-            effects: effects.clone(),
         };
         let value_ty = self.scheme_value_ty(&scheme);
         self.insert_binding_type(binding, value_ty);
-        self.insert_binding_effects(binding, effects);
         let evidence_keys = self
-            .answer_scope_for_constraints(&scheme.constraints)
+            .evidence_scope_for_constraints(&scheme.constraints)
             .into_keys()
             .collect::<Vec<_>>()
             .into_boxed_slice();
@@ -193,14 +184,11 @@ impl CheckPass<'_, '_, '_> {
         origin: HirOrigin,
         param_types: &[HirTyId],
         constraints: &[ConstraintFacts],
-        effects: Option<&HirEffectSet>,
         declared_ty: Option<HirTyId>,
         value: HirExprId,
-    ) -> (HirTyId, EffectRow) {
-        let mut callable_effects =
-            effects.map_or(EffectRow::empty(), |set| self.lower_effect_row(set));
-        let answer_scope = self.answer_scope_for_constraints(constraints);
-        self.push_answer_scope(answer_scope);
+    ) -> HirTyId {
+        let evidence_scope = self.evidence_scope_for_constraints(constraints);
+        self.push_evidence_scope(evidence_scope);
         if let Some(expected) = declared_ty {
             self.push_expected_ty(expected);
         }
@@ -208,22 +196,16 @@ impl CheckPass<'_, '_, '_> {
         if declared_ty.is_some() {
             let _ = self.pop_expected_ty();
         }
-        let _ = self.pop_answer_scope();
-        if effects.is_none() {
-            callable_effects = body_facts.effects.clone();
-        } else {
-            callable_effects =
-                require_declared_effects(self, origin, &callable_effects, &body_facts.effects);
-        }
+        let _ = self.pop_evidence_scope();
         let result_ty = declared_ty.unwrap_or(body_facts.ty);
         self.type_mismatch(origin, result_ty, body_facts.ty);
         let params = self.alloc_ty_list(param_types.iter().copied());
-        let ty = self.alloc_ty(HirTyKind::Arrow {
+
+        self.alloc_ty(HirTyKind::Arrow {
             params,
             ret: result_ty,
-            is_effectful: !callable_effects.is_pure(),
-        });
-        (ty, callable_effects)
+            is_effectful: false,
+        })
     }
 
     fn seed_recursive_callable_scheme(&mut self, seed: &RecCallableSeed<'_>) {
@@ -234,20 +216,16 @@ impl CheckPass<'_, '_, '_> {
             return;
         };
         let builtins = self.builtins();
-        let provisional_effects = seed
-            .effects
-            .map_or(EffectRow::empty(), |set| self.lower_effect_row(set));
         let provisional_ret = seed.declared_ty.unwrap_or(builtins.unknown);
         let params = self.alloc_ty_list(seed.param_types.iter().copied());
         let provisional_ty = self.alloc_ty(HirTyKind::Arrow {
             params,
             ret: provisional_ret,
-            is_effectful: !provisional_effects.is_pure(),
+            is_effectful: false,
         });
         self.insert_let_binding_scheme(LetBindingSchemeInput {
             binding,
             ty: provisional_ty,
-            effects: provisional_effects,
             type_params: (
                 seed.type_params.to_vec().into_boxed_slice(),
                 seed.type_param_kinds.to_vec().into_boxed_slice(),
@@ -275,14 +253,12 @@ impl CheckPass<'_, '_, '_> {
 
     fn check_non_callable_let_value(
         &mut self,
-        origin: HirOrigin,
         is_module_stmt: bool,
         bound_name: Option<Ident>,
         type_params: &[Symbol],
         declared_ty: Option<HirTyId>,
         value: HirExprId,
     ) -> ExprFacts {
-        let builtins = self.builtins();
         let Some(name) = bound_name.filter(|_| is_module_stmt) else {
             return self.check_value_with_expected_ty(declared_ty, value);
         };
@@ -290,9 +266,6 @@ impl CheckPass<'_, '_, '_> {
         match &self.expr(value).kind {
             HirExprKind::Data { variants, fields } => {
                 self.check_bound_data(name, variants.clone(), fields.clone())
-            }
-            HirExprKind::Effect { members } => {
-                self.check_bound_effect(value, name, members.clone())
             }
             HirExprKind::Shape {
                 constraints,
@@ -304,34 +277,17 @@ impl CheckPass<'_, '_, '_> {
                 constraints.clone(),
                 members.clone(),
             ),
-            HirExprKind::Given {
-                type_params,
-                constraints,
-                capability,
-                members,
-            } => {
-                let _ = self.check_given_expr(
-                    value,
-                    origin,
-                    *type_params,
-                    constraints.clone(),
-                    *capability,
-                    members,
-                );
-                ExprFacts::new(builtins.unit, EffectRow::empty())
-            }
             _ => self.check_value_with_expected_ty(declared_ty, value),
         }
     }
 
-    fn check_callable_let_expr(&mut self, input: CallableLetCheckInput<'_>) -> HirTyId {
+    fn check_callable_let_expr(&mut self, input: CallableLetCheckInput) -> HirTyId {
         let CallableLetCheckInput {
             origin,
             exported,
             mods,
             pat,
             params,
-            effects,
             declared_ty,
             value,
             binding,
@@ -373,25 +329,17 @@ impl CheckPass<'_, '_, '_> {
             binding,
             mods,
             param_types: &param_types,
-            effects,
             declared_ty,
             type_params: &type_params,
             type_param_kinds: &type_param_kinds,
             constraints: &constraints,
         });
-        let (ty, callable_effects) = self.check_callable_let_binding(
-            origin,
-            &param_types,
-            &constraints,
-            effects,
-            declared_ty,
-            value,
-        );
+        let ty =
+            self.check_callable_let_binding(origin, &param_types, &constraints, declared_ty, value);
         binding.map_or(ty, |binding| {
             self.insert_let_binding_scheme(LetBindingSchemeInput {
                 binding,
                 ty,
-                effects: callable_effects,
                 type_params: (type_params, type_param_kinds),
                 param_names,
                 comptime_params,
@@ -441,21 +389,25 @@ impl CheckPass<'_, '_, '_> {
             self.insert_binding_type(binding, declared_ty.unwrap_or(builtins.unknown));
         }
         let value_facts = self.check_non_callable_let_value(
-            origin,
             is_module_stmt,
             bound_name,
             &type_params,
             declared_ty,
             value,
         );
-        self.validate_non_callable_let_pattern(origin, pat, value, value_facts.ty);
+        self.validate_non_callable_let_pattern(
+            origin,
+            pat,
+            mods.fallback.is_some(),
+            value,
+            value_facts.ty,
+        );
         let ty = declared_ty.unwrap_or(value_facts.ty);
         self.type_mismatch(origin, ty, value_facts.ty);
         if let Some(binding) = binding {
             self.insert_let_binding_scheme(LetBindingSchemeInput {
                 binding,
                 ty,
-                effects: EffectRow::empty(),
                 type_params: (type_params, type_param_kinds),
                 param_names,
                 comptime_params,
@@ -484,7 +436,6 @@ impl CheckPass<'_, '_, '_> {
             has_param_clause,
             params,
             constraints,
-            effects,
             sig,
             value,
         } = input;
@@ -505,6 +456,17 @@ impl CheckPass<'_, '_, '_> {
             let origin = self.expr(expr).origin;
             self.lower_type_expr(expr, origin)
         });
+        if is_module_stmt
+            && expr_mods.native.is_none()
+            && !self.target_attrs_match(expr_mods.attrs.clone())
+        {
+            if let Some(binding) = binding {
+                self.mark_gated_binding(binding);
+            }
+            self.pop_type_param_kinds();
+            self.finish_let_expr(pat, value, self.builtins().unknown, binding, bound_name);
+            return ExprFacts::new(builtins.unit);
+        }
 
         let final_ty = self.check_let_final_ty(LetFinalTyInput {
             expr_id,
@@ -515,7 +477,6 @@ impl CheckPass<'_, '_, '_> {
             receiver,
             has_param_clause,
             params,
-            effects: effects.as_ref(),
             value,
             binding,
             bound_name,
@@ -525,13 +486,16 @@ impl CheckPass<'_, '_, '_> {
             declared_ty,
             is_module_stmt,
         });
+        if let Some(fallback) = mods.fallback {
+            let _ = check_expr(self, fallback);
+        }
 
         self.pop_type_param_kinds();
         self.finish_let_expr(pat, value, final_ty, binding, bound_name);
-        ExprFacts::new(builtins.unit, EffectRow::empty())
+        ExprFacts::new(builtins.unit)
     }
 
-    fn check_let_final_ty(&mut self, input: LetFinalTyInput<'_>) -> HirTyId {
+    fn check_let_final_ty(&mut self, input: LetFinalTyInput) -> HirTyId {
         if input.is_module_stmt && input.expr_mods.native.is_some() {
             return check_native_let(
                 self,
@@ -548,7 +512,6 @@ impl CheckPass<'_, '_, '_> {
                 mods: input.mods,
                 pat: input.pat,
                 params: input.params,
-                effects: input.effects,
                 declared_ty: input.declared_ty,
                 value: input.value,
                 binding: input.binding,
@@ -606,7 +569,17 @@ impl CheckPass<'_, '_, '_> {
         let HirPatKind::Tuple { items: pat_items } = self.pat(pat).kind else {
             return;
         };
-        let HirExprKind::Tuple { items: value_items } = self.expr(value).kind else {
+        let value_items = match self.expr(value).kind {
+            HirExprKind::Tuple { items } => Some(items),
+            HirExprKind::Import { arg } => match self.expr(arg).kind {
+                HirExprKind::Tuple { items } | HirExprKind::Sequence { exprs: items } => {
+                    Some(items)
+                }
+                _ => None,
+            },
+            _ => None,
+        };
+        let Some(value_items) = value_items else {
             return;
         };
         let pat_items = self.pat_ids(pat_items);
@@ -621,7 +594,9 @@ impl CheckPass<'_, '_, '_> {
             let Some(binding) = self.binding_id_for_decl(name) else {
                 continue;
             };
-            if let Some(target) = import_record_target_for_expr(self, value_item) {
+            if let Some(target) = import_record_target_for_expr(self, value_item)
+                .or_else(|| self.static_import_target(self.expr(value_item).origin.span))
+            {
                 self.insert_binding_import_record_target(binding, target);
             }
         }
@@ -634,6 +609,21 @@ impl CheckPass<'_, '_, '_> {
         ) {
             self.mark_unsafe_binding(binding);
         }
+    }
+
+    fn target_attrs_match(&self, attrs: SliceRange<HirAttr>) -> bool {
+        let attrs = self.attrs(attrs);
+        let target = self.target();
+        for attr in &attrs {
+            let path = self.attr_path(attr);
+            if path.as_slice() != ["target"] {
+                continue;
+            }
+            if !self.when_attr_matches(target, attr) {
+                return false;
+            }
+        }
+        true
     }
 }
 

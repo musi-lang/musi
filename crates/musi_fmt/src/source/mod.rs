@@ -1,7 +1,7 @@
 use music_syntax::{Lexer, parse};
 
 use crate::{
-    FormatError, FormatOptions, FormatResultOf, imports::organize_imports,
+    FormatError, FormatOptions, FormatResultOf, imports::organize_imports_protecting,
     protected::protected_line_ranges,
 };
 
@@ -26,17 +26,32 @@ pub fn format_source(source: &str, options: &FormatOptions) -> FormatResultOf {
             changed: source != ensure_final_newline(source),
         });
     }
-    let organized = organize_imports(source);
-    let source = organized.as_deref().unwrap_or(source);
     let lexed = Lexer::new(source).lex();
-    let parsed = parse(lexed.clone());
-    if !lexed.errors().is_empty() || !parsed.errors().is_empty() {
+    if !lexed.errors().is_empty() {
         return Err(FormatError::SyntaxErrors);
     }
-
+    let parsed = parse(lexed);
+    if !parsed.errors().is_empty() {
+        return Err(FormatError::SyntaxErrors);
+    }
     let tree = parsed.tree();
     let protected_ranges = protected_line_ranges(source, tree);
-    let formatted_text = cst::format_cst_source(source, tree, options, protected_ranges);
+    let organized = organize_imports_protecting(source, &protected_ranges);
+    let formatted_text = if let Some(organized) = organized.as_deref() {
+        let lexed = Lexer::new(organized).lex();
+        if !lexed.errors().is_empty() {
+            return Err(FormatError::SyntaxErrors);
+        }
+        let parsed = parse(lexed);
+        if !parsed.errors().is_empty() {
+            return Err(FormatError::SyntaxErrors);
+        }
+        let tree = parsed.tree();
+        let protected_ranges = protected_line_ranges(organized, tree);
+        cst::format_cst_source(organized, tree, options, protected_ranges)
+    } else {
+        cst::format_cst_source(source, tree, options, protected_ranges)
+    };
     Ok(FormatResult {
         changed: formatted_text != original_source,
         text: formatted_text,

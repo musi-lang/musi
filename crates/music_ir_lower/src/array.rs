@@ -108,11 +108,11 @@ pub(crate) fn append_array_spread_parts(
         }
         HirTyKind::Range { bound } => {
             let result_ty_name = range_sequence_type_name(sema, *bound, ctx.interner);
-            let constraint_answer = sema
-                .expr_constraint_answers(spread_expr)
+            let constraint_evidence = sema
+                .expr_constraint_evidence(spread_expr)
                 .and_then(|items| items.first())
-                .map(|item| super::lower_constraint_answer_expr(ctx, origin, item));
-            let Some(constraint_answer) = constraint_answer else {
+                .map(|item| super::lower_constraint_evidence_expr(ctx, origin, item));
+            let Some(constraint_evidence) = constraint_evidence else {
                 return Err(super::lower_errors::lowering_error(
                     "range spread evidence missing",
                 ));
@@ -121,7 +121,7 @@ pub(crate) fn append_array_spread_parts(
                 origin,
                 IrExprKind::RangeMaterialize {
                     range: Box::new(temp_expr.clone()),
-                    evidence: Box::new(constraint_answer),
+                    evidence: Box::new(constraint_evidence),
                     result_ty_name,
                 },
             )));

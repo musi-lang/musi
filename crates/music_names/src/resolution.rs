@@ -44,8 +44,6 @@ pub enum NameBindingKind {
     TypeParam,
     PatternBind,
     Pin,
-    HandleClauseResult,
-    HandleClauseParam,
 }
 
 #[derive(Debug, Clone, Copy)]

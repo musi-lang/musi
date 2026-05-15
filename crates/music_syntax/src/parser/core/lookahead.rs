@@ -13,7 +13,7 @@ impl Parser<'_> {
         };
         self.tokens
             .get(close + 1)
-            .is_some_and(|token| matches!(token.kind, TokenKind::MinusGt | TokenKind::TildeGt))
+            .is_some_and(|token| matches!(token.kind, TokenKind::MinusGt))
     }
 
     pub(crate) fn is_comparison_expr(&self, node: SyntaxNodeId) -> bool {

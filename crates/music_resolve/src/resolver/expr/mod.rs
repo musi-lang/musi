@@ -3,10 +3,9 @@ use super::*;
 use music_arena::SliceRange;
 use music_hir::{
     HirAccessChainMode, HirArg, HirArrayItem, HirAttr, HirAttrArg, HirBinaryOp, HirConstraint,
-    HirConstraintKind, HirDim, HirEffectItem, HirEffectSet, HirExportMod, HirExprId, HirFieldDef,
-    HirHandleClause, HirLetMods, HirMatchArm, HirMemberDef, HirMemberKind, HirMods, HirNativeMod,
-    HirParam, HirPartialRangeKind, HirPat, HirPatKind, HirPrefixOp, HirQuoteKind, HirRecordItem,
-    HirSpliceKind, HirVariantDef,
+    HirConstraintKind, HirDim, HirExportMod, HirExprId, HirFieldDef, HirLetMods, HirMatchArm,
+    HirMemberDef, HirMemberKind, HirMods, HirNativeMod, HirParam, HirPartialRangeKind, HirPat,
+    HirPatKind, HirPrefixOp, HirRecordItem, HirVariantDef,
 };
 use music_syntax::{SyntaxElement, SyntaxNodeKind};
 
@@ -20,7 +19,6 @@ mod callable;
 mod composite;
 mod control;
 mod decls;
-mod effects_meta;
 mod operators;
 mod signature;
 
@@ -59,18 +57,14 @@ where
                 | SyntaxNodeKind::ImportExpr
                 | SyntaxNodeKind::ForeignBlockExpr
                 | SyntaxNodeKind::DataExpr
-                | SyntaxNodeKind::EffectExpr
                 | SyntaxNodeKind::ShapeExpr
-                | SyntaxNodeKind::GivenExpr
         ) {
             Some(match kind {
                 SyntaxNodeKind::LetExpr => self.lower_let_expr(node),
                 SyntaxNodeKind::ImportExpr => self.lower_import_expr(node),
                 SyntaxNodeKind::ForeignBlockExpr => self.lower_foreign_block_expr(node),
                 SyntaxNodeKind::DataExpr => self.lower_data_expr(node),
-                SyntaxNodeKind::EffectExpr => self.lower_effect_expr(node),
                 SyntaxNodeKind::ShapeExpr => self.lower_shape_expr(node),
-                SyntaxNodeKind::GivenExpr => self.lower_given_expr(node),
                 _ => return None,
             })
         } else {
@@ -83,15 +77,14 @@ where
             SyntaxNodeKind::NameExpr => self.lower_name_expr(node),
             SyntaxNodeKind::LiteralExpr => self.lower_literal_expr(node),
             SyntaxNodeKind::TemplateExpr => self.lower_template_expr(node),
-            SyntaxNodeKind::QuoteExpr => self.lower_quote_expr(node),
-            SyntaxNodeKind::SpliceExpr => self.lower_splice_expr(node),
             SyntaxNodeKind::AttributedExpr => self.lower_attributed_expr(node),
             SyntaxNodeKind::UnsafeExpr => self.lower_unsafe_expr(node),
             SyntaxNodeKind::PinExpr => self.lower_pin_expr(node),
+            SyntaxNodeKind::YieldExpr => self.lower_yield_expr(node),
+            SyntaxNodeKind::DeferExpr => self.lower_defer_expr(node),
             SyntaxNodeKind::TupleExpr => self.lower_tuple_expr(node),
             SyntaxNodeKind::ArrayExpr => self.lower_array_expr_or_ty(node),
             SyntaxNodeKind::ArrayTy => self.lower_array_ty_expr(node),
-            SyntaxNodeKind::AnswerTy => self.lower_answer_ty_expr(node),
             SyntaxNodeKind::RecordExpr => self.lower_record_expr(node),
             SyntaxNodeKind::VariantExpr => self.lower_variant_expr(node),
             SyntaxNodeKind::PiExpr => self.lower_pi_expr(node),
@@ -120,10 +113,7 @@ where
         let kind = node.kind();
         Some(match kind {
             SyntaxNodeKind::MatchExpr => self.lower_match_expr(node),
-            SyntaxNodeKind::AskExpr => self.lower_request_expr(node),
-            SyntaxNodeKind::AnswerLitExpr => self.lower_answer_lit_expr(node),
-            SyntaxNodeKind::HandleExpr => self.lower_handle_expr(node),
-            SyntaxNodeKind::ResumeExpr => self.lower_resume_expr(node),
+            SyntaxNodeKind::IfExpr => self.lower_if_expr(node),
             _ => return None,
         })
     }

@@ -1,41 +1,27 @@
 use std::collections::HashMap;
 
-use music_hir::{HirExprId, HirTyId};
+use music_hir::HirTyId;
 use music_module::ModuleKey;
 use music_names::{NameBindingId, Symbol};
 
-use crate::api::{ComptimeValue, ConstraintKey, GivenFacts, SemaDiagList, ShapeFacts};
+use crate::api::{ComptimeValue, ConstraintKey, SemaDiagList, ShapeFacts};
 use crate::checker::schemes::BindingScheme;
 
 use super::aliases::{
     AttachedMethodMap, BindingComptimeValueMap, BindingConstIntMap, BindingConstraintKeyMap,
-    BindingEffectsMap, BindingImportRecordTargetMap, BindingSchemeMap, BindingTypeMap, DataDefMap,
-    EffectDefMap, ExprCallableEffectsMap, ExprComptimeValueMap, ExprConstraintAnswerMap,
-    ExprDotCallableBindingMap, ExprFactsList, ExprImportRecordTargetMap, ExprMemberFactMap,
-    ForeignLinkMap, GatedBindingSet, GivenFactsMap, PatFactsList, ResumeCtxList, SealedShapeSet,
-    ShapeFactsByNameMap, ShapeFactsMap, ShapeIndexMap, TypeParamKindScopeList, TypeTestTargetMap,
-    UnsafeBindingSet,
+    BindingImportRecordTargetMap, BindingSchemeMap, BindingTypeMap, DataDefMap,
+    ExprComptimeValueMap, ExprConstraintEvidenceMap, ExprDotCallableBindingMap, ExprFactsList,
+    ExprImportRecordTargetMap, ExprMemberFactMap, ForeignLinkMap, GatedBindingSet, PatFactsList,
+    SealedShapeSet, ShapeFactsByNameMap, ShapeFactsMap, ShapeIndexMap, TypeAliasMap,
+    TypeParamKindScopeList, TypeTestTargetMap, UnsafeBindingSet,
 };
 
-use super::{DataDef, EffectDef};
-
-#[derive(Debug, Clone)]
-pub struct ResumeCtx {
-    pub arg: HirTyId,
-    pub result: HirTyId,
-}
-
-impl ResumeCtx {
-    #[must_use]
-    pub const fn new(arg: HirTyId, result: HirTyId) -> Self {
-        Self { arg, result }
-    }
-}
+use super::DataDef;
 
 #[derive(Default)]
 pub struct TypingState {
     pub binding_types: BindingTypeMap,
-    pub binding_effects: BindingEffectsMap,
+    pub type_aliases: TypeAliasMap,
     pub binding_schemes: BindingSchemeMap,
     pub type_param_kind_scopes: TypeParamKindScopeList,
     pub binding_constraint_keys: BindingConstraintKeyMap,
@@ -47,7 +33,6 @@ pub struct TypingState {
     pub foreign_links: ForeignLinkMap,
     pub unsafe_bindings: UnsafeBindingSet,
     pub attached_methods: AttachedMethodMap,
-    pub next_open_row_id: u32,
 }
 
 impl TypingState {
@@ -59,12 +44,10 @@ impl TypingState {
 
 #[derive(Default)]
 pub struct DeclState {
-    pub effect_defs: EffectDefMap,
     pub data_defs: DataDefMap,
     pub shape_index: ShapeIndexMap,
     pub shape_facts_by_name: ShapeFactsByNameMap,
     pub shape_facts: ShapeFactsMap,
-    pub given_facts: GivenFactsMap,
 }
 
 impl DeclState {
@@ -78,10 +61,9 @@ pub struct FactState {
     pub diags: SemaDiagList,
     pub expr_facts: ExprFactsList,
     pub pat_facts: PatFactsList,
-    pub expr_callable_effects: ExprCallableEffectsMap,
     pub expr_import_record_targets: ExprImportRecordTargetMap,
     pub type_test_targets: TypeTestTargetMap,
-    pub expr_constraint_answers: ExprConstraintAnswerMap,
+    pub expr_constraint_evidence: ExprConstraintEvidenceMap,
     pub expr_dot_callable_bindings: ExprDotCallableBindingMap,
     pub expr_member_facts: ExprMemberFactMap,
     pub expr_comptime_values: ExprComptimeValueMap,
@@ -94,26 +76,13 @@ impl FactState {
             diags: Vec::new(),
             expr_facts,
             pat_facts,
-            expr_callable_effects: HashMap::new(),
             expr_import_record_targets: HashMap::new(),
             type_test_targets: HashMap::new(),
-            expr_constraint_answers: HashMap::new(),
+            expr_constraint_evidence: HashMap::new(),
             expr_dot_callable_bindings: HashMap::new(),
             expr_member_facts: HashMap::new(),
             expr_comptime_values: HashMap::new(),
         }
-    }
-}
-
-#[derive(Default)]
-pub struct ResumeState {
-    pub stack: ResumeCtxList,
-}
-
-impl ResumeState {
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
     }
 }
 
@@ -148,19 +117,11 @@ impl TypingState {
 }
 
 impl DeclState {
-    pub fn effect_def(&self, name: &str) -> Option<&EffectDef> {
-        self.effect_defs.get(name)
-    }
-
     pub fn data_def(&self, name: &str) -> Option<&DataDef> {
         self.data_defs.get(name)
     }
 
     pub const fn shape_facts_by_name(&self) -> &HashMap<Symbol, ShapeFacts> {
         &self.shape_facts_by_name
-    }
-
-    pub const fn given_facts(&self) -> &HashMap<HirExprId, GivenFacts> {
-        &self.given_facts
     }
 }

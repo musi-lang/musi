@@ -21,8 +21,6 @@ pub enum OperandShape {
     WideProcedureCaptures,
     TypeLen,
     Type,
-    EffectId,
-    Effect,
     Foreign,
 }
 
@@ -41,11 +39,9 @@ pub enum VmValueKind {
     Data,
     Closure,
     Procedure,
-    Continuation,
     Type,
     Module,
     Foreign,
-    Effect,
     Shape,
 }
 
@@ -53,7 +49,6 @@ pub enum VmValueKind {
 pub enum VmStackKind {
     CallFrame,
     Operand,
-    Handler,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,7 +57,6 @@ pub enum VmIndexSpace {
     Global,
     Procedure,
     ModuleSlot,
-    EffectOp,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -181,11 +175,6 @@ pub enum VmErrorKind {
         index: Option<usize>,
         detail: Box<str>,
     },
-    EffectRejected {
-        effect: Box<str>,
-        op: Option<Box<str>>,
-        reason: Box<str>,
-    },
     RootModuleRequired,
     MissingModuleSource {
         spec: Box<str>,
@@ -194,13 +183,6 @@ pub enum VmErrorKind {
         callee: Box<str>,
         expected: usize,
         found: usize,
-    },
-    HandlerFrameMissing {
-        handler_id: u64,
-        frame_depth: usize,
-    },
-    MissingMatchingHandlerPop {
-        procedure: Box<str>,
     },
     HeapLimitExceeded {
         allocated: usize,
@@ -378,10 +360,6 @@ impl VmErrorKind {
                 .with("stage", stage)
                 .with("subject", native_subject(subject.as_deref(), *index))
                 .with("detail", detail),
-            Self::EffectRejected { effect, op, reason } => DiagContext::new()
-                .with("effect", effect)
-                .with("op", op.as_deref().unwrap_or("<any>"))
-                .with("reason", reason),
             Self::CallArityMismatch {
                 callee,
                 expected,
@@ -390,15 +368,6 @@ impl VmErrorKind {
                 .with("callee", callee)
                 .with("expected", expected)
                 .with("found", found),
-            Self::HandlerFrameMissing {
-                handler_id,
-                frame_depth,
-            } => DiagContext::new()
-                .with("handler_id", handler_id)
-                .with("frame_depth", frame_depth),
-            Self::MissingMatchingHandlerPop { procedure } => {
-                DiagContext::new().with("procedure", procedure)
-            }
             Self::HeapLimitExceeded { allocated, limit } => DiagContext::new()
                 .with("allocated", allocated)
                 .with("limit", limit),
@@ -471,7 +440,6 @@ impl Display for VmStackKind {
         match self {
             Self::CallFrame => f.write_str("call frame"),
             Self::Operand => f.write_str("operand"),
-            Self::Handler => f.write_str("handler"),
         }
     }
 }
@@ -483,7 +451,6 @@ impl Display for VmIndexSpace {
             Self::Global => f.write_str("global slot"),
             Self::Procedure => f.write_str("procedure identifier"),
             Self::ModuleSlot => f.write_str("module slot"),
-            Self::EffectOp => f.write_str("effect operation index"),
         }
     }
 }
@@ -503,8 +470,6 @@ impl From<&Operand> for OperandShape {
             Operand::WideProcedureCaptures { .. } => Self::WideProcedureCaptures,
             Operand::TypeLen { .. } => Self::TypeLen,
             Operand::Type(_) => Self::Type,
-            Operand::EffectId(_) => Self::EffectId,
-            Operand::Effect { .. } => Self::Effect,
             Operand::Foreign(_) => Self::Foreign,
         }
     }

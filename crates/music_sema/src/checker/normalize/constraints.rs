@@ -14,7 +14,6 @@ impl PassBase<'_, '_, '_> {
             .into_iter()
             .map(|constraint| {
                 let kind = match constraint.kind {
-                    HirConstraintKind::Subtype => ConstraintKind::Subtype,
                     HirConstraintKind::Implements => ConstraintKind::Implements,
                     HirConstraintKind::TypeEq => ConstraintKind::TypeEq,
                 };

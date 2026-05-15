@@ -128,14 +128,13 @@ where
         let expr_id = self.alloc_expr(
             origin,
             HirExprKind::Let {
-                mods: HirLetMods::new(false),
+                mods: HirLetMods::new(false, None),
                 pat,
                 type_params,
                 receiver: None,
                 has_param_clause,
                 params,
                 constraints,
-                effects: None,
                 sig,
                 value: body_expr,
             },
@@ -262,14 +261,6 @@ where
         HirFieldDef::new(origin, attrs, name, ty, default_value)
     }
 
-    pub(super) fn lower_effect_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
-        let origin = self.origin_node(node);
-        self.push_scope();
-        let members = self.lower_members(node);
-        self.pop_scope();
-        self.alloc_expr(origin, HirExprKind::Effect { members })
-    }
-
     pub(super) fn lower_shape_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         self.push_scope();
@@ -280,30 +271,6 @@ where
             origin,
             HirExprKind::Shape {
                 constraints,
-                members,
-            },
-        )
-    }
-
-    pub(super) fn lower_given_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
-        let origin = self.origin_node(node);
-        self.push_scope();
-
-        let type_params = self.lower_type_params_clause(node);
-        let constraints = self.lower_constraints_clause(node);
-        let shape = match node.child_nodes().find(|n| is_expr_or_ty(n.kind())) {
-            Some(expr) => self.lower_expr(expr),
-            None => self.error_expr(origin),
-        };
-        let members = self.lower_members(node);
-
-        self.pop_scope();
-        self.alloc_expr(
-            origin,
-            HirExprKind::Given {
-                type_params,
-                constraints,
-                capability: shape,
                 members,
             },
         )
@@ -321,11 +288,7 @@ where
     fn lower_member_def(&mut self, node: SyntaxNode<'tree, 'src>) -> HirMemberDef {
         let origin = self.origin_node(node);
         let attrs = self.lower_attrs(node);
-        let kind = if node.child_tokens().any(|t| t.kind() == TokenKind::KwLaw) {
-            HirMemberKind::Law
-        } else {
-            HirMemberKind::Let
-        };
+        let kind = HirMemberKind::Let;
 
         let name_tok = node
             .child_tokens()
@@ -353,7 +316,7 @@ where
             return self.lower_receiver_method_let(node);
         }
 
-        let is_rec = node.child_tokens().any(|t| t.kind() == TokenKind::KwRec);
+        let is_rec = node.child_tokens().any(|t| t.kind() == TokenKind::KwRecur);
         let pat_node = node.child_nodes().find(|n| n.kind().is_pat());
         let binders = pat_node
             .filter(|pat| pat.kind().is_pat())
@@ -378,21 +341,19 @@ where
 
         self.push_scope();
         let type_params = self.lower_let_type_params(node);
-        let mods = HirLetMods::new(is_rec);
         let has_param_clause = child_of_kind(node, SyntaxNodeKind::ParamList).is_some();
         let params = self.lower_let_params_clause(node);
         let constraints = self.lower_constraints_clause(node);
-        let effects = child_of_kind(node, SyntaxNodeKind::EffectSet)
-            .map(|effect_set| self.lower_effect_set(effect_set));
-
         let mut exprs = node
             .child_nodes()
             .filter(|child| is_expr_or_ty(child.kind()));
         let sig = self.lower_optional_expr_clause(node, TokenKind::Colon, &mut exprs);
-        let value_expr = match exprs.last() {
+        let value_expr = match exprs.next() {
             Some(expr) => self.lower_expr(expr),
             None => self.error_expr(origin),
         };
+        let fallback = self.lower_optional_expr_clause(node, TokenKind::KwElse, &mut exprs);
+        let mods = HirLetMods::new(is_rec, fallback);
         let pat = if let Some(pat_node) = pat_node.filter(|node| node.kind().is_pat()) {
             self.lower_pat(pat_node)
         } else {
@@ -418,7 +379,6 @@ where
                 has_param_clause,
                 params,
                 constraints,
-                effects,
                 sig,
                 value: value_expr,
             },
@@ -427,7 +387,7 @@ where
 
     fn lower_receiver_method_let(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
-        let is_rec = node.child_tokens().any(|t| t.kind() == TokenKind::KwRec);
+        let is_rec = node.child_tokens().any(|t| t.kind() == TokenKind::KwRecur);
         let head = child_of_kind(node, SyntaxNodeKind::ReceiverMethodHead);
         let (receiver_name, method_name) = self.receiver_method_names(head, node.span());
         let _ = self.alloc_binding_without_scope(method_name, NameBindingKind::AttachedMethod);
@@ -448,16 +408,15 @@ where
         }
         let params = self.store.params.alloc_from_iter(params);
         let constraints = self.lower_constraints_clause(node);
-        let effects = child_of_kind(node, SyntaxNodeKind::EffectSet)
-            .map(|effect_set| self.lower_effect_set(effect_set));
         let mut exprs = node
             .child_nodes()
             .filter(|child| is_expr_or_ty(child.kind()));
         let sig = self.lower_optional_expr_clause(node, TokenKind::Colon, &mut exprs);
-        let value_expr = match exprs.last() {
+        let value_expr = match exprs.next() {
             Some(expr) => self.lower_expr(expr),
             None => self.error_expr(origin),
         };
+        let fallback = self.lower_optional_expr_clause(node, TokenKind::KwElse, &mut exprs);
         self.pop_scope();
 
         let pat = self
@@ -471,14 +430,13 @@ where
         self.alloc_expr(
             origin,
             HirExprKind::Let {
-                mods: HirLetMods::new(is_rec),
+                mods: HirLetMods::new(is_rec, fallback),
                 pat,
                 type_params,
                 receiver,
                 has_param_clause: true,
                 params,
                 constraints,
-                effects,
                 sig,
                 value: value_expr,
             },

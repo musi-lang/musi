@@ -105,7 +105,7 @@ fn rhs_flat_len_until(lexed: &LexedSource, start_index: usize, stop_at_comma: bo
             break;
         }
         if let Some(previous) = previous
-            && token_tail_needs_space(previous, token.kind)
+            && rhs_token_tail_needs_space(previous, token.kind)
         {
             len = len.saturating_add(1);
         }
@@ -128,7 +128,7 @@ pub fn rhs_block_header_len(lexed: &LexedSource, start_index: usize) -> Option<u
     let first = lexed.tokens().get(start_index)?;
     if !matches!(
         first.kind,
-        TokenKind::KwData | TokenKind::KwEffect | TokenKind::KwShape | TokenKind::KwUnsafe
+        TokenKind::KwData | TokenKind::KwShape | TokenKind::KwUnsafe
     ) {
         return None;
     }
@@ -209,6 +209,44 @@ fn token_tail_needs_space(previous: TokenKind, current: TokenKind) -> bool {
         return false;
     }
     if current == TokenKind::LBrace && matches!(previous, TokenKind::RBracket | TokenKind::RParen) {
+        return true;
+    }
+    matches!(previous, TokenKind::Comma)
+        || is_operator(previous)
+        || is_operator(current)
+        || (is_word_like(previous) && is_word_like(current))
+}
+
+fn rhs_token_tail_needs_space(previous: TokenKind, current: TokenKind) -> bool {
+    if matches!(
+        previous,
+        TokenKind::LParen | TokenKind::LBracket | TokenKind::Dot
+    ) || matches!(current, TokenKind::RParen | TokenKind::RBracket)
+    {
+        return false;
+    }
+    if current == TokenKind::Dot {
+        return matches!(
+            previous,
+            TokenKind::ColonEq
+                | TokenKind::KwElse
+                | TokenKind::KwLet
+                | TokenKind::KwThen
+                | TokenKind::Pipe
+        ) || is_operator(previous);
+    }
+    if current == TokenKind::LBrace
+        && (is_word_like(previous) || matches!(previous, TokenKind::RBracket | TokenKind::RParen))
+    {
+        return true;
+    }
+    if current == TokenKind::LParen && previous != TokenKind::Colon {
+        return false;
+    }
+    if matches!(previous, TokenKind::Colon) || matches!(current, TokenKind::Colon) {
+        return true;
+    }
+    if matches!(current, TokenKind::KwElse | TokenKind::KwThen) {
         return true;
     }
     matches!(previous, TokenKind::Comma)

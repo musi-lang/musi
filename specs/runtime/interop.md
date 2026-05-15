@@ -13,7 +13,7 @@ Properties:
 - read access only
 - any number of shared borrows may coexist
 - may not be stored, returned, or closure-captured
-- may not survive handler suspension or resume
+- may not survive suspension
 
 `MutRef[T]` is exclusive, non-null, borrow-only writable safe reference.
 
@@ -22,7 +22,7 @@ Properties:
 - writable access to referent
 - exclusive for lifetime
 - may not be stored, returned, or closure-captured
-- may not survive handler suspension or resume
+- may not survive suspension
 
 `Slice[T]` is safe, non-null, borrow-only contiguous view.
 
@@ -56,7 +56,7 @@ Properties:
 
 - usable only inside `unsafe (...)`
 - no ambient null
-- nullable raw pointers use `Option[Ptr[T]]`
+- nullable raw pointers use `Maybe[Ptr[T]]`
 - no infix pointer arithmetic
 - no raw pointer indexing syntax
 

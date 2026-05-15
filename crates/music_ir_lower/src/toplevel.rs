@@ -1,23 +1,16 @@
-use std::collections::BTreeMap;
-use std::iter::repeat_n;
-
 use music_arena::SliceRange;
 use music_hir::{
-    HirAttr, HirExprId, HirExprKind, HirMemberDef, HirMemberKind, HirParam, HirPatKind, HirTyId,
-    HirTyKind, simple_hir_ty_display_name,
+    HirAttr, HirExprId, HirExprKind, HirParam, HirPatKind, HirTyId, HirTyKind,
+    simple_hir_ty_display_name,
 };
 use music_module::ModuleKey;
 use music_names::{Ident, Interner, NameBindingId};
-use music_sema::{
-    DefinitionKey, EffectRow, ExportedValue, GivenFacts, SemaDataDef, SemaModule, SurfaceTyId,
-    SurfaceTyKind,
-};
+use music_sema::{DefinitionKey, SemaDataDef, SemaModule};
 
-use super::closures::lower_user_params;
 use super::{LetItemInput, LowerCtx, TopLevelItems};
 use music_ir::{
     IrCallable, IrDataDef, IrDataVariantDef, IrExpr, IrExprKind, IrForeignDef, IrGlobal,
-    IrModuleInitPart, IrNameRef, IrOrigin, IrParam, IrRecordField,
+    IrModuleInitPart, IrParam,
 };
 
 pub(crate) fn collect_top_level_items(
@@ -60,9 +53,6 @@ pub(crate) fn collect_top_level_items(
                 items,
             );
         }
-        HirExprKind::Given { members, .. } => {
-            _ = collect_given_item(ctx, expr_id, members, exported, items);
-        }
         _ => {
             items
                 .init_parts
@@ -71,11 +61,9 @@ pub(crate) fn collect_top_level_items(
     }
 }
 
-mod given;
 mod items;
 mod profile;
 
-use given::collect_given_item;
 use items::collect_let_item;
 
 #[derive(Debug, Clone, Copy, Default)]

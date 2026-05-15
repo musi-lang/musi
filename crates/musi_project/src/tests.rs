@@ -84,7 +84,7 @@ fn assert_manifest_validation_error(
     write_file(
         test_dir.path(),
         "index.ms",
-        r"export let result : Int := 42;",
+        r"export let expect : Int := 42;",
     );
 
     let error = Project::load(test_dir.path(), ProjectOptions::default()).expect_err(load_note);
@@ -102,7 +102,7 @@ fn write_option_prelude_entry(root: &Path) {
         root,
         "index.ms",
         r"
-export let result () : Option[Int] := someOf[Int](1);
+export let expect () : Maybe[Int] := Some[Int](1);
 ",
     );
 }
@@ -129,10 +129,12 @@ fn assert_builtin_std_root_compiles(manifest: &str, suite_name: &str) {
         &format!(
             r#"
 let Testing := import "@std/testing";
+let Assert := import "@std/assert";
+let Assert := import "@std/assert";
 export let test () :=
   (
     Testing.describe("{suite_name}");
-    Testing.it("adds values", Testing.toBe(1 + 2, 3));
+    Testing.it("adds values", Assert.toBe(1 + 2, 3));
     Testing.endDescribe()
   );
 "#
@@ -193,6 +195,57 @@ fn collect_missing_std_export_docs_in_file(root: &Path, path: &Path, missing: &m
     }
 }
 
+fn collect_plain_std_doc_issues(root: &Path, dir: &Path, issues: &mut Vec<String>) {
+    let mut entries = fs::read_dir(dir)
+        .expect("std dir should be readable")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("std dir entries should be readable");
+    entries.sort_by_key(DirEntry::path);
+    for entry in entries {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_plain_std_doc_issues(root, &path, issues);
+            continue;
+        }
+        if path.extension().is_none_or(|ext| ext != "ms")
+            || path
+                .file_name()
+                .is_some_and(|name| name.to_string_lossy().ends_with(".test.ms"))
+        {
+            continue;
+        }
+        collect_plain_std_doc_issues_in_file(root, &path, issues);
+    }
+}
+
+fn collect_plain_std_doc_issues_in_file(root: &Path, path: &Path, issues: &mut Vec<String>) {
+    let banned = [
+        "alias",
+        "typedef",
+        "wrapper",
+        "helper namespace",
+        "helpers surface",
+        "surface",
+        "core operation",
+        "implementation",
+        "internal",
+    ];
+    let text = fs::read_to_string(path).expect("std module should be readable");
+    for (index, line) in text.lines().enumerate() {
+        let trimmed = line.trim_start();
+        if !(trimmed.starts_with("---") || trimmed.starts_with("--!")) {
+            continue;
+        }
+        let lower = trimmed.to_lowercase();
+        if banned.iter().any(|word| lower.contains(word)) {
+            let relative = path
+                .strip_prefix(root)
+                .expect("std path should be under root");
+            issues.push(format!("{}:{}: {}", relative.display(), index + 1, trimmed));
+        }
+    }
+}
+
 mod success {
     use super::*;
 
@@ -222,7 +275,7 @@ mod success {
         write_file(
             test_dir.path(),
             "index.ms",
-            r#"import "util"; export let result : Int := 42;"#,
+            r#"import "util"; export let expect : Int := 42;"#,
         );
         write_file(
             test_dir.path(),
@@ -244,8 +297,8 @@ mod success {
         let output = project.compile_root_entry().expect("root entry compiles");
 
         assert!(output.artifact.validate().is_ok());
-        assert!(output.text.contains("@util@0.1.0/index.ms::base"));
-        assert!(output.text.contains("@app@1.0.0/index.ms::result"));
+        assert!(output.disasm.contains("@util@0.1.0/index.ms::base"));
+        assert!(output.disasm.contains("@app@1.0.0/index.ms::expect"));
         assert!(project.package("util").is_some());
         assert_eq!(project.workspace().members.len(), 1);
     }
@@ -264,7 +317,7 @@ mod success {
         write_file(
             test_dir.path(),
             "index.ms",
-            "export let result : Int := 42;",
+            "export let expect : Int := 42;",
         );
         write_file(
             test_dir.path(),
@@ -305,7 +358,7 @@ mod success {
         write_file(
             test_dir.path(),
             "index.ms",
-            r#"import "ext"; export let result : Int := 42;"#,
+            r#"import "ext"; export let expect : Int := 42;"#,
         );
         write_file(
             &registry_root,
@@ -319,7 +372,7 @@ mod success {
         write_file(
             &registry_root,
             "ext/1.2.0/index.ms",
-            r"export let ext_result : Int := 7;",
+            r"export let ext_expect : Int := 7;",
         );
 
         let project = Project::load(
@@ -436,7 +489,7 @@ mod success {
   "exports": "./index.ms"
 }"#,
         );
-        write_file(&git_root, "index.ms", r"export let ext_result : Int := 7;");
+        write_file(&git_root, "index.ms", r"export let ext_expect : Int := 7;");
         run_git(&git_root, &["init", "--initial-branch=main"]);
         run_git(&git_root, &["add", "."]);
         run_git(
@@ -575,7 +628,7 @@ mod success {
         write_file(
             test_dir.path(),
             "index.ms",
-            r"export let result : Int := 42;",
+            r"export let expect : Int := 42;",
         );
 
         let project =
@@ -598,14 +651,14 @@ mod success {
   "name": "app",
   "version": "1.0.0",
   "dependencies": { "util": "*" },
-  "imports": { "alias": "util" },
+  "imports": { "tool": "util" },
   "workspace": ["packages/util"]
 }"#,
         );
         write_file(
             test_dir.path(),
             "index.ms",
-            r#"import "alias"; export let result : Int := 42;"#,
+            r#"import "tool"; export let expect : Int := 42;"#,
         );
         write_file(
             test_dir.path(),
@@ -647,7 +700,7 @@ mod success {
             test_dir.path(),
             "features/root.ms",
             r##"let Internal := import "#internal";
-export let result : Int := Internal.value;
+export let expect : Int := Internal.value;
 "##,
         );
         write_file(
@@ -674,17 +727,17 @@ export let result : Int := Internal.value;
   "name": "app",
   "version": "1.0.0",
   "dependencies": { "@std": "*" },
-  "workspace": ["packages/std"]
+  "workspace": ["lib/std"]
 }"#,
         );
         write_file(
             test_dir.path(),
             "index.ms",
-            r"export let result : Int := 42;",
+            r"export let expect : Int := 42;",
         );
         write_file(
             test_dir.path(),
-            "packages/std/musi.json",
+            "lib/std/musi.json",
             r#"{
   "name": "@std",
   "version": "0.1.0",
@@ -694,23 +747,23 @@ export let result : Int := Internal.value;
         );
         write_file(
             test_dir.path(),
-            "packages/std/std.ms",
+            "lib/std/std.ms",
             r#"
 export let version := "0.1.0";
 "#,
         );
         write_file(
             test_dir.path(),
-            "packages/std/testing.ms",
+            "lib/std/testing.ms",
             r#"
 export let pass := { passed := .True, message := "" };
-export let describe (_name, _body) : Unit ~> Unit := _body();
-export let it (_name, _body) : Unit ~> Unit := _body();
+export let describe (_name, _body) : Unit -> Unit := _body();
+export let it (_name, _body) : Unit -> Unit := _body();
 "#,
         );
         write_file(
             test_dir.path(),
-            "packages/std/__tests__/math.test.ms",
+            "lib/std/__tests__/math.test.ms",
             r"
 export let test () : Unit := 0;
 ",
@@ -726,67 +779,6 @@ export let test () : Unit := 0;
                 .as_str()
                 .contains("@@std@0.1.0/__tests__/math.test.ms")
         }));
-    }
-
-    #[test]
-    fn merges_synthetic_law_suites_into_project_test_targets() {
-        let test_dir = TempDir::new();
-        write_file(
-            test_dir.path(),
-            "musi.json",
-            r#"{
-  "name": "app",
-  "version": "1.0.0"
-}"#,
-        );
-        write_file(
-            test_dir.path(),
-            "index.ms",
-            r"
-native let musi_true () : Bool;
-
-export let Console := effect {
-  let readLine () : String;
-  law total () := unsafe { musi_true(); };
-};
-",
-        );
-        write_file(
-            test_dir.path(),
-            "laws.test.ms",
-            r"
-export let test () := 0;
-",
-        );
-
-        let project =
-            Project::load(test_dir.path(), ProjectOptions::default()).expect("project loads");
-        let targets = project
-            .test_targets()
-            .expect("test targets should synthesize");
-        let app_targets = targets
-            .iter()
-            .filter(|target| target.package.name == "app")
-            .collect::<Vec<_>>();
-
-        assert_eq!(app_targets.len(), 2);
-        assert_eq!(app_targets[0].kind, ProjectTestTargetKind::Module);
-        assert_eq!(
-            app_targets[1].kind,
-            ProjectTestTargetKind::SyntheticLawSuite
-        );
-        assert_eq!(
-            app_targets[1].module_key,
-            ModuleKey::new("@app@1.0.0/index.ms::__laws")
-        );
-        assert_eq!(
-            app_targets[1].source_module_key,
-            ModuleKey::new("@app@1.0.0/index.ms")
-        );
-        assert_eq!(app_targets[1].export_name.as_ref(), "musiLawsTest");
-        let ProjectTestTargetSource::SyntheticModule = &app_targets[1].source else {
-            panic!("synthetic suite source expected");
-        };
     }
 
     #[test]
@@ -819,7 +811,7 @@ export let test () := 0;
             .join("../..")
             .canonicalize()
             .expect("repo root should resolve");
-        let std_root = repo_root.join("packages/std");
+        let std_root = repo_root.join("lib/std");
         let mut missing = Vec::<String>::new();
         collect_missing_std_export_docs(&std_root, &std_root, &mut missing);
 
@@ -831,19 +823,40 @@ export let test () := 0;
     }
 
     #[test]
+    fn std_docs_use_plain_public_wording() {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .expect("repo root should resolve");
+        let std_root = repo_root.join("lib/std");
+        let mut issues = Vec::<String>::new();
+        collect_plain_std_doc_issues(&std_root, &std_root, &mut issues);
+
+        assert!(
+            issues.is_empty(),
+            "std docs use implementation-framed wording:\n{}",
+            issues.join("\n")
+        );
+    }
+
+    #[test]
     fn std_manifest_uses_restructured_public_paths() {
         let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
             .canonicalize()
             .expect("repo root should resolve");
-        let manifest = fs::read_to_string(repo_root.join("packages/std/musi.json"))
+        let manifest = fs::read_to_string(repo_root.join("lib/std/musi.json"))
             .expect("std manifest should be readable");
 
         for removed_path in [
             "\"./array\"",
             "\"./list\"",
             "\"./slice\"",
+            "\"./collections/slice\"",
             "\"./iter\"",
+            "\"./collections/iter\"",
+            "\"./math/float\"",
+            "\"./math/integer\"",
             "\"./time\"",
             "\"./io/prompt\"",
             "\"./sys\"",
@@ -856,16 +869,237 @@ export let test () := 0;
         for current in [
             "\"./collections/array\"",
             "\"./collections/list\"",
-            "\"./collections/slice\"",
-            "\"./collections/iter\"",
             "\"./datetime\"",
             "\"./encoding\"",
             "\"./cli/prompt\"",
             "\"./crypto\"",
+            "\"./word\"",
             "\"./uuid\"",
             "\"./semver\"",
         ] {
             assert!(manifest.contains(current), "std export missing: {current}");
+        }
+    }
+
+    #[test]
+    fn std_private_implementation_files_use_underscore_names() {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .expect("repo root should resolve");
+        let std_root = repo_root.join("lib/std");
+
+        for private_file in ["_sys.ms", "math/_float.ms", "math/_integer.ms"] {
+            assert!(
+                std_root.join(private_file).is_file(),
+                "private std file missing: {private_file}"
+            );
+        }
+    }
+
+    #[test]
+    fn std_prelude_keeps_ffi_types_in_ffi_module() {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .expect("repo root should resolve");
+        let prelude = fs::read_to_string(repo_root.join("lib/std/prelude.ms"))
+            .expect("std prelude should be readable");
+
+        for ffi_type in ["Pin", "CString", "CPtr"] {
+            assert!(
+                !prelude.contains(&format!("export let {ffi_type}")),
+                "prelude exports FFI type: {ffi_type}"
+            );
+        }
+    }
+
+    #[test]
+    fn std_assertion_api_keeps_one_integer_equality_matcher() {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .expect("repo root should resolve");
+        let assert = fs::read_to_string(repo_root.join("lib/std/assert.ms"))
+            .expect("std assert module should be readable");
+        let testing = fs::read_to_string(repo_root.join("lib/std/testing.ms"))
+            .expect("std testing module should be readable");
+        assert!(
+            assert.contains("export let toBe "),
+            "std assert module missing toBe matcher"
+        );
+        assert!(
+            !assert.contains("export let toEqual ") && !testing.contains("export let toEqual "),
+            "std assertion modules export duplicate integer equality matcher"
+        );
+    }
+
+    #[test]
+    fn std_testing_keeps_assertions_in_assert_module() {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .expect("repo root should resolve");
+        let testing = fs::read_to_string(repo_root.join("lib/std/testing.ms"))
+            .expect("std testing module should be readable");
+
+        for assertion_export in [
+            "export let toBe ",
+            "export let toBeTrue ",
+            "export let toBeFalse ",
+            "export let equal ",
+            "export let fail ",
+            "export let expect ",
+        ] {
+            assert!(
+                !testing.contains(assertion_export),
+                "std testing should leave assertions in @std/assert: {assertion_export}"
+            );
+        }
+    }
+
+    #[test]
+    fn std_cli_keeps_process_env_io_at_root() {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .expect("repo root should resolve");
+        let cli = fs::read_to_string(repo_root.join("lib/std/cli.ms"))
+            .expect("std cli module should be readable");
+
+        for duplicate in ["export let process", "export let env", "export let io"] {
+            assert!(
+                !cli.contains(duplicate),
+                "std cli should leave root module to own duplicate export: {duplicate}"
+            );
+        }
+        assert!(
+            cli.contains("export let prompt"),
+            "std cli should keep prompt tools"
+        );
+    }
+
+    #[test]
+    fn std_math_keeps_c_math_in_libm() {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .expect("repo root should resolve");
+        let math = fs::read_to_string(repo_root.join("lib/std/math.ms"))
+            .expect("std math module should be readable");
+
+        assert!(
+            !math.contains("import \"@std/libm\""),
+            "std math should keep C math functions in @std/libm"
+        );
+        for c_math_export in [
+            "export let fabs",
+            "export let pow",
+            "export let sqrt",
+            "export let isNan",
+            "export let isFinite",
+        ] {
+            assert!(
+                !math.contains(c_math_export),
+                "std math re-exports C math item: {c_math_export}"
+            );
+        }
+    }
+
+    #[test]
+    fn std_bits_keeps_type_constructor_in_prelude() {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .expect("repo root should resolve");
+        let bits = fs::read_to_string(repo_root.join("lib/std/bits.ms"))
+            .expect("std bits module should be readable");
+
+        assert!(
+            !bits.contains("export let Bits :="),
+            "std bits should keep Bits as a core/prelude type"
+        );
+    }
+
+    #[test]
+    fn std_type_name_exports_stay_in_owned_modules() {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .expect("repo root should resolve");
+        let std_root = repo_root.join("lib/std");
+        let allowed = ["prelude.ms", "ffi.ms"];
+        let mut unexpected = Vec::<String>::new();
+
+        for entry in fs::read_dir(&std_root).expect("std root should be readable") {
+            let entry = entry.expect("std root entry should be readable");
+            let path = entry.path();
+            if path.extension().and_then(|ext| ext.to_str()) != Some("ms") {
+                continue;
+            }
+            let relative = path
+                .strip_prefix(&std_root)
+                .expect("std path should be under root")
+                .to_string_lossy();
+            if allowed.contains(&relative.as_ref()) {
+                continue;
+            }
+            let text = fs::read_to_string(&path).expect("std module should be readable");
+            for (line_index, line) in text.lines().enumerate() {
+                let trimmed = line.trim_start();
+                if !trimmed.starts_with("export let ") || !trimmed.contains(":=") {
+                    continue;
+                }
+                let name = trimmed
+                    .trim_start_matches("export let ")
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or("");
+                let rhs = trimmed.split_once(":=").map_or("", |(_, rhs)| rhs.trim());
+                let direct_member_export = rhs.ends_with(';')
+                    && rhs.contains('.')
+                    && !rhs.starts_with('.')
+                    && !rhs.contains('(');
+                if name.chars().next().is_some_and(char::is_uppercase) && direct_member_export {
+                    unexpected.push(format!("{relative}:{}: {trimmed}", line_index + 1));
+                }
+            }
+        }
+
+        assert!(
+            unexpected.is_empty(),
+            "std type name exports should stay in owning modules:\n{}",
+            unexpected.join("\n")
+        );
+    }
+
+    #[test]
+    fn std_core_imports_stay_in_low_level_modules() {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .expect("repo root should resolve");
+        let std_root = repo_root.join("lib/std");
+        let allowed = ["bits.ms", "ffi.ms", "prelude.ms", "word.ms"];
+
+        for entry in fs::read_dir(&std_root).expect("std root should be readable") {
+            let entry = entry.expect("std root entry should be readable");
+            let path = entry.path();
+            if path.extension().and_then(|ext| ext.to_str()) != Some("ms") {
+                continue;
+            }
+            let relative = path
+                .strip_prefix(&std_root)
+                .expect("std path should be under root")
+                .to_string_lossy();
+            let text = fs::read_to_string(&path).expect("std module should be readable");
+
+            if !allowed.contains(&relative.as_ref()) {
+                assert!(
+                    !text.contains("import \"musi:core\""),
+                    "std module imports core directly: {relative}"
+                );
+            }
         }
     }
 
@@ -885,12 +1119,41 @@ export let test () := 0;
             test_dir.path(),
             "index.ms",
             r#"let Sys := import "@std/sys";
-export let result : Int := 1;
+export let expect : Int := 1;
 "#,
         );
 
         let error = Project::load(test_dir.path(), ProjectOptions::default())
             .expect_err("@std/sys should not resolve as public export");
+
+        assert_eq!(
+            error.diag_code(),
+            Some(ProjectDiagKind::SourceImportUnresolved.code())
+        );
+    }
+
+    #[test]
+    fn foundation_host_specs_stay_behind_std() {
+        let test_dir = TempDir::new();
+        write_file(
+            test_dir.path(),
+            "musi.json",
+            r#"{
+  "name": "app",
+  "version": "1.0.0",
+  "dependencies": { "@std": "*" }
+}"#,
+        );
+        write_file(
+            test_dir.path(),
+            "index.ms",
+            r#"let Env := import "musi:env";
+export let expect : Int := 1;
+"#,
+        );
+
+        let error = Project::load(test_dir.path(), ProjectOptions::default())
+            .expect_err("host foundation spec should not resolve from user package");
 
         assert_eq!(
             error.diag_code(),
@@ -916,7 +1179,7 @@ export let result : Int := 1;
             "index.ms",
             r#"
 let Hub := import "hub";
-export let result () : Bool := Hub.Dep.equals([1, 2], [1, 2]);
+export let expect () : Bit := Hub.Dep.equals([1, 2], [1, 2]);
 "#,
         );
         write_file(
@@ -954,7 +1217,7 @@ export let Dep := import "dep";
             test_dir.path(),
             "packages/dep/index.ms",
             r"
-export let equals (left : []Int, right : []Int) : Bool := left = right;
+export let equals (left : []Int, right : []Int) : Bit := left = right;
 ",
         );
 
@@ -962,7 +1225,7 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
             Project::load(test_dir.path(), ProjectOptions::default()).expect("project loads");
         let artifact = project
             .compile_root_entry_artifact()
-            .expect("root entry compiles through static reexport chain");
+            .expect("root entry compiles through static export chain");
 
         assert!(artifact.validate().is_ok());
     }
@@ -981,20 +1244,23 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
         let sema = session
             .check_module(&entry.module_key)
             .expect("@std sema should succeed");
-        let surface = sema.surface();
+        let exports = sema.surface();
 
-        let bytes = surface
+        let bytes = exports
             .exported_value("bytes")
             .expect("bytes export should exist");
-        let encoding = surface
+        let encoding = exports
             .exported_value("encoding")
             .expect("encoding export should exist");
-        let math = surface
+        let math = exports
             .exported_value("math")
             .expect("math export should exist");
-        let option = surface
-            .exported_value("option")
-            .expect("option export should exist");
+        let maybe = exports
+            .exported_value("maybe")
+            .expect("maybe export should exist");
+        let os = exports
+            .exported_value("os")
+            .expect("os export should exist");
 
         assert_eq!(
             bytes.import_record_target.as_ref(),
@@ -1009,8 +1275,12 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
             Some(&ModuleKey::new("@@std@0.1.0/math.ms"))
         );
         assert_eq!(
-            option.import_record_target.as_ref(),
-            Some(&ModuleKey::new("@@std@0.1.0/option.ms"))
+            maybe.import_record_target.as_ref(),
+            Some(&ModuleKey::new("@@std@0.1.0/maybe.ms"))
+        );
+        assert_eq!(
+            os.import_record_target.as_ref(),
+            Some(&ModuleKey::new("@@std@0.1.0/os.ms"))
         );
     }
 
@@ -1037,7 +1307,7 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
     }
 
     #[test]
-    fn std_root_member_alias_keeps_import_record_target() {
+    fn std_root_member_binding_keeps_import_record_target() {
         let test_dir = TempDir::new();
         write_file(
             test_dir.path(),
@@ -1046,7 +1316,7 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
   "name": "app",
   "version": "1.0.0",
   "dependencies": { "@std": "*" },
-  "workspace": ["packages/std"]
+  "workspace": ["lib/std"]
 }"#,
         );
         write_file(
@@ -1059,7 +1329,7 @@ export let bytes := Std.bytes;
         );
         write_file(
             test_dir.path(),
-            "packages/std/musi.json",
+            "lib/std/musi.json",
             r#"{
   "name": "@std",
   "version": "0.1.0",
@@ -1072,16 +1342,16 @@ export let bytes := Std.bytes;
         );
         write_file(
             test_dir.path(),
-            "packages/std/std.ms",
+            "lib/std/std.ms",
             r#"
 export let bytes := import "@std/bytes";
 "#,
         );
         write_file(
             test_dir.path(),
-            "packages/std/bytes.ms",
+            "lib/std/bytes.ms",
             r"
-export let equals (left : []Int, right : []Int) : Bool := left = right;
+export let equals (left : []Int, right : []Int) : Bit := left = right;
 ",
         );
 
@@ -1113,13 +1383,13 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
   "name": "app",
   "version": "1.0.0",
   "dependencies": { "@std": "*" },
-  "workspace": ["packages/std"]
+  "workspace": ["lib/std"]
 }"#,
         );
         write_option_prelude_entry(test_dir.path());
         write_file(
             test_dir.path(),
-            "packages/std/musi.json",
+            "lib/std/musi.json",
             r#"{
   "name": "@std",
   "version": "0.1.0",
@@ -1127,39 +1397,39 @@ export let equals (left : []Int, right : []Int) : Bool := left = right;
   "exports": {
     ".": "./std.ms",
     "./prelude": "./prelude.ms",
-    "./option": "./option.ms"
+    "./maybe": "./maybe.ms"
   }
 }"#,
         );
         write_file(
             test_dir.path(),
-            "packages/std/std.ms",
+            "lib/std/std.ms",
             r#"
 export let Prelude := import "@std/prelude";
-export let Option := import "@std/option";
+export let Maybe := import "@std/maybe";
 "#,
         );
         write_file(
             test_dir.path(),
-            "packages/std/prelude.ms",
+            "lib/std/prelude.ms",
             r#"
-let OptionPkg := import "@std/option";
+let MaybePkg := import "@std/maybe";
 export let Int := Int;
-export opaque let Option := OptionPkg.Option;
-export let someOf := OptionPkg.someOf;
-export let none := OptionPkg.none;
+export hidden let Maybe := MaybePkg.Maybe;
+export let Some := MaybePkg.Some;
+export let none := MaybePkg.none;
 "#,
         );
         write_file(
             test_dir.path(),
-            "packages/std/option.ms",
+            "lib/std/maybe.ms",
             r"
-export opaque let Option[T] := data {
+export hidden let Maybe[T] := data {
   | Some(T)
   | None
 };
-export let someOf[T] (value : T) : Option[T] := .Some(value);
-export let none[T] () : Option[T] := .None;
+export let Some[T] (value : T) : Maybe[T] := .Some(value);
+export let none[T] () : Maybe[T] := .None;
 ",
         );
 
@@ -1196,7 +1466,8 @@ export let none[T] () : Option[T] := .None;
             test_dir.path(),
             "index.ms",
             r#"let Testing := import "@std/testing";
-export let test () := Testing.it("adds values", Testing.toBe(1 + 2, 3));
+let Assert := import "@std/assert";
+export let test () := Testing.it("adds values", Assert.toBe(1 + 2, 3));
 "#,
         );
 
@@ -1251,7 +1522,7 @@ mod failure {
         write_file(
             test_dir.path(),
             "index.ms",
-            r"export let result : Int := 42;",
+            r"export let expect : Int := 42;",
         );
 
         let error = Project::load(test_dir.path(), ProjectOptions::default())
@@ -1445,7 +1716,7 @@ mod failure {
         write_file(
             test_dir.path(),
             "index.ms",
-            "let Missing := import \"missing\";\nexport let result : Int := 42;\n",
+            "let Missing := import \"missing\";\nexport let expect : Int := 42;\n",
         );
 
         let error = Project::load(test_dir.path(), ProjectOptions::default())
@@ -1491,7 +1762,7 @@ mod failure {
         write_file(
             test_dir.path(),
             "index.ms",
-            "export let result : Int := 42;\n",
+            "export let expect : Int := 42;\n",
         );
 
         let project =

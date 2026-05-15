@@ -35,18 +35,13 @@ pub enum ExprKind {
     Match,
     Attributed,
     Let,
-    Resume,
     Import,
     Data,
-    Effect,
+    Defer,
+    If,
     Shape,
-    Given,
-    Ask,
-    AnswerLit,
-    Handle,
     Foreign,
-    Quote,
-    Splice,
+    Yield,
     Other,
 }
 
@@ -56,12 +51,8 @@ pub enum Expr<'tree, 'src> {
     Binary(BinaryExpr<'tree, 'src>),
     Call(CallExpr<'tree, 'src>),
     Match(MatchExpr<'tree, 'src>),
-    Handle(HandleExpr<'tree, 'src>),
-    AnswerLit(AnswerLitExpr<'tree, 'src>),
     Import(ImportExpr<'tree, 'src>),
-    Given(GivenExpr<'tree, 'src>),
     Let(LetExpr<'tree, 'src>),
-    Quote(QuoteExpr<'tree, 'src>),
     Other(SyntaxNode<'tree, 'src>),
 }
 
@@ -91,27 +82,7 @@ pub struct MatchExpr<'tree, 'src> {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct HandleExpr<'tree, 'src> {
-    syntax: SyntaxNode<'tree, 'src>,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct AnswerLitExpr<'tree, 'src> {
-    syntax: SyntaxNode<'tree, 'src>,
-}
-
-#[derive(Debug, Clone, Copy)]
 pub struct ImportExpr<'tree, 'src> {
-    syntax: SyntaxNode<'tree, 'src>,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct GivenExpr<'tree, 'src> {
-    syntax: SyntaxNode<'tree, 'src>,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct QuoteExpr<'tree, 'src> {
     syntax: SyntaxNode<'tree, 'src>,
 }
 
@@ -156,12 +127,8 @@ impl<'tree, 'src> Expr<'tree, 'src> {
             SyntaxNodeKind::BinaryExpr => Some(Self::Binary(BinaryExpr { syntax: node })),
             SyntaxNodeKind::CallExpr => Some(Self::Call(CallExpr { syntax: node })),
             SyntaxNodeKind::MatchExpr => Some(Self::Match(MatchExpr { syntax: node })),
-            SyntaxNodeKind::AnswerLitExpr => Some(Self::AnswerLit(AnswerLitExpr { syntax: node })),
-            SyntaxNodeKind::HandleExpr => Some(Self::Handle(HandleExpr { syntax: node })),
             SyntaxNodeKind::ImportExpr => Some(Self::Import(ImportExpr { syntax: node })),
-            SyntaxNodeKind::GivenExpr => Some(Self::Given(GivenExpr { syntax: node })),
             SyntaxNodeKind::LetExpr => Some(Self::Let(LetExpr { syntax: node })),
-            SyntaxNodeKind::QuoteExpr => Some(Self::Quote(QuoteExpr { syntax: node })),
             kind if kind.is_expr() => Some(Self::Other(node)),
             _ => None,
         }
@@ -174,12 +141,8 @@ impl<'tree, 'src> Expr<'tree, 'src> {
             Self::Binary(expr) => expr.syntax,
             Self::Call(expr) => expr.syntax,
             Self::Match(expr) => expr.syntax,
-            Self::AnswerLit(expr) => expr.syntax,
-            Self::Handle(expr) => expr.syntax,
             Self::Import(expr) => expr.syntax,
-            Self::Given(expr) => expr.syntax,
             Self::Let(expr) => expr.syntax,
-            Self::Quote(expr) => expr.syntax,
             Self::Other(node) => node,
         }
     }
@@ -219,18 +182,13 @@ fn expr_kind_from_syntax(kind: SyntaxNodeKind) -> ExprKind {
         (SyntaxNodeKind::MatchExpr, ExprKind::Match),
         (SyntaxNodeKind::AttributedExpr, ExprKind::Attributed),
         (SyntaxNodeKind::LetExpr, ExprKind::Let),
-        (SyntaxNodeKind::ResumeExpr, ExprKind::Resume),
         (SyntaxNodeKind::ImportExpr, ExprKind::Import),
         (SyntaxNodeKind::DataExpr, ExprKind::Data),
-        (SyntaxNodeKind::EffectExpr, ExprKind::Effect),
+        (SyntaxNodeKind::DeferExpr, ExprKind::Defer),
+        (SyntaxNodeKind::IfExpr, ExprKind::If),
         (SyntaxNodeKind::ShapeExpr, ExprKind::Shape),
-        (SyntaxNodeKind::GivenExpr, ExprKind::Given),
-        (SyntaxNodeKind::AskExpr, ExprKind::Ask),
-        (SyntaxNodeKind::AnswerLitExpr, ExprKind::AnswerLit),
-        (SyntaxNodeKind::HandleExpr, ExprKind::Handle),
         (SyntaxNodeKind::ForeignBlockExpr, ExprKind::Foreign),
-        (SyntaxNodeKind::QuoteExpr, ExprKind::Quote),
-        (SyntaxNodeKind::SpliceExpr, ExprKind::Splice),
+        (SyntaxNodeKind::YieldExpr, ExprKind::Yield),
     ];
 
     EXPR_KIND_PAIRS
@@ -274,35 +232,7 @@ impl<'tree, 'src> MatchExpr<'tree, 'src> {
     }
 }
 
-impl<'tree, 'src> HandleExpr<'tree, 'src> {
-    #[must_use]
-    pub const fn syntax(self) -> SyntaxNode<'tree, 'src> {
-        self.syntax
-    }
-}
-
-impl<'tree, 'src> AnswerLitExpr<'tree, 'src> {
-    #[must_use]
-    pub const fn syntax(self) -> SyntaxNode<'tree, 'src> {
-        self.syntax
-    }
-}
-
 impl<'tree, 'src> ImportExpr<'tree, 'src> {
-    #[must_use]
-    pub const fn syntax(self) -> SyntaxNode<'tree, 'src> {
-        self.syntax
-    }
-}
-
-impl<'tree, 'src> GivenExpr<'tree, 'src> {
-    #[must_use]
-    pub const fn syntax(self) -> SyntaxNode<'tree, 'src> {
-        self.syntax
-    }
-}
-
-impl<'tree, 'src> QuoteExpr<'tree, 'src> {
     #[must_use]
     pub const fn syntax(self) -> SyntaxNode<'tree, 'src> {
         self.syntax

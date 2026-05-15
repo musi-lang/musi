@@ -47,6 +47,30 @@ mod success {
     }
 
     #[test]
+    fn line_col_uses_character_columns() {
+        let mut map = SourceMap::default();
+        let id = map.add("test.ms", "a\u{1F600}b").expect("add succeeds");
+        let src = map.get(id).expect("source exists");
+        assert_eq!(src.line_col(0), (1, 1));
+        assert_eq!(src.line_col(1), (1, 2));
+        assert_eq!(src.line_col(5), (1, 3));
+        assert_eq!(src.line_col(6), (1, 4));
+    }
+
+    #[test]
+    fn line_col_round_trips_with_offset_for_unicode_text() {
+        let mut map = SourceMap::default();
+        let id = map
+            .add("test.ms", "let icon := \"\u{1F600}\";\nlet value := 1;")
+            .expect("add succeeds");
+        let src = map.get(id).expect("source exists");
+        for (line, col) in [(1, 1), (1, 14), (1, 15), (1, 16), (2, 1), (2, 5)] {
+            let offset = src.offset(line, col).expect("offset should resolve");
+            assert_eq!(src.line_col(offset), (line, col));
+        }
+    }
+
+    #[test]
     fn line_text_returns_correct_lines() {
         assert_line_text(
             "first\nsecond\nthird",

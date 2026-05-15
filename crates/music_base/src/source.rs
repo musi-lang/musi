@@ -104,9 +104,14 @@ impl Source {
             Ok(exact) => exact,
             Err(insert) => insert.saturating_sub(1),
         };
-        let col = offset.saturating_sub(self.line_starts[line_index]);
-        let col_usize = usize::try_from(col).unwrap_or(0);
-        (line_index + 1, col_usize + 1)
+        let line_start = self.line_starts[line_index];
+        let start_idx = usize::try_from(line_start).unwrap_or(0);
+        let end_idx = usize::try_from(offset).unwrap_or(self.text.len());
+        let col = self.text.get(start_idx..end_idx).map_or_else(
+            || usize::try_from(offset.saturating_sub(line_start)).unwrap_or(0),
+            |line_prefix| line_prefix.chars().count(),
+        );
+        (line_index + 1, col + 1)
     }
 
     /// Convert a 1-based (line, column) pair to a byte offset.

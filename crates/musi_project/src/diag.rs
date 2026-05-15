@@ -1,6 +1,7 @@
 use music_base::diag::{DiagCode, DiagContext, DiagLevel, DiagnosticKind};
 
 #[path = "diag_catalog_gen.rs"]
+#[rustfmt::skip]
 mod diag_catalog_gen;
 
 pub use diag_catalog_gen::project_error_kind;

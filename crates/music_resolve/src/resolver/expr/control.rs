@@ -41,7 +41,7 @@ where
         };
 
         let mut exprs = node.child_nodes().filter(|child| child.kind().is_expr());
-        let guard = self.lower_optional_expr_clause(node, TokenKind::KwIf, &mut exprs);
+        let guard = self.lower_optional_expr_clause(node, TokenKind::KwWhere, &mut exprs);
         let expr = match exprs.next() {
             Some(expr) => self.lower_expr(expr),
             None => self.error_expr(self.origin_node(node)),
@@ -49,5 +49,21 @@ where
 
         self.pop_scope();
         HirMatchArm::new(attrs, pat, guard, expr)
+    }
+
+    pub(super) fn lower_if_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
+        let origin = self.origin_node(node);
+        let mut exprs = node.child_nodes().filter(|child| child.kind().is_expr());
+        let condition = self.lower_opt_expr(origin, exprs.next());
+        let then_expr = self.lower_opt_expr(origin, exprs.next());
+        let else_expr = self.lower_opt_expr(origin, exprs.next());
+        self.alloc_expr(
+            origin,
+            HirExprKind::If {
+                condition,
+                then_expr,
+                else_expr,
+            },
+        )
     }
 }

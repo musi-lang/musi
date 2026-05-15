@@ -15,7 +15,7 @@ where
         self.push_scope();
         let _ = self.insert_binding(binder, NameBindingKind::PiBinder);
 
-        let is_effectful = node.child_tokens().any(|t| t.kind() == TokenKind::TildeGt);
+        let is_effectful = false;
         let mut exprs = node.child_nodes();
         let binder_ty = self.lower_opt_expr(origin, exprs.next());
         let ret = self.lower_opt_expr(origin, exprs.next());

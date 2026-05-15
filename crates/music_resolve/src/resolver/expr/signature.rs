@@ -77,58 +77,18 @@ where
         let name = self.intern_ident_token_or_placeholder(name_tok, node.span());
         self.record_use(name);
 
-        let kind = if node.child_tokens().any(|t| t.kind() == TokenKind::LtColon) {
-            HirConstraintKind::Subtype
-        } else if node.child_tokens().any(|t| t.kind() == TokenKind::TildeEq) {
-            HirConstraintKind::TypeEq
-        } else {
-            HirConstraintKind::Implements
-        };
+        let kind = node
+            .child_tokens()
+            .find_map(|token| match token.kind() {
+                TokenKind::TildeEq => Some(HirConstraintKind::TypeEq),
+                TokenKind::PipeEq => Some(HirConstraintKind::Implements),
+                _ => None,
+            })
+            .unwrap_or(HirConstraintKind::Implements);
         let constraint_expr = match node.child_nodes().find(|n| is_expr_or_ty(n.kind())) {
             Some(expr) => self.lower_expr(expr),
             None => self.error_expr(self.origin_node(node)),
         };
         HirConstraint::new(name, kind, constraint_expr)
-    }
-
-    pub(super) fn lower_effect_set(&mut self, node: SyntaxNode<'tree, 'src>) -> HirEffectSet {
-        let mut items = Vec::<HirEffectItem>::new();
-        let mut open = None::<Ident>;
-        let mut saw_dots = false;
-        for child in node.children() {
-            match child {
-                SyntaxElement::Token(tok) => match tok.kind() {
-                    TokenKind::DotDotDot => saw_dots = true,
-                    TokenKind::Ident if saw_dots => {
-                        if let Some(id) = self.intern_ident_token(tok) {
-                            self.record_use(id);
-                            open = Some(id);
-                        }
-                        saw_dots = false;
-                    }
-                    _ => {}
-                },
-                SyntaxElement::Node(n) if n.kind() == SyntaxNodeKind::EffectItem => {
-                    items.push(self.lower_effect_item(n));
-                }
-                SyntaxElement::Node(_) => {}
-            }
-        }
-        let items = self.store.effect_items.alloc_from_iter(items);
-        HirEffectSet::new(items, open)
-    }
-
-    fn lower_effect_item(&mut self, node: SyntaxNode<'tree, 'src>) -> HirEffectItem {
-        let name_tok = node
-            .child_tokens()
-            .find(|t| Self::is_ident_token_kind(t.kind()));
-        let name = self.intern_ident_token_or_placeholder(name_tok, node.span());
-        self.record_use(name);
-
-        let arg = node
-            .child_nodes()
-            .find(|n| is_expr_or_ty(n.kind()))
-            .map(|n| self.lower_expr(n));
-        HirEffectItem::new(name, arg)
     }
 }

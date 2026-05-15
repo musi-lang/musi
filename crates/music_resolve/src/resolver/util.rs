@@ -1,6 +1,7 @@
 use super::*;
 
 use music_arena::SliceRange;
+use music_base::{NumericSuffixClass, parse_u32_literal, split_numeric_suffix};
 use music_hir::{HirBinder, HirConstraint, HirLit, HirLitId, HirLitKind, HirParam};
 use music_syntax::{SyntaxElement, SyntaxNodeKind};
 
@@ -27,26 +28,7 @@ pub(super) fn stmt_inner_expr<'tree, 'src>(
 }
 
 pub(super) fn parse_u32_lit(raw: &str) -> Option<u32> {
-    let raw = raw.replace('_', "");
-    let (radix, digits) = raw
-        .strip_prefix("0x")
-        .or_else(|| raw.strip_prefix("0X"))
-        .map_or_else(
-            || {
-                raw.strip_prefix("0o")
-                    .or_else(|| raw.strip_prefix("0O"))
-                    .map_or_else(
-                        || {
-                            raw.strip_prefix("0b")
-                                .or_else(|| raw.strip_prefix("0B"))
-                                .map_or((10, raw.as_str()), |rest| (2, rest))
-                        },
-                        |rest| (8, rest),
-                    )
-            },
-            |rest| (16, rest),
-        );
-    u32::from_str_radix(digits, radix).ok()
+    parse_u32_literal(raw)
 }
 
 pub(super) fn child_of_kind<'tree, 'src>(
@@ -94,7 +76,14 @@ where
     ) -> Option<HirLitId> {
         let raw = tok.text()?;
         let kind = match tok.kind() {
-            TokenKind::Int => HirLitKind::Int { raw: raw.into() },
+            TokenKind::Int => {
+                let (_, suffix) = split_numeric_suffix(raw);
+                if suffix.is_some_and(|suffix| suffix.class == NumericSuffixClass::F) {
+                    HirLitKind::Float { raw: raw.into() }
+                } else {
+                    HirLitKind::Int { raw: raw.into() }
+                }
+            }
             TokenKind::Float => HirLitKind::Float { raw: raw.into() },
             TokenKind::String => decode_string_lit(raw).map_or_else(
                 |_| HirLitKind::String { value: "".into() },

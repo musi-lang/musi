@@ -1,4 +1,4 @@
-use music_seam::{EffectId, ForeignId, TypeId};
+use music_seam::{ForeignId, TypeId};
 use music_term::TypeTerm;
 
 use super::gc::{HeapOptions, RuntimeHeap};
@@ -116,115 +116,6 @@ impl ForeignCall {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct EffectCall {
-    pub(crate) program: Program,
-    pub(crate) effect: EffectId,
-    pub(crate) module: Box<str>,
-    pub(crate) effect_name: Box<str>,
-    pub(crate) op: u16,
-    pub(crate) op_name: Box<str>,
-    pub(crate) param_tys: Box<[TypeId]>,
-    pub(crate) result_ty: TypeId,
-    pub(crate) is_comptime_safe: bool,
-}
-
-impl EffectCall {
-    #[must_use]
-    pub fn module(&self) -> &str {
-        &self.module
-    }
-
-    #[must_use]
-    pub const fn effect(&self) -> EffectId {
-        self.effect
-    }
-
-    #[must_use]
-    pub fn effect_name(&self) -> &str {
-        &self.effect_name
-    }
-
-    #[must_use]
-    pub const fn op(&self) -> u16 {
-        self.op
-    }
-
-    #[must_use]
-    pub fn op_name(&self) -> &str {
-        &self.op_name
-    }
-
-    #[must_use]
-    pub fn param_tys(&self) -> &[TypeId] {
-        &self.param_tys
-    }
-
-    #[must_use]
-    pub const fn result_ty(&self) -> TypeId {
-        self.result_ty
-    }
-
-    #[must_use]
-    pub const fn is_comptime_safe(&self) -> bool {
-        self.is_comptime_safe
-    }
-
-    #[must_use]
-    pub fn param_ty_name(&self, index: usize) -> Option<&str> {
-        self.param_tys
-            .get(index)
-            .map(|ty| self.program.type_name(*ty))
-    }
-
-    #[must_use]
-    pub fn result_ty_name(&self) -> &str {
-        self.program.type_name(self.result_ty)
-    }
-
-    #[must_use]
-    pub fn type_name(&self, ty: TypeId) -> &str {
-        self.program.type_name(ty)
-    }
-
-    #[must_use]
-    pub fn type_term(&self, ty: TypeId) -> TypeTerm {
-        self.program.type_term(ty)
-    }
-
-    #[must_use]
-    pub fn type_data_layout(&self, ty: TypeId) -> Option<&ProgramDataLayout> {
-        self.program.type_data_layout(ty)
-    }
-
-    #[must_use]
-    pub fn type_abi_kind(&self, ty: TypeId) -> ProgramTypeAbiKind {
-        self.program.type_abi_kind(ty)
-    }
-
-    #[must_use]
-    pub fn param_data_layout(&self, index: usize) -> Option<&ProgramDataLayout> {
-        let ty = *self.param_tys.get(index)?;
-        self.type_data_layout(ty)
-    }
-
-    #[must_use]
-    pub fn param_abi_kind(&self, index: usize) -> Option<ProgramTypeAbiKind> {
-        let ty = *self.param_tys.get(index)?;
-        Some(self.type_abi_kind(ty))
-    }
-
-    #[must_use]
-    pub fn result_data_layout(&self) -> Option<&ProgramDataLayout> {
-        self.type_data_layout(self.result_ty)
-    }
-
-    #[must_use]
-    pub fn result_abi_kind(&self) -> ProgramTypeAbiKind {
-        self.type_abi_kind(self.result_ty)
-    }
-}
-
 pub trait VmHost: Send {
     /// Handles one runtime foreign call.
     ///
@@ -235,18 +126,6 @@ pub trait VmHost: Send {
         &mut self,
         ctx: VmHostCallContext<'_, '_>,
         foreign: &ForeignCall,
-        args: &[Value],
-    ) -> VmResult<Value>;
-
-    /// Handles one unhandled runtime effect invocation.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`VmError`] when host effect handling rejects or fails.
-    fn handle_effect(
-        &mut self,
-        ctx: VmHostCallContext<'_, '_>,
-        effect: &EffectCall,
         args: &[Value],
     ) -> VmResult<Value>;
 }
@@ -311,6 +190,16 @@ impl<'a> VmHostContext<'a> {
 
     #[must_use]
     pub fn bool_flag(&self, value: &Value) -> Option<bool> {
+        if let Value::Int(value) = value {
+            return (*value == 0 || *value == 1).then_some(*value != 0);
+        }
+        if let Value::Nat(value) = value {
+            return (*value == 0 || *value == 1).then_some(*value != 0);
+        }
+        if let Value::Bits(bits) = value {
+            let value = bits.to_u64()?;
+            return (value == 0 || value == 1).then_some(value != 0);
+        }
         let record = self.record(value)?;
         (record.is_empty() && (record.tag() == 0 || record.tag() == 1)).then_some(record.tag() != 0)
     }
@@ -328,19 +217,6 @@ impl VmHost for RejectingHost {
     ) -> VmResult<Value> {
         Err(VmError::new(VmErrorKind::ForeignCallRejected {
             foreign: foreign.name().into(),
-        }))
-    }
-
-    fn handle_effect(
-        &mut self,
-        _ctx: &mut VmHostContext<'_>,
-        effect: &EffectCall,
-        _args: &[Value],
-    ) -> VmResult<Value> {
-        Err(VmError::new(VmErrorKind::EffectRejected {
-            effect: effect.effect_name().into(),
-            op: Some(effect.op_name().into()),
-            reason: "native host rejected runtime effect".into(),
         }))
     }
 }

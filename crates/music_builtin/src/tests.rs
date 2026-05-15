@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use super::{
-    JitLowering, all_builtin_intrinsics, all_builtin_types, all_foundation_modules,
+    IntrinsicLowering, all_builtin_intrinsics, all_builtin_types, all_foundation_modules,
     all_std_package_files, builtin_intrinsic_by_symbol,
 };
 
@@ -33,14 +33,14 @@ mod success {
     }
 
     #[test]
-    fn test_builtin_intrinsics_have_jit_contracts() {
+    fn test_builtin_intrinsics_have_lowering_contracts() {
         for def in all_builtin_intrinsics() {
-            match def.jit {
-                JitLowering::CraneliftOpcode(opcode) => assert!(!opcode.is_empty()),
-                JitLowering::CraneliftTrap(reason)
-                | JitLowering::RuntimeCall(reason)
-                | JitLowering::UnsupportedForJit(reason) => assert!(!reason.is_empty()),
-                JitLowering::VmOnly => {}
+            match def.lowering {
+                IntrinsicLowering::CraneliftOpcode(opcode) => assert!(!opcode.is_empty()),
+                IntrinsicLowering::CraneliftTrap(reason)
+                | IntrinsicLowering::RuntimeCall(reason)
+                | IntrinsicLowering::UnsupportedForBackend(reason) => assert!(!reason.is_empty()),
+                IntrinsicLowering::VmOnly => {}
             }
         }
     }

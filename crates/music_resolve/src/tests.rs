@@ -47,16 +47,14 @@ fn find_nth_name_site(
             let tok = node
                 .child_tokens()
                 .find(|t| matches!(t.kind(), TokenKind::Ident | TokenKind::OpIdent));
-            if let Some(tok) = tok {
-                if let Some(raw) = tok.text() {
-                    let canon = canonical_name_text(tok.kind(), raw);
-                    if canon == spelling {
-                        if hits == nth {
-                            return Some(NameSite::new(source_id, tok.span()));
-                        }
-                        hits += 1;
-                    }
+            if let Some(tok) = tok
+                && let Some(raw) = tok.text()
+            {
+                let canon = canonical_name_text(tok.kind(), raw);
+                if canon == spelling && hits == nth {
+                    return Some(NameSite::new(source_id, tok.span()));
                 }
+                hits += 1;
             }
         }
         for child in node.child_nodes() {
@@ -112,7 +110,7 @@ mod success {
     #[test]
     fn resolves_rec_name_use_in_rhs() {
         assert_name_binding(
-            "let rec f := f;",
+            "let recur f := f;",
             SourceId::from_raw(2),
             "f",
             0,
@@ -263,16 +261,27 @@ mod success {
                 ..ResolveOptions::default()
             },
         );
-        let y_site = find_nth_name_site(source_id, parsed.tree(), "y", 0).expect("y use site");
         let y_binding = resolved
             .names
-            .refs
-            .get(&y_site)
-            .copied()
-            .expect("y binding");
+            .bindings
+            .iter()
+            .find_map(|(id, binding)| {
+                (interner.resolve(binding.name) == "y"
+                    && binding.kind == NameBindingKind::PatternBind)
+                    .then_some(id)
+            })
+            .expect("y pattern binding");
         assert_eq!(
             resolved.names.bindings.get(y_binding).kind,
             NameBindingKind::PatternBind
+        );
+        assert!(
+            resolved
+                .names
+                .refs
+                .values()
+                .any(|binding| *binding == y_binding),
+            "expected at least one `y` reference to resolve"
         );
 
         let x_site = find_nth_name_site(source_id, parsed.tree(), "x", 0).expect("x use site");
@@ -403,8 +412,8 @@ mod success {
     #[test]
     fn data_declarations_do_not_report_variant_or_field_names_as_unbound() {
         let src = r"
-        let Option[T] := data { | Some(T) | None | };
-        let Pair[T] := data { left : T; right : T; };
+        let Maybe[T] := data { | Some(T) | None | };
+        let Pair[T] := data { let left : T; let right : T; };
     ";
         let source_id = SourceId::from_raw(6);
         let module_key = ModuleKey::new("main");
@@ -459,16 +468,26 @@ mod success {
         assert_eq!(resolved.imports[0].spec.as_str(), "std/io");
         assert_eq!(resolved.imports[0].to.as_str(), "std/io");
 
-        let io_site = find_nth_name_site(source_id, parsed.tree(), "IO", 0).expect("IO use site");
         let io_binding = resolved
             .names
-            .refs
-            .get(&io_site)
-            .copied()
-            .expect("IO binding");
+            .bindings
+            .iter()
+            .find_map(|(id, binding)| {
+                (interner.resolve(binding.name) == "IO" && binding.kind == NameBindingKind::Let)
+                    .then_some(id)
+            })
+            .expect("IO let binding");
         assert_eq!(
             resolved.names.bindings.get(io_binding).kind,
             NameBindingKind::Let
+        );
+        assert!(
+            resolved
+                .names
+                .refs
+                .values()
+                .any(|binding| *binding == io_binding),
+            "expected at least one `IO` reference to resolve"
         );
         assert!(
             resolved
@@ -514,7 +533,7 @@ mod success {
     }
 
     #[test]
-    fn static_template_imports_resolve_from_import_env() {
+    fn template_imports_report_invalid_specifier() {
         let src = r"
         let IO := import `std/io`;
     ";
@@ -538,10 +557,8 @@ mod success {
             },
         );
 
-        assert_eq!(resolved.imports.len(), 1);
-        assert_eq!(resolved.imports[0].spec.as_str(), "std/io");
-        assert_eq!(resolved.imports[0].to.as_str(), "std/io");
-        assert!(resolved.diags.is_empty(), "{:?}", resolved.diags);
+        assert!(resolved.imports.is_empty());
+        assert_eq!(resolved.diags.len(), 1);
     }
 
     #[test]
@@ -584,8 +601,8 @@ mod success {
     }
 
     #[test]
-    fn handle_answer_name_resolves() {
-        let src = "let h := answer x; handle x answer h;";
+    fn plain_name_use_resolves() {
+        let src = "let h := 1; h;";
         let source_id = SourceId::from_raw(13);
         let module_key = ModuleKey::new("main");
         let parsed = parse(Lexer::new(src).lex());

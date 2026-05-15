@@ -70,6 +70,23 @@ where
         )
     }
 
+    pub(super) fn lower_yield_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
+        let origin = self.origin_node(node);
+        let Some(value_node) = node.child_nodes().next() else {
+            return self.error_expr(origin);
+        };
+        let value = self.lower_expr(value_node);
+        self.alloc_expr(origin, HirExprKind::Yield { value })
+    }
+
+    pub(super) fn lower_defer_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
+        let origin = self.origin_node(node);
+        let mut exprs = node.child_nodes().filter(|child| child.kind().is_expr());
+        let cleanup = self.lower_opt_expr(origin, exprs.next());
+        let guard = self.lower_optional_expr_clause(node, TokenKind::KwWhere, &mut exprs);
+        self.alloc_expr(origin, HirExprKind::Defer { cleanup, guard })
+    }
+
     pub(super) fn lower_name_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let Some(tok) = node

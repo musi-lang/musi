@@ -7,6 +7,7 @@ use musi_project::ProjectError;
 use musi_rt::RuntimeError;
 use musi_tooling::ToolingError;
 use music_base::diag::{CatalogDiagnostic, DiagContext, display_catalog_or_source};
+use music_seam::{AssemblyError, MarError};
 use music_session::SessionError;
 
 use crate::diag::{CliDiagKind, cli_error_kind};
@@ -18,6 +19,8 @@ pub enum MusiError {
     SessionCompilationFailed(SessionError),
     RuntimeExecutionFailed(RuntimeError),
     ToolingIoFailed(ToolingError),
+    ArtifactTransportFailed(AssemblyError),
+    ArchiveTransportFailed(MarError),
     FormattingFailed(FormatError),
     JsonSerializationFailed(serde_json::Error),
     MissingCurrentDirectory,
@@ -106,6 +109,18 @@ impl From<ToolingError> for MusiError {
     }
 }
 
+impl From<AssemblyError> for MusiError {
+    fn from(source: AssemblyError) -> Self {
+        Self::ArtifactTransportFailed(source)
+    }
+}
+
+impl From<MarError> for MusiError {
+    fn from(source: MarError) -> Self {
+        Self::ArchiveTransportFailed(source)
+    }
+}
+
 impl From<FormatError> for MusiError {
     fn from(source: FormatError) -> Self {
         Self::FormattingFailed(source)
@@ -136,6 +151,8 @@ impl Error for MusiError {
             Self::SessionCompilationFailed(source) => Some(source),
             Self::RuntimeExecutionFailed(source) => Some(source),
             Self::ToolingIoFailed(source) => Some(source),
+            Self::ArtifactTransportFailed(source) => Some(source),
+            Self::ArchiveTransportFailed(source) => Some(source),
             Self::FormattingFailed(source) => Some(source),
             Self::JsonSerializationFailed(source) => Some(source),
             _ => None,

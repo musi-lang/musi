@@ -20,12 +20,12 @@ pub(crate) fn lower_foreign_let(
     let binding = decl_binding_id(sema, name);
     let mut symbol = name_text.clone();
     let mut link = None::<Box<str>>;
-    if let Some(binding) = binding {
-        if let Some(attrs) = sema.foreign_link(binding) {
-            link.clone_from(&attrs.name);
-            if let Some(symbol_override) = attrs.symbol.as_ref() {
-                symbol = symbol_override.clone();
-            }
+    if let Some(binding) = binding
+        && let Some(attrs) = sema.foreign_link(binding)
+    {
+        link.clone_from(&attrs.name);
+        if let Some(symbol_override) = attrs.symbol.as_ref() {
+            symbol = symbol_override.clone();
         }
     }
     let abi = expr

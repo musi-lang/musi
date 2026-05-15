@@ -27,6 +27,11 @@ pub struct KnownSymbols {
     pub string_: Symbol,
     pub rune: Symbol,
     pub bits: Symbol,
+    pub word: Symbol,
+    pub word8: Symbol,
+    pub word16: Symbol,
+    pub word32: Symbol,
+    pub word64: Symbol,
     pub range: Symbol,
     pub pin: Symbol,
     pub closed_range: Symbol,
@@ -85,6 +90,11 @@ impl KnownSymbols {
             string_: interner.intern(BuiltinTypeId::String.name()),
             rune: interner.intern(BuiltinTypeId::Rune.name()),
             bits: interner.intern(BuiltinTypeId::Bits.name()),
+            word: interner.intern(BuiltinTypeId::Word.name()),
+            word8: interner.intern(BuiltinTypeId::Word8.name()),
+            word16: interner.intern(BuiltinTypeId::Word16.name()),
+            word32: interner.intern(BuiltinTypeId::Word32.name()),
+            word64: interner.intern(BuiltinTypeId::Word64.name()),
             range: interner.intern(BuiltinTypeId::Range.name()),
             pin: interner.intern(BuiltinTypeId::Pin.name()),
             closed_range: interner.intern(BuiltinTypeId::ClosedRange.name()),
@@ -117,7 +127,7 @@ impl KnownSymbols {
     }
 
     #[must_use]
-    pub const fn compiler_prelude(self) -> [Symbol; 35] {
+    pub const fn compiler_prelude(self) -> [Symbol; 40] {
         [
             self.type_,
             self.array,
@@ -143,6 +153,11 @@ impl KnownSymbols {
             self.string_,
             self.rune,
             self.bits,
+            self.word,
+            self.word8,
+            self.word16,
+            self.word32,
+            self.word64,
             self.range,
             self.pin,
             self.closed_range,

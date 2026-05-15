@@ -3,7 +3,7 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
-use musi_foundation::resolve_spec;
+use musi_foundation::{resolve_public_spec, resolve_spec};
 use music_base::SourceId;
 use music_base::diag::{Diag, DiagContext, OwnedSourceDiag};
 use music_module::{ImportMap, ImportSiteKind, ModuleKey, ModuleSpecifier, collect_import_sites};
@@ -175,7 +175,7 @@ fn resolve_import_map_target(
 }
 
 fn resolve_package_root_spec(package: &PackageRecord, spec: &str) -> Option<ModuleKey> {
-    if let Some(target) = resolve_spec(spec) {
+    if let Some(target) = resolve_foundation_spec(package, spec) {
         return Some(target);
     }
     if spec.starts_with("./") || spec.starts_with("../") {
@@ -196,7 +196,7 @@ fn resolve_import_spec(
     package_records: &PackageRecordMap,
     package_name_index: &BTreeMap<String, PackageId>,
 ) -> Option<ModuleKey> {
-    if let Some(target) = resolve_spec(spec) {
+    if let Some(target) = resolve_foundation_spec(package, spec) {
         return Some(target);
     }
     if let Some(target) = resolve_compiler_path(
@@ -224,6 +224,13 @@ fn resolve_import_spec(
         .exports
         .get(export_key.as_str())
         .cloned()
+}
+
+fn resolve_foundation_spec(package: &PackageRecord, spec: &str) -> Option<ModuleKey> {
+    if package.package.id.name == "@std" {
+        return resolve_spec(spec);
+    }
+    resolve_public_spec(spec)
 }
 
 fn resolve_compiler_path(

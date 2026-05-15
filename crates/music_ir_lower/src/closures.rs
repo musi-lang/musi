@@ -1,7 +1,7 @@
 use super::{
-    BoundNameSet, ConstraintAnswer, HashSet, HirExprId, HirLetMods, HirParamRange, HirPatId,
-    HirPatKind, Ident, IrCallable, IrExpr, IrExprKind, IrNameRef, IrOrigin, IrParam, LowerCtx,
-    ModuleKey, NameBindingId, collect, decl_binding_id, lower_expr, lowering_invariant_violation,
+    BoundNameSet, ConstraintEvidence, HashSet, HirExprId, HirLetMods, HirParamRange, HirPatId,
+    HirPatKind, IrCallable, IrExpr, IrExprKind, IrNameRef, IrOrigin, IrParam, LowerCtx, ModuleKey,
+    NameBindingId, collect, decl_binding_id, lower_expr, lowering_invariant_violation,
 };
 use std::cmp::Ordering;
 
@@ -13,7 +13,6 @@ pub(crate) struct LoweredParams {
 pub(crate) struct ClosureCallableInput<'a> {
     pub(crate) origin: IrOrigin,
     pub(crate) prefix: &'a str,
-    pub(crate) body_id: HirExprId,
     pub(crate) body: IrExpr,
     pub(crate) hidden_params: Vec<IrParam>,
     pub(crate) hidden_param_names: Vec<Box<str>>,
@@ -52,9 +51,9 @@ pub(crate) fn lower_local_callable_let(
         }
     };
 
-    let (hidden_params, constraint_answer_bindings) =
-        super::hidden_constraint_answer_params_for_binding(ctx.sema, name.as_ref(), binding);
-    let hidden_param_names = constraint_answer_bindings
+    let (hidden_params, constraint_evidence_bindings) =
+        super::hidden_constraint_evidence_params_for_binding(ctx.sema, name.as_ref(), binding);
+    let hidden_param_names = constraint_evidence_bindings
         .values()
         .cloned()
         .collect::<Vec<_>>();
@@ -63,19 +62,19 @@ pub(crate) fn lower_local_callable_let(
         .unwrap_or(&[])
         .iter()
         .map(|key| {
-            super::lower_constraint_answer_expr(
+            super::lower_constraint_evidence_expr(
                 ctx,
                 IrOrigin::new(
                     sema.module().store.exprs.get(value).origin.source_id,
                     sema.module().store.exprs.get(value).origin.span,
                 ),
-                &ConstraintAnswer::Param { key: key.clone() },
+                &ConstraintEvidence::Param { key: key.clone() },
             )
         })
         .collect::<Vec<_>>();
-    super::push_constraint_answer_bindings(ctx, constraint_answer_bindings);
+    super::push_constraint_evidence_bindings(ctx, constraint_evidence_bindings);
     let mut body = lower_expr(ctx, value);
-    super::pop_constraint_answer_bindings(ctx);
+    super::pop_constraint_evidence_bindings(ctx);
     body.origin = IrOrigin {
         source_id: sema.module().store.exprs.get(value).origin.source_id,
         span: sema.module().store.exprs.get(value).origin.span,
@@ -85,7 +84,6 @@ pub(crate) fn lower_local_callable_let(
         ClosureCallableInput {
             origin: body.origin,
             prefix: "localfn",
-            body_id: value,
             body,
             hidden_params,
             hidden_param_names,
@@ -117,7 +115,6 @@ pub(crate) fn lower_lambda_expr(
         ClosureCallableInput {
             origin,
             prefix: "lambda",
-            body_id: body,
             body: lowered_body,
             hidden_params: Vec::new(),
             hidden_param_names: Vec::new(),
@@ -141,25 +138,11 @@ pub(crate) fn lower_user_params(ctx: &LowerCtx<'_>, params: &HirParamRange) -> L
         let binding = decl_binding_id(sema, param.name)
             .unwrap_or_else(|| lowering_invariant_violation("param binding missing"));
         bindings.push(binding);
-        lowered.push(IrParam::new(binding, interner.resolve(param.name.name)));
-    }
-    LoweredParams {
-        params: lowered,
-        bindings,
-    }
-}
-
-pub(crate) fn lower_named_params(ctx: &LowerCtx<'_>, params: &[Ident]) -> LoweredParams {
-    let sema = ctx.sema;
-    let interner = ctx.interner;
-    let mut lowered = Vec::new();
-    let mut bindings = Vec::new();
-    for param in params {
-        let binding = decl_binding_id(sema, *param).unwrap_or_else(|| {
-            lowering_invariant_violation("named param binding missing in lowering")
-        });
-        bindings.push(binding);
-        lowered.push(IrParam::new(binding, interner.resolve(param.name)));
+        let ty = sema.binding_type(binding).map_or_else(
+            || "Unknown".into(),
+            |ty| super::render_ty_name(sema, ty, interner),
+        );
+        lowered.push(IrParam::new(binding, interner.resolve(param.name.name), ty));
     }
     LoweredParams {
         params: lowered,
@@ -171,7 +154,6 @@ pub(crate) fn lower_closure_callable(
     ctx: &mut LowerCtx<'_>,
     input: ClosureCallableInput<'_>,
 ) -> IrExpr {
-    let sema = ctx.sema;
     let captures = compute_capture_bindings(
         ctx,
         &input.body,
@@ -223,13 +205,6 @@ pub(crate) fn lower_closure_callable(
             body,
         )
         .with_binding_opt(input.binding)
-        .with_effects(
-            sema.try_expr_effects(input.body_id)
-                .unwrap_or_else(|| {
-                    lowering_invariant_violation("expr effects missing for closure body")
-                })
-                .clone(),
-        )
         .with_import_record_target_opt(input.callable_import_record_target),
     );
 
@@ -267,7 +242,7 @@ pub(crate) fn compute_capture_bindings(
 
     used.retain(|binding| !local.contains(binding) && !ctx.module_level_bindings.contains(binding));
     let active_synthetic = ctx
-        .constraint_answer_bindings
+        .constraint_evidence_bindings
         .iter()
         .flat_map(|bindings| bindings.values().cloned())
         .collect::<HashSet<_>>();
@@ -318,7 +293,13 @@ pub(crate) fn lower_capture_params(
     captures
         .iter()
         .map(|capture| match capture {
-            ClosureCapture::Binding(binding) => IrParam::new(*binding, binding_name(ctx, *binding)),
+            ClosureCapture::Binding(binding) => {
+                let ty = ctx.sema.binding_type(*binding).map_or_else(
+                    || "Unknown".into(),
+                    |ty| super::render_ty_name(ctx.sema, ty, ctx.interner),
+                );
+                IrParam::new(*binding, binding_name(ctx, *binding), ty)
+            }
             ClosureCapture::Synthetic(name) => IrParam::synthetic(name.clone()),
         })
         .collect()

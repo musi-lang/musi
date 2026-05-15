@@ -101,15 +101,6 @@ impl<'ctx, 'ctx_state, 'interner, 'env> SurfaceTyImporter<'ctx, 'ctx_state, 'int
             },
             SurfaceTyKind::Bits { width } => HirTyKind::Bits { width: *width },
             SurfaceTyKind::Range { .. } => self.import_range_kind(kind),
-            SurfaceTyKind::Handler {
-                effect,
-                input,
-                output,
-            } => HirTyKind::Handler {
-                effect: self.import(*effect),
-                input: self.import(*input),
-                output: self.import(*output),
-            },
             SurfaceTyKind::Mut { inner } => HirTyKind::Mut {
                 inner: self.import(*inner),
             },

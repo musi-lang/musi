@@ -14,7 +14,6 @@ impl PassBase<'_, '_, '_> {
             HirExprKind::Variant { tag, .. } => self.resolve_symbol(tag.name).to_owned(),
             HirExprKind::Prefix { op, .. } => prefix_op_subject(op).to_owned(),
             HirExprKind::Binary { op, .. } => self.binary_op_subject(op),
-            HirExprKind::AnswerLit { effect, .. } => self.resolve_symbol(effect.name).to_owned(),
             _ => expr_kind_subject(&expr.kind).to_owned(),
         }
     }
@@ -44,7 +43,6 @@ const fn fixed_binary_op_subject(op: &HirBinaryOp) -> &'static str {
     match op {
         HirBinaryOp::Assign => "=",
         HirBinaryOp::Arrow => "->",
-        HirBinaryOp::EffectArrow => "=>",
         HirBinaryOp::TypeEq | HirBinaryOp::Eq => "==",
         HirBinaryOp::Or => "or",
         HirBinaryOp::Xor => "xor",
@@ -85,7 +83,6 @@ const fn composite_expr_subject(kind: &HirExprKind) -> Option<&'static str> {
         HirExprKind::Tuple { .. } => Some("tuple expression"),
         HirExprKind::Array { .. } => Some("array expression"),
         HirExprKind::ArrayTy { .. } => Some("array type expression"),
-        HirExprKind::AnswerTy { .. } => Some("answer type expression"),
         HirExprKind::Record { .. } => Some("record expression"),
         HirExprKind::Pi { .. } => Some("callable type expression"),
         HirExprKind::Lambda { .. } => Some("lambda expression"),
@@ -104,18 +101,14 @@ const fn decl_expr_subject(kind: &HirExprKind) -> &'static str {
     match kind {
         HirExprKind::Let { .. } => "let expression",
         HirExprKind::Import { .. } => "import expression",
+        HirExprKind::Yield { .. } => "yield expression",
+        HirExprKind::Defer { .. } => "defer expression",
         HirExprKind::Match { .. } => "match expression",
+        HirExprKind::If { .. } => "if expression",
         HirExprKind::Data { .. } => "data declaration",
-        HirExprKind::Effect { .. } => "effect declaration",
         HirExprKind::Shape { .. } => "shape declaration",
-        HirExprKind::Given { .. } => "given declaration",
-        HirExprKind::Request { .. } => "ask expression",
         HirExprKind::Unsafe { .. } => "unsafe expression",
         HirExprKind::Pin { .. } => "pin expression",
-        HirExprKind::Handle { .. } => "handle expression",
-        HirExprKind::Resume { .. } => "resume expression",
-        HirExprKind::Quote { .. } => "quote expression",
-        HirExprKind::Splice { .. } => "splice expression",
         _ => "expression",
     }
 }
@@ -126,7 +119,5 @@ const fn prefix_op_subject(op: &HirPrefixOp) -> &'static str {
         HirPrefixOp::Not => "not",
         HirPrefixOp::Mut => "mut",
         HirPrefixOp::Known => "known",
-        HirPrefixOp::Any => "any",
-        HirPrefixOp::Some => "some",
     }
 }

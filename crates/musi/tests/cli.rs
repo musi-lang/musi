@@ -10,6 +10,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use musi_project::ProjectDiagKind;
 use music_base::diag::DiagContext;
+use music_seam::{
+    MarArchive, MarOptimizationPolicy, MarPackageKind, MarProfile, decode_binary,
+    decode_mar_archive,
+};
 use serde_json::Value;
 
 static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(0);
@@ -81,8 +85,51 @@ fn parse_json(output: &[u8]) -> Value {
     serde_json::from_slice(output).expect("stdout should be valid JSON")
 }
 
+fn parse_json_file(path: &Path) -> Value {
+    let bytes = fs::read(path).expect("JSON file should be readable");
+    serde_json::from_slice(&bytes).expect("JSON file should parse")
+}
+
 fn golden_json(text: &str) -> Value {
     serde_json::from_str(text).expect("golden JSON should parse")
+}
+
+fn assert_source_map_contains_index_source(payload: &Value) {
+    let sources = payload["sources"]
+        .as_array()
+        .expect("source map should include sources array");
+    let source = sources
+        .iter()
+        .find(|source| {
+            source["path"]
+                .as_str()
+                .is_some_and(|path| path.ends_with("index.ms"))
+        })
+        .expect("source map should include index source path");
+    assert!(
+        source["text"].as_str().is_some_and(|text| !text.is_empty()),
+        "source map should include source text"
+    );
+    assert!(
+        source["line_count"].as_u64().is_some_and(|count| count > 0),
+        "source map should include line count"
+    );
+    assert!(
+        source["byte_length"].as_u64().is_some_and(|len| len > 0),
+        "source map should include source byte length"
+    );
+}
+
+fn archive_module_blob<'archive>(
+    archive: &'archive MarArchive,
+    module_key: &str,
+) -> &'archive [u8] {
+    archive
+        .modules
+        .iter()
+        .find(|module| module.key.as_ref() == module_key)
+        .map(|module| module.blob.as_ref())
+        .expect("archive module should exist")
 }
 
 fn diag_code(kind: ProjectDiagKind) -> String {
@@ -150,7 +197,7 @@ mod success {
         assert!(!manifest.contains("\"main\""));
         assert_eq!(
             index,
-            "let io := import \"@std/io\";\n\nlet message := \"Hello, world!\";\nio.writeLine(message);\n"
+            "let io := import \"@std/io\";\n\nlet message := \"Hello, world!\";\nio.writeLn(message);\n"
         );
         assert!(!index.contains("export let main"));
         assert!(test.contains("import \"@std/testing\""));
@@ -261,7 +308,7 @@ mod success {
         write_file(
             test_dir.path(),
             "index.ms",
-            "let io := import \"@std/io\";\nio.writeLine(\"Hello\");\n",
+            "let io := import \"@std/io\";\nio.writeLn(\"Hello\");\n",
         );
 
         let output = run_musi(&["run", "index.ms"], test_dir.path());
@@ -288,13 +335,14 @@ mod success {
             test_dir.path(),
             "add.test.ms",
             r#"let Testing := import "@std/testing";
+let Assert := import "@std/assert";
 
 let add (left : Int, right : Int) : Int := left + right;
 
 export let test () :=
   (
     Testing.describe("add");
-    Testing.it("adds values", Testing.toBe(add(2, 3), 5));
+    Testing.it("adds values", Assert.toBe(add(2, 3), 5));
     Testing.endDescribe()
   );
 "#,
@@ -341,11 +389,12 @@ export let test () :=
             test_dir.path(),
             "index.test.ms",
             r#"let Testing := import "@std/testing";
+let Assert := import "@std/assert";
 
 export let test () :=
   (
     Testing.describe("target");
-    Testing.it("passes", Testing.toBe(1, 1));
+    Testing.it("passes", Assert.toBe(1, 1));
     Testing.endDescribe()
   );
 "#,
@@ -371,7 +420,404 @@ export let test () :=
 
         assert_success(&output);
         assert!(test_dir.path().join("index.seam").exists());
+        let map_path = test_dir.path().join("index.seam.map");
+        assert!(map_path.exists());
+        let payload = parse_json_file(&map_path);
+        assert_eq!(payload["version"].as_u64(), Some(1));
+        assert_eq!(payload["artifact_file_name"].as_str(), Some("index.seam"));
+        assert!(
+            payload["artifact_path"]
+                .as_str()
+                .is_some_and(|path| path.ends_with("index.seam"))
+        );
+        assert_eq!(
+            payload["entry_module_key"].as_str(),
+            Some("@app@0.1.0/index.ms")
+        );
+        assert_source_map_contains_index_source(&payload);
         assert!(!test_dir.path().join("target").exists());
+    }
+
+    #[test]
+    fn build_archive_writes_mar_package() {
+        let test_dir = TempDir::new();
+        write_file(
+            test_dir.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"entry\": \"index.ms\"\n}\n",
+        );
+        write_file(
+            test_dir.path(),
+            "index.ms",
+            "export let value : Int := 1;\n",
+        );
+
+        let output = run_musi(&["build", "--archive"], test_dir.path());
+
+        assert_success(&output);
+        let path = test_dir.path().join("index.mar");
+        let bytes = fs::read(&path).expect("archive should be readable");
+        let archive = decode_mar_archive(&bytes).expect("archive should decode");
+        assert_eq!(archive.manifest.package_name.as_ref(), "app");
+        assert_eq!(archive.manifest.package_version.as_ref(), "0.1.0");
+        assert_eq!(archive.manifest.profile, MarProfile::Debug);
+        assert_eq!(archive.manifest.package_kind, MarPackageKind::Fat);
+        assert_eq!(
+            archive.manifest.entry_module.as_deref(),
+            Some("@app@0.1.0/index.ms")
+        );
+        assert!(
+            archive
+                .modules
+                .iter()
+                .any(|module| module.key.as_ref() == "@app@0.1.0/index.ms")
+        );
+        assert!(archive.modules.iter().all(|module| !module.blob.is_empty()));
+        let map_path = test_dir.path().join("index.mar.map");
+        assert!(map_path.exists());
+        let payload = parse_json_file(&map_path);
+        assert_eq!(payload["version"].as_u64(), Some(1));
+        assert_eq!(payload["artifact_file_name"].as_str(), Some("index.mar"));
+        assert!(
+            payload["artifact_path"]
+                .as_str()
+                .is_some_and(|path| path.ends_with("index.mar"))
+        );
+        assert_eq!(
+            payload["entry_module_key"].as_str(),
+            Some("@app@0.1.0/index.ms")
+        );
+        assert_source_map_contains_index_source(&payload);
+    }
+
+    #[test]
+    fn build_profile_requires_archive_output() {
+        let test_dir = TempDir::new();
+        write_file(
+            test_dir.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"entry\": \"index.ms\"\n}\n",
+        );
+        write_file(
+            test_dir.path(),
+            "index.ms",
+            "export let value : Int := 1;\n",
+        );
+
+        let output = run_musi(&["build", "--profile", "debug"], test_dir.path());
+
+        assert!(!output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("incompatible command arguments `--profile` and `missing --archive`")
+        );
+    }
+
+    #[test]
+    fn build_package_requires_archive_output() {
+        let test_dir = TempDir::new();
+        write_file(
+            test_dir.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"entry\": \"index.ms\"\n}\n",
+        );
+        write_file(
+            test_dir.path(),
+            "index.ms",
+            "export let value : Int := 1;\n",
+        );
+
+        let output = run_musi(&["build", "--package", "fat"], test_dir.path());
+
+        assert!(!output.status.success());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("incompatible command arguments `--package` and `missing --archive`")
+        );
+    }
+
+    #[test]
+    fn build_archive_release_omits_default_source_map() {
+        let test_dir = TempDir::new();
+        write_file(
+            test_dir.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"entry\": \"index.ms\"\n}\n",
+        );
+        write_file(
+            test_dir.path(),
+            "index.ms",
+            "export let value : Int := 1;\n",
+        );
+
+        let output = run_musi(
+            &["build", "--archive", "--profile", "release"],
+            test_dir.path(),
+        );
+
+        assert_success(&output);
+        let path = test_dir.path().join("index.mar");
+        let bytes = fs::read(&path).expect("archive should be readable");
+        let archive = decode_mar_archive(&bytes).expect("archive should decode");
+        assert_eq!(archive.manifest.profile, MarProfile::Release);
+        assert_eq!(archive.manifest.package_kind, MarPackageKind::Fat);
+        assert_eq!(
+            archive.manifest.optimization_policy,
+            MarOptimizationPolicy::release_fat()
+        );
+        assert_eq!(archive.modules.len(), 1);
+        assert_eq!(archive.modules[0].key.as_ref(), "@app@0.1.0/index.ms");
+        assert!(!test_dir.path().join("index.mar.map").exists());
+    }
+
+    #[test]
+    fn build_archive_release_fat_mangles_private_names_and_shrinks_entry_blob() {
+        let test_dir = TempDir::new();
+        write_file(
+            test_dir.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"entry\": \"index.ms\"\n}\n",
+        );
+        write_file(
+            test_dir.path(),
+            "index.ms",
+            r"let hiddenVeryLongPrivateGlobalForReleaseFat : Int := 41;
+let hiddenVeryLongPrivateHelperProcedureForReleaseFat (x : Int) : Int := hiddenVeryLongPrivateGlobalForReleaseFat;
+export let value : Int := hiddenVeryLongPrivateHelperProcedureForReleaseFat(1);
+",
+        );
+
+        let debug_output = run_musi(
+            &[
+                "build",
+                "--archive",
+                "--profile",
+                "debug",
+                "--package",
+                "fat",
+            ],
+            test_dir.path(),
+        );
+        assert_success(&debug_output);
+        let debug_archive_bytes =
+            fs::read(test_dir.path().join("index.mar")).expect("archive should be readable");
+        let debug_archive =
+            decode_mar_archive(&debug_archive_bytes).expect("archive should decode");
+        let debug_entry_blob = archive_module_blob(&debug_archive, "@app@0.1.0/index.ms");
+        let debug_artifact = decode_binary(debug_entry_blob).expect("artifact should decode");
+        assert!(
+            debug_artifact.strings.as_slice().iter().any(|record| {
+                record
+                    .text
+                    .as_ref()
+                    .contains("hiddenVeryLongPrivateHelperProcedureForReleaseFat")
+            }),
+            "debug archive should retain private helper names"
+        );
+
+        let release_output = run_musi(
+            &[
+                "build",
+                "--archive",
+                "--profile",
+                "release",
+                "--package",
+                "fat",
+            ],
+            test_dir.path(),
+        );
+        assert_success(&release_output);
+        let release_archive_bytes =
+            fs::read(test_dir.path().join("index.mar")).expect("archive should be readable");
+        let release_archive =
+            decode_mar_archive(&release_archive_bytes).expect("archive should decode");
+        assert_eq!(release_archive.modules.len(), 1);
+        let release_entry_blob = archive_module_blob(&release_archive, "@app@0.1.0/index.ms");
+        let release_artifact = decode_binary(release_entry_blob).expect("artifact should decode");
+        assert!(
+            release_artifact
+                .strings
+                .as_slice()
+                .iter()
+                .all(|record| !record.text.as_ref().contains("hiddenVeryLongPrivate")),
+            "release-fat archive should mangle private symbol names"
+        );
+        assert!(
+            release_artifact
+                .exports
+                .iter()
+                .any(|(_, export)| release_artifact.string_text(export.name).contains("value")),
+            "release-fat archive should preserve public export names"
+        );
+        assert!(
+            release_entry_blob.len() < debug_entry_blob.len(),
+            "release-fat entry blob should shrink after private name mangling"
+        );
+    }
+
+    #[test]
+    fn build_archive_records_thin_package_kind() {
+        let test_dir = TempDir::new();
+        write_file(
+            test_dir.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"entry\": \"index.ms\"\n}\n",
+        );
+        write_file(
+            test_dir.path(),
+            "index.ms",
+            "export let value : Int := 1;\n",
+        );
+
+        let output = run_musi(
+            &["build", "--archive", "--package", "thin"],
+            test_dir.path(),
+        );
+
+        assert_success(&output);
+        let path = test_dir.path().join("index.mar");
+        let bytes = fs::read(&path).expect("archive should be readable");
+        let archive = decode_mar_archive(&bytes).expect("archive should decode");
+        assert_eq!(archive.manifest.package_kind, MarPackageKind::Thin);
+        assert!(test_dir.path().join("index.mar.map").exists());
+    }
+
+    #[test]
+    fn build_archive_fat_bundles_static_import_modules() {
+        let test_dir = TempDir::new();
+        write_file(
+            test_dir.path(),
+            "musi.json",
+            r##"{
+  "name": "app",
+  "version": "0.1.0",
+  "entry": "index.ms",
+  "imports": { "#dep": "./dep.ms" }
+}"##,
+        );
+        write_file(
+            test_dir.path(),
+            "index.ms",
+            r##"let Dep := import "#dep";
+export let value : Int := Dep.value;
+"##,
+        );
+        write_file(test_dir.path(), "dep.ms", "export let value : Int := 7;\n");
+
+        let output = run_musi(&["build", "--archive", "--package", "fat"], test_dir.path());
+
+        assert_success(&output);
+        let bytes =
+            fs::read(test_dir.path().join("index.mar")).expect("archive should be readable");
+        let archive = decode_mar_archive(&bytes).expect("archive should decode");
+        let module_keys = archive
+            .modules
+            .iter()
+            .map(|module| module.key.as_ref())
+            .collect::<Vec<_>>();
+        assert!(module_keys.contains(&"@app@0.1.0/dep.ms"));
+        assert!(module_keys.contains(&"@app@0.1.0/index.ms"));
+        assert!(module_keys.len() > 2);
+    }
+
+    #[test]
+    fn build_archive_thin_keeps_only_entry_module() {
+        let test_dir = TempDir::new();
+        write_file(
+            test_dir.path(),
+            "musi.json",
+            r##"{
+  "name": "app",
+  "version": "0.1.0",
+  "entry": "index.ms",
+  "imports": { "#dep": "./dep.ms" }
+}"##,
+        );
+        write_file(
+            test_dir.path(),
+            "index.ms",
+            r##"let Dep := import "#dep";
+export let value : Int := Dep.value;
+"##,
+        );
+        write_file(test_dir.path(), "dep.ms", "export let value : Int := 7;\n");
+
+        let output = run_musi(
+            &["build", "--archive", "--package", "thin"],
+            test_dir.path(),
+        );
+
+        assert_success(&output);
+        let bytes =
+            fs::read(test_dir.path().join("index.mar")).expect("archive should be readable");
+        let archive = decode_mar_archive(&bytes).expect("archive should decode");
+        assert_eq!(archive.modules.len(), 1);
+        assert_eq!(archive.modules[0].key.as_ref(), "@app@0.1.0/index.ms");
+    }
+
+    #[test]
+    fn build_archive_uses_mar_extension_for_manifest_output() {
+        let test_dir = TempDir::new();
+        write_file(
+            test_dir.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"entry\": \"index.ms\",\n  \"compile\": { \"output\": \"dist/index.seam\" }\n}\n",
+        );
+        write_file(
+            test_dir.path(),
+            "index.ms",
+            "export let value : Int := 1;\n",
+        );
+
+        let output = run_musi(&["build", "--archive"], test_dir.path());
+
+        assert_success(&output);
+        assert!(test_dir.path().join("dist/index.mar").exists());
+        assert!(!test_dir.path().join("dist/index.seam").exists());
+    }
+
+    #[test]
+    fn disasm_prints_seam_mnemonics_for_project_entry() {
+        let test_dir = TempDir::new();
+        write_file(
+            test_dir.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"entry\": \"index.ms\"\n}\n",
+        );
+        write_file(
+            test_dir.path(),
+            "index.ms",
+            "export let value : Int := 1;\n",
+        );
+
+        let output = run_musi(&["disasm", "index.ms"], test_dir.path());
+
+        assert_success(&output);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains(".procedure $@app@0.1.0/index.ms::value::init"));
+        assert!(stdout.contains("ld.c.i4 1"));
+        assert!(stdout.contains("ret"));
+    }
+
+    #[test]
+    fn decomp_prints_hil_projection_for_project_entry() {
+        let test_dir = TempDir::new();
+        write_file(
+            test_dir.path(),
+            "musi.json",
+            "{\n  \"name\": \"app\",\n  \"version\": \"0.1.0\",\n  \"entry\": \"index.ms\"\n}\n",
+        );
+        write_file(
+            test_dir.path(),
+            "index.ms",
+            "export let value : Int := 1;\n",
+        );
+
+        let output = run_musi(&["decomp", "index.ms"], test_dir.path());
+
+        assert_success(&output);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("module seam.projection"));
     }
 
     #[test]
@@ -391,16 +837,15 @@ export let test () :=
             test_dir.path(),
             "io.test.ms",
             r#"let Testing := import "@std/testing";
-let Io := import "musi:io";
-let Log := import "musi:log";
-
+let Assert := import "@std/assert";
+let Io := import "@std/io";
 export let test () :=
   (
     Testing.describe("io");
-    Io.printLine("hidden stdout");
-    Io.printErrorLine("hidden stderr");
-    Log.write(40, "hidden log");
-    Testing.it("passes", Testing.toBe(1, 1));
+    Io.writeLn("hidden stdout");
+    Io.writeErrLn("hidden stderr");
+    Io.writeErrLn("hidden log");
+    Testing.it("passes", Assert.toBe(1, 1));
     Testing.endDescribe()
   );
 "#,
@@ -734,11 +1179,12 @@ export let test () :=
                 test_dir.path(),
                 &format!("{package}/add.test.ms"),
                 r#"let Testing := import "@std/testing";
+let Assert := import "@std/assert";
 
 export let test () :=
   (
     Testing.describe("workspace");
-    Testing.it("passes", Testing.toBe(1, 1));
+    Testing.it("passes", Assert.toBe(1, 1));
     Testing.endDescribe()
   );
 "#,
@@ -759,25 +1205,21 @@ export let test () :=
         write_file(
             test_dir.path(),
             "musi.json",
-            "{\n  \"workspace\": { \"members\": [\"packages/std\"] }\n}\n",
+            "{\n  \"workspace\": { \"members\": [\"lib/std\"] }\n}\n",
         );
         write_file(
             test_dir.path(),
-            "packages/std/musi.json",
+            "lib/std/musi.json",
             "{\n  \"name\": \"@std\",\n  \"version\": \"0.1.0\"\n}\n",
         );
+        write_file(test_dir.path(), "lib/std/index.ms", "let value := 1;\n");
         write_file(
             test_dir.path(),
-            "packages/std/index.ms",
-            "let value := 1;\n",
-        );
-        write_file(
-            test_dir.path(),
-            "packages/std/__tests__/std.test.ms",
+            "lib/std/__tests__/std.test.ms",
             "export let test () := ();\n",
         );
 
-        let output = run_musi(&["test", "packages/std"], test_dir.path());
+        let output = run_musi(&["test", "lib/std"], test_dir.path());
 
         assert_success(&output);
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -790,28 +1232,21 @@ export let test () :=
         write_file(
             test_dir.path(),
             "musi.json",
-            "{\n  \"workspace\": { \"members\": [\"packages/std\"] }\n}\n",
+            "{\n  \"workspace\": { \"members\": [\"lib/std\"] }\n}\n",
         );
         write_file(
             test_dir.path(),
-            "packages/std/musi.json",
+            "lib/std/musi.json",
             "{\n  \"name\": \"@std\",\n  \"version\": \"0.1.0\"\n}\n",
         );
+        write_file(test_dir.path(), "lib/std/index.ms", "let value := 1;\n");
         write_file(
             test_dir.path(),
-            "packages/std/index.ms",
-            "let value := 1;\n",
-        );
-        write_file(
-            test_dir.path(),
-            "packages/std/__tests__/std.test.ms",
+            "lib/std/__tests__/std.test.ms",
             "export let test () := ();\n",
         );
 
-        let output = run_musi(
-            &["test", "packages/std/__tests__/std.test.ms"],
-            test_dir.path(),
-        );
+        let output = run_musi(&["test", "lib/std/__tests__/std.test.ms"], test_dir.path());
 
         assert_success(&output);
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -831,11 +1266,12 @@ export let test () :=
             test_dir.path(),
             "root.test.ms",
             r#"let Testing := import "@std/testing";
+let Assert := import "@std/assert";
 
 export let test () :=
   (
     Testing.describe("root");
-    Testing.it("passes", Testing.toBe(1, 1));
+    Testing.it("passes", Assert.toBe(1, 1));
     Testing.endDescribe()
   );
 "#,
@@ -850,11 +1286,12 @@ export let test () :=
             test_dir.path(),
             "member/member.test.ms",
             r#"let Testing := import "@std/testing";
+let Assert := import "@std/assert";
 
 export let test () :=
   (
     Testing.describe("member");
-    Testing.it("passes", Testing.toBe(1, 1));
+    Testing.it("passes", Assert.toBe(1, 1));
     Testing.endDescribe()
   );
 "#,

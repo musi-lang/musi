@@ -77,7 +77,7 @@ impl ProcedureEmitter<'_, '_> {
             Operand::None,
         )));
         self.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::BrFalse,
+            Opcode::BrZ,
             Operand::Label(next_label),
         )));
         true
@@ -151,7 +151,7 @@ impl ProcedureEmitter<'_, '_> {
             Operand::None,
         )));
         self.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::BrFalse,
+            Opcode::BrZ,
             Operand::Label(next_label),
         )));
         self.compile_projected_patterns(scrutinee_slot, items, Opcode::LdElem, next_label, diags)

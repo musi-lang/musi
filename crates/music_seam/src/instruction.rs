@@ -2,8 +2,7 @@ use music_arena::Idx;
 
 use crate::artifact::StringId;
 use crate::descriptor::{
-    ConstantDescriptor, EffectDescriptor, ForeignDescriptor, GlobalDescriptor, ProcedureDescriptor,
-    TypeDescriptor,
+    ConstantDescriptor, ForeignDescriptor, GlobalDescriptor, ProcedureDescriptor, TypeDescriptor,
 };
 use crate::opcode::Opcode;
 
@@ -21,8 +20,6 @@ pub enum OperandShape {
     Procedure,
     WideProcedureCaptures,
     Foreign,
-    Effect,
-    EffectId,
     Label,
     TypeLen,
     BranchTable,
@@ -48,11 +45,6 @@ pub enum Operand {
         captures: u8,
     },
     Foreign(Idx<ForeignDescriptor>),
-    Effect {
-        effect: Idx<EffectDescriptor>,
-        op: u16,
-    },
-    EffectId(Idx<EffectDescriptor>),
     Label(LabelId),
     TypeLen {
         ty: Idx<TypeDescriptor>,

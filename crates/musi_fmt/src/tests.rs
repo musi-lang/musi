@@ -61,7 +61,7 @@ fn assert_file_format_is_stable(path: &Path, source: &str) {
     );
     let formatted_result = format_source(source, &options())
         .unwrap_or_else(|err| panic!("{}: {err:?}", path.display()));
-    assert_formatted_text_is_stable(&formatted_result.text);
+    assert_formatted_text_is_stable_for_path(path, &formatted_result.text);
 }
 
 fn assert_format_respects_width(source: &str, path: &Path) {
@@ -80,12 +80,26 @@ fn assert_format_respects_width(source: &str, path: &Path) {
 }
 
 fn assert_formatted_text_is_stable(text: &str) {
+    assert_formatted_text_is_stable_for_path(Path::new("<inline>"), text);
+}
+
+fn assert_formatted_text_is_stable_for_path(path: &Path, text: &str) {
     let formatted = Lexer::new(text).lex();
-    assert!(formatted.errors().is_empty(), "{:?}", formatted.errors());
+    assert!(
+        formatted.errors().is_empty(),
+        "{}: {:?}",
+        path.display(),
+        formatted.errors()
+    );
     let parsed = parse(formatted);
-    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+    assert!(
+        parsed.errors().is_empty(),
+        "{}: {:?}",
+        path.display(),
+        parsed.errors()
+    );
     let second = format_source(text, &options()).unwrap();
-    assert_eq!(second.text, text);
+    assert_eq!(second.text, text, "{}", path.display());
 }
 
 fn line_has_unbreakable_atom(line: &str) -> bool {
@@ -178,6 +192,27 @@ mod success {
     }
 
     #[test]
+    fn spaces_empty_groups_after_infix_operators() {
+        let formatted_array =
+            format_source("let value := if values =[] then 1 else 0;", &options())
+                .expect("empty array format");
+        let formatted_sequence =
+            format_source("let value := if next =() then 1 else 0;", &options())
+                .expect("empty sequence format");
+
+        assert_eq!(
+            formatted_array.text,
+            "let value := if values = [] then 1 else 0;\n"
+        );
+        assert_eq!(
+            formatted_sequence.text,
+            "let value := if next = () then 1 else 0;\n"
+        );
+        assert_formatted_text_is_stable(&formatted_array.text);
+        assert_formatted_text_is_stable(&formatted_sequence.text);
+    }
+
+    #[test]
     fn keeps_empty_lambda_params_attached_to_backslash() {
         let source = r"let value := \() => 1;";
 
@@ -193,6 +228,231 @@ mod success {
         let formatted_result = format_source(source, &options()).unwrap();
 
         assert_eq!(formatted_result.text, "let value := not zero1();\n");
+    }
+
+    #[test]
+    fn spaces_empty_tuple_function_type_after_annotation_colon() {
+        let source = "let value (fallback :() -> T) : T := fallback();";
+
+        let formatted_result = format_source(source, &options()).unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            "let value (fallback : () -> T) : T := fallback();\n"
+        );
+        let second = format_source(&formatted_result.text, &options()).unwrap();
+        assert_eq!(second.text, formatted_result.text);
+    }
+
+    #[test]
+    fn spaces_dot_variants_after_infix_operator() {
+        let source = "let value := flag.value =.True;";
+
+        let formatted_result = format_source(source, &options()).unwrap();
+
+        assert_eq!(formatted_result.text, "let value := flag.value = .True;\n");
+        let second = format_source(&formatted_result.text, &options()).unwrap();
+        assert_eq!(second.text, formatted_result.text);
+    }
+
+    #[test]
+    fn wraps_rhs_when_inserted_dot_variant_space_exceeds_width() {
+        let mut options = options();
+        options.line_width = 29;
+        let source = "let value := flag.value =.True;";
+
+        let formatted_result = format_source(source, &options).unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            "let value :=\n  flag.value = .True;\n"
+        );
+        let second = format_source(&formatted_result.text, &options).unwrap();
+        assert_eq!(second.text, formatted_result.text);
+    }
+
+    #[test]
+    fn spaces_compact_if_then_else_boundaries() {
+        let source = "let value := if isLower(value)then.True else fail()else .False;";
+
+        let formatted_result = format_source(source, &options()).unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            "let value := if isLower(value) then .True else fail() else .False;\n"
+        );
+        let second = format_source(&formatted_result.text, &options()).unwrap();
+        assert_eq!(second.text, formatted_result.text);
+    }
+
+    #[test]
+    fn spaces_compact_chained_if_then_else_boundaries() {
+        let source = "let value := if isLower(value)then.True else if hasDigit(value)then.False else .Unknown;";
+
+        let formatted_result = format_source(source, &options()).unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            "let value :=\n  if isLower(value) then .True else if hasDigit(value) then .False else .Unknown;\n"
+        );
+        let second = format_source(&formatted_result.text, &options()).unwrap();
+        assert_eq!(second.text, formatted_result.text);
+    }
+
+    #[test]
+    fn keeps_space_between_unsafe_keyword_and_paren_expr() {
+        let source = "let value := unsafe(Musi__floatIsFinite(value));";
+
+        let formatted_result = format_source(source, &options()).unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            "let value := unsafe (Musi__floatIsFinite(value));\n"
+        );
+        let second = format_source(&formatted_result.text, &options()).unwrap();
+        assert_eq!(second.text, formatted_result.text);
+    }
+
+    #[test]
+    fn keeps_unsafe_sequence_opening_with_unsafe_keyword() {
+        let source = "let value := unsafe(let x := ffi(); x);";
+
+        let formatted_result = format_source(source, &options()).unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            "let value := unsafe (\n  let x := ffi();\n  x\n);\n"
+        );
+        let second = format_source(&formatted_result.text, &options()).unwrap();
+        assert_eq!(second.text, formatted_result.text);
+    }
+
+    #[test]
+    fn indents_unsafe_sequence_after_multiline_bind_rhs() {
+        let source = "export let value () :=\n  unsafe(let x := ffi(); x);";
+
+        let formatted_result = format_source(source, &options()).unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            "export let value () := unsafe (\n  let x := ffi();\n  x\n);\n"
+        );
+        let second = format_source(&formatted_result.text, &options()).unwrap();
+        assert_eq!(second.text, formatted_result.text);
+    }
+
+    #[test]
+    fn keeps_unary_minus_attached_to_numeric_literal() {
+        let source = "let value := -1; let next := if value < 0 then -2.5 else value - 1; let matched := match value (| _ => -1);";
+
+        let formatted_result = format_source(source, &options()).unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            "let value := -1;\nlet next := if value < 0 then -2.5 else value - 1;\nlet matched := match value (\n| _ => -1\n);\n"
+        );
+        let second = format_source(&formatted_result.text, &options()).unwrap();
+        assert_eq!(second.text, formatted_result.text);
+    }
+
+    #[test]
+    fn keeps_space_before_unit_sequence_after_then_else() {
+        let source = "let value := if done then() else();";
+
+        let formatted_result = format_source(source, &options()).unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            "let value := if done then () else ();\n"
+        );
+        let second = format_source(&formatted_result.text, &options()).unwrap();
+        assert_eq!(second.text, formatted_result.text);
+    }
+
+    #[test]
+    fn spaces_let_else_dot_variant() {
+        let source = "let .Some(value):=maybe else.None;";
+
+        let formatted_result = format_source(source, &options()).unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            "let .Some(value) := maybe else .None;\n"
+        );
+        let second = format_source(&formatted_result.text, &options()).unwrap();
+        assert_eq!(second.text, formatted_result.text);
+    }
+
+    #[test]
+    fn wraps_long_if_else_before_else() {
+        let mut options = options();
+        options.line_width = 72;
+        let source = "let value := if conditionIsVeryLong(target) then resultWhenTrue(target) else resultWhenFalse(target);";
+
+        let formatted_result = format_source(source, &options).unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            "let value :=\n  if conditionIsVeryLong(target) then resultWhenTrue(target)\n  else resultWhenFalse(target);\n"
+        );
+        let second = format_source(&formatted_result.text, &options).unwrap();
+        assert_eq!(second.text, formatted_result.text);
+    }
+
+    #[test]
+    fn wraps_long_nested_if_else_before_else() {
+        let mut options = options();
+        options.line_width = 72;
+        let source = "let value := choose(if conditionIsVeryLong(target) then resultWhenTrue(target) else resultWhenFalse(target));";
+
+        let formatted_result = format_source(source, &options).unwrap();
+
+        assert!(
+            formatted_result
+                .text
+                .lines()
+                .all(|line| line.chars().count() <= options.line_width)
+        );
+        let second = format_source(&formatted_result.text, &options).unwrap();
+        assert_eq!(second.text, formatted_result.text);
+    }
+
+    #[test]
+    fn wraps_long_let_else_before_else() {
+        let mut options = options();
+        options.line_width = 72;
+        let source = "let .Some(value) := maybeResultWithLongName(target) else fallbackWhenMissingWithLongName(target);";
+
+        let formatted_result = format_source(source, &options).unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            "let .Some(value) :=\n  maybeResultWithLongName(target)\n  else fallbackWhenMissingWithLongName(target);\n"
+        );
+        let second = format_source(&formatted_result.text, &options).unwrap();
+        assert_eq!(second.text, formatted_result.text);
+    }
+
+    #[test]
+    fn aligns_else_with_if_inside_sequence_expression() {
+        let source = "let value := (
+  let major := compareByte(leftText, rightText, 0);
+  if major /= 0 then major
+    else
+    (
+      let minor := compareByte(leftText, rightText, 2);
+      if minor /= 0 then minor else compareByte(leftText, rightText, 4)
+    )
+);";
+
+        let formatted_result = format_source(source, &options()).unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            "let value :=\n  (\n    let major := compareByte(leftText, rightText, 0);\n    if major /= 0 then major\n    else\n      (\n        let minor := compareByte(leftText, rightText, 2);\n        if minor /= 0 then minor else compareByte(leftText, rightText, 4)\n      )\n  );\n"
+        );
+        let second = format_source(&formatted_result.text, &options()).unwrap();
+        assert_eq!(second.text, formatted_result.text);
     }
 
     #[test]
@@ -256,13 +516,13 @@ mod success {
 
     #[test]
     fn keeps_call_arguments_on_one_line_when_they_fit_width() {
-        let source = "let ok := testing.it(\"adds values\", testing.toBeTrue(add(1, 2)));";
+        let source = "let success := testing.it(\"adds values\", assert.toBeTrue(add(1, 2)));";
 
         let formatted_result = format_source(source, &options()).unwrap();
 
         assert_eq!(
             formatted_result.text,
-            "let ok := testing.it(\"adds values\", testing.toBeTrue(add(1, 2)));\n"
+            "let success := testing.it(\"adds values\", assert.toBeTrue(add(1, 2)));\n"
         );
         assert!(
             formatted_result
@@ -310,7 +570,7 @@ mod success {
     fn keeps_bind_operator_attached_to_broken_receiver_signature() {
         let mut options = options();
         options.line_width = 64;
-        let source = r"export let(self : Option[T]).fold [T, U] (onNone : U, onSome : T -> U) : U
+        let source = r"export let(self : Maybe[T]).fold [T, U] (onNone : U, onSome : T -> U) : U
   :=
   fold[T, U](self, onNone, onSome);
 ";
@@ -319,7 +579,7 @@ mod success {
 
         assert_eq!(
             formatted_result.text,
-            r"export let (self : Option[T]).fold [T, U] (
+            r"export let (self : Maybe[T]).fold [T, U] (
   onNone : U,
   onSome : T -> U
 ) : U := fold[T, U](self, onNone, onSome);
@@ -337,24 +597,83 @@ mod success {
 
     #[test]
     fn keeps_fitting_rhs_after_multiline_receiver_signature() {
-        let source = r"export let (self : Result[T, E]).fold [T, E, U] (
-  onOk : T -> U,
-  onErr : E -> U
+        let source = r"export let (self : Expect[T, E]).fold [T, E, U] (
+  onSuccess : T -> U,
+  onFailure : E -> U
 ) : U :=
-  fold[T, E, U](self, onOk, onErr);
+  fold[T, E, U](self, onSuccess, onFailure);
 ";
 
         let formatted_result = format_source(source, &options()).unwrap();
 
         assert_eq!(
             formatted_result.text,
-            r"export let (self : Result[T, E]).fold [T, E, U] (
-  onOk : T -> U,
-  onErr : E -> U
-) : U := fold[T, E, U](self, onOk, onErr);
+            r"export let (
+  self : Expect[T, E]
+).fold [T, E, U] (onSuccess : T -> U, onFailure : E -> U) : U :=
+  fold[T, E, U](self, onSuccess, onFailure);
 "
         );
         let second = format_source(&formatted_result.text, &options()).unwrap();
+        assert_eq!(second.text, formatted_result.text);
+    }
+
+    #[test]
+    fn wraps_long_receiver_method_signature_with_generics_and_single_param() {
+        let mut options = options();
+        options.line_width = 80;
+        let source = "export let (self : Expect[T, E]).mapFail [T, E, F] (f : E -> F) : Expect[T, F,] := mapFail[T, E, F](self, f);";
+
+        let formatted_result = format_source(source, &options).unwrap();
+
+        assert!(
+            formatted_result
+                .text
+                .lines()
+                .all(|line| line.chars().count() <= options.line_width)
+        );
+        let second = format_source(&formatted_result.text, &options).unwrap();
+        assert_eq!(second.text, formatted_result.text);
+    }
+
+    #[test]
+    fn wraps_long_multiline_receiver_method_signature_before_bind_operator() {
+        let mut options = options();
+        options.line_width = 80;
+        let source = r"export let (
+  self : Expect[T, E]
+).mapFail [T, E, F] (f : E -> F) : Expect[T, F,]
+:=
+  mapFail[T, E, F](self, f);
+";
+
+        let formatted_result = format_source(source, &options).unwrap();
+
+        assert!(
+            formatted_result
+                .text
+                .lines()
+                .all(|line| line.chars().count() <= options.line_width)
+        );
+        let second = format_source(&formatted_result.text, &options).unwrap();
+        assert_eq!(second.text, formatted_result.text);
+    }
+
+    #[test]
+    fn wraps_compact_receiver_method_signature_after_spacing_expands_it() {
+        let mut options = options();
+        options.line_width = 80;
+        let source = "export let(self:Expect[T,E]).mapFail[T,E,F](f:E->F):Expect[T,F,]:=mapFail[T,E,F](self,f);";
+
+        let formatted_result = format_source(source, &options).unwrap();
+
+        assert!(
+            formatted_result
+                .text
+                .lines()
+                .all(|line| line.chars().count() <= options.line_width)
+        );
+        let second = format_source(&formatted_result.text, &options).unwrap();
         assert_eq!(second.text, formatted_result.text);
     }
 
@@ -394,8 +713,21 @@ mod success {
     }
 
     #[test]
+    fn keeps_short_declaration_parameters_inline_when_body_wraps() {
+        let source =
+            "export let exists (target : Path) : Bit := fsHost.exists(target.toString()) > 0;";
+
+        let formatted_result = format_source(source, &options()).unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            "export let exists (target : Path) : Bit := fsHost.exists(target.toString()) > 0;\n"
+        );
+    }
+
+    #[test]
     fn keeps_fitting_effect_members_inline_and_aligned() {
-        let source = r"export opaque let Runtime := effect {
+        let source = r"export hidden let Runtime := shape {
   let envGet (name : String) : String;
   let envSet (name : String, value : String) : Int;
   let randomIntInRange (lowerBound : Int, upperBound : Int) : Int;
@@ -405,7 +737,7 @@ mod success {
 
         assert_eq!(
             formatted_result.text,
-            r"export opaque let Runtime := effect {
+            r"export hidden let Runtime := shape {
   let envGet (name : String) : String;
   let envSet (name : String, value : String) : Int;
   let randomIntInRange (lowerBound : Int, upperBound : Int) : Int;
@@ -426,13 +758,13 @@ mod success {
     fn wraps_only_long_effect_member_parameters() {
         let mut options = options();
         options.line_width = 48;
-        let source = "export opaque let Runtime := effect { let randomIntInRange (lowerBound : Int, upperBound : Int) : Int; };";
+        let source = "export hidden let Runtime := shape { let randomIntInRange (lowerBound : Int, upperBound : Int) : Int; };";
 
         let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
             formatted_result.text,
-            r"export opaque let Runtime := effect {
+            r"export hidden let Runtime := shape {
   let randomIntInRange (
     lowerBound : Int,
     upperBound : Int
@@ -452,13 +784,13 @@ mod success {
 
     #[test]
     fn keeps_fitting_instance_members_inline_and_spaced() {
-        let source = "export let intRangeable := given Rangeable[Int] { let next (value : Int) : Option[Int] := someOf[Int](value + 1); };";
+        let source = "export let intRangeable := shape { let next (value : Int) : Maybe[Int] := Some[Int](value + 1); };";
 
         let formatted_result = format_source(source, &options()).unwrap();
 
         assert_eq!(
             formatted_result.text,
-            "export let intRangeable :=\n  given Rangeable[Int] {\n  let next (value : Int) : Option[Int] := someOf[Int](value + 1);\n};\n"
+            "export let intRangeable := shape {\n  let next (value : Int) : Maybe[Int] := Some[Int](value + 1);\n};\n"
         );
     }
 
@@ -502,6 +834,34 @@ mod success {
             "let value :=\n  foo(\n    aaaaaaaaaaaaaaaaaaaa,\n    bbbbbbbbbbbbbbbbbbbb,\n  );\n"
         );
         let second = format_source(&formatted_result.text, &options).unwrap();
+        assert_eq!(second.text, formatted_result.text);
+    }
+
+    #[test]
+    fn declaration_wrap_keeps_short_type_applications_inline() {
+        let source = "let expectAndThen [T, E, U] (target : Expect[T, E], f : T -> Expect[U, E]) : Expect[U, E] := target.andThen(f);";
+
+        let formatted_result = format_source(source, &options()).unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            "let expectAndThen [T, E, U] (\n  target : Expect[T, E],\n  f : T -> Expect[U, E]\n) : Expect[U, E] := target.andThen(f);\n"
+        );
+        let second = format_source(&formatted_result.text, &options()).unwrap();
+        assert_eq!(second.text, formatted_result.text);
+    }
+
+    #[test]
+    fn declaration_wrap_drops_empty_trailing_parameter_item() {
+        let source = "export let betweenInclusive (actual : Int, lowerBound : Int, upperBound : Int,) : Bit := assert.betweenInclusive(actual, lowerBound, upperBound);";
+
+        let formatted_result = format_source(source, &options()).unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            "export let betweenInclusive (\n  actual : Int,\n  lowerBound : Int,\n  upperBound : Int\n) : Bit := assert.betweenInclusive(actual, lowerBound, upperBound);\n"
+        );
+        let second = format_source(&formatted_result.text, &options()).unwrap();
         assert_eq!(second.text, formatted_result.text);
     }
 
@@ -550,10 +910,10 @@ mod success {
 
     #[test]
     fn formats_match_arms_pipe_aligned_by_default() {
-        let source = r"export let readNonEmptyLine () : Option[String] :=
+        let source = r"export let readNonEmptyLine () : Maybe[String] :=
   match readTrimmedLine() (
-    | value if value.isEmpty() => option.noneOf[String]()
-    | value => option.someOf[String](value)
+    | value where value.isEmpty() => maybe.None[String]()
+    | value => maybe.Some[String](value)
   );
 ";
 
@@ -561,10 +921,10 @@ mod success {
 
         assert_eq!(
             formatted_result.text,
-            r"export let readNonEmptyLine () : Option[String] :=
+            r"export let readNonEmptyLine () : Maybe[String] :=
   match readTrimmedLine() (
-  | value if value.isEmpty() => option.noneOf[String]()
-  | value => option.someOf[String](value)
+  | value where value.isEmpty() => maybe.None[String]()
+  | value => maybe.Some[String](value)
   );
 "
         );
@@ -572,7 +932,7 @@ mod success {
 
     #[test]
     fn formats_dirty_multiline_match_rhs_canonically() {
-        let source = r"export let isLess (target : Ordering) : Bool := match target(
+        let source = r"export let isLess (target : Ordering) : Bit := match target(
     | .Less => 0 = 0
     | _ => 0 = 1);
 ";
@@ -581,7 +941,7 @@ mod success {
 
         assert_eq!(
             formatted_result.text,
-            r"export let isLess (target : Ordering) : Bool :=
+            r"export let isLess (target : Ordering) : Bit :=
   match target (
   | .Less => 0 = 0
   | _ => 0 = 1
@@ -596,7 +956,7 @@ mod success {
     fn formats_dirty_multiline_match_rhs_with_block_arms_when_configured() {
         let mut options = options();
         options.match_arm_indent = MatchArmIndent::Block;
-        let source = r"export let isLess (target : Ordering) : Bool := match target(
+        let source = r"export let isLess (target : Ordering) : Bit := match target(
 | .Less => 0 = 0
 | _ => 0 = 1);
 ";
@@ -605,7 +965,7 @@ mod success {
 
         assert_eq!(
             formatted_result.text,
-            r"export let isLess (target : Ordering) : Bool :=
+            r"export let isLess (target : Ordering) : Bit :=
   match target (
     | .Less => 0 = 0
     | _ => 0 = 1
@@ -695,16 +1055,16 @@ mod success {
     }
 
     #[test]
-    fn block_effect_member_parameter_layout_breaks_fitting_members() {
+    fn block_member_parameter_layout_breaks_fitting_members() {
         let mut options = options();
-        options.effect_member_parameter_layout = GroupLayout::Block;
-        let source = "export opaque let Runtime := effect { let envSet (name : String, value : String) : Int; };";
+        options.member_parameter_layout = GroupLayout::Block;
+        let source = "export hidden let Runtime := shape { let envSet (name : String, value : String) : Int; };";
 
         let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
             formatted_result.text,
-            r"export opaque let Runtime := effect {
+            r"export hidden let Runtime := shape {
   let envSet (
     name : String,
     value : String
@@ -732,13 +1092,13 @@ mod success {
     fn auto_record_field_layout_keeps_simple_data_fields_one_line_when_fitting() {
         let mut options = options();
         options.record_field_layout = GroupLayout::Auto;
-        let source = "let p := data { x : Int; y : Int };";
+        let source = "let p := data { let x : Int; let y : Int };";
 
         let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
             formatted_result.text,
-            "let p := data { x : Int; y : Int };\n"
+            "let p := data {\n  let x : Int;\n  let y : Int\n};\n"
         );
     }
 
@@ -747,13 +1107,13 @@ mod success {
         let mut options = options();
         options.line_width = 0;
         options.record_field_layout = GroupLayout::Auto;
-        let source = "let p := data { x : Int; y : Int };";
+        let source = "let p := data { let x : Int; let y : Int };";
 
         let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
             formatted_result.text,
-            "let p := data { x : Int; y : Int };\n"
+            "let p := data {\n  let x : Int;\n  let y : Int\n};\n"
         );
     }
 
@@ -763,8 +1123,8 @@ mod success {
         options.record_field_layout = GroupLayout::Auto;
         let source = r"let p := data {
   --- x coordinate
-  x : Int;
-  y : Int
+  let x : Int;
+  let y : Int
 };
 ";
 
@@ -774,8 +1134,8 @@ mod success {
             formatted_result.text,
             r"let p := data {
   --- x coordinate
-  x : Int;
-  y : Int
+  let x : Int;
+  let y : Int
 };
 "
         );
@@ -785,13 +1145,13 @@ mod success {
     fn block_record_field_layout_expands_simple_data_fields() {
         let mut options = options();
         options.record_field_layout = GroupLayout::Block;
-        let source = "let p := data { x : Int; y : Int };";
+        let source = "let p := data { let x : Int; let y : Int };";
 
         let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
             formatted_result.text,
-            "let p := data {\n  x : Int;\n  y : Int\n};\n"
+            "let p := data {\n  let x : Int;\n  let y : Int\n};\n"
         );
     }
 
@@ -800,13 +1160,13 @@ mod success {
         let mut options = options();
         options.line_width = 32;
         options.record_field_layout = GroupLayout::Auto;
-        let source = "let p := data { longLeftName : Int; longRightName : Int };";
+        let source = "let p := data { let longLeftName : Int; let longRightName : Int };";
 
         let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
             formatted_result.text,
-            "let p := data {\n  longLeftName : Int;\n  longRightName : Int\n};\n"
+            "let p := data {\n  let longLeftName : Int;\n  let longRightName : Int\n};\n"
         );
     }
 
@@ -829,10 +1189,10 @@ mod success {
     fn formats_match_arms_with_block_indent_when_configured() {
         let mut options = options();
         options.match_arm_indent = MatchArmIndent::Block;
-        let source = r"export let readNonEmptyLine () : Option[String] :=
+        let source = r"export let readNonEmptyLine () : Maybe[String] :=
   match readTrimmedLine() (
-  | value if value.isEmpty() => option.noneOf[String]()
-  | value => option.someOf[String](value)
+  | value where value.isEmpty() => maybe.None[String]()
+  | value => maybe.Some[String](value)
   );
 ";
 
@@ -840,10 +1200,10 @@ mod success {
 
         assert_eq!(
             formatted_result.text,
-            r"export let readNonEmptyLine () : Option[String] :=
+            r"export let readNonEmptyLine () : Maybe[String] :=
   match readTrimmedLine() (
-    | value if value.isEmpty() => option.noneOf[String]()
-    | value => option.someOf[String](value)
+    | value where value.isEmpty() => maybe.None[String]()
+    | value => maybe.Some[String](value)
   );
 "
         );
@@ -866,16 +1226,18 @@ mod success {
     }
 
     #[test]
-    fn trailing_commas_apply_to_effect_sets() {
+    fn formats_stack_effect_attribute() {
         let mut options = options();
         options.trailing_commas = TrailingCommas::MultiLine;
-        let source = "let f () : Int require { Console, Runtime } := 1;";
+        let source = "@foreign(stack := [Word, Word ; Word]) let f() : Int;";
 
         let formatted_result = format_source(source, &options).unwrap();
 
         assert_eq!(
             formatted_result.text,
-            "let f () : Int require {\n  Console,\n  Runtime,\n} := 1;\n"
+            "@foreign(stack := [Word, Word;
+    Word])
+let f () : Int;\n"
         );
         let second = format_source(&formatted_result.text, &options).unwrap();
         assert_eq!(second.text, formatted_result.text);
@@ -904,7 +1266,7 @@ mod success {
 
     #[test]
     fn keeps_attribute_attached_on_own_line_before_native() {
-        let source = "@link(symbol := \"data.tag\")\nnative \"musi\" let levelTagIntrinsic (level : Level) : Int;";
+        let source = "@foreign(abi := .musi)\nlet writeIntrinsic(message : String) : Unit;";
 
         let mut options = options();
         options.trailing_commas = TrailingCommas::Never;
@@ -913,7 +1275,7 @@ mod success {
 
         assert_eq!(
             formatted_result.text,
-            "@link(symbol := \"data.tag\")\nnative \"musi\" let levelTagIntrinsic (level : Level) : Int;\n"
+            "@foreign(abi := .musi)\nlet writeIntrinsic (message : String) : Unit;\n"
         );
         let second = format_source(&formatted_result.text, &options).unwrap();
         assert_eq!(second.text, formatted_result.text);
@@ -921,7 +1283,7 @@ mod success {
 
     #[test]
     fn formats_multiple_attributes_as_attached_lines() {
-        let source = "@target(os := \"linux\") @link(name := \"c\") native \"c\" let puts (msg : CString) : Int;";
+        let source = "@target(os := \"linux\") @foreign(abi := .c) let puts(msg : CString) : Int;";
 
         let mut options = options();
         options.trailing_commas = TrailingCommas::Never;
@@ -930,7 +1292,7 @@ mod success {
 
         assert_eq!(
             formatted_result.text,
-            "@target(os := \"linux\")\n@link(name := \"c\")\nnative \"c\" let puts (msg : CString) : Int;\n"
+            "@target(os := \"linux\")\n@foreign(abi := .c)\nlet puts (msg : CString) : Int;\n"
         );
     }
 
@@ -1040,25 +1402,67 @@ import "@std/testing";
 
     #[test]
     fn sorts_import_destructure_fields() {
-        let source = r#"let { writeLine, readText, append } := import "@std/io";"#;
+        let source = r#"let { writeLn, readText, append } := import "@std/io";"#;
 
         let formatted_result = format_source(source, &options()).unwrap();
 
         assert_eq!(
             formatted_result.text,
-            "let {\n  append,\n  readText,\n  writeLine,\n} := import \"@std/io\";\n"
+            "let {\n  append,\n  readText,\n  writeLn,\n} := import \"@std/io\";\n"
         );
     }
 
     #[test]
     fn sorts_aliased_import_destructure_fields_by_imported_name() {
-        let source = r#"let { writeLine: line, append, readText: read } := import "@std/io";"#;
+        let source = r#"let { writeLn: line, append, readText: read } := import "@std/io";"#;
 
         let formatted_result = format_source(source, &options()).unwrap();
 
         assert_eq!(
             formatted_result.text,
-            "let {\n  append,\n  readText : read,\n  writeLine : line,\n} := import \"@std/io\";\n"
+            "let {\n  append,\n  readText : read,\n  writeLn : line,\n} := import \"@std/io\";\n"
+        );
+    }
+
+    #[test]
+    fn import_destructure_field_comments_do_not_break_formatting() {
+        let source = r#"let {
+  -- writes one line
+  writeLn,
+  readText,
+} := import "@std/io";"#;
+
+        let formatted_result = format_source(source, &options()).unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            r#"let {
+  -- writes one line
+  writeLn,
+  readText,
+} := import "@std/io";
+"#
+        );
+    }
+
+    #[test]
+    fn import_destructure_field_block_comments_do_not_break_formatting() {
+        let source = r#"let {
+  /- reads text -/
+  readText,
+  writeLn,
+} := import "@std/io";"#;
+
+        let formatted_result = format_source(source, &options()).unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            r#"let {
+  /- reads text -/
+  readText,
+  writeLn,
+} := import "@std/io";
+"#
         );
     }
 
@@ -1105,6 +1509,107 @@ let testing := import "@std/testing";
     }
 
     #[test]
+    fn attached_import_comment_blocks_move_with_sorted_imports() {
+        let source = r#"-- testing helpers
+-- used by assertions
+let testing := import "@std/testing";
+-- io helpers
+-- used by stdout
+let io := import "@std/io";
+"#;
+
+        let formatted_result = format_source(source, &options()).unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            r#"-- io helpers
+-- used by stdout
+let io := import "@std/io";
+-- testing helpers
+-- used by assertions
+let testing := import "@std/testing";
+"#
+        );
+    }
+
+    #[test]
+    fn attached_import_block_comments_move_with_sorted_imports() {
+        let source = concat!(
+            "/",
+            r#"--
+testing helpers
+-/
+let testing := import "@std/testing";
+/-
+io helpers
+-/
+let io := import "@std/io";
+"#,
+        );
+
+        let formatted_result = format_source(source, &options()).unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            concat!(
+                "/",
+                r#"-
+io helpers
+-/
+let io := import "@std/io";
+/--
+testing helpers
+-/
+let testing := import "@std/testing";
+"#,
+            )
+        );
+    }
+
+    #[test]
+    fn keeps_leading_regular_block_comment_on_own_line() {
+        let source = concat!(
+            "/",
+            r"-
+explains value
+-/
+let value:=1;",
+        );
+
+        let formatted_result = format_source(source, &options()).unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            concat!(
+                "/",
+                r"-
+explains value
+-/
+let value := 1;
+",
+            )
+        );
+    }
+
+    #[test]
+    fn module_docs_stay_before_sorted_imports() {
+        let source = r#"--! module docs
+let testing := import "@std/testing";
+let io := import "@std/io";
+"#;
+
+        let formatted_result = format_source(source, &options()).unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            r#"--! module docs
+let io := import "@std/io";
+let testing := import "@std/testing";
+"#
+        );
+    }
+
+    #[test]
     fn standalone_comments_split_import_sort_groups() {
         let source = r#"let testing := import "@std/testing";
 
@@ -1137,15 +1642,28 @@ let io := import "@std/io";
     }
 
     #[test]
+    fn format_text_for_path_uses_markdown_formatter_for_markdown_files() {
+        let markdown = "# Example\n\n```musi\nlet testing:=import \"@std/testing\";\nlet io:=import \"@std/io\";\n```\n";
+
+        let formatted_result =
+            format_text_for_path(Path::new("README.md"), markdown, &options()).unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            "# Example\n\n```musi\nlet io := import \"@std/io\";\nlet testing := import \"@std/testing\";\n```\n"
+        );
+    }
+
+    #[test]
     fn preserves_single_top_level_blank_line_between_statements() {
         let source =
-            "let io := import \"@std/io\";\n\nlet message := \"Hello\";\nio.writeLine(message);\n";
+            "let io := import \"@std/io\";\n\nlet message := \"Hello\";\nio.writeLn(message);\n";
 
         let formatted_result = format_source(source, &options()).unwrap();
 
         assert_eq!(
             formatted_result.text,
-            "let io := import \"@std/io\";\n\nlet message := \"Hello\";\nio.writeLine(message);\n"
+            "let io := import \"@std/io\";\n\nlet message := \"Hello\";\nio.writeLn(message);\n"
         );
     }
 
@@ -1196,6 +1714,20 @@ let io := import "@std/io";
     }
 
     #[test]
+    fn ignore_preserves_next_documented_item() {
+        let formatted_result = format_source(
+            "-- musi-fmt-ignore\n--- important value\nlet   x:=1;\nlet y:=2;",
+            &options(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            "-- musi-fmt-ignore\n--- important value\nlet   x:=1;\nlet y := 2;\n"
+        );
+    }
+
+    #[test]
     fn ignore_range_preserves_source_lines() {
         let formatted_result = format_source(
             "-- musi-fmt-ignore-start\nlet   x:=1;\n-- musi-fmt-ignore-end\nlet y:=2;",
@@ -1206,6 +1738,45 @@ let io := import "@std/io";
         assert_eq!(
             formatted_result.text,
             "-- musi-fmt-ignore-start\nlet   x:=1;\n-- musi-fmt-ignore-end\nlet y := 2;\n"
+        );
+    }
+
+    #[test]
+    fn ignore_preserves_import_before_organizing_imports() {
+        let source = "let b := import \"./b\";\n-- musi-fmt-ignore\nlet   a:=import \"./a\";\n";
+
+        let formatted_result = format_source(source, &options()).unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            "let b := import \"./b\";\n-- musi-fmt-ignore\nlet   a:=import \"./a\";\n"
+        );
+    }
+
+    #[test]
+    fn ignore_does_not_disable_unprotected_import_sorting() {
+        let source = r#"let z := import "./z";
+let y := import "./y";
+
+-- musi-fmt-ignore
+let   b:=import "./b";
+
+let d := import "./d";
+let c := import "./c";
+"#;
+
+        let formatted_result = format_source(source, &options()).unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            r#"let y := import "./y";
+let z := import "./z";
+
+-- musi-fmt-ignore
+let   b:=import "./b";
+let c := import "./c";
+let d := import "./d";
+"#
         );
     }
 
@@ -1221,6 +1792,39 @@ let io := import "@std/io";
     }
 
     #[test]
+    fn formats_attribute_style_musi_markdown_fences() {
+        let markdown = "# Example\n\n```{.musi #sample}\nlet x:=1;\n```\n";
+        let formatted_result = format_markdown(markdown, &options()).unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            "# Example\n\n```{.musi #sample}\nlet x := 1;\n```\n"
+        );
+    }
+
+    #[test]
+    fn markdown_fence_closing_matches_opening_marker_length() {
+        let markdown = "# Example\n\n````musi\nlet text := \"```\";\nlet x:=1;\n````\n";
+        let formatted_result = format_markdown(markdown, &options()).unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            "# Example\n\n````musi\nlet text := \"```\";\nlet x := 1;\n````\n"
+        );
+    }
+
+    #[test]
+    fn markdown_fence_closing_rejects_non_space_suffix() {
+        let markdown = "# Example\n\n````text\n````not a close\nraw\n````\n";
+        let formatted_result = format_markdown(markdown, &options()).unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            "# Example\n\n````text\n````not a close\nraw\n````\n"
+        );
+    }
+
+    #[test]
     fn markdown_ignore_skips_next_musi_fence() {
         let markdown = "<!-- musi-fmt-ignore -->\n```musi\nlet x:=1;\n```\n";
         let formatted_result = format_markdown(markdown, &options()).unwrap();
@@ -1228,6 +1832,17 @@ let io := import "@std/io";
         assert_eq!(
             formatted_result.text,
             "<!-- musi-fmt-ignore -->\n```musi\nlet x:=1;\n```\n"
+        );
+    }
+
+    #[test]
+    fn markdown_ignore_skips_next_musi_fence_after_non_musi_fence() {
+        let markdown = "<!-- musi-fmt-ignore -->\n```ts\nlet x=1\n```\n```musi\nlet x:=1;\n```\n```musi\nlet y:=2;\n```\n";
+        let formatted_result = format_markdown(markdown, &options()).unwrap();
+
+        assert_eq!(
+            formatted_result.text,
+            "<!-- musi-fmt-ignore -->\n```ts\nlet x=1\n```\n```musi\nlet x:=1;\n```\n```musi\nlet y := 2;\n```\n"
         );
     }
 
@@ -1287,18 +1902,19 @@ let io := import "@std/io";
 
     #[test]
     fn preserves_multiline_test_sequence_regression() {
-        let source = r#"let testing := import "@std/testing";
+        let source = r#"let assert := import "@std/assert";
+let testing := import "@std/testing";
 let array := import "./std.ms";
 
 export let test () :=
   (
     testing.describe("array");
-    testing.it("'copy' clones sequence values", testing.toBeTrue(array.equalsInt(array.copy[Int]([1, 2, 3]), [1, 2, 3])));
-    testing.it("'concat' joins two sequences", testing.toBeTrue(array.equalsInt(array.concat[Int]([1, 2], [3, 4]), [1, 2, 3, 4])));
-    testing.it("'append' adds trailing value", testing.toBeTrue(array.equalsInt(array.append[Int]([1, 2], 3), [1, 2, 3])));
-    testing.it("'prepend' adds leading value", testing.toBeTrue(array.equalsInt(array.prepend[Int](0, [1, 2]), [0, 1, 2])));
-    testing.it("'isEmpty' detects empty arrays", testing.toBeTrue(array.isEmpty[Int]([])));
-    testing.it("'nonEmpty' detects non-empty arrays", testing.toBeTrue(array.nonEmpty[Int]([1])));
+    testing.it("'copy' clones sequence values", assert.toBeTrue(array.equalsInt(array.copy[Int]([1, 2, 3]), [1, 2, 3])));
+    testing.it("'concat' joins two sequences", assert.toBeTrue(array.equalsInt(array.concat[Int]([1, 2], [3, 4]), [1, 2, 3, 4])));
+    testing.it("'append' adds trailing value", assert.toBeTrue(array.equalsInt(array.append[Int]([1, 2], 3), [1, 2, 3])));
+    testing.it("'prepend' adds leading value", assert.toBeTrue(array.equalsInt(array.prepend[Int](0, [1, 2]), [0, 1, 2])));
+    testing.it("'isEmpty' detects empty arrays", assert.toBeTrue(array.isEmpty[Int]([])));
+    testing.it("'nonEmpty' detects non-empty arrays", assert.toBeTrue(array.nonEmpty[Int]([1])));
     testing.endDescribe()
   );
 "#;
@@ -1311,6 +1927,7 @@ export let test () :=
         assert_eq!(
             formatted_result.text,
             r#"let array := import "./std.ms";
+let assert := import "@std/assert";
 let testing := import "@std/testing";
 
 export let test () :=
@@ -1318,31 +1935,29 @@ export let test () :=
     testing.describe("array");
     testing.it(
       "'copy' clones sequence values",
-      testing.toBeTrue(array.equalsInt(array.copy[Int]([1, 2, 3]), [1, 2, 3]))
+      assert.toBeTrue(array.equalsInt(array.copy[Int]([1, 2, 3]), [1, 2, 3]))
     );
     testing.it(
       "'concat' joins two sequences",
-      testing.toBeTrue(
+      assert.toBeTrue(
         array.equalsInt(array.concat[Int]([1, 2], [3, 4]), [1, 2, 3, 4])
       )
     );
     testing.it(
       "'append' adds trailing value",
-      testing.toBeTrue(array.equalsInt(array.append[Int]([1, 2], 3), [1, 2, 3]))
+      assert.toBeTrue(array.equalsInt(array.append[Int]([1, 2], 3), [1, 2, 3]))
     );
     testing.it(
       "'prepend' adds leading value",
-      testing.toBeTrue(
-        array.equalsInt(array.prepend[Int](0, [1, 2]), [0, 1, 2])
-      )
+      assert.toBeTrue(array.equalsInt(array.prepend[Int](0, [1, 2]), [0, 1, 2]))
     );
     testing.it(
       "'isEmpty' detects empty arrays",
-      testing.toBeTrue(array.isEmpty[Int]([]))
+      assert.toBeTrue(array.isEmpty[Int]([]))
     );
     testing.it(
       "'nonEmpty' detects non-empty arrays",
-      testing.toBeTrue(array.nonEmpty[Int]([1]))
+      assert.toBeTrue(array.nonEmpty[Int]([1]))
     );
     testing.endDescribe()
   );
@@ -1360,11 +1975,11 @@ export let test () :=
     fn formats_constructs_without_changing_tokens() {
         const SOURCES: &[&str] = &[
             "export let toString  (self : Command) : String := match self (\n| .Command(value := value) => value\n);",
-            "export let chance (percent : Int) : Bool := match () (\n| _ if percent <= 0 => 0 = 1\n| _ if percent >= 100 => 0 = 0\n| _ => nextIntInRange(0, 100) < percent\n);",
+            "export let chance (percent : Int) : Bit := match () (\n| _ where percent <= 0 => 0 = 1\n| _ where percent >= 100 => 0 = 0\n| _ => nextIntInRange(0, 100) < percent\n);",
             "export let command (value : String) : Command := .Command(value := value);",
             "export let values : []Int := [1, 2, 3];",
-            "export let cast [T] (raw : CPtr) : Ptr[T] := .Ptr(raw := raw);",
-            "export native \"musi\" (\nlet offset[T] (pointer : Ptr[T], count : Int) : Ptr[T];\nlet read[T] (pointer : Ptr[T]) : T;\n);",
+            "export let cast[T](raw : CPtr) : Ptr[T] := .Ptr(raw := raw);",
+            "@foreign(abi := .musi)\nexport let offset[T](pointer : Ptr[T], count : Int) : Ptr[T];\n@foreign(abi := .musi)\nexport let read[T](pointer : Ptr[T]) : T;",
             "--- Documented value.\nexport let x : Int := 1;",
             "let x := 1; -- trailing\nlet y := /- inline -/ 2;",
         ];
@@ -1381,7 +1996,7 @@ export let test () :=
             .canonicalize()
             .unwrap();
         let mut files = Vec::new();
-        collect_musi_files(repo.join("packages/std"), &mut files);
+        collect_musi_files(repo.join("lib/std"), &mut files);
         collect_musi_files(repo.join("crates/musi_foundation/modules"), &mut files);
 
         for path in files {
@@ -1397,7 +2012,7 @@ export let test () :=
             .canonicalize()
             .unwrap();
         let mut files = Vec::new();
-        collect_musi_files(repo.join("packages/std"), &mut files);
+        collect_musi_files(repo.join("lib/std"), &mut files);
         collect_musi_files(repo.join("crates/musi_foundation/modules"), &mut files);
 
         for path in files {

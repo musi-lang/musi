@@ -3,11 +3,18 @@ use music_hir::{HirExprId, HirPatId, HirTyId};
 use music_module::ModuleKey;
 use music_names::NameBindingId;
 
-use crate::api::{ComptimeValue, ConstraintAnswer, ExprFacts, ExprMemberFact, PatFacts};
+use crate::api::{ComptimeValue, ConstraintEvidence, ExprFacts, ExprMemberFact, PatFacts};
 use crate::checker::state::PassBase;
-use crate::effects::EffectRow;
 
 impl PassBase<'_, '_, '_> {
+    pub fn expr_facts(&self, id: HirExprId) -> ExprFacts {
+        self.facts
+            .expr_facts
+            .get(idx_to_usize(id))
+            .cloned()
+            .expect("expr facts slot missing")
+    }
+
     pub fn set_expr_facts(&mut self, id: HirExprId, facts: ExprFacts) {
         let slot = self
             .facts
@@ -25,27 +32,19 @@ impl PassBase<'_, '_, '_> {
         let _prev = self.facts.expr_import_record_targets.insert(id, target);
     }
 
-    pub fn expr_callable_effects(&self, id: HirExprId) -> Option<EffectRow> {
-        self.facts.expr_callable_effects.get(&id).cloned()
-    }
-
-    pub fn set_expr_callable_effects(&mut self, id: HirExprId, effects: EffectRow) {
-        let _prev = self.facts.expr_callable_effects.insert(id, effects);
-    }
-
     pub fn set_type_test_target(&mut self, id: HirExprId, target: HirTyId) {
         let _prev = self.facts.type_test_targets.insert(id, target);
     }
 
-    pub fn set_expr_constraint_answers(
+    pub fn set_expr_constraint_evidence(
         &mut self,
         id: HirExprId,
-        answers: impl Into<Box<[ConstraintAnswer]>>,
+        evidence: impl Into<Box<[ConstraintEvidence]>>,
     ) {
         let _prev = self
             .facts
-            .expr_constraint_answers
-            .insert(id, answers.into());
+            .expr_constraint_evidence
+            .insert(id, evidence.into());
     }
 
     pub fn set_expr_dot_callable_binding(&mut self, id: HirExprId, binding: NameBindingId) {

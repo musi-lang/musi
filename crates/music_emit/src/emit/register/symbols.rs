@@ -26,41 +26,6 @@ pub(super) fn ensure_type(
     type_id
 }
 
-pub(super) fn ensure_effect(
-    state: &mut ProgramState,
-    effect: &IrEffectDef,
-    layout: &mut ModuleLayout,
-) -> EffectId {
-    if let Some(id) = state.effects_by_key.get(&effect.key).copied() {
-        return id;
-    }
-    let name = qualified_name(&effect.key.module, &effect.key.name);
-    let name_id = state.artifact.intern_string(name.as_ref());
-    let ops = effect
-        .ops
-        .iter()
-        .map(|op| {
-            EffectOpDescriptor::new(
-                state.artifact.intern_string(op.name.as_ref()),
-                op.param_tys
-                    .iter()
-                    .map(|ty| ensure_type(state, layout, ty.as_ref()))
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-                ensure_type(state, layout, op.result_ty.as_ref()),
-            )
-            .with_comptime_safe(op.is_comptime_safe)
-        })
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
-    let id = state
-        .artifact
-        .effects
-        .alloc(EffectDescriptor::new(name_id, ops));
-    let _ = state.effects_by_key.insert(effect.key.clone(), id);
-    id
-}
-
 fn lower_named_term(name: &str, args: Box<[TypeTerm]>) -> TypeTerm {
     let (module, local_name) = name
         .rsplit_once("::")

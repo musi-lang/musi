@@ -24,12 +24,6 @@ diag SpreadCallArgsNotEmitted 3506
 diag UnknownClosureTarget 3507
   message "emitted closure target `{target}` unknown"
 
-diag UnknownEffect 3508
-  message "emitted effect `{effect}` unknown"
-
-diag UnknownHandlerType 3509
-  message "emitted answer type `{type}` unknown"
-
 diag UnknownRecordType 3510
   message "emitted record type `{type}` unknown"
 

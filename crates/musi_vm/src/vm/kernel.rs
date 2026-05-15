@@ -96,27 +96,7 @@ impl Vm {
             RuntimeKernel::ConstI64Array8Return { ty, cells } => {
                 self.exec_const_i64_array8_return_kernel(args, ty, cells)
             }
-            RuntimeKernel::InlineEffectResume {
-                resume_value,
-                value_add,
-            } => Self::exec_inline_effect_resume_kernel(args, resume_value, value_add),
-            RuntimeKernel::InlineEffectResumeClauses { .. } => Ok(None),
         }
-    }
-
-    fn exec_inline_effect_resume_kernel(
-        args: &[Value],
-        resume_value: i16,
-        value_add: i16,
-    ) -> VmResult<Option<Value>> {
-        if !args.is_empty() {
-            return Ok(None);
-        }
-        Ok(Some(Value::Int(
-            i64::from(resume_value)
-                .checked_add(i64::from(value_add))
-                .ok_or_else(int_overflow_error)?,
-        )))
     }
 
     fn exec_int_tail_accumulator(

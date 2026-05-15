@@ -62,15 +62,6 @@ impl Parser<'_> {
         )
     }
 
-    pub(super) fn expected_splice_target(&self) -> ParseError {
-        ParseError::new(
-            ParseErrorKind::ExpectedSpliceTarget {
-                found: self.found_token(),
-            },
-            self.span(),
-        )
-    }
-
     pub(super) fn expected_operator_member_name(&self) -> ParseError {
         ParseError::new(
             ParseErrorKind::ExpectedOperatorMemberName {

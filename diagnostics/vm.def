@@ -68,7 +68,7 @@ diag InvalidRangeBounds 6118
   message "range bounds `{start}` and `{end}` invalid"
 
 diag InvalidRangeEvidence 6119
-  message "range answer invalid for value kind `{found}`"
+  message "range endpoint evidence invalid for value kind `{found}`"
 
 diag InvalidRangeStep 6120
   message "range step invalid (`{detail}`)"
@@ -103,10 +103,6 @@ diag NativeCallFailed 6128
   message "native call `{native}` failed during `{stage}` for `{subject}` (`{detail}`)"
   primary "native call `{native}` failed"
 
-diag EffectRejected 6129
-  message "effect `{effect}` operation `{op}` rejected (`{reason}`)"
-  primary "effect `{effect}` rejected"
-
 diag RootModuleRequired 6130
   message "VM root module required"
 
@@ -116,14 +112,6 @@ diag MissingModuleSource 6131
 diag CallArityMismatch 6132
   message "runtime call `{callee}` expected `{expected}` arguments, found `{found}`"
   primary "call `{callee}` has `{found}` arguments here"
-
-diag HandlerFrameMissing 6133
-  message "answer `{handler_id}` frame depth `{frame_depth}` missing"
-  primary "answer `{handler_id}` frame missing"
-
-diag MissingMatchingHandlerPop 6134
-  message "procedure `{procedure}` missing matching `hdl.pop`"
-  primary "matching `hdl.pop` missing"
 
 diag HeapLimitExceeded 6135
   message "heap limit `{limit}` exceeded with `{allocated}` allocated bytes"
@@ -140,21 +128,9 @@ diag StackFrameLimitExceeded 6137
 diag InstructionBudgetExhausted 6138
   message "instruction budget `{budget}` exhausted"
 
-diag RuntimeEffectArgsInvalid 6139
-  message "runtime effect `{effect}.{op}` expected `{expected}`, found `{found}`"
-  primary "runtime effect `{op}` arguments invalid"
-
-diag RuntimeEffectOperationFailed 6140
-  message "runtime effect `{effect}` operation `{op}` failed (`{source}`)"
-  primary "runtime effect `{op}` failed"
-
 diag RuntimeHostUnavailable 6141
   message "runtime host `{subject}` unavailable"
   primary "runtime host `{subject}` unavailable"
-
-diag RuntimeEffectUnsupported 6149
-  message "runtime effect `{effect}.{op}` unsupported"
-  primary "runtime effect operation `{op}` unsupported"
 
 diag NativeArgumentTypeMismatch 6142
   message "native argument `{index}` expected `{expected}`, found `{found}`"
@@ -226,12 +202,9 @@ map vm_error_kind crate::VmErrorKind required
   case "ForeignCallRejected { .. }" ForeignCallRejected
   case "PointerIntrinsicFailed { .. }" PointerIntrinsicFailed
   case "NativeCallFailed { .. }" NativeCallFailed
-  case "EffectRejected { .. }" EffectRejected
   case "RootModuleRequired" RootModuleRequired
   case "MissingModuleSource { .. }" MissingModuleSource
   case "CallArityMismatch { .. }" CallArityMismatch
-  case "HandlerFrameMissing { .. }" HandlerFrameMissing
-  case "MissingMatchingHandlerPop { .. }" MissingMatchingHandlerPop
   case "HeapLimitExceeded { .. }" HeapLimitExceeded
   case "HeapObjectTooLarge { .. }" HeapObjectTooLarge
   case "StackFrameLimitExceeded { .. }" StackFrameLimitExceeded

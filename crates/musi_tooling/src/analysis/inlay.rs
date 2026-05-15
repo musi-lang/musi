@@ -2,9 +2,10 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use music_base::{Source, Span};
-use music_hir::{HirArg, HirExprId, HirExprKind, HirPatId, HirPatKind};
+use music_hir::{HirArg, HirExprId, HirExprKind, HirPatId, HirPatKind, HirReceiverDecl};
+use music_module::ModuleKey;
 use music_names::{NameBindingKind, NameResolution, Symbol};
-use music_sema::SemaModule;
+use music_sema::{ExprMemberKind, SemaModule};
 use music_session::Session;
 
 use super::docs::source_span_text;
@@ -65,20 +66,20 @@ fn variable_type_hints(context: &AnalysisContext<'_>) -> Vec<ToolInlayHint> {
         .filter_map(|(binding_id, binding)| {
             if !matches!(
                 binding.kind,
-                NameBindingKind::Let | NameBindingKind::PatternBind
+                NameBindingKind::Let
+                    | NameBindingKind::PatternBind
+                    | NameBindingKind::AttachedMethod
             ) {
                 return None;
             }
-            if !binding_needs_type_hint(sema, binding.site.span) {
-                return None;
-            }
+            let hint_offset = binding_type_hint_offset(context, sema, binding.site.span)?;
+            let (line, col) = context.source.line_col(hint_offset);
             let ty = sema
                 .binding_type(binding_id)
                 .map(|ty| render_hir_ty(sema, context.session, ty))?;
             if ty.is_empty() || ty == "Unknown" {
                 return None;
             }
-            let (line, col) = context.source.line_col(binding.site.span.end);
             Some(ToolInlayHint::new(
                 ToolPosition::new(line, col),
                 format!(": {ty}"),
@@ -88,13 +89,78 @@ fn variable_type_hints(context: &AnalysisContext<'_>) -> Vec<ToolInlayHint> {
         .collect()
 }
 
-fn binding_needs_type_hint(sema: &SemaModule, binding_span: Span) -> bool {
-    sema.module().store.exprs.iter().any(|(_, expr)| {
-        let HirExprKind::Let { pat, sig, .. } = expr.kind else {
-            return false;
+fn binding_type_hint_offset(
+    context: &AnalysisContext<'_>,
+    sema: &SemaModule,
+    binding_span: Span,
+) -> Option<u32> {
+    sema.module().store.exprs.iter().find_map(|(_, expr)| {
+        let HirExprKind::Let {
+            pat,
+            sig,
+            has_param_clause,
+            receiver,
+            value,
+            ..
+        } = &expr.kind
+        else {
+            return None;
         };
-        sig.is_none() && pat_contains_span(sema, pat, binding_span)
+        if sig.is_some() || !let_binds_span(sema, *pat, receiver.as_ref(), binding_span) {
+            return None;
+        }
+        if !has_param_clause {
+            return Some(binding_span.end);
+        }
+        let head_end = receiver.as_ref().map_or_else(
+            || sema.module().store.pats.get(*pat).origin.span.end,
+            |receiver| receiver.method.span.end,
+        );
+        let value_start = sema.module().store.exprs.get(*value).origin.span.start;
+        find_param_clause_end(context.source, head_end, value_start).or(Some(binding_span.end))
     })
+}
+
+fn let_binds_span(
+    sema: &SemaModule,
+    pat: HirPatId,
+    receiver: Option<&HirReceiverDecl>,
+    binding_span: Span,
+) -> bool {
+    pat_contains_span(sema, pat, binding_span)
+        || receiver_method_matches_span(receiver, binding_span)
+}
+
+fn receiver_method_matches_span(receiver: Option<&HirReceiverDecl>, binding_span: Span) -> bool {
+    receiver.is_some_and(|receiver| receiver.method.span == binding_span)
+}
+
+fn find_param_clause_end(source: &Source, search_start: u32, search_end: u32) -> Option<u32> {
+    if search_end <= search_start {
+        return None;
+    }
+    let start = usize::try_from(search_start).ok()?;
+    let end = usize::try_from(search_end).ok()?;
+    let text = source.text().get(start..end)?;
+    let open = text.find('(')?;
+    let mut depth = 0usize;
+    let suffix = text.get(open..)?;
+    for (offset, ch) in suffix.char_indices() {
+        if ch == '(' {
+            depth = depth.saturating_add(1);
+        } else if ch == ')' {
+            if depth == 0 {
+                return None;
+            }
+            depth = depth.saturating_sub(1);
+            if depth == 0 {
+                let end_offset = open.saturating_add(offset).saturating_add(ch.len_utf8());
+                let absolute = start.saturating_add(end_offset);
+                return u32::try_from(absolute).ok();
+            }
+        }
+    }
+    None
 }
 
 fn pat_contains_span(sema: &SemaModule, pat: HirPatId, span: Span) -> bool {
@@ -138,16 +204,13 @@ fn pat_contains_span(sema: &SemaModule, pat: HirPatId, span: Span) -> bool {
 
 fn parameter_name_hints(context: &AnalysisContext<'_>) -> Vec<ToolInlayHint> {
     let sema = context.sema;
-    let param_names = same_module_param_names(sema);
+    let param_names = same_module_param_names(context.session, sema);
     let mut hints = Vec::new();
     for (_, expr) in &sema.module().store.exprs {
         let HirExprKind::Call { callee, args } = &expr.kind else {
             continue;
         };
-        let Some(callee_name) = callee_name(sema, *callee) else {
-            continue;
-        };
-        let Some(names) = param_names.get(&callee_name) else {
+        let Some(names) = param_names_for_callee(context, sema, &param_names, *callee) else {
             continue;
         };
         let args = sema.module().store.args.get(args.clone());
@@ -158,13 +221,13 @@ fn parameter_name_hints(context: &AnalysisContext<'_>) -> Vec<ToolInlayHint> {
             let Some(name) = names.get(index) else {
                 continue;
             };
-            push_parameter_hint(context, sema, &mut hints, arg, *name);
+            push_parameter_hint(context, sema, &mut hints, arg, name);
         }
     }
     hints
 }
 
-fn same_module_param_names(sema: &SemaModule) -> HashMap<Symbol, Vec<Symbol>> {
+fn same_module_param_names(session: &Session, sema: &SemaModule) -> HashMap<Symbol, Vec<String>> {
     let mut names = HashMap::new();
     for (_, expr) in &sema.module().store.exprs {
         let HirExprKind::Let {
@@ -185,7 +248,7 @@ fn same_module_param_names(sema: &SemaModule) -> HashMap<Symbol, Vec<Symbol>> {
             .params
             .get(params.clone())
             .iter()
-            .map(|param| param.name.name)
+            .map(|param| session.resolve_symbol(param.name.name).to_owned())
             .collect::<Vec<_>>();
         let _ = names.insert(binding, params);
     }
@@ -207,21 +270,71 @@ fn callee_name(sema: &SemaModule, expr: HirExprId) -> Option<Symbol> {
     }
 }
 
+fn param_names_for_callee(
+    context: &AnalysisContext<'_>,
+    sema: &SemaModule,
+    same_module: &HashMap<Symbol, Vec<String>>,
+    callee: HirExprId,
+) -> Option<Vec<String>> {
+    if let Some(name) = callee_name(sema, callee)
+        && let Some(names) = same_module.get(&name)
+    {
+        return Some(names.clone());
+    }
+    imported_export_param_names(context, sema, callee)
+}
+
+fn imported_export_param_names(
+    context: &AnalysisContext<'_>,
+    sema: &SemaModule,
+    callee: HirExprId,
+) -> Option<Vec<String>> {
+    if let HirExprKind::Apply { callee, .. } = sema.module().store.exprs.get(callee).kind {
+        return imported_export_param_names(context, sema, callee);
+    }
+    let fact = sema.expr_member_fact(callee)?;
+    if !matches!(fact.kind, ExprMemberKind::ImportRecordExport) {
+        return None;
+    }
+    let target = fact
+        .import_record_target
+        .as_ref()
+        .or_else(|| import_record_base_target(sema, callee))?;
+    let export_name = context.session.resolve_symbol(fact.name);
+    let imported = context.session.sema_module_cached(target).ok().flatten()?;
+    let export = imported
+        .surface()
+        .exported_values()
+        .iter()
+        .find(|export| export.name.as_ref() == export_name)?;
+    Some(export.param_names.iter().map(ToString::to_string).collect())
+}
+
+fn import_record_base_target(sema: &SemaModule, callee: HirExprId) -> Option<&ModuleKey> {
+    let HirExprKind::Field { base, .. } = sema.module().store.exprs.get(callee).kind else {
+        return None;
+    };
+    sema.expr_import_record_target(base)
+}
+
 fn push_parameter_hint(
     context: &AnalysisContext<'_>,
     sema: &SemaModule,
     hints: &mut Vec<ToolInlayHint>,
     arg: &HirArg,
-    name: Symbol,
+    name_text: &str,
 ) {
     let expr = sema.module().store.exprs.get(arg.expr);
     let argument_text = source_span_text(context.source, expr.origin.span)
         .unwrap_or_default()
         .trim();
-    let name_text = context.session.resolve_symbol(name);
     if argument_text == name_text {
         return;
     }
+    let is_literal_argument = matches!(
+        expr.kind,
+        HirExprKind::Lit { .. } | HirExprKind::Template { .. }
+    );
     let (line, col) = context.source.line_col(expr.origin.span.start);
     let mut hint = ToolInlayHint::new(
         ToolPosition::new(line, col),
@@ -229,5 +342,6 @@ fn push_parameter_hint(
         ToolInlayHintKind::Parameter,
     );
     hint.tooltip = Some(format!("parameter `{name_text}`"));
+    hint.is_literal_argument = is_literal_argument;
     hints.push(hint);
 }

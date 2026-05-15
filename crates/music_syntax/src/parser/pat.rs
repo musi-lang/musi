@@ -33,6 +33,9 @@ impl Parser<'_> {
 
     fn parse_pattern_primary(&mut self) -> SyntaxNodeParseResult {
         match self.peek_kind() {
+            TokenKind::Underscore if self.at_generated_identifier_prefix() => {
+                Err(self.reserved_generated_identifier())
+            }
             TokenKind::Underscore => {
                 let token = self.advance_element();
                 Ok(self
@@ -50,7 +53,7 @@ impl Parser<'_> {
                     .push_node_from_children(SyntaxNodeKind::LiteralPat, vec![token]))
             }
             TokenKind::Ident => {
-                let ident = self.advance_element();
+                let ident = self.expect_ident_element()?;
                 Ok(self
                     .builder
                     .push_node_from_children(SyntaxNodeKind::BindPat, vec![ident]))

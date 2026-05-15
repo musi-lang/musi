@@ -1,6 +1,7 @@
 use music_base::diag::{DiagCode, DiagContext, DiagLevel, DiagnosticKind};
 
 #[path = "diag_catalog_gen.rs"]
+#[rustfmt::skip]
 mod diag_catalog_gen;
 
 pub use diag_catalog_gen::vm_error_kind;
@@ -36,20 +37,14 @@ pub enum VmDiagKind {
     ForeignCallRejected,
     PointerIntrinsicFailed,
     NativeCallFailed,
-    EffectRejected,
     RootModuleRequired,
     MissingModuleSource,
     CallArityMismatch,
-    HandlerFrameMissing,
-    MissingMatchingHandlerPop,
     HeapLimitExceeded,
     HeapObjectTooLarge,
     StackFrameLimitExceeded,
     InstructionBudgetExhausted,
-    RuntimeEffectArgsInvalid,
-    RuntimeEffectOperationFailed,
     RuntimeHostUnavailable,
-    RuntimeEffectUnsupported,
     NativeArgumentTypeMismatch,
     NativeArgumentOutOfRange,
     NativeArgumentInvalid,

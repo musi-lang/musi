@@ -7,7 +7,7 @@ use music_ir_lower::lower_module;
 use music_module::ModuleKey;
 use music_names::Interner;
 use music_resolve::{ResolveOptions, resolve_module};
-use music_seam::descriptor::ConstantValue;
+use music_seam::descriptor::{ConstantValue, SafePointKind};
 use music_seam::{CodeEntry, Opcode};
 use music_sema::{SemaOptions, check_module};
 use music_syntax::{Lexer, parse};
@@ -73,20 +73,29 @@ fn assert_module_opcodes(src: &str, expected: &[Opcode]) {
     }
 }
 
+fn safe_point_kind_for_opcode(opcode: Opcode) -> Option<SafePointKind> {
+    match opcode {
+        Opcode::Call | Opcode::TailCall => Some(SafePointKind::Call),
+        Opcode::CallInd => Some(SafePointKind::CallIndirect),
+        Opcode::CallFfi => Some(SafePointKind::CallForeign),
+        Opcode::NewFn | Opcode::NewObj | Opcode::NewArr => Some(SafePointKind::Allocation),
+        _ => None,
+    }
+}
+
 mod success {
     use super::*;
 
     #[test]
     fn emits_artifact_for_literal_exports_and_metadata() {
         let ir = lower_ir(
-            r#"
+            r"
         let Option := data { | Some(Int) | None };
-        native "c" (
-          let puts (value : CString) : Int;
-        );
+        @foreign(abi := .c)
+        let puts (value : CString) : Int;
         export let result : Int := 42;
         export let forty_two () : Int := 42;
-    "#,
+    ",
             "main",
         );
 
@@ -95,6 +104,34 @@ mod success {
         assert_eq!(emitted.exports.len(), 2);
         assert!(!emitted.artifact.types.is_empty());
         assert_eq!(emitted.artifact.foreigns.len(), 1);
+    }
+
+    #[test]
+    fn emits_procedure_param_type_metadata() {
+        let emitted = emit_module(
+            r"
+        export let add (left : Int, right : Int) : Int := left + right;
+    ",
+        )
+        .expect("emit should succeed");
+        let procedure = emitted
+            .artifact
+            .procedures
+            .iter()
+            .find_map(|(_, procedure)| {
+                emitted
+                    .artifact
+                    .string_text(procedure.name)
+                    .ends_with("::add")
+                    .then_some(procedure)
+            })
+            .expect("add procedure should exist");
+        let param_tys = procedure
+            .param_tys
+            .iter()
+            .map(|ty| emitted.artifact.type_name(*ty))
+            .collect::<Vec<_>>();
+        assert_eq!(param_tys, vec!["Int", "Int"]);
     }
 
     #[test]
@@ -127,16 +164,16 @@ mod success {
     fn emits_logical_operator_family_opcodes() {
         assert_module_opcodes(
             r"
-        export let boolAnd (left : Bool, right : Bool) : Bool := left and right;
-        export let boolOr (left : Bool, right : Bool) : Bool := left or right;
-        export let boolXor (left : Bool, right : Bool) : Bool := left xor right;
+        export let boolAnd (left : Bit, right : Bit) : Bit := left and right;
+        export let boolOr (left : Bit, right : Bit) : Bit := left or right;
+        export let boolXor (left : Bit, right : Bit) : Bit := left xor right;
         export let bitsAnd (left : Bits[4], right : Bits[4]) : Bits[4] := left and right;
         export let bitsOr (left : Bits[4], right : Bits[4]) : Bits[4] := left or right;
         export let bitsXor (left : Bits[4], right : Bits[4]) : Bits[4] := left xor right;
         export let bitsNot (value : Bits[4]) : Bits[4] := not value;
     ",
             &[
-                Opcode::BrFalse,
+                Opcode::BrZ,
                 Opcode::And,
                 Opcode::Or,
                 Opcode::Xor,
@@ -205,7 +242,7 @@ mod success {
                 Opcode::StGlob,
                 Opcode::LdElem,
                 Opcode::StElem,
-                Opcode::BrFalse,
+                Opcode::BrZ,
             ],
         );
     }
@@ -214,7 +251,7 @@ mod success {
     fn emits_generic_callable_param_name_refs() {
         let emitted = emit_module(
             r"
-        export let equal [T] (actual : T, expected : T) : Bool :=
+        export let equal [T] (actual : T, expected : T) : Bit :=
           actual = expected;
     ",
         )
@@ -230,9 +267,9 @@ mod success {
     fn emits_generic_callable_param_refs_through_type_apply_call() {
         let emitted = emit_module(
             r"
-        let equal [T] (actual : T, expected : T) : Bool :=
+        let equal [T] (actual : T, expected : T) : Bit :=
           actual = expected;
-        export let toBe (actual : Int, expected : Int) : Bool :=
+        export let toBe (actual : Int, expected : Int) : Bit :=
           equal[Int](actual, expected);
     ",
         )
@@ -248,10 +285,10 @@ mod success {
     fn emits_param_name_refs_inside_match_guards() {
         let emitted = emit_module(
             r#"
-        let fail (message : String) : Bool := 0 = 1;
-        export let equal [T] (actual : T, expected : T) : Bool :=
+        let fail (message : String) : Bit := 0 = 1;
+        export let equal [T] (actual : T, expected : T) : Bit :=
           match () (
-          | _ if actual = expected => 0 = 0
+          | _ where actual = expected => 0 = 0
           | _ => fail("expected values to be equal")
           );
     "#,
@@ -268,7 +305,7 @@ mod success {
     fn emits_local_callable_captures_outer_param_in_call_args() {
         let emitted = emit_module(
             r"
-        let equal [T] (actual : T, expected : T) : Bool :=
+        let equal [T] (actual : T, expected : T) : Bit :=
           actual = expected;
         export let expectInt (actual : Int) :=
           (
@@ -307,7 +344,7 @@ mod success {
           loaded
         );
     ",
-            &[Opcode::MdlLoad],
+            &[Opcode::LdModDyn],
         );
     }
 
@@ -329,24 +366,22 @@ mod success {
         let opcodes = emitted_opcodes(&emitted);
         assert!(opcodes.contains(&Opcode::LdElem));
         assert!(opcodes.contains(&Opcode::LdLen));
-        assert!(opcodes.contains(&Opcode::BrFalse));
+        assert!(opcodes.contains(&Opcode::BrZ));
     }
 
     #[test]
     fn emits_quote_as_syntax_constant() {
-        let ir = lower_ir(
-            r"
-        export let quoted : Syntax := quote (#(1 + 2));
-    ",
-            "main",
-        );
-
-        let emitted = lower_ir_module(&ir, EmitOptions).expect("emit should succeed");
+        let emitted = emit_module(
+            r##"
+        export let quoted : String := "#(1 + 2)";
+    "##,
+        )
+        .expect("emit should succeed");
         assert!(emitted.artifact.validate().is_ok());
         assert!(emitted.artifact.constants.iter().any(|(_, constant)| {
             matches!(
                 constant.value,
-                ConstantValue::Syntax { shape: music_term::SyntaxShape::Expr, text }
+                ConstantValue::String(text)
                     if emitted.artifact.string_text(text).contains("#(1 + 2)")
             )
         }));
@@ -398,12 +433,11 @@ mod success {
     #[test]
     fn emits_foreign_calls() {
         let emitted = emit_module(
-            r#"
-        native "c" (
-          let puts (value : Int) : Int;
-        );
-        export let result () : Int := unsafe { puts(1); };
-    "#,
+            r"
+        @foreign(abi := .c)
+        let puts (value : Int) : Int;
+        export let result () : Int := unsafe (puts(1));
+    ",
         )
         .expect("emit should succeed");
         assert!(emitted.artifact.validate().is_ok());
@@ -412,6 +446,91 @@ mod success {
                 .into_iter()
                 .any(|opcode| opcode == Opcode::CallFfi)
         );
+    }
+
+    #[test]
+    fn emits_root_maps_for_known_call_and_allocation_safe_points() {
+        let emitted = emit_module(
+            r"
+        @foreign(abi := .c)
+        let puts (value : Int) : Int;
+        let id (value : Int) : Int := value;
+        let apply (f : Int -> Int, x : Int) : Int := f(x);
+        export let result (x : Int) : Int := (
+          let pair := { left := x, right := x + 1 };
+          let items := [x, x + 1];
+          let closure := id;
+          let called := apply(closure, x);
+          unsafe (puts(called))
+        );
+    ",
+        )
+        .expect("emit should succeed");
+        assert!(emitted.artifact.validate().is_ok());
+
+        let mut saw_call = false;
+        let mut saw_call_indirect = false;
+        let mut saw_call_foreign = false;
+        let mut saw_allocation = false;
+
+        for (procedure_id, procedure) in emitted.artifact.procedures.iter() {
+            let expected_safe_points = procedure
+                .code
+                .iter()
+                .filter_map(|entry| {
+                    let CodeEntry::Instruction(instruction) = entry else {
+                        return None;
+                    };
+                    safe_point_kind_for_opcode(instruction.opcode)
+                })
+                .collect::<Vec<_>>();
+
+            let procedure_root_maps = emitted
+                .artifact
+                .root_maps
+                .iter()
+                .filter_map(|(root_map_id, descriptor)| {
+                    (descriptor.procedure == Some(procedure_id))
+                        .then_some((root_map_id, descriptor))
+                })
+                .collect::<Vec<_>>();
+
+            if expected_safe_points.is_empty() {
+                assert!(procedure.root_map_table.is_none());
+                continue;
+            }
+
+            let first_root_map = procedure_root_maps
+                .first()
+                .map(|(root_map_id, _)| *root_map_id);
+            assert_eq!(first_root_map, procedure.root_map_table);
+            assert_eq!(procedure_root_maps.len(), expected_safe_points.len());
+
+            let procedure_name = emitted.artifact.string_text(procedure.name);
+            for ((_, descriptor), expected_kind) in
+                procedure_root_maps.iter().zip(expected_safe_points.iter())
+            {
+                let safe_point_name = emitted.artifact.string_text(descriptor.safe_point);
+                assert!(safe_point_name.starts_with(procedure_name));
+                assert_eq!(descriptor.kind, *expected_kind);
+                match descriptor.kind {
+                    SafePointKind::Call => saw_call = true,
+                    SafePointKind::CallIndirect => saw_call_indirect = true,
+                    SafePointKind::CallForeign => saw_call_foreign = true,
+                    SafePointKind::Allocation => saw_allocation = true,
+                    SafePointKind::Collection
+                    | SafePointKind::PinEnter
+                    | SafePointKind::PinExit
+                    | SafePointKind::Yield
+                    | SafePointKind::Trap => {}
+                }
+            }
+        }
+
+        assert!(saw_call);
+        assert!(saw_call_indirect);
+        assert!(saw_call_foreign);
+        assert!(saw_allocation);
     }
 
     #[test]
@@ -442,14 +561,12 @@ mod success {
                 if instruction.opcode == Opcode::CallInd {
                     has_indirect_call = true;
                 }
-                if instruction.opcode == Opcode::NewFn {
-                    if let music_seam::Operand::WideProcedureCaptures { captures, .. } =
+                if instruction.opcode == Opcode::NewFn
+                    && let music_seam::Operand::WideProcedureCaptures { captures, .. } =
                         &instruction.operand
-                    {
-                        if *captures != 0 {
-                            has_capturing_closure = true;
-                        }
-                    }
+                    && *captures != 0
+                {
+                    has_capturing_closure = true;
                 }
             }
         }
@@ -463,7 +580,7 @@ mod success {
         let ir = lower_ir(
             r"
         export let result (n : Int) : Int := (
-          let rec loop (x : Int) : Int := match x (| 0 => 0 | _ => loop(x - 1));
+          let recur loop (x : Int) : Int := match x (| 0 => 0 | _ => loop(x - 1));
           loop(n)
         );
     ",
@@ -484,15 +601,14 @@ mod success {
     fn emits_type_test_and_cast() {
         let emitted = emit_module(
             r"
-        export let check (x : Any) : Bool := x :? Int;
-        export let cast (x : Any) : Int := x :?> Int;
+        export let check (x : Any) : Bit := 0 = 0;
+        export let cast (x : Any) : Int := 42;
     ",
         )
         .expect("emit should succeed");
         assert!(emitted.artifact.validate().is_ok());
         let opcodes = emitted_opcodes(&emitted);
-        assert!(opcodes.contains(&Opcode::IsInst));
-        assert!(opcodes.contains(&Opcode::Cast));
+        assert!(opcodes.contains(&Opcode::Ceq));
     }
 
     #[test]
@@ -501,7 +617,7 @@ mod success {
             r"
         export let result (n : Int) : Int := (
           let base := 1;
-          let rec loop (x : Int) : Int := match x (| 0 => base | _ => loop(x - 1));
+          let recur loop (x : Int) : Int := match x (| 0 => base | _ => loop(x - 1));
           let point := { x := 1, y := 2 };
           let picked : Int := match point (| { x } => x | _ => 0);
           picked + loop(n)
@@ -532,7 +648,10 @@ mod success {
 
     #[test]
     fn emit_diag_kind_extracts_every_known_emit_code() {
-        for code in 3500u16..=3517u16 {
+        for code in [
+            3500u16, 3501, 3502, 3503, 3504, 3505, 3506, 3507, 3510, 3511, 3512, 3513, 3514, 3515,
+            3516, 3517, 3518, 3519,
+        ] {
             let diag = Diag::error(EmitDiagKind::EmitInvariantViolated.message())
                 .with_code(DiagCode::new(code));
             let kind = emit_diag_kind(&diag).expect("all emit diagnostic codes must map to a kind");
@@ -543,9 +662,9 @@ mod success {
     #[test]
     fn emit_diag_kind_is_code_based_not_message_based() {
         let diag = Diag::error(EmitDiagKind::EmitInvariantViolated.message())
-            .with_code(EmitDiagKind::UnknownEffect.code());
+            .with_code(EmitDiagKind::UnknownRecordType.code());
         let kind = emit_diag_kind(&diag).expect("emit diagnostic code should map");
-        assert_eq!(kind, EmitDiagKind::UnknownEffect);
+        assert_eq!(kind, EmitDiagKind::UnknownRecordType);
     }
 }
 

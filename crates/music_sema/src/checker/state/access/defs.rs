@@ -6,17 +6,9 @@ use music_names::{NameBindingId, Symbol};
 use crate::api::{DefinitionKey, SemaDataDef, SemaDataVariantDef};
 use crate::checker::state::aliases::SYNTH_SUM_PREFIX;
 
-use crate::checker::state::{DataDef, EffectDef, PassBase};
+use crate::checker::state::{DataDef, PassBase};
 
 impl PassBase<'_, '_, '_> {
-    pub fn effect_def(&self, name: &str) -> Option<&EffectDef> {
-        self.decls.effect_defs.get(name)
-    }
-
-    pub fn insert_effect_def(&mut self, name: impl Into<Box<str>>, def: EffectDef) {
-        let _prev = self.decls.effect_defs.insert(name.into(), def);
-    }
-
     pub fn data_def(&self, name: &str) -> Option<&DataDef> {
         self.decls.data_defs.get(name)
     }

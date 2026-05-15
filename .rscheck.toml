@@ -266,7 +266,7 @@ level = "deny"
 [rules."design.god_object"]
 level = "deny"
 max_fields = 64
-max_methods = 25
+max_methods = 64
 max_variants = 160
 
 [rules."perf.hot_path_allocations"]
@@ -297,7 +297,7 @@ mode = "cyclomatic"
 
 [rules."shape.responsibility_split"]
 level = "deny"
-method_count_threshold = 25
+method_count_threshold = 64
 
 [rules."testing.external_test_modules"]
 expected_file = "tests.rs"

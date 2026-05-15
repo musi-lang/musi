@@ -69,7 +69,13 @@ impl Parser<'_> {
 
     pub(crate) fn expect_ident_element(&mut self) -> SyntaxElementParseResult {
         match self.peek_kind() {
+            TokenKind::Ident if self.peek_text().is_some_and(|text| text.starts_with("__")) => {
+                Err(self.reserved_generated_identifier())
+            }
             TokenKind::Ident => Ok(self.advance_element()),
+            TokenKind::Underscore if self.at_generated_identifier_prefix() => {
+                Err(self.reserved_generated_identifier())
+            }
             kind if kind.is_keyword() => Err(self.reserved_keyword_identifier()),
             _ => Err(ParseError::new(
                 ParseErrorKind::ExpectedIdentifier {
@@ -82,7 +88,13 @@ impl Parser<'_> {
 
     pub(crate) fn expect_name_element(&mut self) -> SyntaxElementParseResult {
         match self.peek_kind() {
+            TokenKind::Ident if self.peek_text().is_some_and(|text| text.starts_with("__")) => {
+                Err(self.reserved_generated_identifier())
+            }
             TokenKind::Ident | TokenKind::OpIdent => Ok(self.advance_element()),
+            TokenKind::Underscore if self.at_generated_identifier_prefix() => {
+                Err(self.reserved_generated_identifier())
+            }
             kind if kind.is_keyword() => Err(self.reserved_keyword_identifier()),
             _ => Err(ParseError::new(
                 ParseErrorKind::ExpectedIdentifier {
@@ -100,6 +112,28 @@ impl Parser<'_> {
             },
             self.span(),
         )
+    }
+
+    pub(crate) fn reserved_generated_identifier(&self) -> ParseError {
+        ParseError::new(
+            ParseErrorKind::ReservedGeneratedIdentifier,
+            self.generated_identifier_prefix_span(),
+        )
+    }
+
+    pub(crate) fn at_generated_identifier_prefix(&self) -> bool {
+        self.peek_kind() == TokenKind::Underscore && self.nth_kind(1) == TokenKind::Underscore
+    }
+
+    pub(crate) fn generated_identifier_prefix_span(&self) -> Span {
+        self.peek().span.to(self.nth(1).span)
+    }
+
+    pub(crate) fn peek_text(&self) -> Option<&str> {
+        let span = self.peek().span;
+        let start = usize::try_from(span.start).ok()?;
+        let end = usize::try_from(span.end).ok()?;
+        self.source_text.get(start..end)
     }
 
     pub(crate) fn span(&self) -> Span {

@@ -13,6 +13,7 @@ struct CatalogEntry {
     help: Option<&'static str>,
 }
 
+#[rustfmt::skip]
 const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: VmDiagKind::SeamDecodeFailed,
@@ -169,8 +170,8 @@ const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: VmDiagKind::InvalidRangeEvidence,
         code: 6119,
-        message: "range answer invalid for value kind `{found}`",
-        primary: "range answer invalid for value kind `{found}`",
+        message: "range endpoint evidence invalid for value kind `{found}`",
+        primary: "range endpoint evidence invalid for value kind `{found}`",
         secondary: None,
         help: None,
     },
@@ -247,14 +248,6 @@ const ENTRIES: &[CatalogEntry] = &[
         help: None,
     },
     CatalogEntry {
-        kind: VmDiagKind::EffectRejected,
-        code: 6129,
-        message: "effect `{effect}` operation `{op}` rejected (`{reason}`)",
-        primary: "effect `{effect}` rejected",
-        secondary: None,
-        help: None,
-    },
-    CatalogEntry {
         kind: VmDiagKind::RootModuleRequired,
         code: 6130,
         message: "VM root module required",
@@ -275,22 +268,6 @@ const ENTRIES: &[CatalogEntry] = &[
         code: 6132,
         message: "runtime call `{callee}` expected `{expected}` arguments, found `{found}`",
         primary: "call `{callee}` has `{found}` arguments here",
-        secondary: None,
-        help: None,
-    },
-    CatalogEntry {
-        kind: VmDiagKind::HandlerFrameMissing,
-        code: 6133,
-        message: "answer `{handler_id}` frame depth `{frame_depth}` missing",
-        primary: "answer `{handler_id}` frame missing",
-        secondary: None,
-        help: None,
-    },
-    CatalogEntry {
-        kind: VmDiagKind::MissingMatchingHandlerPop,
-        code: 6134,
-        message: "procedure `{procedure}` missing matching `hdl.pop`",
-        primary: "matching `hdl.pop` missing",
         secondary: None,
         help: None,
     },
@@ -327,34 +304,10 @@ const ENTRIES: &[CatalogEntry] = &[
         help: None,
     },
     CatalogEntry {
-        kind: VmDiagKind::RuntimeEffectArgsInvalid,
-        code: 6139,
-        message: "runtime effect `{effect}.{op}` expected `{expected}`, found `{found}`",
-        primary: "runtime effect `{op}` arguments invalid",
-        secondary: None,
-        help: None,
-    },
-    CatalogEntry {
-        kind: VmDiagKind::RuntimeEffectOperationFailed,
-        code: 6140,
-        message: "runtime effect `{effect}` operation `{op}` failed (`{source}`)",
-        primary: "runtime effect `{op}` failed",
-        secondary: None,
-        help: None,
-    },
-    CatalogEntry {
         kind: VmDiagKind::RuntimeHostUnavailable,
         code: 6141,
         message: "runtime host `{subject}` unavailable",
         primary: "runtime host `{subject}` unavailable",
-        secondary: None,
-        help: None,
-    },
-    CatalogEntry {
-        kind: VmDiagKind::RuntimeEffectUnsupported,
-        code: 6149,
-        message: "runtime effect `{effect}.{op}` unsupported",
-        primary: "runtime effect operation `{op}` unsupported",
         secondary: None,
         help: None,
     },
@@ -486,6 +439,7 @@ pub fn from_code(raw: u16) -> Option<VmDiagKind> {
         .map(|entry| entry.kind)
 }
 
+#[rustfmt::skip]
 pub const fn vm_error_kind(source: &crate::VmErrorKind) -> VmDiagKind {
     match source {
         crate::VmErrorKind::SeamDecodeFailed { .. } => VmDiagKind::SeamDecodeFailed,
@@ -517,14 +471,9 @@ pub const fn vm_error_kind(source: &crate::VmErrorKind) -> VmDiagKind {
         crate::VmErrorKind::ForeignCallRejected { .. } => VmDiagKind::ForeignCallRejected,
         crate::VmErrorKind::PointerIntrinsicFailed { .. } => VmDiagKind::PointerIntrinsicFailed,
         crate::VmErrorKind::NativeCallFailed { .. } => VmDiagKind::NativeCallFailed,
-        crate::VmErrorKind::EffectRejected { .. } => VmDiagKind::EffectRejected,
         crate::VmErrorKind::RootModuleRequired => VmDiagKind::RootModuleRequired,
         crate::VmErrorKind::MissingModuleSource { .. } => VmDiagKind::MissingModuleSource,
         crate::VmErrorKind::CallArityMismatch { .. } => VmDiagKind::CallArityMismatch,
-        crate::VmErrorKind::HandlerFrameMissing { .. } => VmDiagKind::HandlerFrameMissing,
-        crate::VmErrorKind::MissingMatchingHandlerPop { .. } => {
-            VmDiagKind::MissingMatchingHandlerPop
-        }
         crate::VmErrorKind::HeapLimitExceeded { .. } => VmDiagKind::HeapLimitExceeded,
         crate::VmErrorKind::HeapObjectTooLarge { .. } => VmDiagKind::HeapObjectTooLarge,
         crate::VmErrorKind::StackFrameLimitExceeded { .. } => VmDiagKind::StackFrameLimitExceeded,

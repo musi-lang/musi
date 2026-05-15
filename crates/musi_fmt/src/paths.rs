@@ -32,6 +32,22 @@ impl FormatPathSummary {
     }
 }
 
+/// Formats one text buffer using the format kind implied by `path`.
+///
+/// # Errors
+///
+/// Returns [`FormatError`] when parsing or formatting fails.
+pub fn format_text_for_path(path: &Path, text: &str, options: &FormatOptions) -> FormatResultOf {
+    match input_kind_for_path(path, options) {
+        Some(FormatInputKind::Musi) => format_source(text, options),
+        Some(FormatInputKind::Markdown) => format_markdown(text, options),
+        None => Ok(crate::FormatResult {
+            text: text.to_owned(),
+            changed: false,
+        }),
+    }
+}
+
 /// Formats one file.
 ///
 /// # Errors
@@ -46,16 +62,7 @@ pub fn format_file(
         path: path.to_path_buf(),
         source,
     })?;
-    let formatted = match input_kind_for_path(path, options) {
-        Some(FormatInputKind::Musi) => format_source(&text, options)?,
-        Some(FormatInputKind::Markdown) => format_markdown(&text, options)?,
-        None => {
-            return Ok(FormatPathChange {
-                path: path.to_path_buf(),
-                changed: false,
-            });
-        }
-    };
+    let formatted = format_text_for_path(path, &text, options)?;
     if formatted.changed && !check {
         fs::write(path, formatted.text).map_err(|source| FormatError::IoFailed {
             path: path.to_path_buf(),

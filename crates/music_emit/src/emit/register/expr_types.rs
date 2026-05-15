@@ -103,7 +103,7 @@ fn collect_expr_types_aggregate(
             evidence,
         } => {
             let _ = ensure_type(state, layout, "Any");
-            let _ = ensure_type(state, layout, "Bool");
+            let _ = ensure_type(state, layout, "Bit");
             collect_expr_types(state, layout, value);
             collect_expr_types(state, layout, range);
             collect_expr_types(state, layout, evidence);
@@ -175,6 +175,16 @@ fn collect_expr_types_binding_and_control(
             collect_expr_types(state, layout, right);
             true
         }
+        IrExprKind::If {
+            condition,
+            then_expr,
+            else_expr,
+        } => {
+            collect_expr_types(state, layout, condition);
+            collect_expr_types(state, layout, then_expr);
+            collect_expr_types(state, layout, else_expr);
+            true
+        }
         IrExprKind::Not { expr } => {
             collect_expr_types(state, layout, expr);
             true
@@ -217,38 +227,6 @@ fn collect_expr_types_call_and_effect(
         }
         IrExprKind::Call { callee, args } => {
             collect_call_expr_types(state, layout, callee, args);
-            true
-        }
-        IrExprKind::Request { args, .. } => {
-            collect_expr_types_iter(state, layout, args);
-            true
-        }
-        IrExprKind::RequestSeq { args, .. } => {
-            let _ = ensure_type(state, layout, "[]Any");
-            collect_expr_types_seq_parts(state, layout, args);
-            true
-        }
-        IrExprKind::AnswerLit {
-            effect_key,
-            value,
-            ops,
-        } => {
-            collect_answer_lit_expr_types(state, layout, effect_key, value, ops);
-            true
-        }
-        IrExprKind::Handle {
-            effect_key,
-            answer,
-            body,
-            ..
-        } => {
-            collect_handle_expr_types(state, layout, effect_key, answer, body);
-            true
-        }
-        IrExprKind::Resume { expr } => {
-            if let Some(expr) = expr.as_deref() {
-                collect_expr_types(state, layout, expr);
-            }
             true
         }
         _ => false,
@@ -304,32 +282,6 @@ fn collect_call_parts_expr_types(
     let _ = ensure_type(state, layout, "[]Any");
     collect_expr_types(state, layout, callee);
     collect_expr_types_seq_parts(state, layout, args);
-}
-
-fn collect_answer_lit_expr_types(
-    state: &mut ProgramState,
-    layout: &mut ModuleLayout,
-    effect_key: &DefinitionKey,
-    value: &IrExpr,
-    ops: &[IrHandleOp],
-) {
-    let answer_ty = answer_type_name(effect_key);
-    let _ = ensure_type(state, layout, answer_ty.as_ref());
-    collect_expr_types(state, layout, value);
-    collect_expr_types_iter(state, layout, ops.iter().map(|op| &op.closure));
-}
-
-fn collect_handle_expr_types(
-    state: &mut ProgramState,
-    layout: &mut ModuleLayout,
-    effect_key: &DefinitionKey,
-    answer: &IrExpr,
-    body: &IrExpr,
-) {
-    let answer_ty = answer_type_name(effect_key);
-    let _ = ensure_type(state, layout, answer_ty.as_ref());
-    collect_expr_types(state, layout, answer);
-    collect_expr_types(state, layout, body);
 }
 
 fn collect_expr_types_iter<'a, I>(state: &mut ProgramState, layout: &mut ModuleLayout, exprs: I)

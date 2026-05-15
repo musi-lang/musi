@@ -13,6 +13,7 @@ struct CatalogEntry {
     help: Option<&'static str>,
 }
 
+#[rustfmt::skip]
 const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: RuntimeDiagKind::RootModuleRequired,
@@ -102,6 +103,7 @@ pub fn from_code(raw: u16) -> Option<RuntimeDiagKind> {
         .map(|entry| entry.kind)
 }
 
+#[rustfmt::skip]
 pub const fn runtime_error_kind(source: &crate::RuntimeErrorKind) -> RuntimeDiagKind {
     match source {
         crate::RuntimeErrorKind::RootModuleRequired => RuntimeDiagKind::RootModuleRequired,

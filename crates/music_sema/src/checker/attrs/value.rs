@@ -1,4 +1,4 @@
-use music_base::diag::DiagContext;
+use music_base::{diag::DiagContext, parse_u32_literal};
 use music_hir::{HirAttr, HirAttrArg, HirExprId, HirExprKind, HirLitKind};
 use music_names::Ident;
 
@@ -84,7 +84,7 @@ impl PassBase<'_, '_, '_> {
     pub(in crate::checker::attrs) fn parse_u32_value(&self, expr_id: HirExprId) -> Option<u32> {
         match self.expr(expr_id).kind {
             HirExprKind::Lit { lit } => match self.lit_kind(lit) {
-                HirLitKind::Int { raw } => raw.parse().ok(),
+                HirLitKind::Int { raw } => parse_u32_literal(raw.as_ref()),
                 _ => None,
             },
             _ => None,

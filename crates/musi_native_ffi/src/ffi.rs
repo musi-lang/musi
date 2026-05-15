@@ -25,6 +25,8 @@ pub struct FfiCif {
     rtype: *mut FfiType,
     bytes: c_uint,
     flags: c_uint,
+    #[cfg(all(target_arch = "aarch64", target_vendor = "apple"))]
+    aarch64_nfixedargs: c_uint,
 }
 
 pub enum FfiTypeRef {

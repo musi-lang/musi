@@ -1,11 +1,11 @@
 use super::{
-    ComptimeValue, DefinitionKey, ExprMemberKind, HirArg, HirDim, HirExprId, HirExprKind, HirParam,
-    HirParamRange, HirPatKind, HirTyId, HirTyKind, Ident, Interner, IrArg, IrCallable, IrExpr,
-    IrExprKind, IrIntrinsicKind, IrLit, IrOrigin, IrParam, IrSeqPart, LowerCtx, ModuleKey,
-    NameBindingId, NameSite, SemaModule, SliceRange, Symbol, decl_binding_id, fresh_temp,
-    hidden_constraint_answer_params_for_binding, lower_constraint_answer_expr, lower_errors,
-    lower_expr, lowering_invariant_violation, pop_constraint_answer_bindings,
-    push_constraint_answer_bindings, render_ty_name, render_type_value_expr_name, toplevel,
+    ComptimeValue, ExprMemberKind, HirArg, HirDim, HirExprId, HirExprKind, HirParam, HirParamRange,
+    HirPatKind, HirTyId, HirTyKind, Ident, Interner, IrArg, IrCallable, IrExpr, IrExprKind,
+    IrIntrinsicKind, IrLit, IrOrigin, IrParam, IrSeqPart, LowerCtx, ModuleKey, NameBindingId,
+    NameSite, SemaModule, SliceRange, Symbol, decl_binding_id, fresh_temp,
+    hidden_constraint_evidence_params_for_binding, lower_constraint_evidence_expr, lower_errors,
+    lower_expr, lowering_invariant_violation, pop_constraint_evidence_bindings,
+    push_constraint_evidence_bindings, render_ty_name, render_type_value_expr_name, toplevel,
     use_binding_id,
 };
 
@@ -13,14 +13,11 @@ mod args;
 mod comptime;
 mod dot;
 mod intrinsics;
-mod request;
 
-use args::{
-    SpreadMode, lower_origin, lower_spread_args, ordered_call_args, resolve_request_target,
-};
+use args::{SpreadMode, lower_origin, lower_spread_args, ordered_call_args};
 use comptime::lower_comptime_call_expr;
 use dot::{lower_dot_callable_call_expr, resolve_dot_callable_call_target};
-use intrinsics::{lower_ffi_pointer_intrinsic, lower_std_cmp_intrinsic};
+use intrinsics::{lower_ffi_pointer_intrinsic, lower_std_cmp_intrinsic, lower_std_libm_intrinsic};
 pub(crate) fn lower_call_expr(
     ctx: &mut LowerCtx<'_>,
     callee: HirExprId,
@@ -35,6 +32,9 @@ pub(crate) fn lower_call_expr(
         sema.module().store.args.get(args.clone()),
     );
     if let Some(intrinsic) = lower_std_cmp_intrinsic(ctx, callee, &arg_nodes) {
+        return intrinsic;
+    }
+    if let Some(intrinsic) = lower_std_libm_intrinsic(ctx, callee, &arg_nodes) {
         return intrinsic;
     }
     if let Some(intrinsic) = lower_ffi_pointer_intrinsic(ctx, callee, &arg_nodes) {
@@ -105,11 +105,4 @@ pub(crate) fn lower_call_expr(
     Ok(IrExprKind::Sequence {
         exprs: prelude.into_boxed_slice(),
     })
-}
-
-pub(crate) fn lower_request_expr(
-    ctx: &mut LowerCtx<'_>,
-    expr: HirExprId,
-) -> Result<IrExprKind, Box<str>> {
-    request::lower_request_expr(ctx, expr)
 }

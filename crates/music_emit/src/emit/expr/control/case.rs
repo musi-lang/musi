@@ -106,7 +106,7 @@ impl ProcedureEmitter<'_, '_> {
         if let Some(guard) = guard {
             self.compile_expr(guard, true, diags);
             self.code.push(CodeEntry::Instruction(Instruction::new(
-                Opcode::BrFalse,
+                Opcode::BrZ,
                 Operand::Label(next_label),
             )));
         }

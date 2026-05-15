@@ -1,10 +1,10 @@
 catalog sema music_sema SemaDiagKind crates/music_sema/src/diag_catalog_gen.rs
 
 diag AttrDuplicateRepr 3000
-  message "`@repr` attribute duplicate"
+  message "`@layout form` attribute duplicate"
 
 diag AttrReprRequiresKindString 3001
-  message "`@repr` needs string `kind` argument"
+  message "`@layout form needs variant value"
 
 diag AttrLayoutArgRequiresName 3002
   message "`@layout` argument needs name"
@@ -90,6 +90,14 @@ diag AttrWhenRequiresStringList 3020
 diag ForeignSignatureRequired 3021
   message "native binding needs signature"
 
+diag ExternalImportCannotBeExported 3309
+  message "`@foreign` import cannot be exported"
+  primary "`@foreign` declaration has no body"
+
+diag ExternalBodyRequiresExport 3310
+  message "`@foreign` body needs `export`"
+  primary "`@foreign` body must be exported"
+
 diag InvalidPartialModifier 3120
   message "`partial` target invalid"
 
@@ -115,14 +123,6 @@ diag InvalidDataVariantDiscriminant 3026
 diag CyclicDataVariantDiscriminant 3027
   message "cyclic data variant discriminant"
 
-diag CollectDuplicateEffectOp 3028
-  message "effect operation `{operation}` duplicate"
-  secondary "effect operation `{operation}` previous declaration"
-
-diag CollectDuplicateEffectLaw 3029
-  message "effect law `{law}` duplicate"
-  secondary "effect law `{law}` previous declaration"
-
 diag CollectDuplicateShapeMember 3030
   message "shape member `{member}` duplicate"
 
@@ -132,73 +132,12 @@ diag CollectDuplicateShapeLaw 3031
 diag UnknownExport 3032
   message "export binding `{name}` unknown"
 
-diag InvalidRequestTarget 3033
-  message "ask target expected effect operation call"
-  primary "ask target must be effect operation call"
-  help "write `ask Effect.op(...)`"
-
-diag UnknownEffect 3034
-  message "effect `{effect}` unknown"
-
-diag DuplicateHandlerClause 3035
-  message "answer clause `{clause}` duplicate"
-
-diag UnknownEffectOp 3036
-  message "effect operation `{operation}` unknown"
-
-diag HandlerClauseArityMismatch 3037
-  message "answer clause parameter count differs from operation"
-  primary "answer clause parameters do not match operation"
-
-diag HandleRequiresSingleValueClause 3038
-  message "handle needs exactly one value clause"
-  primary "answer literal needs exactly one `value` clause"
-  help "add exactly one `value => ...` clause"
-
-diag HandlerMissingOperationClause 3039
-  message "answer operation clause `{operation}` missing"
-  help "add clause for each handled operation"
-
-diag ResumeOutsideHandlerClause 3040
-  message "resume outside answer clause"
-  primary "`resume` only valid inside answer operation clause"
-  help "move `resume` into answer operation clause"
-
-diag EffectNotDeclared 3041
-  message "effect not declared"
-  primary "effect must appear in surrounding effect row"
-  help "add effect to effect annotation or remove ask"
-
-diag GivenMemberArityMismatch 3042
-  message "given member `{member}` expected `{expected}` parameters, found `{found}`"
-  primary "given member `{member}` parameters declared here"
-
-diag UnknownGivenMember 3043
-  message "given member `{member}` unknown"
-
-diag GivenMemberValueRequired 3044
-  message "given member `{member}` missing value"
-  primary "given member `{member}` needs value"
-
-diag DuplicateGivenMember 3045
-  message "given member `{member}` duplicate"
-
-diag MissingGivenMember 3046
-  message "given member `{member}` missing"
-
-diag InvalidGivenTarget 3047
-  message "given target `{target}` invalid"
-  primary "given target `{target}` found here"
-
 diag SealedShape 3048
   message "sealed shape `{shape}`"
   primary "sealed shape `{shape}` used here"
 
 diag UnknownShape 3049
   message "shape `{shape}` unknown"
-
-diag DuplicateGiven 3050
-  message "given for shape `{shape}` duplicate"
 
 diag PlainLetRequiresIrrefutablePattern 3051
   message "plain `let` needs irrefutable pattern"
@@ -324,6 +263,14 @@ diag PinnedValueEscapes 3125
   message "pinned value `{name}` escapes pin scope"
   primary "`{name}` returned from pin body"
 
+diag PinnedValueCapturedByClosure 3312
+  message "pinned value `{name}` captured by closure"
+  primary "`{name}` captured by closure inside pin scope"
+
+diag YieldInsidePinScope 3311
+  message "`yield` inside pin scope"
+  primary "`yield` would suspend active pin scope"
+
 diag InvalidTypeApplication 3070
   message "type application target `{target}` invalid"
 
@@ -385,10 +332,10 @@ diag BinaryOperatorHasNoExecutableLowering 3090
   message "binary operator has no executable lowering"
 
 diag LogicalOperatorDomainMismatch 3127
-  message "operator `{operator}` needs `Bool` or matching `Bits[N]`, found `{left}` and `{right}`"
+  message "operator `{operator}` needs `Bit` or matching `Bits[N]`, found `{left}` and `{right}`"
 
 diag UnaryLogicalOperatorDomainMismatch 3128
-  message "operator `{operator}` needs `Bool` or `Bits[N]`, found `{found}`"
+  message "operator `{operator}` needs `Bit` or `Bits[N]`, found `{found}`"
 
 diag InvalidBitsWidth 3129
   message "bits width `{width}` expected positive natural literal"
@@ -420,8 +367,8 @@ diag OrPatternBindersMismatch 3097
 diag UnsatisfiedConstraint 3098
   message "unsatisfied constraint"
 
-diag AmbiguousGivenMatch 3099
-  message "given match ambiguous"
+diag AmbiguousConstraintEvidence 3099
+  message "constraint evidence ambiguous"
 
 diag ConstrainedNonCallableBinding 3100
   message "non-callable `let` cannot have `where` constraints"

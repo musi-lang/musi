@@ -1,6 +1,8 @@
 use std::ops::Range;
 
-use music_syntax::{Lexer, TokenKind};
+use music_syntax::{Lexer, TokenKind, parse};
+
+use crate::protected::protected_line_ranges;
 
 #[derive(Debug, Clone)]
 struct ImportStatement {
@@ -37,33 +39,51 @@ pub fn organize_imports(source: &str) -> Option<String> {
     if !lexed.errors().is_empty() {
         return None;
     }
-    let tokens = token_views(source);
+    let parsed = parse(lexed);
+    if !parsed.errors().is_empty() {
+        return None;
+    }
+    let protected_ranges = protected_line_ranges(source, parsed.tree());
+    organize_imports_protecting(source, &protected_ranges)
+}
+
+#[must_use]
+pub fn organize_imports_protecting(
+    source: &str,
+    protected_ranges: &[Range<usize>],
+) -> Option<String> {
+    let tokens = token_views(source)?;
     if tokens.is_empty() {
         return None;
     }
     let statements = collect_top_level_statements(source, &tokens);
-    let replacements = import_block_replacements(source, &statements);
+    let replacements = import_block_replacements(source, &statements, protected_ranges);
     apply_replacements(source, &replacements)
 }
 
-fn token_views(source: &str) -> Vec<TokenView<'_>> {
+fn token_views(source: &str) -> Option<Vec<TokenView<'_>>> {
     let lexed = Lexer::new(source).lex();
-    lexed
-        .tokens()
-        .iter()
-        .filter(|token| token.kind != TokenKind::Eof)
-        .filter_map(|token| {
-            let start = usize::try_from(token.span.start).ok()?;
-            let end = usize::try_from(token.span.end).ok()?;
-            let text = source.get(start..end)?;
-            Some(TokenView {
-                kind: token.kind,
-                start,
-                end,
-                text,
+    if !lexed.errors().is_empty() {
+        return None;
+    }
+    Some(
+        lexed
+            .tokens()
+            .iter()
+            .filter(|token| token.kind != TokenKind::Eof)
+            .filter_map(|token| {
+                let start = usize::try_from(token.span.start).ok()?;
+                let end = usize::try_from(token.span.end).ok()?;
+                let text = source.get(start..end)?;
+                Some(TokenView {
+                    kind: token.kind,
+                    start,
+                    end,
+                    text,
+                })
             })
-        })
-        .collect()
+            .collect(),
+    )
 }
 
 fn collect_top_level_statements(source: &str, tokens: &[TokenView<'_>]) -> Vec<ImportStatement> {
@@ -147,29 +167,97 @@ fn attached_statement_start(source: &str, token_start: usize) -> usize {
     let line_start = prefix
         .rfind('\n')
         .map_or(0, |index| index.saturating_add(1));
-    let before_line = source.get(..line_start).unwrap_or_default();
-    let Some(previous_line_end) = before_line.trim_end_matches('\n').rfind('\n') else {
-        let previous_line = source.get(..line_start).unwrap_or_default();
-        if line_start > 0 && previous_line.trim_start().starts_with("--") {
-            return 0;
+
+    let mut attach_start = line_start;
+    while let Some(previous_start) = previous_line_start(source, attach_start) {
+        let previous_line = source
+            .get(previous_start..attach_start)
+            .unwrap_or_default()
+            .trim_end_matches(['\r', '\n']);
+        if is_attached_import_line_comment(previous_line) {
+            attach_start = previous_start;
+            continue;
         }
-        return token_start;
-    };
-    let previous_line_start = previous_line_end.saturating_add(1);
-    let previous_line = source
-        .get(previous_line_start..line_start)
-        .unwrap_or_default();
-    if previous_line.trim_start().starts_with("--") {
-        return previous_line_start;
+        if let Some(block_start) = attached_block_comment_start(source, attach_start, previous_line)
+        {
+            attach_start = block_start;
+            continue;
+        }
+        if !is_attached_import_block_comment_start(previous_line) {
+            break;
+        }
+        attach_start = previous_start;
+    }
+    if attach_start != line_start {
+        return attach_start;
     }
     token_start
 }
 
-fn import_block_replacements(source: &str, statements: &[ImportStatement]) -> Vec<Replacement> {
+fn is_attached_import_line_comment(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    trimmed.starts_with("--") && !trimmed.starts_with("--!")
+}
+
+fn is_attached_import_block_comment_start(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    starts_with_block_comment(trimmed) && !starts_with_module_block_comment(trimmed)
+}
+
+fn attached_block_comment_start(
+    source: &str,
+    attach_start: usize,
+    previous_line: &str,
+) -> Option<usize> {
+    if !previous_line.trim_end().ends_with("-/") {
+        return None;
+    }
+    let block_start = source
+        .get(..attach_start)?
+        .as_bytes()
+        .windows(2)
+        .rposition(|window| matches!(window, [b'/', b'-']))?;
+    let block_opener = source.get(block_start..block_start.saturating_add(3))?;
+    (!starts_with_module_block_comment(block_opener)).then_some(block_start)
+}
+
+fn starts_with_block_comment(text: &str) -> bool {
+    text.as_bytes().starts_with(b"/-")
+}
+
+fn starts_with_module_block_comment(text: &str) -> bool {
+    text.as_bytes().starts_with(b"/-!")
+}
+
+fn previous_line_start(source: &str, line_start: usize) -> Option<usize> {
+    if line_start == 0 {
+        return None;
+    }
+    let before = source.get(..line_start)?.trim_end_matches(['\r', '\n']);
+    Some(
+        before
+            .rfind('\n')
+            .map_or(0, |index| index.saturating_add(1)),
+    )
+}
+
+fn import_block_replacements(
+    source: &str,
+    statements: &[ImportStatement],
+    protected_ranges: &[Range<usize>],
+) -> Vec<Replacement> {
     let mut replacements = Vec::new();
     let mut block = Vec::<ImportStatement>::new();
 
     for statement in statements {
+        if protected_ranges
+            .iter()
+            .any(|range| ranges_overlap(&statement.range, range))
+        {
+            push_sorted_block(&mut replacements, &block);
+            block.clear();
+            continue;
+        }
         if let Some(previous) = block.last() {
             let between = source
                 .get(previous.range.end..statement.range.start)
@@ -183,6 +271,10 @@ fn import_block_replacements(source: &str, statements: &[ImportStatement]) -> Ve
     }
     push_sorted_block(&mut replacements, &block);
     replacements
+}
+
+const fn ranges_overlap(left: &Range<usize>, right: &Range<usize>) -> bool {
+    left.start < right.end && right.start < left.end
 }
 
 fn newline_count(text: &str) -> usize {
@@ -212,7 +304,9 @@ fn push_sorted_block(replacements: &mut Vec<Replacement>, block: &[ImportStateme
 }
 
 fn sort_import_destructure_fields(statement: &str) -> String {
-    let tokens = token_views(statement);
+    let Some(tokens) = token_views(statement) else {
+        return statement.to_owned();
+    };
     let Some(colon_eq_index) = tokens
         .iter()
         .position(|token| token.kind == TokenKind::ColonEq)
@@ -270,6 +364,16 @@ fn sort_brace_fields(
             .unwrap_or_default()
             .to_owned();
     }
+    if fields.iter().any(|range| {
+        source
+            .get(range.clone())
+            .is_some_and(field_contains_comment)
+    }) {
+        return source
+            .get(open.start..close.end)
+            .unwrap_or_default()
+            .to_owned();
+    }
 
     let mut sortable = fields
         .into_iter()
@@ -319,8 +423,17 @@ fn collect_field_ranges(
         .collect()
 }
 
+fn field_contains_comment(field: &str) -> bool {
+    field
+        .as_bytes()
+        .windows(2)
+        .any(|window| matches!(window, [b'-' | b'/', b'-']))
+}
+
 fn sort_nested_record_fields(field: &str) -> String {
-    let tokens = token_views(field);
+    let Some(tokens) = token_views(field) else {
+        return field.to_owned();
+    };
     let Some(open_index) = tokens
         .iter()
         .position(|token| token.kind == TokenKind::LBrace)
@@ -340,6 +453,7 @@ fn sort_nested_record_fields(field: &str) -> String {
 
 fn field_sort_key(field: &str) -> String {
     token_views(field)
+        .unwrap_or_default()
         .into_iter()
         .find(|token| token.kind == TokenKind::Ident)
         .map_or_else(

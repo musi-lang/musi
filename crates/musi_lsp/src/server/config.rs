@@ -18,18 +18,22 @@ impl Default for LspConfig {
 
 impl LspConfig {
     pub(super) fn from_initialize_params(params: &InitializeParams) -> Self {
+        params
+            .initialization_options
+            .as_ref()
+            .map_or_else(Self::default, Self::from_settings)
+    }
+
+    pub(super) fn from_settings(settings: &LSPAny) -> Self {
         let mut config = Self::default();
-        let Some(options) = &params.initialization_options else {
-            return config;
-        };
-        config.hover_maximum_length = options
+        config.hover_maximum_length = settings
             .get("hover")
             .and_then(|hover| hover.get("maximumLength"))
             .and_then(number_option)
             .and_then(|value| usize::try_from(value).ok())
             .filter(|value| *value > 0)
             .unwrap_or(config.hover_maximum_length);
-        let Some(inlay_hints) = options.get("inlayHints") else {
+        let Some(inlay_hints) = settings.get("inlayHints") else {
             return config;
         };
         config.inlay_hints.enabled = bool_option(inlay_hints, "enabled").unwrap_or(true);
@@ -52,8 +56,8 @@ impl Default for InlayHintConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            parameter_names: ParameterNameHints::None,
-            variable_types: false,
+            parameter_names: ParameterNameHints::Literals,
+            variable_types: true,
         }
     }
 }
@@ -62,9 +66,11 @@ impl InlayHintConfig {
     pub(super) const fn allows(self, hint: &ToolInlayHint) -> bool {
         match hint.kind {
             ToolInlayHintKind::Type => self.variable_types,
-            ToolInlayHintKind::Parameter => {
-                !matches!(self.parameter_names, ParameterNameHints::None)
-            }
+            ToolInlayHintKind::Parameter => match self.parameter_names {
+                ParameterNameHints::None => false,
+                ParameterNameHints::Literals => hint.is_literal_argument,
+                ParameterNameHints::All => true,
+            },
         }
     }
 }

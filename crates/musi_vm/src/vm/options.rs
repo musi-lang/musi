@@ -19,15 +19,20 @@ impl Default for VmOptions {
 }
 
 impl VmOptions {
-    pub const DEFAULT: Self = Self {
-        heap_limit_bytes: None,
-        max_object_bytes: None,
-        stack_frame_limit: None,
-        instruction_budget: None,
-        gc_stress: false,
-        mode: MvmMode::Normal,
-        features: MvmFeatures::DEFAULT,
-    };
+    pub const DEFAULT: Self = Self::from_mode_bundle(MvmModeBundle::NORMAL);
+
+    #[must_use]
+    pub const fn from_mode_bundle(bundle: MvmModeBundle) -> Self {
+        Self {
+            heap_limit_bytes: None,
+            max_object_bytes: None,
+            stack_frame_limit: None,
+            instruction_budget: None,
+            gc_stress: false,
+            mode: bundle.mode,
+            features: bundle.features,
+        }
+    }
 
     #[must_use]
     pub const fn with_heap_limit_bytes(mut self, heap_limit_bytes: usize) -> Self {
@@ -64,13 +69,23 @@ impl VmOptions {
         mut self,
         optimization_level: VmOptimizationLevel,
     ) -> Self {
-        self.mode = optimization_level;
+        self = self.with_mode(optimization_level);
         self
     }
 
     #[must_use]
+    pub const fn with_mode_bundle(mut self, bundle: MvmModeBundle) -> Self {
+        self.mode = bundle.mode;
+        self.features = bundle.features;
+        self
+    }
+
+    /// Applies one canonical mode bundle.
+    ///
+    /// Bundle defaults are applied first; per-feature setters can override after this call.
+    #[must_use]
     pub const fn with_mode(mut self, mode: MvmMode) -> Self {
-        self.mode = mode;
+        self = self.with_mode_bundle(mode.bundle());
         self
     }
 
@@ -114,9 +129,47 @@ pub enum MvmMode {
 impl MvmMode {
     #[allow(non_upper_case_globals)]
     pub const Tiered: Self = Self::Normal;
+
+    #[must_use]
+    pub const fn bundle(self) -> MvmModeBundle {
+        match self {
+            Self::DebugInterpreter => MvmModeBundle::DEBUG,
+            Self::Interpreter => MvmModeBundle::INTERP,
+            Self::Normal => MvmModeBundle::NORMAL,
+            Self::Hot => MvmModeBundle::HOT,
+        }
+    }
 }
 
 pub type VmOptimizationLevel = MvmMode;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MvmModeBundle {
+    pub mode: MvmMode,
+    pub features: MvmFeatures,
+}
+
+impl MvmModeBundle {
+    pub const DEBUG: Self = Self {
+        mode: MvmMode::DebugInterpreter,
+        features: MvmFeatures::DEBUG_DEFAULT,
+    };
+
+    pub const INTERP: Self = Self {
+        mode: MvmMode::Interpreter,
+        features: MvmFeatures::DEFAULT,
+    };
+
+    pub const NORMAL: Self = Self {
+        mode: MvmMode::Normal,
+        features: MvmFeatures::DEFAULT,
+    };
+
+    pub const HOT: Self = Self {
+        mode: MvmMode::Hot,
+        features: MvmFeatures::DEFAULT,
+    };
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MvmFeatures {
@@ -135,8 +188,14 @@ impl MvmFeatures {
     const FUSED_DISPATCH: u8 = 0b0100;
     const INLINE_CACHES: u8 = 0b1000;
 
+    const DEBUG_DEFAULT_BITS: u8 = Self::QUICKENING | Self::INLINE_CACHES;
+
     pub const DEFAULT: Self = Self {
         bits: Self::QUICKENING | Self::RUNTIME_KERNELS | Self::FUSED_DISPATCH | Self::INLINE_CACHES,
+    };
+
+    pub const DEBUG_DEFAULT: Self = Self {
+        bits: Self::DEBUG_DEFAULT_BITS,
     };
 
     #[must_use]
@@ -223,29 +282,32 @@ impl VmOptions {
     ///
     /// Returns an error when an option is unknown, has an invalid value, or
     /// does not use the `-Xmvm:` prefix.
+    ///
+    /// Mode tiers are parsed as canonical bundles first; `+Use*` and `-Use*`
+    /// flags are then applied as explicit feature overrides.
     pub fn parse_mvm_options(
         env_options: Option<&str>,
         args: &[String],
     ) -> Result<Self, MvmOptionsParseError> {
-        let mut options = Self::DEFAULT;
+        let mut parsed = ParsedMvmOptions::default();
         if let Some(env_options) = env_options {
             for option in env_options.split_whitespace() {
-                options = parse_mvm_option(options, option)?;
+                parse_mvm_option(&mut parsed, option)?;
             }
         }
         for option in args {
-            options = parse_mvm_option(options, option)?;
+            parse_mvm_option(&mut parsed, option)?;
         }
-        Ok(options)
+        Ok(parsed.finish())
     }
 }
 
 pub(super) const DEFAULT_AUTO_COLLECT_THRESHOLD_BYTES: usize = 1024 * 1024;
 
 fn parse_mvm_option(
-    mut options: VmOptions,
+    parsed: &mut ParsedMvmOptions,
     option: &str,
-) -> Result<VmOptions, MvmOptionsParseError> {
+) -> Result<(), MvmOptionsParseError> {
     let Some(raw) = option.strip_prefix("-Xmvm:") else {
         return Err(parse_error(format!(
             "MVM option `{option}` must start with `-Xmvm:`"
@@ -253,19 +315,43 @@ fn parse_mvm_option(
     };
     if let Some(flag) = raw.strip_prefix('+') {
         return match flag {
-            "UseQuickening" => Ok(options.with_quickening(true)),
-            "UseKernels" => Ok(options.with_runtime_kernels(true)),
-            "UseFusedDispatch" => Ok(options.with_fused_dispatch(true)),
-            "UseInlineCaches" => Ok(options.with_inline_caches(true)),
+            "UseQuickening" => {
+                parsed.feature_overrides.quickening = Some(true);
+                Ok(())
+            }
+            "UseKernels" => {
+                parsed.feature_overrides.runtime_kernels = Some(true);
+                Ok(())
+            }
+            "UseFusedDispatch" => {
+                parsed.feature_overrides.fused_dispatch = Some(true);
+                Ok(())
+            }
+            "UseInlineCaches" => {
+                parsed.feature_overrides.inline_caches = Some(true);
+                Ok(())
+            }
             _ => Err(parse_error(format!("unknown MVM option `{option}`"))),
         };
     }
     if let Some(flag) = raw.strip_prefix('-') {
         return match flag {
-            "UseQuickening" => Ok(options.with_quickening(false)),
-            "UseKernels" => Ok(options.with_runtime_kernels(false)),
-            "UseFusedDispatch" => Ok(options.with_fused_dispatch(false)),
-            "UseInlineCaches" => Ok(options.with_inline_caches(false)),
+            "UseQuickening" => {
+                parsed.feature_overrides.quickening = Some(false);
+                Ok(())
+            }
+            "UseKernels" => {
+                parsed.feature_overrides.runtime_kernels = Some(false);
+                Ok(())
+            }
+            "UseFusedDispatch" => {
+                parsed.feature_overrides.fused_dispatch = Some(false);
+                Ok(())
+            }
+            "UseInlineCaches" => {
+                parsed.feature_overrides.inline_caches = Some(false);
+                Ok(())
+            }
             _ => Err(parse_error(format!("unknown MVM option `{option}`"))),
         };
     }
@@ -276,28 +362,37 @@ fn parse_mvm_option(
     };
     match key {
         "Tier" => {
-            options.mode = match value {
-                "Normal" => MvmMode::Normal,
-                "Interp" => MvmMode::Interpreter,
-                "Debug" => MvmMode::DebugInterpreter,
-                "Hot" => MvmMode::Hot,
+            parsed.mode_bundle = match value {
+                "Normal" => MvmModeBundle::NORMAL,
+                "Interp" => MvmModeBundle::INTERP,
+                "Debug" => MvmModeBundle::DEBUG,
+                "Hot" => MvmModeBundle::HOT,
                 _ => return Err(parse_error(format!("unknown MVM mode `{value}`"))),
             };
-            Ok(options)
+            Ok(())
         }
-        "HeapLimit" => parse_usize(value, option).map(|value| options.with_heap_limit_bytes(value)),
+        "HeapLimit" => {
+            parse_usize(value, option).map(|value| parsed.options.heap_limit_bytes = Some(value))
+        }
         "StackLimit" => {
-            parse_usize(value, option).map(|value| options.with_stack_frame_limit(value))
+            parse_usize(value, option).map(|value| parsed.options.stack_frame_limit = Some(value))
         }
         "StepLimit" => {
             let value = value.parse::<u64>().map_err(|_| {
                 parse_error(format!("MVM option `{option}` expects unsigned integer"))
             })?;
-            Ok(options.with_instruction_budget(value))
+            parsed.options.instruction_budget = Some(value);
+            Ok(())
         }
         "GC" => match value {
-            "Auto" => Ok(options.with_gc_stress(false)),
-            "Stress" => Ok(options.with_gc_stress(true)),
+            "Auto" => {
+                parsed.options.gc_stress = false;
+                Ok(())
+            }
+            "Stress" => {
+                parsed.options.gc_stress = true;
+                Ok(())
+            }
             _ => Err(parse_error(format!("unknown MVM GC mode `{value}`"))),
         },
         _ => Err(parse_error(format!("unknown MVM option `{option}`"))),
@@ -313,5 +408,55 @@ fn parse_usize(value: &str, option: &str) -> Result<usize, MvmOptionsParseError>
 fn parse_error(message: String) -> MvmOptionsParseError {
     MvmOptionsParseError {
         message: message.into_boxed_str(),
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ParsedMvmOptions {
+    options: VmOptions,
+    mode_bundle: MvmModeBundle,
+    feature_overrides: MvmFeatureOverrides,
+}
+
+impl Default for ParsedMvmOptions {
+    fn default() -> Self {
+        Self {
+            options: VmOptions::DEFAULT,
+            mode_bundle: MvmModeBundle::NORMAL,
+            feature_overrides: MvmFeatureOverrides::default(),
+        }
+    }
+}
+
+impl ParsedMvmOptions {
+    const fn finish(self) -> VmOptions {
+        self.feature_overrides
+            .apply(self.options.with_mode_bundle(self.mode_bundle))
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+struct MvmFeatureOverrides {
+    quickening: Option<bool>,
+    runtime_kernels: Option<bool>,
+    fused_dispatch: Option<bool>,
+    inline_caches: Option<bool>,
+}
+
+impl MvmFeatureOverrides {
+    const fn apply(self, mut options: VmOptions) -> VmOptions {
+        if let Some(enabled) = self.quickening {
+            options = options.with_quickening(enabled);
+        }
+        if let Some(enabled) = self.runtime_kernels {
+            options = options.with_runtime_kernels(enabled);
+        }
+        if let Some(enabled) = self.fused_dispatch {
+            options = options.with_fused_dispatch(enabled);
+        }
+        if let Some(enabled) = self.inline_caches {
+            options = options.with_inline_caches(enabled);
+        }
+        options
     }
 }

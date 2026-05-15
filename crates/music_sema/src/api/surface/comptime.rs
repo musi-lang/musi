@@ -14,11 +14,9 @@ pub enum ComptimeValue {
     Seq(ComptimeSeqValue),
     Data(ComptimeDataValue),
     Closure(ComptimeClosureValue),
-    Continuation(ComptimeContinuationValue),
     Type(ComptimeTypeValue),
     ImportRecord(ComptimeImportRecordValue),
     Foreign(ComptimeForeignValue),
-    Effect(ComptimeEffectValue),
     Shape(ComptimeShapeValue),
 }
 
@@ -46,11 +44,6 @@ pub struct ComptimeClosureValue {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ComptimeContinuationValue {
-    pub frames: ComptimeValueList,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ComptimeTypeValue {
     pub term: TypeTerm,
 }
@@ -65,12 +58,6 @@ pub struct ComptimeForeignValue {
     pub module: ModuleKey,
     pub name: Box<str>,
     pub type_args: Box<[TypeTerm]>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ComptimeEffectValue {
-    pub module: ModuleKey,
-    pub name: Box<str>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

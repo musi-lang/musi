@@ -3,8 +3,7 @@ use music_term::SyntaxTerm;
 
 use crate::types::VmResult;
 use crate::value::{
-    ClosureValue, ContinuationValue, DataValue, GcRef, I64ArrayValue, ModuleValue, SequenceValue,
-    Value, ValueList,
+    ClosureValue, DataValue, GcRef, I64ArrayValue, ModuleValue, SequenceValue, Value, ValueList,
 };
 
 use super::super::object::HeapObject;
@@ -178,18 +177,6 @@ impl RuntimeHeap {
         options: &HeapOptions,
     ) -> VmResult<Value> {
         self.alloc_value(HeapObject::Module(value), Value::Module, options)
-    }
-
-    pub(crate) fn alloc_continuation(
-        &mut self,
-        value: ContinuationValue,
-        options: &HeapOptions,
-    ) -> VmResult<Value> {
-        self.alloc_value(
-            HeapObject::Continuation(Box::new(value)),
-            Value::Continuation,
-            options,
-        )
     }
 
     fn alloc_value(

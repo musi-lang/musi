@@ -1,10 +1,13 @@
 use music_arena::SliceRange;
-use music_base::diag::DiagContext;
+use music_base::{diag::DiagContext, parse_u64_literal};
 use music_hir::{
     HirBinaryOp, HirDim, HirExprId, HirExprKind, HirLitKind, HirOrigin, HirPrefixOp, HirRecordItem,
     HirTyField, HirTyId, HirTyKind,
 };
+use music_names::Ident;
 
+use crate::checker::decls::import_record_export_for_expr;
+use crate::checker::surface::import_surface_ty;
 use crate::checker::{DiagKind, PassBase};
 
 impl PassBase<'_, '_, '_> {
@@ -29,15 +32,30 @@ impl PassBase<'_, '_, '_> {
         Some(match self.expr(expr).kind {
             HirExprKind::Error => self.builtins().error,
             HirExprKind::Name { name } => self.named_type_for_symbol(name.name),
+            HirExprKind::Field { base, name, .. } => {
+                self.lower_import_field_type_expr(base, name)?
+            }
             HirExprKind::Lit { lit } => match self.lit_kind(lit) {
-                HirLitKind::Int { raw } => match raw.parse::<u64>() {
-                    Ok(value) => self.alloc_ty(HirTyKind::NatLit(value)),
-                    Err(_) => self.builtins().error,
-                },
+                HirLitKind::Int { raw } => {
+                    let error_ty = self.builtins().error;
+                    parse_u64_literal(raw.as_ref())
+                        .map_or(error_ty, |value| self.alloc_ty(HirTyKind::NatLit(value)))
+                }
                 _ => return None,
             },
             _ => return None,
         })
+    }
+
+    fn lower_import_field_type_expr(&mut self, base: HirExprId, name: Ident) -> Option<HirTyId> {
+        let (surface, export) = import_record_export_for_expr(self, base, name)?;
+        let exported_ty = import_surface_ty(self, &surface, export.ty);
+        if self.ty(exported_ty).kind == HirTyKind::Type {
+            return self
+                .builtin_type_alias_for_name(export.name.as_ref())
+                .or_else(|| Some(self.named_type_for_symbol(name.name)));
+        }
+        None
     }
 
     pub(super) fn lower_type_aggregate_expr(&mut self, expr: HirExprId) -> Option<HirTyId> {
@@ -62,32 +80,20 @@ impl PassBase<'_, '_, '_> {
 
     pub(super) fn lower_type_callable_expr(&mut self, expr: HirExprId) -> Option<HirTyId> {
         Some(match self.expr(expr).kind {
-            HirExprKind::AnswerTy {
-                effect,
-                input,
-                output,
-            } => {
-                let effect_origin = self.expr(effect).origin;
-                let effect = self.lower_type_expr(effect, effect_origin);
-                let input_origin = self.expr(input).origin;
-                let input = self.lower_type_expr(input, input_origin);
-                let output_origin = self.expr(output).origin;
-                let output = self.lower_type_expr(output, output_origin);
-                self.alloc_ty(HirTyKind::Handler {
-                    effect,
-                    input,
-                    output,
-                })
-            }
             HirExprKind::Pi {
                 binder: _,
                 binder_ty,
                 ret,
                 is_effectful,
             } => {
+                let has_empty_params = self.type_binder_is_empty_tuple_expr(binder_ty);
                 let binder_origin = self.expr(binder_ty).origin;
                 let binder_ty = self.lower_type_expr(binder_ty, binder_origin);
-                let params = self.alloc_ty_list([binder_ty]);
+                let params = if has_empty_params {
+                    self.alloc_ty_list([])
+                } else {
+                    self.alloc_ty_list([binder_ty])
+                };
                 let ret_origin = self.expr(ret).origin;
                 let ret = self.lower_type_expr(ret, ret_origin);
                 self.alloc_ty(HirTyKind::Arrow {
@@ -118,22 +124,6 @@ impl PassBase<'_, '_, '_> {
                 let origin = self.expr(expr).origin;
                 let inner = self.lower_type_expr(expr, origin);
                 self.alloc_ty(HirTyKind::Mut { inner })
-            }
-            HirExprKind::Prefix {
-                op: HirPrefixOp::Any,
-                expr,
-            } => {
-                let origin = self.expr(expr).origin;
-                let shape = self.lower_type_expr(expr, origin);
-                self.alloc_ty(HirTyKind::AnyShape { capability: shape })
-            }
-            HirExprKind::Prefix {
-                op: HirPrefixOp::Some,
-                expr,
-            } => {
-                let origin = self.expr(expr).origin;
-                let shape = self.lower_type_expr(expr, origin);
-                self.alloc_ty(HirTyKind::SomeShape { capability: shape })
             }
             _ => return None,
         })
@@ -218,7 +208,7 @@ impl PassBase<'_, '_, '_> {
 
     pub(super) fn lower_bits_ty(&mut self, origin: HirOrigin, width_ty: HirTyId) -> HirTyId {
         match self.ty(width_ty).kind {
-            HirTyKind::NatLit(width) if width > 0 && u32::try_from(width).is_ok() => {
+            HirTyKind::NatLit(width) if u32::try_from(width).is_ok() => {
                 self.alloc_ty(HirTyKind::Bits {
                     width: u32::try_from(width).unwrap_or(u32::MAX),
                 })
@@ -251,20 +241,25 @@ impl PassBase<'_, '_, '_> {
         left: HirExprId,
         right: HirExprId,
     ) -> HirTyId {
-        match op {
-            &HirBinaryOp::Arrow | &HirBinaryOp::EffectArrow => {
+        match *op {
+            HirBinaryOp::Arrow => {
+                let has_empty_params = self.type_binder_is_empty_tuple_expr(left);
                 let left_origin = self.expr(left).origin;
                 let left = self.lower_type_expr(left, left_origin);
-                let params = self.alloc_ty_list([left]);
+                let params = if has_empty_params {
+                    self.alloc_ty_list([])
+                } else {
+                    self.alloc_ty_list([left])
+                };
                 let right_origin = self.expr(right).origin;
                 let ret = self.lower_type_expr(right, right_origin);
                 self.alloc_ty(HirTyKind::Arrow {
                     params,
                     ret,
-                    is_effectful: matches!(op, &HirBinaryOp::EffectArrow),
+                    is_effectful: false,
                 })
             }
-            &HirBinaryOp::Add => {
+            HirBinaryOp::Add => {
                 let left_origin = self.expr(left).origin;
                 let right_origin = self.expr(right).origin;
                 let left = self.lower_type_expr(left, left_origin);
@@ -296,5 +291,13 @@ impl PassBase<'_, '_, '_> {
             .collect::<Vec<_>>();
         let fields = self.alloc_ty_fields(fields);
         self.alloc_ty(HirTyKind::Record { fields })
+    }
+
+    fn type_binder_is_empty_tuple_expr(&self, expr: HirExprId) -> bool {
+        matches!(
+            self.expr(expr).kind,
+            HirExprKind::Tuple { items } | HirExprKind::Sequence { exprs: items }
+                if self.expr_ids(items).is_empty()
+        )
     }
 }

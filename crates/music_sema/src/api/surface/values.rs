@@ -5,7 +5,7 @@ use super::{
         AttrList, ComptimeParamList, ConstraintSurfaceList, DefinitionKey, NameList,
         SurfaceTyIdList,
     },
-    ComptimeValue, SurfaceEffectRow, SurfaceTyId,
+    ComptimeValue, SurfaceTyId,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -17,11 +17,9 @@ pub struct ExportedValue {
     pub param_names: NameList,
     pub comptime_params: ComptimeParamList,
     pub constraints: ConstraintSurfaceList,
-    pub effects: SurfaceEffectRow,
     pub opaque: bool,
     pub import_record_target: Option<ModuleKey>,
     pub shape_key: Option<DefinitionKey>,
-    pub effect_key: Option<DefinitionKey>,
     pub data_key: Option<DefinitionKey>,
     pub is_attached_method: bool,
     pub const_int: Option<i64>,
@@ -44,11 +42,9 @@ impl ExportedValue {
             param_names: Box::default(),
             comptime_params: Box::default(),
             constraints: Box::default(),
-            effects: SurfaceEffectRow::default(),
             opaque: false,
             import_record_target: None,
             shape_key: None,
-            effect_key: None,
             data_key: None,
             is_attached_method: false,
             const_int: None,
@@ -92,12 +88,6 @@ impl ExportedValue {
     }
 
     #[must_use]
-    pub fn with_effects(mut self, effects: SurfaceEffectRow) -> Self {
-        self.effects = effects;
-        self
-    }
-
-    #[must_use]
     pub const fn with_opaque(mut self, opaque: bool) -> Self {
         self.opaque = opaque;
         self
@@ -112,12 +102,6 @@ impl ExportedValue {
     #[must_use]
     pub fn with_shape_key(mut self, shape_key: DefinitionKey) -> Self {
         self.shape_key = Some(shape_key);
-        self
-    }
-
-    #[must_use]
-    pub fn with_effect_key(mut self, effect_key: DefinitionKey) -> Self {
-        self.effect_key = Some(effect_key);
         self
     }
 

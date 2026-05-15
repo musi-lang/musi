@@ -253,7 +253,6 @@ const fn export_kind(target: ExportTarget) -> ProgramExportKind {
         ExportTarget::Global(_) => ProgramExportKind::Global,
         ExportTarget::Foreign(_) => ProgramExportKind::Foreign,
         ExportTarget::Type(_) => ProgramExportKind::Type,
-        ExportTarget::Effect(_) => ProgramExportKind::Effect,
         ExportTarget::Shape(_) => ProgramExportKind::Shape,
     }
 }

@@ -2,6 +2,9 @@
 pub enum BuiltinIntrinsicId {
     DataTag,
     CompareFloatTotal,
+    FloatIsNan,
+    FloatIsInfinite,
+    FloatIsFinite,
     FfiPtrNull,
     FfiPtrIsNull,
     FfiPtrOffset,
@@ -13,9 +16,6 @@ pub enum BuiltinIntrinsicId {
     SysTargetFamily,
     SysTargetPointerWidth,
     SysTargetEndian,
-    SysJitSupported,
-    SysJitBackend,
-    SysJitIsa,
     SysMatchesOs,
     SysMatchesArch,
     SysMatchesFamily,
@@ -36,12 +36,12 @@ pub enum BuiltinSafety {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum JitLowering {
+pub enum IntrinsicLowering {
     CraneliftOpcode(&'static str),
     CraneliftTrap(&'static str),
     RuntimeCall(&'static str),
     VmOnly,
-    UnsupportedForJit(&'static str),
+    UnsupportedForBackend(&'static str),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,7 +51,7 @@ pub struct BuiltinIntrinsicDef {
     pub symbol: &'static str,
     pub kind: BuiltinIntrinsicKind,
     pub safety: BuiltinSafety,
-    pub jit: JitLowering,
+    pub lowering: IntrinsicLowering,
 }
 
 impl BuiltinIntrinsicDef {
@@ -61,7 +61,7 @@ impl BuiltinIntrinsicDef {
         symbol: &'static str,
         kind: BuiltinIntrinsicKind,
         safety: BuiltinSafety,
-        jit: JitLowering,
+        lowering: IntrinsicLowering,
     ) -> Self {
         Self {
             id,
@@ -69,7 +69,7 @@ impl BuiltinIntrinsicDef {
             symbol,
             kind,
             safety,
-            jit,
+            lowering,
         }
     }
 }
@@ -81,7 +81,7 @@ pub const BUILTIN_INTRINSICS: &[BuiltinIntrinsicDef] = &[
         "data.tag",
         BuiltinIntrinsicKind::Data,
         BuiltinSafety::Safe,
-        JitLowering::RuntimeCall("data.tag"),
+        IntrinsicLowering::RuntimeCall("data.tag"),
     ),
     BuiltinIntrinsicDef::new(
         BuiltinIntrinsicId::CompareFloatTotal,
@@ -89,7 +89,31 @@ pub const BUILTIN_INTRINSICS: &[BuiltinIntrinsicDef] = &[
         "compare.float.total",
         BuiltinIntrinsicKind::Numeric,
         BuiltinSafety::Safe,
-        JitLowering::RuntimeCall("compare.float.total"),
+        IntrinsicLowering::RuntimeCall("compare.float.total"),
+    ),
+    BuiltinIntrinsicDef::new(
+        BuiltinIntrinsicId::FloatIsNan,
+        "floatIsNan",
+        "float.is_nan",
+        BuiltinIntrinsicKind::Numeric,
+        BuiltinSafety::Safe,
+        IntrinsicLowering::RuntimeCall("float.is_nan"),
+    ),
+    BuiltinIntrinsicDef::new(
+        BuiltinIntrinsicId::FloatIsInfinite,
+        "floatIsInfinite",
+        "float.is_infinite",
+        BuiltinIntrinsicKind::Numeric,
+        BuiltinSafety::Safe,
+        IntrinsicLowering::RuntimeCall("float.is_infinite"),
+    ),
+    BuiltinIntrinsicDef::new(
+        BuiltinIntrinsicId::FloatIsFinite,
+        "floatIsFinite",
+        "float.is_finite",
+        BuiltinIntrinsicKind::Numeric,
+        BuiltinSafety::Safe,
+        IntrinsicLowering::RuntimeCall("float.is_finite"),
     ),
     BuiltinIntrinsicDef::new(
         BuiltinIntrinsicId::FfiPtrNull,
@@ -97,7 +121,7 @@ pub const BUILTIN_INTRINSICS: &[BuiltinIntrinsicDef] = &[
         "ffi.ptr.null",
         BuiltinIntrinsicKind::Pointer,
         BuiltinSafety::Unsafe,
-        JitLowering::CraneliftOpcode("iconst_0"),
+        IntrinsicLowering::CraneliftOpcode("iconst_0"),
     ),
     BuiltinIntrinsicDef::new(
         BuiltinIntrinsicId::FfiPtrIsNull,
@@ -105,7 +129,7 @@ pub const BUILTIN_INTRINSICS: &[BuiltinIntrinsicDef] = &[
         "ffi.ptr.is_null",
         BuiltinIntrinsicKind::Pointer,
         BuiltinSafety::Unsafe,
-        JitLowering::CraneliftOpcode("icmp_imm.eqz"),
+        IntrinsicLowering::CraneliftOpcode("icmp_imm.eqz"),
     ),
     BuiltinIntrinsicDef::new(
         BuiltinIntrinsicId::FfiPtrOffset,
@@ -113,7 +137,7 @@ pub const BUILTIN_INTRINSICS: &[BuiltinIntrinsicDef] = &[
         "ffi.ptr.offset",
         BuiltinIntrinsicKind::Pointer,
         BuiltinSafety::Unsafe,
-        JitLowering::CraneliftTrap("pointer offset overflow"),
+        IntrinsicLowering::CraneliftTrap("pointer offset overflow"),
     ),
     BuiltinIntrinsicDef::new(
         BuiltinIntrinsicId::FfiPtrRead,
@@ -121,7 +145,7 @@ pub const BUILTIN_INTRINSICS: &[BuiltinIntrinsicDef] = &[
         "ffi.ptr.read",
         BuiltinIntrinsicKind::Pointer,
         BuiltinSafety::Unsafe,
-        JitLowering::CraneliftTrap("pointer read fault"),
+        IntrinsicLowering::CraneliftTrap("pointer read fault"),
     ),
     BuiltinIntrinsicDef::new(
         BuiltinIntrinsicId::FfiPtrWrite,
@@ -129,7 +153,7 @@ pub const BUILTIN_INTRINSICS: &[BuiltinIntrinsicDef] = &[
         "ffi.ptr.write",
         BuiltinIntrinsicKind::Pointer,
         BuiltinSafety::Unsafe,
-        JitLowering::CraneliftTrap("pointer write fault"),
+        IntrinsicLowering::CraneliftTrap("pointer write fault"),
     ),
     sys_intrinsic(
         BuiltinIntrinsicId::SysTargetOs,
@@ -162,17 +186,6 @@ pub const BUILTIN_INTRINSICS: &[BuiltinIntrinsicDef] = &[
         "sys.target.endian",
     ),
     sys_intrinsic(
-        BuiltinIntrinsicId::SysJitSupported,
-        "sysJitSupported",
-        "sys.jit.supported",
-    ),
-    sys_intrinsic(
-        BuiltinIntrinsicId::SysJitBackend,
-        "sysJitBackend",
-        "sys.jit.backend",
-    ),
-    sys_intrinsic(BuiltinIntrinsicId::SysJitIsa, "sysJitIsa", "sys.jit.isa"),
-    sys_intrinsic(
         BuiltinIntrinsicId::SysMatchesOs,
         "sysMatchesOs",
         "sys.matches.os",
@@ -200,7 +213,7 @@ const fn sys_intrinsic(
         symbol,
         BuiltinIntrinsicKind::Target,
         BuiltinSafety::Safe,
-        JitLowering::RuntimeCall(symbol),
+        IntrinsicLowering::RuntimeCall(symbol),
     )
 }
 

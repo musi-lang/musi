@@ -1,0 +1,81 @@
+manifest_version = 1
+
+[[files]]
+path = "grammar/MusiParser.g4"
+sha256 = "6c5ccb6bcdafdff4ee442d671b930f6171614be691ccec52ea7107534c6198c9"
+
+[[files]]
+path = "grammar/MusiLexer.g4"
+sha256 = "fbd2027b836cc3c5b46232415f0a8f17a35d16a02ef9e253c4a9407a90b0d2a0"
+
+[[files]]
+path = "grammar/Musi.abnf"
+sha256 = "2b16fe1df451a359e0605ca49207da437d9c3deae1021523bb4a4ca6fe31bd10"
+
+[[files]]
+path = "specs/language/first-class-everything.md"
+sha256 = "150cea4127c2161abffa487ce5ff3f20b8a8f2d68b6e1c60f3fa08be6d2f6de8"
+
+[[files]]
+path = "specs/language/items-and-attributes.md"
+sha256 = "92128c18b8709d801c449270131f78e2d113a92050b1be9239c1bb2d7e52d84c"
+
+[[files]]
+path = "specs/language/syntax.md"
+sha256 = "ce55e2db725e21014d9c38720159c4f4c10ea9467706dc8a0a0865fd1edf15a3"
+
+[[files]]
+path = "specs/language/type-core.md"
+sha256 = "7c3d70f594560ce0d8873cd41a88d0c24f38d698b663a62b62a443f77953ce28"
+
+[[files]]
+path = "specs/language/contextual-capabilities.md"
+sha256 = "bf4d31bb3942db7f7ff34d7dc9161fc9423bab93b2d2673add106fc6009a98a0"
+
+[[files]]
+path = "specs/language/module-boundaries.md"
+sha256 = "ff20f9aefff6c997220a9e8a6f2d67f67228aef3e2c2d2fad6c88775a6c6d0e4"
+
+[[files]]
+path = "specs/language/yield-and-capabilities.md"
+sha256 = "594ebf86efca86b71df13229b16dc6eccb329106624569a8293e2b19e6b1cf29"
+
+[[files]]
+path = "specs/seam/bytecode.md"
+sha256 = "f65911e09c0c954ddce327b7227a8966c91f8f71d9436c7d5aa7b0de9c5197df"
+
+[[files]]
+path = "specs/seam/lowering.md"
+sha256 = "16840ad455616e41c4f7e6b4e159a6a2a6aaf7d82b19cdb4b572af66e7197edd"
+
+[[files]]
+path = "specs/seam/domains.md"
+sha256 = "72cb621eb6defa1ca17a3e588eb3f7d84845beaa9020a77c8c5f80ece7399b7c"
+
+[[files]]
+path = "specs/seam/format.md"
+sha256 = "85d416e5522fa3d860c1af3e7ddec999ca803fd2d9c44b045d358a9ab65290f6"
+
+[[files]]
+path = "docs/__smallcore__/musi-small-core-frozen-system.md"
+sha256 = "eb53fa28774d07900e43106e9d9c0419a2c7446b0f12b77ecbb590e8b6dd9c99"
+
+[[files]]
+path = "docs/__smallcore__/seam-00-index-and-principles.md"
+sha256 = "b6c76e6c4950467d6e67e32cbdb514e14d1977c15d1e8dc8574b785a86d26130"
+
+[[files]]
+path = "docs/__smallcore__/seam-01-bytecode-and-stack-effects.md"
+sha256 = "097e4d206ec519adb105168d4c6887063635a5002c5871c8845a7b51eefe4e7d"
+
+[[files]]
+path = "docs/__smallcore__/seam-02-calls-objects-and-layouts.md"
+sha256 = "cdd0e97fd8462e8f0118e4955d669bb0312715389d3ed6afd5a47f5c090d19cc"
+
+[[files]]
+path = "docs/__smallcore__/seam-03-runtime-gc-pinning-yield-defer.md"
+sha256 = "61e3a2ad746aa3ee93047ad06fddb7a0f733c13070814432b09c2c28173043df"
+
+[[files]]
+path = "docs/__smallcore__/seam-04-external-artifacts-decomp-mar.md"
+sha256 = "5a11dfe902aaa36625b9cec0b654cf16c2193dd906fed6a1400e9ac880a3b99e"

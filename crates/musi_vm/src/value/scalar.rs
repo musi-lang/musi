@@ -1,4 +1,4 @@
-use music_seam::{EffectId, ForeignId, ProcedureId, ShapeId, TypeId};
+use music_seam::{ForeignId, ProcedureId, ShapeId, TypeId};
 use smallvec::SmallVec;
 
 use crate::value::ids::GcRef;
@@ -16,7 +16,6 @@ pub enum HeapValueKind {
     Seq,
     Data,
     Closure,
-    Continuation,
     Module,
 }
 
@@ -34,11 +33,9 @@ pub enum Value {
     Data(GcRef),
     Closure(GcRef),
     Procedure(ProcedureValue),
-    Continuation(GcRef),
     Type(TypeId),
     Module(GcRef),
     Foreign(ForeignValue),
-    Effect(EffectId),
     Shape(ShapeId),
 }
 
@@ -168,11 +165,9 @@ impl Value {
             Self::Data(_) => VmValueKind::Data,
             Self::Closure(_) => VmValueKind::Closure,
             Self::Procedure(_) => VmValueKind::Procedure,
-            Self::Continuation(_) => VmValueKind::Continuation,
             Self::Type(_) => VmValueKind::Type,
             Self::Module(_) => VmValueKind::Module,
             Self::Foreign(_) => VmValueKind::Foreign,
-            Self::Effect(_) => VmValueKind::Effect,
             Self::Shape(_) => VmValueKind::Shape,
         }
     }
@@ -185,7 +180,6 @@ impl Value {
             | Self::Seq(reference)
             | Self::Data(reference)
             | Self::Closure(reference)
-            | Self::Continuation(reference)
             | Self::Module(reference) => Some(*reference),
             Self::Unit
             | Self::Int(_)
@@ -196,7 +190,6 @@ impl Value {
             | Self::Procedure(_)
             | Self::Type(_)
             | Self::Foreign(_)
-            | Self::Effect(_)
             | Self::Shape(_) => None,
         }
     }
@@ -209,7 +202,6 @@ impl Value {
             Self::Seq(_) => Some(HeapValueKind::Seq),
             Self::Data(_) => Some(HeapValueKind::Data),
             Self::Closure(_) => Some(HeapValueKind::Closure),
-            Self::Continuation(_) => Some(HeapValueKind::Continuation),
             Self::Module(_) => Some(HeapValueKind::Module),
             Self::Unit
             | Self::Int(_)
@@ -220,7 +212,6 @@ impl Value {
             | Self::Procedure(_)
             | Self::Type(_)
             | Self::Foreign(_)
-            | Self::Effect(_)
             | Self::Shape(_) => None,
         }
     }

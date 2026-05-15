@@ -4,15 +4,11 @@ pub fn is_operator(kind: TokenKind) -> bool {
     const OPERATORS: &[TokenKind] = &[
         TokenKind::ColonEq,
         TokenKind::MinusGt,
-        TokenKind::TildeGt,
         TokenKind::TildeEq,
         TokenKind::EqGt,
         TokenKind::SlashEq,
         TokenKind::LtEq,
         TokenKind::GtEq,
-        TokenKind::LtColon,
-        TokenKind::ColonQuestion,
-        TokenKind::ColonQuestionGt,
         TokenKind::PipeGt,
         TokenKind::Pipe,
         TokenKind::Plus,
@@ -26,8 +22,6 @@ pub fn is_operator(kind: TokenKind) -> bool {
         TokenKind::KwAnd,
         TokenKind::KwOr,
         TokenKind::KwIn,
-        TokenKind::KwShl,
-        TokenKind::KwShr,
         TokenKind::KwXor,
     ];
     OPERATORS.contains(&kind)
@@ -68,23 +62,19 @@ const fn is_spacing_keyword(kind: TokenKind) -> bool {
 const fn is_declaration_keyword(kind: TokenKind) -> bool {
     matches!(
         kind,
-        TokenKind::KwShape
-            | TokenKind::KwData
-            | TokenKind::KwEffect
-            | TokenKind::KwGiven
-            | TokenKind::KwLaw
-            | TokenKind::KwLet
+        TokenKind::KwShape | TokenKind::KwData | TokenKind::KwLet
     )
 }
 
 const fn is_control_keyword(kind: TokenKind) -> bool {
     matches!(
         kind,
-        TokenKind::KwHandle
+        TokenKind::KwDefer
             | TokenKind::KwIf
+            | TokenKind::KwElse
             | TokenKind::KwMatch
-            | TokenKind::KwAsk
-            | TokenKind::KwResume
+            | TokenKind::KwThen
+            | TokenKind::KwYield
     )
 }
 
@@ -93,11 +83,9 @@ const fn is_modifier_keyword(kind: TokenKind) -> bool {
         kind,
         TokenKind::KwKnown
             | TokenKind::KwExport
-            | TokenKind::KwNative
+            | TokenKind::KwHidden
             | TokenKind::KwMut
-            | TokenKind::KwOpaque
-            | TokenKind::KwPartial
-            | TokenKind::KwRec
+            | TokenKind::KwRecur
             | TokenKind::KwUnsafe
     )
 }
@@ -105,14 +93,10 @@ const fn is_modifier_keyword(kind: TokenKind) -> bool {
 const fn is_other_spacing_keyword(kind: TokenKind) -> bool {
     matches!(
         kind,
-        TokenKind::KwAnswer
-            | TokenKind::KwAny
-            | TokenKind::KwAs
+        TokenKind::KwAs
+            | TokenKind::KwErased
             | TokenKind::KwImport
             | TokenKind::KwNot
-            | TokenKind::KwRequire
-            | TokenKind::KwQuote
-            | TokenKind::KwSome
             | TokenKind::KwWhere
     )
 }

@@ -14,11 +14,11 @@ const FOUNDATION_MODULES: &[FoundationModuleDef] = &[
     },
     FoundationModuleDef {
         spec: "musi:intrinsics",
-        source: include_str!("../modules/intrinsics.ms"),
+        source: include_str!("../modules/_intrinsics.ms"),
     },
     FoundationModuleDef {
         spec: "musi:env",
-        source: include_str!("../modules/env.ms"),
+        source: include_str!("../modules/_env.ms"),
     },
     FoundationModuleDef {
         spec: "musi:ffi",
@@ -26,51 +26,47 @@ const FOUNDATION_MODULES: &[FoundationModuleDef] = &[
     },
     FoundationModuleDef {
         spec: "musi:process",
-        source: include_str!("../modules/process.ms"),
+        source: include_str!("../modules/_process.ms"),
     },
     FoundationModuleDef {
         spec: "musi:io",
-        source: include_str!("../modules/io.ms"),
+        source: include_str!("../modules/_io.ms"),
     },
     FoundationModuleDef {
         spec: "musi:fs",
-        source: include_str!("../modules/fs.ms"),
+        source: include_str!("../modules/_fs.ms"),
     },
     FoundationModuleDef {
         spec: "musi:time",
-        source: include_str!("../modules/time.ms"),
+        source: include_str!("../modules/_time.ms"),
     },
     FoundationModuleDef {
         spec: "musi:random",
-        source: include_str!("../modules/random.ms"),
+        source: include_str!("../modules/_random.ms"),
     },
     FoundationModuleDef {
         spec: "musi:text",
-        source: include_str!("../modules/text.ms"),
+        source: include_str!("../modules/_text.ms"),
     },
     FoundationModuleDef {
         spec: "musi:json",
-        source: include_str!("../modules/json_host.ms"),
+        source: include_str!("../modules/_json.ms"),
     },
     FoundationModuleDef {
         spec: "musi:encoding",
-        source: include_str!("../modules/encoding_host.ms"),
+        source: include_str!("../modules/_encoding.ms"),
     },
     FoundationModuleDef {
         spec: "musi:fmt",
-        source: include_str!("../modules/fmt.ms"),
+        source: include_str!("../modules/_fmt.ms"),
     },
     FoundationModuleDef {
         spec: "musi:crypto",
-        source: include_str!("../modules/crypto_host.ms"),
+        source: include_str!("../modules/_crypto.ms"),
     },
     FoundationModuleDef {
         spec: "musi:uuid",
-        source: include_str!("../modules/uuid_host.ms"),
-    },
-    FoundationModuleDef {
-        spec: "musi:log",
-        source: include_str!("../modules/log.ms"),
+        source: include_str!("../modules/_uuid.ms"),
     },
     FoundationModuleDef {
         spec: "musi:test",
@@ -81,6 +77,15 @@ const FOUNDATION_MODULES: &[FoundationModuleDef] = &[
         source: include_str!("../modules/syntax.ms"),
     },
 ];
+
+#[must_use]
+#[cfg(test)]
+pub fn registered_specs() -> Vec<&'static str> {
+    FOUNDATION_MODULES
+        .iter()
+        .map(|module| module.spec)
+        .collect()
+}
 
 pub fn extend_import_map(import_map: &mut ImportMap) {
     for module in FOUNDATION_MODULES {
@@ -99,6 +104,19 @@ pub fn resolve_spec(spec: &str) -> Option<ModuleKey> {
         return None;
     }
     module_source(spec).map(|_| ModuleKey::new(spec))
+}
+
+#[must_use]
+pub fn resolve_public_spec(spec: &str) -> Option<ModuleKey> {
+    if !is_public_import_spec(spec) {
+        return None;
+    }
+    resolve_spec(spec)
+}
+
+#[must_use]
+pub fn is_public_import_spec(spec: &str) -> bool {
+    matches!(spec, "musi:core" | "musi:ffi" | "musi:test" | "musi:syntax")
 }
 
 #[must_use]

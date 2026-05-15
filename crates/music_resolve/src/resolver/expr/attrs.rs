@@ -1,5 +1,6 @@
 use super::*;
 
+use music_hir::HirLitKind;
 use music_names::Symbol;
 
 impl<'tree, 'src> Resolver<'_, '_, 'tree, 'src>
@@ -9,27 +10,25 @@ where
     pub(super) fn lower_attributed_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let attrs = self.lower_attrs(node);
+        let foreign_abi = self.foreign_abi_from_attrs(attrs.clone());
 
         let export_mod_node = node
             .child_nodes()
             .find(|n| n.kind() == SyntaxNodeKind::ExportMod);
         let (export_mod, export_foreign_abi) =
-            export_mod_node.map_or((None, None), |node| self.parse_export_mod(node));
+            export_mod_node.map_or((None, None), Self::parse_export_mod);
 
         let mut mods = HirMods::EMPTY.with_attrs(attrs);
         if let Some(export_mod) = export_mod {
             mods = mods.with_export(export_mod);
         }
-        if node
-            .child_tokens()
-            .any(|t| t.kind() == TokenKind::KwPartial)
-        {
-            mods = mods.with_partial();
-        }
         if export_mod_node.is_some()
             && (export_foreign_abi.is_some() || is_foreign_group_target(&node))
         {
             mods = mods.with_native(HirNativeMod::new(export_foreign_abi));
+        }
+        if let Some(foreign_abi) = foreign_abi {
+            mods = mods.with_native(HirNativeMod::new(Some(foreign_abi)));
         }
 
         let target = node.child_nodes().find(|n| {
@@ -104,22 +103,52 @@ where
         HirAttrArg::new(name, arg_value)
     }
 
-    fn parse_export_mod(
-        &mut self,
-        node: SyntaxNode<'tree, 'src>,
-    ) -> (Option<HirExportMod>, Option<Symbol>) {
+    fn parse_export_mod(node: SyntaxNode<'tree, 'src>) -> (Option<HirExportMod>, Option<Symbol>) {
         debug_assert_eq!(node.kind(), SyntaxNodeKind::ExportMod);
-        let opaque = node.child_tokens().any(|t| t.kind() == TokenKind::KwOpaque);
-        let foreign_abi = if node.child_tokens().any(|t| t.kind() == TokenKind::KwNative) {
-            node.child_tokens()
-                .find(|t| t.kind() == TokenKind::String)
-                .and_then(SyntaxToken::text)
-                .and_then(|raw| decode_string_lit(raw).ok())
-                .map(|abi| self.interner.intern(abi.as_str()))
-        } else {
-            None
-        };
-        (Some(HirExportMod::new(opaque)), foreign_abi)
+        (Some(HirExportMod::new(false)), None)
+    }
+
+    fn foreign_abi_from_attrs(&mut self, attrs: SliceRange<HirAttr>) -> Option<Symbol> {
+        for attr in self.store.attrs.get(attrs) {
+            let path = self
+                .store
+                .idents
+                .get(attr.path)
+                .iter()
+                .map(|ident| self.interner.resolve(ident.name))
+                .collect::<Vec<_>>();
+            if path.as_slice() != ["foreign"] {
+                continue;
+            }
+            let mut positional_index: usize = 0;
+            for arg in self.store.attr_args.get(attr.args.clone()) {
+                let is_abi_arg = match arg.name.map(|ident| self.interner.resolve(ident.name)) {
+                    Some("abi") => true,
+                    Some(_) => false,
+                    None => {
+                        let is_first_positional = positional_index == 0;
+                        positional_index += 1;
+                        is_first_positional
+                    }
+                };
+                if !is_abi_arg {
+                    continue;
+                }
+                match self.store.exprs.get(arg.value).kind {
+                    HirExprKind::Variant { tag, .. } | HirExprKind::Name { name: tag } => {
+                        return Some(tag.name);
+                    }
+                    HirExprKind::Lit { lit } => {
+                        if let HirLitKind::String { value } = &self.store.lits.get(lit).kind {
+                            return Some(self.interner.intern(value));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            return Some(self.interner.intern("c"));
+        }
+        None
     }
 }
 

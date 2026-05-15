@@ -1,6 +1,6 @@
 use music_module::ModuleKey;
 use music_names::NameBindingId;
-use music_sema::{DefinitionKey, EffectRow, GivenSurface, ShapeSurface};
+use music_sema::{DefinitionKey, ShapeSurface};
 
 use super::{IrExpr, IrParam};
 
@@ -15,7 +15,6 @@ pub struct IrCallable {
     pub exported: bool,
     pub hot: bool,
     pub cold: bool,
-    pub effects: EffectRow,
     pub import_record_target: Option<ModuleKey>,
 }
 
@@ -33,7 +32,6 @@ impl IrCallable {
             exported: false,
             hot: false,
             cold: false,
-            effects: EffectRow::default(),
             import_record_target: None,
         }
     }
@@ -65,12 +63,6 @@ impl IrCallable {
     #[must_use]
     pub const fn with_cold(mut self, cold: bool) -> Self {
         self.cold = cold;
-        self
-    }
-
-    #[must_use]
-    pub fn with_effects(mut self, effects: EffectRow) -> Self {
-        self.effects = effects;
         self
     }
 
@@ -271,7 +263,6 @@ pub struct IrGlobal {
     pub name: Box<str>,
     pub body: IrExpr,
     pub exported: bool,
-    pub effects: EffectRow,
     pub import_record_target: Option<ModuleKey>,
 }
 
@@ -286,7 +277,6 @@ impl IrGlobal {
             name: name.into(),
             body,
             exported: false,
-            effects: EffectRow::default(),
             import_record_target: None,
         }
     }
@@ -310,12 +300,6 @@ impl IrGlobal {
     }
 
     #[must_use]
-    pub fn with_effects(mut self, effects: EffectRow) -> Self {
-        self.effects = effects;
-        self
-    }
-
-    #[must_use]
     pub fn with_import_record_target(mut self, import_record_target: ModuleKey) -> Self {
         self.import_record_target = Some(import_record_target);
         self
@@ -327,49 +311,6 @@ impl IrGlobal {
         import_record_target: Option<ModuleKey>,
     ) -> Self {
         self.import_record_target = import_record_target;
-        self
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IrEffectDef {
-    pub key: DefinitionKey,
-    pub ops: Box<[IrEffectOpDef]>,
-}
-
-impl IrEffectDef {
-    #[must_use]
-    pub const fn new(key: DefinitionKey, ops: Box<[IrEffectOpDef]>) -> Self {
-        Self { key, ops }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IrEffectOpDef {
-    pub name: Box<str>,
-    pub param_tys: IrNameList,
-    pub result_ty: Box<str>,
-    pub is_comptime_safe: bool,
-}
-
-impl IrEffectOpDef {
-    #[must_use]
-    pub fn new<Name, ResultTy>(name: Name, param_tys: IrNameList, result_ty: ResultTy) -> Self
-    where
-        Name: Into<Box<str>>,
-        ResultTy: Into<Box<str>>,
-    {
-        Self {
-            name: name.into(),
-            param_tys,
-            result_ty: result_ty.into(),
-            is_comptime_safe: false,
-        }
-    }
-
-    #[must_use]
-    pub const fn with_comptime_safe(mut self, is_comptime_safe: bool) -> Self {
-        self.is_comptime_safe = is_comptime_safe;
         self
     }
 }
@@ -406,22 +347,6 @@ impl IrShapeDef {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IrGivenDef {
-    pub shape_key: DefinitionKey,
-    pub member_names: IrNameList,
-}
-
-impl IrGivenDef {
-    #[must_use]
-    pub const fn new(shape_key: DefinitionKey, member_names: IrNameList) -> Self {
-        Self {
-            shape_key,
-            member_names,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrMetaRecord {
     pub target: Box<str>,
     pub key: Box<str>,
@@ -454,11 +379,5 @@ impl From<&ShapeSurface> for IrShapeDef {
                 .collect::<Vec<_>>()
                 .into_boxed_slice(),
         )
-    }
-}
-
-impl From<&GivenSurface> for IrGivenDef {
-    fn from(value: &GivenSurface) -> Self {
-        Self::new(value.shape_key.clone(), value.member_names.clone())
     }
 }

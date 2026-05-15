@@ -9,21 +9,30 @@ impl Vm {
     /// # Errors
     ///
     /// Returns [`VmError`] if initialization is missing or value is not callable.
-    pub fn call_value(&mut self, value: Value, args: &[Value]) -> VmResult<Value> {
+    pub fn call_value(&mut self, value: &Value, args: &[Value]) -> VmResult<Value> {
+        self.call_value_ref(value, args)
+    }
+
+    /// Calls one borrowed runtime value if it is callable.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VmError`] if initialization is missing or value is not callable.
+    pub fn call_value_ref(&mut self, value: &Value, args: &[Value]) -> VmResult<Value> {
         self.ensure_initialized()?;
-        if let Some(result) = self.try_call_primitive_kernel_fast(&value, args)? {
+        if let Some(result) = self.try_call_primitive_kernel_fast(value, args)? {
             return self.finish_call_value(self.frames.len(), result);
         }
-        self.observe_heap_value(&value)?;
+        self.observe_heap_value(value)?;
         for arg in args {
             self.observe_heap_value(arg)?;
         }
         let base_depth = self.frames.len();
         let result = match value {
-            Value::Procedure(procedure) => self.call_procedure_value(procedure, args, base_depth),
+            Value::Procedure(procedure) => self.call_procedure_value(*procedure, args, base_depth),
             Value::Closure(closure) => {
                 let (module_slot, procedure, params, locals, captures) = {
-                    let closure = self.heap.closure(closure)?;
+                    let closure = self.heap.closure(*closure)?;
                     (
                         closure.module_slot,
                         closure.procedure,
@@ -77,25 +86,15 @@ impl Vm {
                     )
                 }
             }
-            Value::Continuation(continuation) => {
-                let [value] = args else {
-                    return Err(VmError::new(VmErrorKind::CallArityMismatch {
-                        callee: "continuation".into(),
-                        expected: 1,
-                        found: args.len(),
-                    }));
-                };
-                self.invoke_continuation(continuation, value.clone())
-            }
             Value::Foreign(foreign_value) => {
                 let ForeignValue {
                     module_slot,
                     foreign,
                     type_args,
                 } = foreign_value;
-                let call = self.foreign_call(module_slot, foreign);
-                let call = Self::specialize_foreign_call(call, &type_args);
-                self.call_musi_intrinsic(module_slot, &call, args)
+                let call = self.foreign_call(*module_slot, *foreign);
+                let call = Self::specialize_foreign_call(call, type_args);
+                self.call_musi_intrinsic(*module_slot, &call, args)
                     .unwrap_or_else(|| self.call_host_foreign(&call, args))
             }
             _ => Err(VmError::new(VmErrorKind::NonCallableValue {
@@ -138,11 +137,9 @@ impl Vm {
             | Value::Syntax(_)
             | Value::Seq(_)
             | Value::Data(_)
-            | Value::Continuation(_)
             | Value::Type(_)
             | Value::Module(_)
             | Value::Foreign(_)
-            | Value::Effect(_)
             | Value::Shape(_) => Ok(None),
         }
     }
@@ -209,7 +206,6 @@ impl Value {
                 | Self::Seq(_)
                 | Self::Data(_)
                 | Self::Closure(_)
-                | Self::Continuation(_)
                 | Self::Module(_)
         )
     }

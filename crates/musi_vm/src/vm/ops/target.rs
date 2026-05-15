@@ -83,21 +83,3 @@ pub(super) const fn target_endian() -> &'static str {
         "little"
     }
 }
-
-pub(super) fn jit_supported() -> bool {
-    matches!(target_arch(), "x86-64" | "aarch64" | "rv64" | "s390x")
-}
-
-pub(super) fn jit_backend() -> &'static str {
-    if jit_supported() { "cranelift" } else { "" }
-}
-
-pub(super) fn jit_isa() -> &'static str {
-    match target_arch() {
-        "x86-64" => "x64",
-        "aarch64" => "aarch64",
-        "rv64" => "riscv64",
-        "s390x" => "s390x",
-        _ => "",
-    }
-}

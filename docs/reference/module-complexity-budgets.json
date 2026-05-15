@@ -1,0 +1,34 @@
+{
+  "modules": [
+    {
+      "owner": "musi_lsp",
+      "path": "crates/musi_lsp/src/server/navigation.rs",
+      "max_cyclomatic_sum": 60,
+      "max_cyclomatic_max_fn": 12,
+      "baseline_cyclomatic_sum": 58,
+      "baseline_cyclomatic_max_fn": 11,
+      "max_delta_sum_from_baseline": 2,
+      "max_delta_max_fn_from_baseline": 1
+    },
+    {
+      "owner": "music_sema",
+      "path": "crates/music_sema/src/checker/exprs/mod.rs",
+      "max_cyclomatic_sum": 140,
+      "max_cyclomatic_max_fn": 12,
+      "baseline_cyclomatic_sum": 137,
+      "baseline_cyclomatic_max_fn": 10,
+      "max_delta_sum_from_baseline": 3,
+      "max_delta_max_fn_from_baseline": 2
+    },
+    {
+      "owner": "musi_fmt",
+      "path": "crates/musi_fmt/src/source/cst/mod.rs",
+      "max_cyclomatic_sum": 6,
+      "max_cyclomatic_max_fn": 3,
+      "baseline_cyclomatic_sum": 1,
+      "baseline_cyclomatic_max_fn": 1,
+      "max_delta_sum_from_baseline": 5,
+      "max_delta_max_fn_from_baseline": 1
+    }
+  ]
+}

@@ -20,12 +20,17 @@ pub(super) const fn section_tag_byte(tag: SectionTag) -> u8 {
         SectionTag::Constants => 3,
         SectionTag::Globals => 4,
         SectionTag::Procedures => 5,
-        SectionTag::Effects => 6,
-        SectionTag::Shapes => 7,
-        SectionTag::Foreigns => 8,
-        SectionTag::Exports => 9,
-        SectionTag::Data => 10,
-        SectionTag::Meta => 11,
+        SectionTag::Shapes => 6,
+        SectionTag::Foreigns => 7,
+        SectionTag::Exports => 8,
+        SectionTag::Data => 9,
+        SectionTag::Meta => 10,
+        SectionTag::Manifest => 11,
+        SectionTag::Imports => 12,
+        SectionTag::RootMaps => 13,
+        SectionTag::StackEffects => 14,
+        SectionTag::BlockSignatures => 15,
+        SectionTag::Closures => 16,
     }
 }
 

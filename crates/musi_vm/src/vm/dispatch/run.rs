@@ -54,16 +54,13 @@ impl Vm {
             Opcode::DivS => self.exec_fast_int_op(runtime, i64::checked_div),
             Opcode::RemS => self.exec_fast_int_op(runtime, i64::checked_rem),
             Opcode::Br => self.exec_fast_br(runtime),
-            Opcode::BrFalse => self.exec_fast_brfalse(runtime),
+            Opcode::BrZ => self.exec_fast_brz(runtime),
             Opcode::Call => self.execute_runtime_call(runtime),
             Opcode::TailCall => self.exec_fast_tail_call(runtime),
             Opcode::CallInd | Opcode::NewFn => self.exec_fast_call_edge(runtime),
             Opcode::Ret => self.return_from_frame(),
             Opcode::NewArr | Opcode::LdElem | Opcode::StElem => self.exec_fast_seq(runtime),
             Opcode::NewObj | Opcode::LdFld | Opcode::StFld => self.exec_fast_data(runtime),
-            Opcode::HdlPush | Opcode::HdlPop | Opcode::Raise | Opcode::Resume => {
-                self.exec_fast_effect(runtime)
-            }
             _ => {
                 let instruction =
                     if let Some(instruction) = runtime.operand.to_instruction(runtime.opcode) {
@@ -109,7 +106,7 @@ impl Vm {
             | Opcode::Or
             | Opcode::Xor
             | Opcode::Not => self.exec_scalar(instruction),
-            Opcode::Br | Opcode::BrFalse | Opcode::BrTbl => self.exec_branch(instruction),
+            Opcode::Br | Opcode::BrZ | Opcode::BrTbl => self.exec_branch(instruction),
             Opcode::Call if matches!(instruction.operand, music_seam::Operand::I16(_)) => {
                 self.exec_type(instruction)
             }
@@ -121,13 +118,9 @@ impl Vm {
             }
             Opcode::NewObj | Opcode::LdFld | Opcode::StFld => self.exec_data(instruction),
             Opcode::LdType | Opcode::IsInst | Opcode::Cast => self.exec_type(instruction),
-            Opcode::HdlPush | Opcode::HdlPop | Opcode::Raise | Opcode::Resume => {
-                self.exec_effect(instruction)
-            }
-            Opcode::CallFfi | Opcode::LdFfi | Opcode::MdlLoad | Opcode::MdlGet => {
+            Opcode::CallFfi | Opcode::LdFfi | Opcode::LdModDyn | Opcode::LdExpDyn => {
                 self.exec_host_edge(instruction)
             }
-            _ => Err(Self::invalid_dispatch(instruction, "general")),
         }
     }
 

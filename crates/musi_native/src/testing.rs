@@ -1,7 +1,7 @@
 use std::mem::take;
 
 use musi_foundation::test;
-use musi_vm::{EffectCall, Value, VmError, VmErrorKind, VmHostContext, VmResult};
+use musi_vm::{ForeignCall, Value, VmError, VmErrorKind, VmHostContext, VmResult};
 
 pub type TestSuitePath = Vec<Box<str>>;
 pub type NativeTestCaseResultList = Vec<NativeTestCaseResult>;
@@ -74,53 +74,57 @@ impl TestHost {
     }
 
     #[must_use]
-    pub fn handle_effect(
+    pub fn handle_foreign(
         &mut self,
         ctx: &VmHostContext<'_>,
-        effect: &EffectCall,
+        foreign: &ForeignCall,
         args: &[Value],
     ) -> Option<VmResult<Value>> {
-        if effect.effect_name() != test::EFFECT {
-            return None;
-        }
+        let op = foreign
+            .name()
+            .strip_prefix("musi:test::")
+            .and_then(|name| name.strip_prefix("Musi__"))?;
         let Some(collector) = self.collector.as_mut() else {
-            return Some(Err(reject_test_effect(effect, "test session not active")));
+            return Some(Err(VmError::new(VmErrorKind::ForeignCallRejected {
+                foreign: foreign.name().into(),
+            })));
         };
-        Some(handle_test_effect(ctx, collector, effect, args).map(|()| Value::Unit))
+        Some(handle_test_foreign(ctx, collector, foreign, op, args).map(|()| Value::Unit))
     }
 }
 
-fn handle_test_effect(
+fn handle_test_foreign(
     ctx: &VmHostContext<'_>,
     collector: &mut TestCollector,
-    effect: &EffectCall,
+    foreign: &ForeignCall,
+    op: &str,
     args: &[Value],
 ) -> VmResult {
-    match effect.op_name() {
+    match op {
         test::SUITE_START_OP => {
             let [name] = args else {
-                return Err(invalid_test_effect(effect));
+                return Err(invalid_test_foreign(foreign));
             };
             let Some(name) = ctx.string(name) else {
-                return Err(invalid_test_effect(effect));
+                return Err(invalid_test_foreign(foreign));
             };
             collector.active_suites.push(name.as_str().into());
         }
         test::SUITE_END_OP => {
             if !args.is_empty() {
-                return Err(invalid_test_effect(effect));
+                return Err(invalid_test_foreign(foreign));
             }
             let _ = collector.active_suites.pop();
         }
         test::TEST_CASE_OP => {
             let [name, passed] = args else {
-                return Err(invalid_test_effect(effect));
+                return Err(invalid_test_foreign(foreign));
             };
             let Some(name) = ctx.string(name) else {
-                return Err(invalid_test_effect(effect));
+                return Err(invalid_test_foreign(foreign));
             };
             let Some(passed) = ctx.bool_flag(passed) else {
-                return Err(invalid_test_effect(effect));
+                return Err(invalid_test_foreign(foreign));
             };
             collector.cases.push(NativeTestCaseResult::new(
                 suite_name(&collector.active_suites),
@@ -128,21 +132,15 @@ fn handle_test_effect(
                 passed,
             ));
         }
-        _ => return Err(invalid_test_effect(effect)),
+        _ => return Err(invalid_test_foreign(foreign)),
     }
     Ok(())
 }
 
-fn reject_test_effect(effect: &EffectCall, reason: impl Into<Box<str>>) -> VmError {
-    VmError::new(VmErrorKind::EffectRejected {
-        effect: effect.effect_name().into(),
-        op: Some(effect.op_name().into()),
-        reason: reason.into(),
+fn invalid_test_foreign(foreign: &ForeignCall) -> VmError {
+    VmError::new(VmErrorKind::ForeignCallRejected {
+        foreign: foreign.name().into(),
     })
-}
-
-fn invalid_test_effect(effect: &EffectCall) -> VmError {
-    reject_test_effect(effect, "invalid test event")
 }
 
 fn suite_name(path: &[Box<str>]) -> Box<str> {

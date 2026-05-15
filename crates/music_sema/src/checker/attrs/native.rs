@@ -1,10 +1,18 @@
 use std::collections::BTreeSet;
 
+use music_arena::SliceRange;
 use music_base::diag::DiagContext;
-use music_hir::{HirAttr, HirExprId, HirExprKind, HirOrigin, HirTyId, HirTyKind};
-use music_names::Symbol;
+use music_hir::{
+    HirAttr, HirExprId, HirExprKind, HirOrigin, HirParam, HirPatId, HirPatKind, HirTyId, HirTyKind,
+};
+use music_names::{Ident, NameBindingId, Symbol};
 
+use crate::checker::decls::import_record_export_for_expr;
+use crate::checker::exprs::check_expr;
+use crate::checker::surface::import_surface_ty;
 use crate::checker::{CheckPass, DiagKind};
+
+type SeenNativeTypeBindings = BTreeSet<NameBindingId>;
 
 impl CheckPass<'_, '_, '_> {
     pub fn validate_native_let(&mut self, expr: HirExprId, abi: &str) {
@@ -16,13 +24,13 @@ impl CheckPass<'_, '_, '_> {
         for param in self.params(params) {
             if let Some(expr) = param.ty {
                 let origin = self.expr(expr).origin;
-                let ty = self.lower_type_expr(expr, origin);
+                let ty = self.lower_native_type_expr(expr, origin);
                 self.validate_ffi_type(expr, ty, abi);
             }
         }
         if let Some(sig) = sig {
             let origin = self.expr(sig).origin;
-            let ty = self.lower_type_expr(sig, origin);
+            let ty = self.lower_native_type_expr(sig, origin);
             self.validate_ffi_type(sig, ty, abi);
         } else {
             let span = self.expr(expr).origin.span;
@@ -43,6 +51,147 @@ impl CheckPass<'_, '_, '_> {
                 }
                 _ => {}
             }
+        }
+    }
+
+    pub(in crate::checker) fn lower_native_params(
+        &mut self,
+        range: SliceRange<HirParam>,
+    ) -> Box<[HirTyId]> {
+        let builtins = self.builtins();
+        self.params(range)
+            .into_iter()
+            .map(|param| {
+                let ty = param.ty.map_or(builtins.unknown, |expr| {
+                    let origin = self.expr(expr).origin;
+                    self.lower_native_type_expr(expr, origin)
+                });
+                if let Some(binding) = self.binding_id_for_decl(param.name) {
+                    self.insert_binding_type(binding, ty);
+                }
+                if let Some(default) = param.default {
+                    let facts = check_expr(self, default);
+                    let origin = self.expr(default).origin;
+                    self.type_mismatch(origin, ty, facts.ty);
+                }
+                ty
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice()
+    }
+
+    pub(in crate::checker) fn lower_native_type_expr(
+        &mut self,
+        expr: HirExprId,
+        origin: HirOrigin,
+    ) -> HirTyId {
+        self.lower_native_type_expr_seen(expr, origin, &mut BTreeSet::new())
+    }
+
+    fn lower_native_type_expr_seen(
+        &mut self,
+        expr: HirExprId,
+        origin: HirOrigin,
+        seen: &mut SeenNativeTypeBindings,
+    ) -> HirTyId {
+        match self.expr(expr).kind {
+            HirExprKind::Name { name } => self.lower_native_name_type_expr(name, seen),
+            HirExprKind::Field { base, name, .. } => self
+                .lower_native_import_field_type_expr(base, name)
+                .unwrap_or_else(|| self.lower_type_expr(expr, origin)),
+            _ => self.lower_type_expr(expr, origin),
+        }
+    }
+
+    fn lower_native_name_type_expr(
+        &mut self,
+        name: Ident,
+        seen: &mut SeenNativeTypeBindings,
+    ) -> HirTyId {
+        let ty = self.named_type_for_symbol(name.name);
+        let HirTyKind::Named {
+            name: ty_name,
+            args,
+        } = self.ty(ty).kind
+        else {
+            return ty;
+        };
+        if ty_name != name.name || !self.ty_ids(args).is_empty() {
+            return ty;
+        }
+        let Some(binding) = self.binding_id_for_use(name) else {
+            return ty;
+        };
+        if !seen.insert(binding) {
+            return self.builtins().error;
+        }
+        let lowered = self
+            .binding_value_expr(self.root_expr_id(), binding)
+            .and_then(|value| self.lower_native_alias_value_type_expr(value, seen))
+            .unwrap_or(ty);
+        let _ = seen.remove(&binding);
+        lowered
+    }
+
+    fn lower_native_alias_value_type_expr(
+        &mut self,
+        expr: HirExprId,
+        seen: &mut BTreeSet<NameBindingId>,
+    ) -> Option<HirTyId> {
+        let origin = self.expr(expr).origin;
+        match self.expr(expr).kind {
+            HirExprKind::Name { name } => Some(self.lower_native_name_type_expr(name, seen)),
+            HirExprKind::Field { base, name, .. } => {
+                self.lower_native_import_field_type_expr(base, name)
+            }
+            HirExprKind::Tuple { .. }
+            | HirExprKind::ArrayTy { .. }
+            | HirExprKind::Record { .. }
+            | HirExprKind::Pi { .. }
+            | HirExprKind::Apply { .. }
+            | HirExprKind::Index { .. }
+            | HirExprKind::Binary { .. }
+            | HirExprKind::Prefix { .. } => {
+                Some(self.lower_native_type_expr_seen(expr, origin, seen))
+            }
+            _ => None,
+        }
+    }
+
+    fn lower_native_import_field_type_expr(
+        &mut self,
+        base: HirExprId,
+        name: Ident,
+    ) -> Option<HirTyId> {
+        let (surface, export) = import_record_export_for_expr(self, base, name)?;
+        let exported_ty = import_surface_ty(self, &surface, export.ty);
+        if self.ty(exported_ty).kind == HirTyKind::Type {
+            if let Some(ty) = self.builtin_type_alias_for_name(export.name.as_ref()) {
+                return Some(ty);
+            }
+            return Some(self.named_type_for_symbol(name.name));
+        }
+        Some(exported_ty)
+    }
+
+    fn binding_value_expr(&self, expr_id: HirExprId, binding: NameBindingId) -> Option<HirExprId> {
+        match self.expr(expr_id).kind {
+            HirExprKind::Sequence { exprs } => self
+                .expr_ids(exprs)
+                .into_iter()
+                .find_map(|expr| self.binding_value_expr(expr, binding)),
+            HirExprKind::Let { pat, value, .. } => self
+                .pat_binds(pat, binding)
+                .then_some(value)
+                .or_else(|| self.binding_value_expr(value, binding)),
+            _ => None,
+        }
+    }
+
+    fn pat_binds(&self, pat_id: HirPatId, binding: NameBindingId) -> bool {
+        match self.pat(pat_id).kind {
+            HirPatKind::Bind { name } => self.binding_id_for_decl(name) == Some(binding),
+            _ => false,
         }
     }
 
@@ -89,7 +238,7 @@ impl CheckPass<'_, '_, '_> {
         self.validate_string_attr_args(
             attr,
             origin,
-            &[known.name_key, known.symbol_key],
+            &[known.name_key],
             DiagKind::AttrLinkRequiresStringValue,
         );
     }
@@ -106,10 +255,6 @@ impl CheckPass<'_, '_, '_> {
             "feature",
             "pointerWidth",
             "endian",
-            "jit",
-            "jitIsa",
-            "jitCallConv",
-            "jitFeature",
         ]
         .into_iter()
         .map(|name| self.intern(name))
@@ -130,7 +275,7 @@ impl CheckPass<'_, '_, '_> {
                 self.attr_value_is_string(&arg) || self.attr_value_is_string_array(&arg)
             };
             if !valid {
-                let kind = if matches!(arg_name, Some("feature" | "family" | "jitFeature")) {
+                let kind = if matches!(arg_name, Some("feature" | "family")) {
                     DiagKind::AttrWhenRequiresStringList
                 } else {
                     DiagKind::AttrWhenRequiresStringValue

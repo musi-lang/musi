@@ -16,8 +16,8 @@ mod success {
 
     #[test]
     fn parses_and_formats_type_terms() {
-        let term = parse_type_term("(Int, String) -> Bool").unwrap();
-        assert_eq!(term.to_string(), "(Int, String) -> Bool");
+        let term = parse_type_term("(Int, String) -> Bit").unwrap();
+        assert_eq!(term.to_string(), "(Int, String) -> Bit");
     }
 
     #[test]

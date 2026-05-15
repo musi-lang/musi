@@ -58,10 +58,4 @@ impl PassBase<'_, '_, '_> {
         }
         self.push_diag(diag);
     }
-
-    pub fn fresh_open_row_name(&mut self, base: &str) -> Box<str> {
-        let next = self.typing.next_open_row_id;
-        self.typing.next_open_row_id = self.typing.next_open_row_id.saturating_add(1);
-        format!("{base}#{next}").into_boxed_str()
-    }
 }

@@ -1,0 +1,767 @@
+# Musi Full LLM Context
+
+> Full inline briefing for LLMs working on the Musi language and repository. This complements `llms.txt`, which is the concise index. Prefer repository files as source of truth when this file conflicts with code, grammar, specs, or tests.
+
+## Project Summary
+
+Musi is an expression-first programming language with typed effects, a SEAM bytecode pipeline, package tooling around `.ms` source files, Rust compiler/runtime/tooling crates, and a first-party standard library. The workspace version is `0.1.0`; language contracts are frozen for the 0.1.0 baseline.
+
+Two user-facing binaries ship from the workspace:
+
+- `musi`: package/workspace lane for manifests, workspaces, run, build, and test flows.
+- `music`: direct lane for single `.ms` source graphs and `.seam` artifacts.
+
+Core namespace rules:
+
+- `musi:*` is compiler-owned foundation and runtime capability space.
+- `@std/<family>` is the first-party standard library surface.
+- `@std` is a barrel module that re-exports stdlib families.
+- `*.test.ms` files export `test`; `musi test` discovers tests recursively, including under `__tests__/`.
+
+## Install And Quick Start
+
+Prerequisites:
+
+- Rust `1.95.0` or newer.
+- `libffi` for native/FFI runtime support.
+
+Local install:
+
+```bash
+cargo install --locked --force --path crates/music
+cargo install --locked --force --path crates/musi
+```
+
+Package quick start:
+
+```bash
+musi init hello
+cd hello
+musi run
+musi test
+```
+
+Direct file quick start:
+
+```musi
+let base := 21;
+
+let twice (x : Int) : Int := x + x;
+
+let total := twice(base);
+total;
+```
+
+```bash
+music check index.ms
+```
+
+## Command Surface
+
+Package lane:
+
+```bash
+musi check
+musi build
+musi run
+musi test
+```
+
+Direct lane:
+
+```bash
+music check index.ms
+music build index.ms
+music info index
+music disasm index
+music run index.seam
+```
+
+Validation commands commonly used in this repository:
+
+```bash
+make check
+make lint
+make rscheck
+cargo test -p music_syntax
+cargo test -p music_sema
+```
+
+Prefer targeted crate tests over full-workspace tests on lower-memory machines.
+
+## Repository Layout
+
+Top-level areas:
+
+- `crates/`: Rust compiler, runtime, tooling, package, LSP, and CLI crates.
+- `lib/std/`: first-party `@std` Musi package.
+- `crates/musi_foundation/modules/`: compiler-owned `musi:*` foundation modules.
+- `docs/reference/`: language/runtime/diagnostics/API references.
+- `docs/where/`: ownership and workspace maps.
+- `specs/`: language, runtime, interop, and SEAM design documents.
+- `grammar/`: grammar sources and generated ANTLR artifacts.
+- `benches/`: Criterion and VM/runtime benchmark support.
+
+Canonical docs:
+
+- `docs/where/workspace-map.md`
+- `docs/reference/public-api.md`
+- `docs/reference/language-feature-coverage.md`
+- `docs/reference/builtins.md`
+- `docs/reference/comments.md`
+- `docs/reference/diagnostics.md`
+- `docs/reference/performance.md`
+- `docs/reference/seam-il.md`
+
+Canonical grammar:
+
+- `grammar/MusiParser.g4`
+- `grammar/MusiLexer.g4`
+- `grammar/Musi.abnf`
+
+## Workspace Crate Map
+
+Compiler pipeline:
+
+- `music_base`: shared source spans, diagnostics, source maps.
+- `music_builtin`: hidden builtin type, intrinsic, std/foundation registry.
+- `music_names`: symbol interning and compiler name tables.
+- `music_syntax`: lexer, parser, syntax tree.
+- `music_module`: module keys, import maps, module syntax helpers.
+- `music_resolve`: name and import resolution.
+- `music_sema`: semantic checking, exported surface, effect rows.
+- `music_ir`: IR model and diagnostics.
+- `music_ir_lower`: sema-to-IR lowering.
+- `music_emit`: SEAM emission from IR.
+- `music_session`: end-to-end compile orchestration and caches.
+
+Runtime and host:
+
+- `music_seam`: SEAM artifact, SEAM HIL, lowered `.seam` text, binary, opcodes.
+- `musi_vm`: VM program loading, values, execution, host/loader traits, VM errors.
+- `musi_native_ffi`: libffi-backed native call bridge.
+- `musi_native`: host effect and native dispatch.
+- `musi_rt`: embeddable runtime wrapper around session, VM, and native host.
+- `musi_foundation`: compiler-owned `musi:*` modules.
+
+Project and tooling:
+
+- `musi_project`: package manifests, workspace graph, registry, project compile entrypoints.
+- `musi_fmt`: source formatting options, source formatter, path formatter.
+- `musi_tooling`: diagnostics collection, hover, direct tooling helpers, editor primitives.
+- `musi_lsp`: language server.
+
+User-facing binaries:
+
+- `music`: direct file and artifact lane.
+- `musi`: package/workspace lane.
+
+Supporting crates:
+
+- `music_arena`: arena and slice-index utilities.
+- `music_hir`: HIR data model.
+- `music_term`: syntax and type term helpers.
+
+Primary phase DAG:
+
+- `music_base -> music_names -> music_syntax -> music_module -> music_resolve -> music_sema -> music_ir`
+- `music_ir + music_sema -> music_ir_lower -> music_session`
+- `music_ir -> music_emit -> music_session`
+- `music_seam -> musi_vm -> musi_native -> musi_rt`
+- `musi_foundation`, `musi_project`, and `musi_tooling` sit above core compiler/runtime crates.
+
+## Public API Inventory
+
+Binaries:
+
+- `music`: direct check/build/run lane for `.ms` and `.seam`.
+- `musi`: package-aware check/build/run/test lane.
+
+Compiler libraries:
+
+- `music_syntax`: lex/parse entrypoints and syntax tree exports.
+- `music_builtin`: builtin type and intrinsic catalog used by compiler/runtime layers.
+- `music_resolve`: resolved module model.
+- `music_sema`: `check_module`, semantic surface, diagnostics, checked type metadata.
+- `music_ir`: IR model and diagnostics.
+- `music_ir_lower`: sema-to-IR lowering.
+- `music_emit`: IR-to-SEAM lowering.
+- `music_session`: `Session`, `CompiledOutput`, session diagnostics/options, CTFE host configuration.
+
+Runtime libraries:
+
+- `music_seam`: SEAM artifact encode/decode, SEAM HIL model/verifier, lowered `.seam` text, instruction/types surface.
+- `musi_vm`: `Program`, `Vm`, `VmOptions`, `MvmMode`, `MvmFeatures`, `VmOptimizationLevel`, runtime `Value`, bound call handles, value inspection views, host/loader traits, VM errors.
+- `musi_native`: `NativeHost`, native test report types.
+- `musi_rt`: `Runtime`, `RuntimeOptions`, runtime errors.
+- `musi_foundation`: compiler-owned foundation/runtime module registration helpers.
+
+Project and tooling libraries:
+
+- `musi_project`: project load, workspace/package compile entrypoints.
+- `musi_fmt`: `FormatOptions`, source formatter, path formatter, formatter errors.
+- `musi_tooling`: diagnostics collection, hover, artifact helpers.
+- `musi_lsp`: `MusiLanguageServer`.
+
+Internal/support libraries:
+
+- `music_base`, `music_arena`, `music_hir`, `music_module`, `music_names`, `music_term`.
+
+## Language Core
+
+Musi is expression-first: everything is an expression. Top-level statements require `;`. In computation blocks, non-final expressions require `;`; a final expression may omit `;` and becomes the block result.
+
+```musi
+(
+  let x := 1;
+  x + 1
+)
+```
+
+Delimiter meanings:
+
+- `( ... )`: computation, grouping, blocks, tuple expressions, and sequencing.
+- `{ ... }`: structure, records, data bodies, shapes, and attributes.
+- `[ ... ]`: array/type-argument/index shape where grammar admits it.
+
+Accepted empty forms:
+
+```musi
+()        -- unit
+[,]       -- empty array
+[;]       -- empty stack effect
+data {;}  -- empty product
+data {|}  -- empty sum
+match x (|) -- empty match for uninhabited subject
+```
+
+Binding, assignment, and equality:
+
+- `:=` binds a value or assigns into an existing mutable place.
+- Assignment returns `()`.
+- Equality is `=`.
+- Inequality is `/=`.
+
+Control:
+
+- `if` is binary `Bit` selection and always has `else`.
+- `match` is structural inspection. Alternatives start with `|`.
+- Guards use `where`.
+- `let pattern := expr else fallback;` is refutable forward binding.
+
+```musi
+if count /= 0 then use(count) else 0
+
+match value (
+| .Some(x) where x > 0 => x
+| .Some(_) => 0
+| .None => fallback
+)
+```
+
+Functions and calls:
+
+- Lambdas start with `\`.
+- Function types use `->`.
+- Declarations use `:` for result types.
+- Named arguments use `name := value`.
+- Pipelines use `|>`.
+
+```musi
+let id[T](value : T) : T := value;
+let f := \(x : Int) : Int => x;
+let result := value |> transform(extra := 1);
+```
+
+Fixed source operators:
+
+```text
+arithmetic: + - * / %
+comparison: = /= < <= > >=
+words: and or xor not in
+ranges: ..< ..
+fallback: ??
+pipeline: |>
+```
+
+Users may not invent symbolic operators. `and`, `or`, `xor`, and `not` are strict value operators. Use `if`, `match`, or explicit delayed helpers for short-circuiting behavior.
+
+## Types And Data
+
+Primitive and library types:
+
+- `Bit` is the primitive condition type. Conditions require `Bit`; there is no truthiness.
+- `Bool` is a standard-library item, not a primitive keyword. It binds `.True` to bit value `1` and `.False` to bit value `0`, and exports lowercase aliases `true` and `false`.
+- `Unknown` is an inference or recovery type.
+- `Unit` has exactly one value and is written `()`.
+- `Empty` is uninhabited.
+
+Data definitions:
+
+```musi
+let Buffer := data {
+  let ptr : Ptr[mut Byte];
+  let len : Nat;
+};
+
+let Maybe[T] := data {
+| Some(value : T)
+| None
+};
+```
+
+Do not mix product fields and sum variants in one `data` body.
+
+Mutability:
+
+```musi
+let x := mut 0;
+let x : mut Int := mut 0;
+let p : Ptr[mut Byte] := getMutablePtr();
+let q : mut Ptr[mut Byte] := mut getMutablePtr();
+```
+
+Absence and failure are algebraic data:
+
+```musi
+?T   == Maybe[T]
+E!T  == Expect[T, E]
+```
+
+`??` is Maybe fallback only. Failure is handled with `match`, `let ... else`, or named helpers. There is no hidden exception syntax.
+
+Ranges:
+
+```musi
+a ..< b   -- half-open [a, b)
+a .. b    -- inclusive [a, b]
+```
+
+`...` remains spread/splat syntax and is lexed before range tokens.
+
+## Imports, Exports, Modules, And External Boundaries
+
+Top-level declarations are private by default. `export` adds a binding to the public Musi API.
+
+```musi
+export let add(a : Int, b : Int) : Int := (
+  a + b
+);
+```
+
+`export hidden let` exports a type name while hiding its representation.
+
+```musi
+export hidden let File := data {
+  let fd : Word;
+};
+```
+
+`import` brings in a Musi source export record. Bound imports are ordinary values.
+
+```musi
+let io := import "@std/io";
+let std := import "@std";
+let maybe := std.maybe;
+```
+
+`as` is not import alias syntax. It aliases matched or refined values only.
+
+External boundaries use `@foreign` metadata on ordinary declarations. There is no `native`, `extern`, `pub`, or `foreign` source keyword in the small core.
+
+Rules:
+
+- `@foreign` plus a declaration without a body imports an external implementation.
+- `@foreign` plus `export` plus a body exports an external entry point.
+- `export` without `@foreign` is a public Musi API only.
+- `@foreign` without `export` but with a body is invalid.
+- `@foreign` with `export` but without a body is invalid in the core.
+- Do not duplicate direction with `mode`, `import`, or `export` keys.
+
+```musi
+@foreign(
+  name := "musi_read",
+  abi := .c,
+  stack := [Word, Ptr[Byte], Nat ; Nat]
+)
+let readFd(fd : Word, ptr : Ptr[Byte], len : Nat) : Nat;
+```
+
+## Attributes, Builtins, And Intrinsics
+
+Accepted public source attributes:
+
+```text
+@deprecated
+@skip
+@layout
+@foreign
+@link
+@target
+```
+
+Attribute names and keys use camelCase where needed.
+
+`@link` carries native library link requirements for foreign bindings.
+
+`@target` carries target/platform availability predicates.
+
+Compiler-owned builtin bindings use reserved namespaced metadata:
+
+```musi
+@musi.builtin(name := "Type")
+export let Type := Type;
+```
+
+Irreducible runtime leaves use reserved intrinsic metadata:
+
+```musi
+@musi.intrinsic(name := "ptr.load")
+let ptrLoad(ptr : CPtr) : Int;
+```
+
+Source-facing APIs should wrap intrinsic-backed leaves in ordinary Musi code.
+
+Compiler-owned facts:
+
+- `music_builtin` owns compiler builtin names, foundation module specs, std package file paths, and intrinsic symbols.
+- `musi:core`, focused `musi:*` host/VM primitive modules, and `@std/*` expose stable public APIs over the hidden builtin layer.
+- `Pin[T]` is a compiler-owned scoped pin capability created only by `pin value as name in expr`.
+- External boundary facts are modeled with `@foreign` metadata, stack effects, explicit unsafe surfaces, and ordinary import/export records.
+
+## Shapes And Capability Values
+
+`shape` defines a static interface or contract shape. Musi small core uses ordinary values and parameters for capability flow.
+
+```musi
+let Reader := shape {
+  let read(into : mut Buffer) : IOError!Nat;
+};
+```
+
+A concrete value can satisfy a shape statically. An `erased Shape` value may carry runtime evidence, witnesses, or dynamic dispatch. Type-erasure cost stays visible.
+
+Capability values are ordinary values passed through normal bindings, imports, and parameters. They carry authority explicitly; there is no hidden global instance registry or ambient effect context.
+
+```musi
+let useReader(reader : erased Reader, buffer : mut Buffer) : IOError!Nat := (
+  reader.read(buffer)
+);
+```
+
+Operator members may appear in shapes, but operator precedence and associativity are fixed by the grammar, not user declarations.
+
+## Comments And Documentation Comments
+
+Ordinary comments:
+
+```musi
+-- line comment
+
+/-
+block comment
+-/
+```
+
+Item docs attach to the following item:
+
+```musi
+--- value shown in examples
+let value := 1;
+
+/-- value shown in examples -/
+let other := 2;
+```
+
+Module docs attach to the current module:
+
+```musi
+--! Math helpers used by examples.
+
+/-!
+Math helpers used by examples.
+-/
+```
+
+Tooling extracts module docs for module hover and import documentation.
+
+## Diagnostics Contract
+
+Musi diagnostics follow Clang-style precision: exact source location, concrete subject, expected/found facts, related source ranges, and fix-its when safe.
+
+Rules:
+
+- Every user-facing diagnostic comes from typed diagnostic enums in the owning crate/phase.
+- Every source diagnostic has one primary label on the offending token or expression.
+- Headlines name the exact broken thing when known: source text, symbol, operator, field, variant, import specifier, type, `mut`, `known`, or expected/found pair.
+- Secondary labels point to related source: declaration, expected annotation, parameter, previous definition, operation signature.
+- Hints explain actionable repair.
+- Fix-its only when replacement is exact and safe.
+- Headlines avoid articles: `a`, `an`, `the`.
+- Headlines avoid filler words: `was`, `were`, `is`.
+- User-facing text does not abbreviate words like `arg`, `attr`, `expr`, or `fn`.
+
+Renderer shape:
+
+```text
+src/main.ms:7:8: error[MS3091]: call argument `value` expected `String`, found `Int`
+  |
+7 | repeat(value := 10)
+  |        ^^^^^ argument provided here
+  |        ~~~~~ parameter `value` declared here with type `String`
+help: pass string value or change parameter type
+```
+
+## Standard Library
+
+Manifest and barrel:
+
+- `lib/std/musi.json`: `@std` package manifest.
+- `lib/std/std.ms`: root `@std` barrel module.
+- `lib/std/prelude.ms`: prelude exports.
+
+Core std modules:
+
+- `lib/std/ascii.ms`
+- `lib/std/assert.ms`
+- `lib/std/bits.ms`
+- `lib/std/bool.ms`
+- `lib/std/bytes.ms`
+- `lib/std/cmp.ms`
+- `lib/std/errors.ms`
+- `lib/std/expect.ms`
+- `lib/std/maybe.ms`
+- `lib/std/testing.ms`
+- `lib/std/text.ms`
+
+Collections and math:
+
+- `lib/std/collections.ms`
+- `lib/std/collections/array.ms`
+- `lib/std/collections/iter.ms`
+- `lib/std/collections/list.ms`
+- `lib/std/collections/slice.ms`
+- `lib/std/math.ms`
+- `lib/std/math/float.ms`
+- `lib/std/math/integer.ms`
+
+Host-facing and environment wrappers:
+
+- `lib/std/cli.ms`
+- `lib/std/cli/prompt.ms`
+- `lib/std/crypto.ms`
+- `lib/std/datetime.ms`
+- `lib/std/env.ms`
+- `lib/std/ffi.ms`
+- `lib/std/fmt.ms`
+- `lib/std/fs.ms`
+- `lib/std/io.ms`
+- `lib/std/json.ms`
+- `lib/std/libc.ms`
+- `lib/std/libm.ms`
+- `lib/std/log.ms`
+- `lib/std/os.ms`
+- `lib/std/path.ms`
+- `lib/std/process.ms`
+- `lib/std/random.ms`
+- `lib/std/semver.ms`
+- `lib/std/sys.ms`
+- `lib/std/uuid.ms`
+
+Encoding:
+
+- `lib/std/encoding.ms`
+- `lib/std/encoding/base64.ms`
+- `lib/std/encoding/hex.ms`
+- `lib/std/encoding/utf8.ms`
+
+Tests:
+
+- `lib/std/__tests__/*.test.ms`
+- `lib/std/__tests__/*/*.test.ms`
+
+## Foundation Modules
+
+Compiler-owned foundation/runtime modules live under `crates/musi_foundation/modules/`. They expose lower-level `musi:*` surfaces and back stdlib wrappers.
+
+Important foundation module files:
+
+- `core.ms`
+- `crypto_host.ms`
+- `encoding_host.ms`
+- `env.ms`
+- `fmt.ms`
+- `fs.ms`
+- `io.ms`
+- `json_host.ms`
+- `log.ms`
+- `process.ms`
+- `random.ms`
+- `syntax.ms`
+- `test.ms`
+- `text.ms`
+- `time.ms`
+- `uuid_host.ms`
+
+Use `@std/*` first in user code. Use `musi:*` when working at compiler, runtime, host integration, or intrinsic boundaries.
+
+## SEAM, Runtime, And Interop
+
+SEAM is the artifact and bytecode pipeline target.
+
+Key references:
+
+- `docs/reference/seam-il.md`
+- `specs/seam/domains.md`
+- `specs/seam/format.md`
+- `specs/seam/bytecode.md`
+- `specs/seam/lowering.md`
+
+Runtime and interop references:
+
+- `specs/runtime/memory-model.md`
+- `specs/runtime/interop.md`
+- `specs/interop/c-interop-memory.md`
+
+Runtime implementation crates:
+
+- `music_seam`: artifact encode/decode, HIL, text, binary, instructions.
+- `musi_vm`: VM program loading, values, execution, host and loader traits.
+- `musi_native_ffi`: libffi-backed native call bridge.
+- `musi_native`: host effect and native dispatch.
+- `musi_rt`: embeddable runtime wrapper.
+
+## Formatter, Tooling, And LSP
+
+Formatter:
+
+- `musi_fmt` owns source formatting, path formatting, and `FormatOptions`.
+- Formatter tests live in `crates/musi_fmt/src/tests.rs`.
+- CLI and LSP formatting surfaces call into `musi_fmt`.
+
+Tooling:
+
+- `musi_tooling` owns diagnostics collection, hover, document links, folding ranges, selection ranges, references, rename, symbols, semantic tokens, code actions, and artifact helpers.
+- Tooling APIs are CLI/editor-oriented and should return stable data structures over raw compiler internals.
+
+LSP:
+
+- `musi_lsp` owns `MusiLanguageServer`.
+- LSP conversion helpers live under `crates/musi_lsp/src/server/convert.rs`.
+- Request handlers live under `crates/musi_lsp/src/server/requests.rs`.
+- Navigation helpers live under `crates/musi_lsp/src/server/navigation.rs`.
+
+## Coding And Repo Rules
+
+Important repository conventions:
+
+- No placeholders in `crates/`: no `todo!()`, `unimplemented!()`, placeholder panics, or empty pipelines.
+- `src/` is production-only.
+- Rust unit tests live in `module/tests.rs`.
+- Benches live in `benches/` and use Criterion with `bench_` prefix.
+- Prefer longform names: `lexer.rs`, `parser.rs`, `syntax`, `sema`.
+- Reserve `Syntax*` for syntax trees, not token streams.
+- Lexer nouns stay short: `Token`, `TokenKind`, `Trivia`, `Lexer`.
+- Keep trivia types in `trivia.rs`.
+- Prefer top-level `use` imports and local names.
+- Do not write fully qualified paths such as `music_hir::Foo`, `music_arena::Bar`, or `crate::mod::Type` inside function bodies, match arms, or helper signatures just to name ordinary types or variants.
+- Absolute singleton uses are acceptable for real singletons such as `crate::CONST`, `crate::func()`, and macros.
+- Do not introduce new macros.
+
+Type alias rules:
+
+- `Vec<Item>` becomes `ItemList`.
+- `Box<Item>` becomes `ItemPtr` or `BoxedItem`.
+- `Result<T, XError>` becomes `XResult<T = ()>`.
+- If one composite type appears two or more times in one module public surface, alias it.
+- Alias names describe the owned concept, not only the container shape.
+
+Phase boundaries:
+
+- Phase DAG has no cycles.
+- SEAM transport stays `music_bc -> music_assembly`.
+- Project integration lives above compiler/runtime phases in `musi_project` and `music_session`.
+- Pre-resolve contracts use `*Env` names, not `*Resolver`.
+
+## Lint And Validation Configuration
+
+The workspace uses Rust 2024 and strict linting. Workspace lints deny unsafe code by default, many Clippy categories, placeholder APIs, unreachable code, TODOs, unimplemented code, and accidental absolute paths.
+
+Common validation:
+
+```bash
+cargo fmt --all
+cargo fmt --check
+cargo check --workspace
+cargo check --workspace --tests
+cargo clippy --locked --workspace -- -D warnings
+cargo clippy --locked --workspace --tests -- -D warnings
+cargo test -p musi_diaggen -p music -p musi_fmt -p musi_tooling -p musi_lsp --tests
+cargo run -p musi_diaggen -- check
+make rscheck
+make lint
+```
+
+`make rscheck` finds architecture, portability, naming, aliasing, and shape issues beyond standard Rust/Clippy signals.
+
+## Agent Guidance
+
+When answering questions or changing code:
+
+- Treat grammar files and authored source as source of truth.
+- Prefer current repository evidence over older docs if conflicts exist.
+- Distinguish current implemented behavior from proposed design.
+- For syntax questions, check grammar first, then specs/tests.
+- For crate ownership questions, check `docs/where/workspace-map.md`.
+- For public API questions, check `docs/reference/public-api.md`.
+- For diagnostic wording or ranges, check `docs/reference/diagnostics.md` and typed diagnostic enums in the owning crate.
+- For standard-library behavior, check `lib/std/`, `crates/musi_foundation/modules/`, and std tests.
+- For runtime behavior, check `musi_rt`, `musi_native`, `musi_vm`, `music_seam`, and runtime specs.
+- Avoid broad compatibility fallbacks, ad hoc diagnostics, parser fallbacks, or doc-only changes when code behavior is requested.
+- Prefer focused edits and targeted validation.
+
+## File Index
+
+High-value entry files:
+
+- `README.md`
+- `Cargo.toml`
+- `AGENTS.md`
+- `docs/where/workspace-map.md`
+- `docs/reference/public-api.md`
+- `docs/reference/language-feature-coverage.md`
+- `docs/reference/builtins.md`
+- `docs/reference/comments.md`
+- `docs/reference/diagnostics.md`
+- `docs/reference/performance.md`
+- `docs/reference/seam-il.md`
+- `specs/index.md`
+- `specs/language/syntax.md`
+- `specs/language/type-core.md`
+- `specs/language/first-class-everything.md`
+- `specs/language/items-and-attributes.md`
+- `specs/language/module-boundaries.md`
+- `specs/language/contextual-capabilities.md`
+- `specs/language/yield-and-capabilities.md`
+- `specs/runtime/memory-model.md`
+- `specs/runtime/interop.md`
+- `specs/interop/c-interop-memory.md`
+- `specs/seam/domains.md`
+- `specs/seam/format.md`
+- `specs/seam/bytecode.md`
+- `specs/seam/lowering.md`
+- `grammar/MusiParser.g4`
+- `grammar/MusiLexer.g4`
+- `grammar/Musi.abnf`
+- `lib/std/musi.json`
+- `lib/std/std.ms`
+- `lib/std/prelude.ms`
+- `crates/music_syntax/src/parser.rs`
+- `crates/music_syntax/src/lexer.rs`
+- `crates/music_syntax/src/token.rs`
+- `crates/music_sema/src/lib.rs`
+- `crates/music_session/src/lib.rs`
+- `crates/musi_fmt/src/lib.rs`
+- `crates/musi_tooling/src/lib.rs`
+- `crates/musi_lsp/src/lib.rs`
+- `crates/musi_rt/src/lib.rs`

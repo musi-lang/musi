@@ -22,10 +22,10 @@ pub mod process {
 
 pub mod io {
     pub const EFFECT: &str = "musi:io::Io";
-    pub const PRINT_OP: &str = "print";
-    pub const PRINT_LINE_OP: &str = "printLine";
-    pub const PRINT_ERROR_OP: &str = "printError";
-    pub const PRINT_ERROR_LINE_OP: &str = "printErrorLine";
+    pub const WRITE_OP: &str = "write";
+    pub const WRITE_LN_OP: &str = "writeLn";
+    pub const WRITE_ERR_OP: &str = "writeErr";
+    pub const WRITE_ERR_LN_OP: &str = "writeErrLn";
     pub const READ_LINE_OP: &str = "readLine";
 }
 
@@ -64,14 +64,14 @@ pub mod text {
     pub const FROM_BYTE_OP: &str = "fromByte";
 }
 
-pub mod json_host {
-    pub const EFFECT: &str = "musi:json::JsonHost";
+pub mod json {
+    pub const EFFECT: &str = "musi:json::Json";
     pub const IS_VALID_OP: &str = "isValid";
     pub const NORMALIZE_OP: &str = "normalize";
 }
 
-pub mod encoding_host {
-    pub const EFFECT: &str = "musi:encoding::EncodingHost";
+pub mod encoding {
+    pub const EFFECT: &str = "musi:encoding::Encoding";
     pub const BASE64_ENCODE_OP: &str = "base64Encode";
     pub const BASE64_DECODE_OP: &str = "base64Decode";
     pub const BASE64_IS_VALID_OP: &str = "base64IsValid";
@@ -86,21 +86,15 @@ pub mod fmt {
     pub const FLOAT_OP: &str = "float";
 }
 
-pub mod crypto_host {
-    pub const EFFECT: &str = "musi:crypto::CryptoHost";
+pub mod crypto {
+    pub const EFFECT: &str = "musi:crypto::Crypto";
     pub const SHA256_HEX_OP: &str = "sha256Hex";
     pub const SHA256_BASE64_OP: &str = "sha256Base64";
 }
 
-pub mod uuid_host {
-    pub const EFFECT: &str = "musi:uuid::UuidHost";
+pub mod uuid {
+    pub const EFFECT: &str = "musi:uuid::Uuid";
     pub const V4_OP: &str = "v4";
-}
-
-pub mod log {
-    pub const EFFECT: &str = "musi:log::Log";
-    pub const INFO_OP: &str = "info";
-    pub const WRITE_OP: &str = "write";
 }
 
 pub mod test {
@@ -123,6 +117,11 @@ pub fn extend_import_map(import_map: &mut ImportMap) {
 #[must_use]
 pub fn resolve_spec(spec: &str) -> Option<ModuleKey> {
     registry::resolve_spec(spec)
+}
+
+#[must_use]
+pub fn resolve_public_spec(spec: &str) -> Option<ModuleKey> {
+    registry::resolve_public_spec(spec)
 }
 
 #[must_use]

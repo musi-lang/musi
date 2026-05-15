@@ -50,14 +50,6 @@ pub(super) fn format_bind_layout(text: String, options: &FormatOptions) -> Strin
         }
         if line.chars().count() > options.line_width
             && is_let_line(line)
-            && let Some(broken) = split_long_let_signature(line, options)
-        {
-            out.push_str(&broken);
-            index = index.saturating_add(1);
-            continue;
-        }
-        if line.chars().count() > options.line_width
-            && is_let_line(line)
             && let Some(bind_index) = line.find(" := ")
         {
             let lhs_end = bind_index.saturating_add(" :=".len());
@@ -85,6 +77,14 @@ pub(super) fn format_bind_layout(text: String, options: &FormatOptions) -> Strin
             index = index.saturating_add(1);
             continue;
         }
+        if line.chars().count() > options.line_width
+            && is_let_line(line)
+            && let Some(broken) = split_long_let_signature(line, options)
+        {
+            out.push_str(&broken);
+            index = index.saturating_add(1);
+            continue;
+        }
         out.push_str(line);
         out.push('\n');
         index = index.saturating_add(1);
@@ -103,9 +103,7 @@ fn is_single_line_bind_rhs(line: &str) -> bool {
         && !trimmed.starts_with("---")
         && !trimmed.starts_with("--")
         && !trimmed.starts_with("match ")
-        && !trimmed.starts_with("given ")
         && !trimmed.starts_with("data ")
-        && !trimmed.starts_with("effect ")
         && !trimmed.starts_with("shape ")
         && !trimmed.starts_with("unsafe ")
         && !trimmed.starts_with("pin ")
@@ -130,10 +128,10 @@ fn remove_last_line(text: &mut String) {
 }
 
 fn split_long_let_signature(line: &str, options: &FormatOptions) -> Option<String> {
-    let open = line.rfind(" (")?.saturating_add(1);
+    let open = declaration_params_open(line)?;
     let close = matching_close_paren(line, open)?;
     let inner = line.get(open + 1..close)?;
-    if inner.trim().is_empty() || !inner.contains(',') {
+    if inner.trim().is_empty() {
         return None;
     }
     let indent = line
@@ -144,7 +142,10 @@ fn split_long_let_signature(line: &str, options: &FormatOptions) -> Option<Strin
     let mut out = String::new();
     out.push_str(line.get(..=open)?.trim_end());
     out.push('\n');
-    for item in split_top_level_commas(inner) {
+    for item in split_top_level_commas(inner)
+        .into_iter()
+        .filter(|item| !item.trim().is_empty())
+    {
         out.push_str(&item_indent);
         out.push_str(item.trim());
         out.push_str(",\n");
@@ -158,6 +159,23 @@ fn split_long_let_signature(line: &str, options: &FormatOptions) -> Option<Strin
     out.push_str(line.get(close + 1..)?.trim_end());
     out.push('\n');
     Some(out)
+}
+
+fn declaration_params_open(line: &str) -> Option<usize> {
+    let mut params_open = None;
+    for (index, _) in line.match_indices(" (") {
+        let open = index.saturating_add(1);
+        let Some(close) = matching_close_paren(line, open) else {
+            continue;
+        };
+        let Some(tail) = line.get(close.saturating_add(1)..).map(str::trim_start) else {
+            continue;
+        };
+        if tail.starts_with(':') {
+            params_open = Some(open);
+        }
+    }
+    params_open
 }
 
 fn matching_close_paren(line: &str, open: usize) -> Option<usize> {
@@ -189,7 +207,9 @@ fn split_top_level_commas(text: &str) -> Vec<&str> {
             '[' => bracket_depth = bracket_depth.saturating_add(1),
             ']' => bracket_depth = bracket_depth.saturating_sub(1),
             ',' if paren_depth == 0 && bracket_depth == 0 => {
-                if let Some(item) = text.get(start..index) {
+                if let Some(item) = text.get(start..index)
+                    && !item.trim().is_empty()
+                {
                     items.push(item);
                 }
                 start = index.saturating_add(1);
@@ -197,7 +217,9 @@ fn split_top_level_commas(text: &str) -> Vec<&str> {
             _ => {}
         }
     }
-    if let Some(item) = text.get(start..) {
+    if let Some(item) = text.get(start..)
+        && !item.trim().is_empty()
+    {
         items.push(item);
     }
     items

@@ -1,6 +1,6 @@
 # SEAM Module Format
 
-Status: proposed
+Status: frozen 0.1.0 baseline (2026-05-14)
 
 This spec defines the public SEAM module formats.
 
@@ -9,8 +9,8 @@ SEAM is the primary lowered target for Musi and any other frontend that wants to
 Public artifacts:
 
 - `.seam` for canonical binary modules
-- `.seamil` for canonical textual twin of one `.seam` module
 - `.mar` for archives that package one or more `.seam` modules with resources and metadata
+- textual bytecode is a `disasm` view of `.seam`
 
 SEAM is not described as `v2`, `v3`, or similar product branding. Compatibility is expressed by file-format version fields.
 
@@ -33,7 +33,7 @@ It is:
 - deterministic
 - suitable for direct frontend targeting
 - suitable for VM loading
-- suitable for JIT input after verification
+- suitable for backend input after verification
 
 It is not:
 
@@ -41,9 +41,9 @@ It is not:
 - a package archive
 - a host-native executable
 
-### `.seamil`
+### Textual bytecode view
 
-`.seamil` is the canonical textual twin of `.seam`.
+Textual bytecode is a `disasm` view of `.seam`.
 
 It is:
 
@@ -64,19 +64,21 @@ It may not contain:
 - source-language sugar
 - a richer lowering contract than the binary module image
 
-`.seamil` is BC/IL transport text, not HIL text. Public HIL uses a separate typed syntax.
+Textual bytecode is BC/IL transport text, not HIL text. Public HIL uses a separate typed syntax.
 
 ### `.mar`
 
-`.mar` is an archive bundle.
+`.mar` is a stable Musi archive/package, analogous to `.jar`.
 
-It contains:
+It may contain:
 
 - manifest
 - one or more `.seam` modules
 - resources
 - optional native libraries
 - optional introspection payloads such as source maps and symbol tables
+
+It may also flatten modules into archive-wide tables when a build profile asks for that shape. Its identity is archive/package, not minification or flattening.
 
 Native app mode embeds `.mar` into a launcher/runtime image.
 
@@ -126,7 +128,6 @@ SEAM extension families are called domains.
 Public domains:
 
 - `managed`
-- `resumable`
 - `native`
 - `link`
 - `introspect`
@@ -134,7 +135,6 @@ Public domains:
 A module declares required features as fully qualified names such as:
 
 - `managed.views`
-- `resumable.cont.oneshot`
 - `native.pin`
 - `link.dynamic`
 - `introspect.invoke`
@@ -181,13 +181,13 @@ Opcode wire model:
 
 - primary opcode: one byte (`0x00..0xFE`)
 - extended opcode: prefix `0xFF` plus a two-byte opcode id
-- `.seamil` mnemonics are canonical dotted names such as `ld.loc`, `br.false`, `call.ind`, `new.obj`, and `call.ffi`
+- `disasm` mnemonics are canonical dotted names such as `ld.loc`, `br.z`, `call.ind`, `new.obj`, and `call.ffi`
 - assembler/disassembler mnemonics are canonical and alias-free
 - opcode semantics, stack effects, and numeric positions are defined by `specs/seam/bytecode.md`
 
 ## Textual Form
 
-`.seamil` uses the same compatibility model as `.seam`.
+The textual bytecode view uses the same compatibility model as `.seam`.
 
 Text modules declare:
 
@@ -202,8 +202,8 @@ Text modules declare:
 
 Text tooling must support:
 
-- assemble `.seamil` to `.seam`
-- disassemble `.seam` to `.seamil`
+- assemble textual bytecode to `.seam`
+- disassemble `.seam` to textual bytecode
 - validate both with the same verifier contract
 
 ## Lowering Boundary
@@ -218,12 +218,11 @@ That means SEAM modules encode:
 - explicit block and label structure
 - explicit calls and indirect calls
 - explicit runtime object and layout operations
-- explicit handler-frame and continuation machinery
 - explicit FFI interop operations
 
-SEAM modules do not encode source-level syntax such as pattern matching, `given` contextual visibility, range syntax, or `effect` / `answer` / `handle` / `resume` syntax directly.
+SEAM modules do not encode source-level syntax such as pattern matching, context visibility, or range syntax directly.
 
-Source-level ideas lower to stack bytecode plus descriptors. For example, tuples, records, variants, `?T`, and `E!T` use `new.obj` plus layout fields; dynamic messages use `call.dyn`; interface or shape dispatch uses `call.iface`; foreign ABI edges use `call.ffi`.
+Source-level ideas lower to stack bytecode plus descriptors. For example, tuples, records, variants, `?T`, and `E!T` use `new.obj` plus layout fields, and foreign ABI edges use `call.ffi`.
 
 ## See Also
 

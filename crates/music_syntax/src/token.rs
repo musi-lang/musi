@@ -25,39 +25,28 @@ pub enum TokenKind {
 
     // Keywords (grammar/Musi.abnf)
     KwAnd,
-    KwAnswer,
     KwAs,
-    KwAny,
-    KwAsk,
     KwShape,
-    KwCatch,
     KwMatch,
     KwData,
-    KwEffect,
+    KwDefer,
+    KwElse,
+    KwErased,
     KwExport,
-    KwNative,
-    KwHandle,
+    KwHidden,
     KwIf,
     KwImport,
     KwIn,
     KwKnown,
-    KwLaw,
     KwLet,
     KwMut,
-    KwRequire,
     KwNot,
-    KwOpaque,
     KwOr,
-    KwPartial,
-    KwQuote,
-    KwRec,
-    KwResume,
+    KwRecur,
     KwPin,
+    KwThen,
     KwUnsafe,
-    KwGiven,
-    KwShl,
-    KwShr,
-    KwSome,
+    KwYield,
     KwWhere,
     KwXor,
 
@@ -79,6 +68,8 @@ pub enum TokenKind {
     // Operators / punctuation.
     Dot,
     Colon,
+    Question,
+    Bang,
     Pipe,
     Underscore,
 
@@ -93,26 +84,21 @@ pub enum TokenKind {
 
     // Compound tokens (grammar/Musi.abnf)
     ColonEq,          // :=
+    ColonGt,          // :>
+    ColonQuestionGt,  // :?>
     MinusGt,          // ->
-    TildeGt,          // ~>
+    PipeEq,           // |=
     TildeEq,          // ~=
     EqGt,             // =>
     SlashEq,          // /=
     LtEq,             // <=
     GtEq,             // >=
-    LtColon,          // <:
-    LtDotDot,         // <..
-    LtDotDotLt,       // <..<
     DotDot,           // ..
     DotDotLt,         // ..<
     DotDotDot,        // ...
     DotLBracket,      // .[
     DotLParen,        // .(
-    QuestionDot,      // ?.
-    BangDot,          // !.
     QuestionQuestion, // ??
-    ColonQuestion,    // :?
-    ColonQuestionGt,  // :?>
     PipeGt,           // |>
 
     // User-defined symbolic operator token (2+ sym-char).
@@ -121,28 +107,25 @@ pub enum TokenKind {
 
 // Ordered by longest-to-shortest (maximal munch).
 pub const TOKEN_PATTERNS: &[(&[u8], TokenKind)] = &[
-    (b"<..<", TokenKind::LtDotDotLt),
-    (b"<..", TokenKind::LtDotDot),
-    (b"..<", TokenKind::DotDotLt),
     (b":?>", TokenKind::ColonQuestionGt),
     (b":=", TokenKind::ColonEq),
+    (b":>", TokenKind::ColonGt),
     (b"...", TokenKind::DotDotDot),
+    (b"..<", TokenKind::DotDotLt),
     (b"..", TokenKind::DotDot),
     (b".[", TokenKind::DotLBracket),
     (b".(", TokenKind::DotLParen),
-    (b"?.", TokenKind::QuestionDot),
-    (b"!.", TokenKind::BangDot),
     (b"??", TokenKind::QuestionQuestion),
     (b"=>", TokenKind::EqGt),
     (b"->", TokenKind::MinusGt),
+    (b"~=", TokenKind::TildeEq),
+    (b"|=", TokenKind::PipeEq),
     (b"/=", TokenKind::SlashEq),
     (b"<=", TokenKind::LtEq),
-    (b"<:", TokenKind::LtColon),
     (b">=", TokenKind::GtEq),
     (b"|>", TokenKind::PipeGt),
-    (b"~>", TokenKind::TildeGt),
-    (b"~=", TokenKind::TildeEq),
-    (b":?", TokenKind::ColonQuestion),
+    (b"?", TokenKind::Question),
+    (b"!", TokenKind::Bang),
     (b"#", TokenKind::Hash),
     (b"\\", TokenKind::Backslash),
     (b"%", TokenKind::Percent),
@@ -168,46 +151,35 @@ pub const TOKEN_PATTERNS: &[(&[u8], TokenKind)] = &[
     (b"_", TokenKind::Underscore),
 ];
 
-const KEYWORD_NAMES: [(&str, TokenKind, &str); 36] = [
+const KEYWORD_NAMES: [(&str, TokenKind, &str); 25] = [
     ("and", TokenKind::KwAnd, "`and`"),
-    ("ask", TokenKind::KwAsk, "`ask`"),
-    ("answer", TokenKind::KwAnswer, "`answer`"),
     ("as", TokenKind::KwAs, "`as`"),
-    ("any", TokenKind::KwAny, "`any`"),
-    ("catch", TokenKind::KwCatch, "`catch`"),
-    ("match", TokenKind::KwMatch, "`match`"),
     ("data", TokenKind::KwData, "`data`"),
-    ("effect", TokenKind::KwEffect, "`effect`"),
+    ("defer", TokenKind::KwDefer, "`defer`"),
+    ("else", TokenKind::KwElse, "`else`"),
+    ("erased", TokenKind::KwErased, "`erased`"),
     ("export", TokenKind::KwExport, "`export`"),
-    ("native", TokenKind::KwNative, "`native`"),
-    ("handle", TokenKind::KwHandle, "`handle`"),
+    ("hidden", TokenKind::KwHidden, "`hidden`"),
     ("if", TokenKind::KwIf, "`if`"),
     ("import", TokenKind::KwImport, "`import`"),
     ("in", TokenKind::KwIn, "`in`"),
     ("known", TokenKind::KwKnown, "`known`"),
-    ("law", TokenKind::KwLaw, "`law`"),
     ("let", TokenKind::KwLet, "`let`"),
+    ("match", TokenKind::KwMatch, "`match`"),
     ("mut", TokenKind::KwMut, "`mut`"),
-    ("require", TokenKind::KwRequire, "`require`"),
     ("not", TokenKind::KwNot, "`not`"),
-    ("opaque", TokenKind::KwOpaque, "`opaque`"),
     ("or", TokenKind::KwOr, "`or`"),
-    ("partial", TokenKind::KwPartial, "`partial`"),
-    ("quote", TokenKind::KwQuote, "`quote`"),
-    ("rec", TokenKind::KwRec, "`rec`"),
-    ("resume", TokenKind::KwResume, "`resume`"),
     ("pin", TokenKind::KwPin, "`pin`"),
-    ("unsafe", TokenKind::KwUnsafe, "`unsafe`"),
-    ("given", TokenKind::KwGiven, "`given`"),
-    ("shl", TokenKind::KwShl, "`shl`"),
-    ("shr", TokenKind::KwShr, "`shr`"),
-    ("some", TokenKind::KwSome, "`some`"),
+    ("recur", TokenKind::KwRecur, "`recur`"),
     ("shape", TokenKind::KwShape, "`shape`"),
+    ("then", TokenKind::KwThen, "`then`"),
+    ("unsafe", TokenKind::KwUnsafe, "`unsafe`"),
     ("where", TokenKind::KwWhere, "`where`"),
     ("xor", TokenKind::KwXor, "`xor`"),
+    ("yield", TokenKind::KwYield, "`yield`"),
 ];
 
-const PUNCT_DISPLAY: [(TokenKind, &str); 45] = [
+const PUNCT_DISPLAY: [(TokenKind, &str); 42] = [
     (TokenKind::At, "`@`"),
     (TokenKind::Hash, "`#`"),
     (TokenKind::Backslash, "`\\\\`"),
@@ -221,6 +193,8 @@ const PUNCT_DISPLAY: [(TokenKind, &str); 45] = [
     (TokenKind::Semicolon, "`;`"),
     (TokenKind::Dot, "`.`"),
     (TokenKind::Colon, "`:`"),
+    (TokenKind::Question, "`?`"),
+    (TokenKind::Bang, "`!`"),
     (TokenKind::Pipe, "`|`"),
     (TokenKind::Underscore, "`_`"),
     (TokenKind::Plus, "`+`"),
@@ -232,26 +206,21 @@ const PUNCT_DISPLAY: [(TokenKind, &str); 45] = [
     (TokenKind::Lt, "`<`"),
     (TokenKind::Gt, "`>`"),
     (TokenKind::ColonEq, "`:=`"),
+    (TokenKind::ColonGt, "`:>`"),
+    (TokenKind::ColonQuestionGt, "`:?>`"),
     (TokenKind::MinusGt, "`->`"),
-    (TokenKind::TildeGt, "`~>`"),
+    (TokenKind::PipeEq, "`|=`"),
     (TokenKind::TildeEq, "`~=`"),
     (TokenKind::EqGt, "`=>`"),
     (TokenKind::SlashEq, "`/=`"),
     (TokenKind::LtEq, "`<=`"),
     (TokenKind::GtEq, "`>=`"),
-    (TokenKind::LtColon, "`<:`"),
-    (TokenKind::LtDotDot, "`<..`"),
-    (TokenKind::LtDotDotLt, "`<..<`"),
     (TokenKind::DotDot, "`..`"),
     (TokenKind::DotDotLt, "`..<`"),
     (TokenKind::DotDotDot, "`...`"),
     (TokenKind::DotLBracket, "`.[`"),
     (TokenKind::DotLParen, "`.(`"),
-    (TokenKind::QuestionDot, "`?.`"),
-    (TokenKind::BangDot, "`!.`"),
     (TokenKind::QuestionQuestion, "`??`"),
-    (TokenKind::ColonQuestion, "`:?`"),
-    (TokenKind::ColonQuestionGt, "`:?>`"),
     (TokenKind::PipeGt, "`|>`"),
 ];
 

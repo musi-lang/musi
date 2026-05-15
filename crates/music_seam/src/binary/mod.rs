@@ -1,7 +1,9 @@
 use crate::descriptor::{
-    ConstantDescriptor, ConstantValue, DataDescriptor, DataVariantDescriptor, EffectDescriptor,
-    EffectOpDescriptor, ExportDescriptor, ExportTarget, ForeignDescriptor, GlobalDescriptor,
-    MetaDescriptor, ProcedureDescriptor, ShapeDescriptor, TypeDescriptor,
+    BlockSignatureDescriptor, ClosureDescriptor, ConstantDescriptor, ConstantValue, DataDescriptor,
+    DataFieldDescriptor, DataVariantDescriptor, ExportDescriptor, ExportTarget, ForeignDescriptor,
+    GlobalDescriptor, ImportDescriptor, ManifestDescriptor, MetaDescriptor, ObjectHeaderDescriptor,
+    ProcedureCallingConvention, ProcedureDescriptor, ProcedureVisibility, RootMapDescriptor,
+    SafePointKind, ShapeDescriptor, StackEffectDescriptor, TypeDescriptor,
 };
 use crate::{
     Artifact, BINARY_MAJOR_VERSION, BINARY_MINOR_VERSION, CodeEntry, Instruction, Label, Opcode,

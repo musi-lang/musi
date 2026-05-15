@@ -1,4 +1,4 @@
-use music_seam::{EffectId, ForeignId, ProcedureId, ShapeId, TypeId};
+use music_seam::{ForeignId, ProcedureId, ShapeId, TypeId};
 use music_term::SyntaxTerm;
 
 use crate::gc::RuntimeHeap;
@@ -22,11 +22,9 @@ pub enum ValueView<'a> {
     Data(RecordView<'a>),
     Closure(ClosureView<'a>),
     Procedure(ProcedureValue),
-    Continuation,
     Type(TypeId),
     Module(ModuleView<'a>),
     Foreign(ForeignId),
-    Effect(EffectId),
     Shape(ShapeId),
 }
 
@@ -54,11 +52,9 @@ pub fn render_value_view(view: ValueView<'_>) -> Option<String> {
             procedure.module_slot(),
             procedure.procedure().raw()
         )),
-        ValueView::Continuation => Some("<continuation>".to_owned()),
         ValueView::Type(ty) => Some(format!("<type:{}>", ty.raw())),
         ValueView::Module(module) => Some(format!("<module:{}>", module.spec())),
         ValueView::Foreign(foreign) => Some(format!("<foreign:{}>", foreign.raw())),
-        ValueView::Effect(effect) => Some(format!("<effect:{}>", effect.raw())),
         ValueView::Shape(shape) => Some(format!("<capability:{}>", shape.raw())),
         ValueView::CPtr(addr) => Some(format!("<cptr:0x{addr:x}>")),
     }

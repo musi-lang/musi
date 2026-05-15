@@ -314,6 +314,7 @@ impl<'src> Lexer<'src> {
             self.cursor.bump_bytes(1);
             let _ = self.lex_digits_with_separators(errors, 10);
             self.lex_exp_part(errors);
+            self.lex_numeric_suffix();
             return TokenKind::Float;
         }
 
@@ -332,6 +333,7 @@ impl<'src> Lexer<'src> {
                     let kind = LexErrorKind::MissingDigitsAfterBasePrefix { base };
                     Self::push_error(errors, kind, prefix_start, self.cursor.pos());
                 }
+                self.lex_numeric_suffix();
                 return TokenKind::Int;
             }
         }
@@ -344,13 +346,16 @@ impl<'src> Lexer<'src> {
             self.cursor.bump_bytes(1);
             let _ = self.lex_digits_with_separators(errors, 10);
             self.lex_exp_part(errors);
+            self.lex_numeric_suffix();
             return TokenKind::Float;
         }
 
         if matches!(self.cursor.peek_char(), Some('e' | 'E')) {
             self.lex_exp_part(errors);
+            self.lex_numeric_suffix();
             return TokenKind::Float;
         }
+        self.lex_numeric_suffix();
         TokenKind::Int
     }
 
@@ -371,6 +376,29 @@ impl<'src> Lexer<'src> {
         }
     }
 
+    fn lex_numeric_suffix(&mut self) {
+        if self.cursor.peek_byte() == Some(b'_') && self.try_lex_numeric_suffix(true) {
+            return;
+        }
+        let _ = self.try_lex_numeric_suffix(false);
+    }
+
+    fn try_lex_numeric_suffix(&mut self, expect_leading_underscore: bool) -> bool {
+        let offset = usize::from(expect_leading_underscore);
+        let Some(class) = self.cursor.peek_byte_n(offset) else {
+            return false;
+        };
+        if !matches!(class, b'z' | b'n' | b'f') {
+            return false;
+        }
+        if expect_leading_underscore {
+            self.cursor.bump_bytes(1);
+        }
+        self.cursor.bump_bytes(1);
+        self.cursor.consume_while_byte(|b| b.is_ascii_digit());
+        true
+    }
+
     fn lex_digits_with_separators(&mut self, errors: &mut LexErrorList, base: u32) -> (bool, bool) {
         let mut saw_digit = false;
         let mut saw_invalid_digit = false;
@@ -384,6 +412,12 @@ impl<'src> Lexer<'src> {
                     self.cursor.bump_bytes(1);
                 }
                 b'_' => {
+                    if saw_digit
+                        && !prev_underscore
+                        && matches!(self.cursor.peek_byte_n(1), Some(b'z' | b'n' | b'f'))
+                    {
+                        break;
+                    }
                     let underscore_start = self.cursor.pos();
                     let underscore_ok = saw_digit && !prev_underscore;
                     self.cursor.bump_bytes(1);

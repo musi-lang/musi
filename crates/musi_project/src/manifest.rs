@@ -214,7 +214,7 @@ pub struct FmtConfig {
     pub call_argument_layout: Option<FmtGroupLayout>,
     pub declaration_parameter_layout: Option<FmtGroupLayout>,
     pub record_field_layout: Option<FmtGroupLayout>,
-    pub effect_member_parameter_layout: Option<FmtGroupLayout>,
+    pub member_parameter_layout: Option<FmtGroupLayout>,
     pub operator_break: Option<FmtOperatorBreak>,
 }
 

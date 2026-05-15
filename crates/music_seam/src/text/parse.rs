@@ -8,7 +8,7 @@ use music_base::diag::DiagContext;
 ///
 /// Returns [`AssemblyError`] if directives, operands, labels, references, or the final artifact
 /// structure are invalid.
-pub fn parse_text(text: &str) -> AssemblyResult<Artifact> {
+pub fn parse_disasm(text: &str) -> AssemblyResult<Artifact> {
     let mut builder = TextBuilder::new();
     let lines = text.lines().map(str::trim).collect::<Vec<_>>();
     let mut index = 0usize;
@@ -42,8 +42,8 @@ pub fn parse_text(text: &str) -> AssemblyResult<Artifact> {
 /// # Errors
 ///
 /// Returns [`AssemblyError`] if parsing or artifact validation fails.
-pub fn validate_text(text: &str) -> AssemblyResult {
-    let _ = parse_text(text)?;
+pub fn validate_disasm(text: &str) -> AssemblyResult {
+    let _ = parse_disasm(text)?;
     Ok(())
 }
 

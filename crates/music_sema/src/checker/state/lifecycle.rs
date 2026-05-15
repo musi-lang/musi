@@ -8,11 +8,9 @@ use crate::api::{
     DefinitionKey, ExprFacts, PatFacts, SemaDataDef, SemaDataVariantDef, SemaModule, SemaOptions,
 };
 use crate::checker::surface::build_module_surface;
-use crate::effects::EffectRow;
 
 use super::{
-    Builtins, DeclState, FactState, ModuleState, ResumeState, RuntimeEnv, TypingState,
-    host_target_info,
+    Builtins, DeclState, FactState, ModuleState, RuntimeEnv, TypingState, host_target_info,
 };
 
 pub fn prepare_module<'interner, 'env>(
@@ -25,7 +23,6 @@ pub fn prepare_module<'interner, 'env>(
     TypingState,
     DeclState,
     FactState,
-    ResumeState,
 ) {
     let known = KnownSymbols::new(interner);
     let builtins = Builtins::from_resolved(&mut resolved, known);
@@ -40,10 +37,7 @@ pub fn prepare_module<'interner, 'env>(
         .iter()
         .map(|import| (import.span, import.to.clone()))
         .collect::<HashMap<_, _>>();
-    let expr_facts = vec![
-        ExprFacts::new(builtins.unknown, EffectRow::empty());
-        resolved.module.store.exprs.len()
-    ];
+    let expr_facts = vec![ExprFacts::new(builtins.unknown); resolved.module.store.exprs.len()];
     let pat_facts = vec![PatFacts::new(builtins.unknown); resolved.module.store.pats.len()];
 
     let mut decls = DeclState::new();
@@ -58,7 +52,6 @@ pub fn prepare_module<'interner, 'env>(
         TypingState::new(),
         decls,
         FactState::new(expr_facts, pat_facts),
-        ResumeState::new(),
     )
 }
 
@@ -74,9 +67,9 @@ fn seed_builtin_data_defs(decls: &mut DeclState, module: &ModuleKey) {
         ),
     ]);
     let _ = decls.data_defs.insert(
-        "Bool".into(),
+        "Bit".into(),
         SemaDataDef::new(
-            DefinitionKey::new(module.clone(), "Bool"),
+            DefinitionKey::new(module.clone(), "Bit"),
             bool_variants,
             None,
             None,
@@ -111,16 +104,14 @@ pub fn finish_module(
             pat_facts: facts.pat_facts,
             expr_import_record_targets: facts.expr_import_record_targets,
             type_test_targets: facts.type_test_targets,
-            expr_constraint_answers: facts.expr_constraint_answers,
+            expr_constraint_evidence: facts.expr_constraint_evidence,
             expr_dot_callable_bindings: facts.expr_dot_callable_bindings,
             expr_member_facts: facts.expr_member_facts,
             expr_comptime_values: facts.expr_comptime_values,
         },
         decls: crate::SemaDeclsBuild {
-            effect_defs: decls.effect_defs,
             data_defs: decls.data_defs,
             shape_facts: decls.shape_facts,
-            given_facts: decls.given_facts,
         },
         surface,
         diags: facts.diags,

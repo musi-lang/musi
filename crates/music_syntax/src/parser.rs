@@ -18,7 +18,6 @@ mod recover;
 const PREFIX_BP: u8 = 24;
 const MUL_BP: u8 = 20;
 const ADD_BP: u8 = 18;
-const SHIFT_BP: u8 = 16;
 const COMPARE_BP: u8 = 14;
 const AND_BP: u8 = 12;
 const XOR_BP: u8 = 10;
@@ -142,13 +141,13 @@ impl SyntaxTreeBuilder {
 }
 
 struct Parser<'a> {
+    source_text: &'a str,
     tokens: &'a [Token],
     pos: usize,
     builder: &'a mut SyntaxTreeBuilder,
     errors: &'a mut ParseErrorList,
     comparison_exprs: Vec<SyntaxNodeId>,
     lparen_match: Vec<Option<usize>>,
-    quote_depth: u32,
 }
 
 impl<'a> Parser<'a> {
@@ -159,13 +158,13 @@ impl<'a> Parser<'a> {
     ) -> Self {
         let tokens = lexed.tokens();
         Self {
+            source_text: lexed.text(),
             tokens,
             pos: 0,
             builder,
             errors,
             comparison_exprs: Vec::new(),
             lparen_match: compute_matching(tokens, TokenKind::LParen, TokenKind::RParen),
-            quote_depth: 0,
         }
     }
 }
@@ -180,10 +179,10 @@ fn compute_matching(tokens: &[Token], open: TokenKind, close: TokenKind) -> Vec<
     for (index, token) in tokens.iter().enumerate() {
         if same_kind(token.kind, open) {
             stack.push(index);
-        } else if same_kind(token.kind, close) {
-            if let Some(open_index) = stack.pop() {
-                matches[open_index] = Some(index);
-            }
+        } else if same_kind(token.kind, close)
+            && let Some(open_index) = stack.pop()
+        {
+            matches[open_index] = Some(index);
         }
     }
     matches

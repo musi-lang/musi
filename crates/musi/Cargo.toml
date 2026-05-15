@@ -24,8 +24,12 @@ musi_project = { path = "../musi_project" }
 musi_rt = { path = "../musi_rt" }
 musi_vm = { path = "../musi_vm" }
 music_module = { path = "../music_module" }
+music_seam = { path = "../music_seam" }
 music_sema = { path = "../music_sema" }
 serde_json = { workspace = true }
+
+[dev-dependencies]
+sha2 = { workspace = true }
 
 [lints]
 workspace = true

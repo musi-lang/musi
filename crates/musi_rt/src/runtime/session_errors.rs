@@ -1,4 +1,3 @@
-use musi_foundation::syntax;
 use musi_vm::{VmDiagKind, VmError, VmErrorKind};
 use music_session::SessionError;
 
@@ -12,10 +11,8 @@ pub(super) fn runtime_session_error(err: SessionError) -> RuntimeError {
 pub(super) fn vm_runtime_error(err: &RuntimeError) -> VmError {
     match err.kind() {
         RuntimeErrorKind::SessionFailed { detail, .. } => {
-            VmError::new(VmErrorKind::EffectRejected {
-                effect: syntax::EFFECT.into(),
-                op: Some(syntax::EVAL_OP.into()),
-                reason: detail.clone(),
+            VmError::new(VmErrorKind::ForeignCallRejected {
+                foreign: format!("musi:syntax::Musi__eval ({detail})").into_boxed_str(),
             })
         }
         RuntimeErrorKind::MissingModuleSource { spec } => {

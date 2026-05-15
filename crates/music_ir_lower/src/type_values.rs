@@ -57,14 +57,12 @@ pub(crate) fn is_type_value_expr(
                     .all(|arg| type_apply_arg_expr(sema, arg, interner))
         }
         HirExprKind::Binary { op, left, right } => {
-            matches!(
-                op,
-                HirBinaryOp::Add | HirBinaryOp::Arrow | HirBinaryOp::EffectArrow
-            ) && is_type_value_expr(sema, *left, interner)
+            matches!(op, HirBinaryOp::Add | HirBinaryOp::Arrow)
+                && is_type_value_expr(sema, *left, interner)
                 && is_type_value_expr(sema, *right, interner)
         }
         HirExprKind::Prefix {
-            op: HirPrefixOp::Mut | HirPrefixOp::Known | HirPrefixOp::Any | HirPrefixOp::Some,
+            op: HirPrefixOp::Mut | HirPrefixOp::Known,
             expr,
         } => is_type_value_expr(sema, *expr, interner),
         HirExprKind::Record { items } => sema

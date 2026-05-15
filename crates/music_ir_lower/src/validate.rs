@@ -1,5 +1,5 @@
 use music_base::diag::{Diag, DiagContext};
-use music_sema::{SemaModule, SurfaceEffectRow, SurfaceTy, SurfaceTyId, SurfaceTyKind};
+use music_sema::{SemaModule, SurfaceTy, SurfaceTyId, SurfaceTyKind};
 
 use music_ir::{IrDiagKind as DiagKind, IrDiagList};
 
@@ -8,17 +8,8 @@ pub(crate) fn validate_surface(sema: &SemaModule, diags: &mut IrDiagList) {
     let types = surface.types();
     for export in surface.exported_values() {
         validate_surface_ty_id(types, export.ty, diags);
-        validate_effect_row(types, &export.effects, diags);
         for constraint in &export.constraints {
             validate_surface_ty_id(types, constraint.value, diags);
-        }
-    }
-    for effect in surface.exported_effects() {
-        for op in &effect.ops {
-            for param in &op.params {
-                validate_surface_ty_id(types, *param, diags);
-            }
-            validate_surface_ty_id(types, op.result, diags);
         }
     }
     for shape in surface.exported_shapes() {
@@ -30,26 +21,6 @@ pub(crate) fn validate_surface(sema: &SemaModule, diags: &mut IrDiagList) {
                 validate_surface_ty_id(types, *param, diags);
             }
             validate_surface_ty_id(types, member.result, diags);
-        }
-    }
-    for given in surface.exported_givens() {
-        for arg in &given.shape_args {
-            validate_surface_ty_id(types, *arg, diags);
-        }
-        for constraint in &given.constraints {
-            validate_surface_ty_id(types, constraint.value, diags);
-        }
-    }
-}
-
-pub(crate) fn validate_effect_row(
-    types: &[SurfaceTy],
-    row: &SurfaceEffectRow,
-    diags: &mut IrDiagList,
-) {
-    for item in &row.items {
-        if let Some(arg) = item.arg {
-            validate_surface_ty_id(types, arg, diags);
         }
     }
 }
@@ -100,15 +71,6 @@ pub(crate) fn validate_surface_ty(types: &[SurfaceTy], ty: &SurfaceTy, diags: &m
             validate_surface_ty_id(types, *item, diags);
         }
         SurfaceTyKind::Range { bound } => validate_surface_ty_id(types, *bound, diags),
-        SurfaceTyKind::Handler {
-            effect,
-            input,
-            output,
-        } => {
-            validate_surface_ty_id(types, *effect, diags);
-            validate_surface_ty_id(types, *input, diags);
-            validate_surface_ty_id(types, *output, diags);
-        }
         SurfaceTyKind::Mut { inner } => validate_surface_ty_id(types, *inner, diags),
         SurfaceTyKind::AnyShape { capability: shape }
         | SurfaceTyKind::SomeShape { capability: shape } => {

@@ -3,8 +3,7 @@ use std::mem::size_of;
 use music_term::SyntaxTerm;
 
 use crate::value::{
-    ClosureValue, ContinuationValue, DataValue, GcRef, I64ArrayValue, ModuleValue, SequenceValue,
-    Value,
+    ClosureValue, DataValue, GcRef, I64ArrayValue, ModuleValue, SequenceValue, Value,
 };
 
 const VALUE_BYTES: usize = size_of::<Value>();
@@ -19,7 +18,6 @@ pub(super) enum HeapObject {
     Data(DataValue),
     Closure(ClosureValue),
     Module(ModuleValue),
-    Continuation(Box<ContinuationValue>),
 }
 
 impl HeapObject {
@@ -40,15 +38,6 @@ impl HeapObject {
                 OBJECT_HEADER_BYTES.saturating_add(value.captures.len().saturating_mul(VALUE_BYTES))
             }
             Self::Module(value) => OBJECT_HEADER_BYTES.saturating_add(value.spec.len()),
-            Self::Continuation(value) => {
-                let frame_values = value
-                    .frames
-                    .iter()
-                    .map(|frame| frame.locals.len().saturating_add(frame.stack.len()))
-                    .sum::<usize>();
-                let value_count = frame_values.saturating_add(value.handlers.len());
-                OBJECT_HEADER_BYTES.saturating_add(value_count.saturating_mul(VALUE_BYTES))
-            }
         }
     }
 
@@ -65,23 +54,6 @@ impl HeapObject {
                     visit(child);
                 }
             }
-            Self::Continuation(value) => {
-                for frame in &value.frames {
-                    for child in frame
-                        .locals
-                        .iter()
-                        .chain(frame.stack.iter())
-                        .filter_map(Value::gc_ref)
-                    {
-                        visit(child);
-                    }
-                }
-                for handler in &value.handlers {
-                    if let Some(reference) = handler.handler.gc_ref() {
-                        visit(reference);
-                    }
-                }
-            }
             Self::String(_) | Self::Syntax(_) | Self::I64Array(_) | Self::Module(_) => {}
         }
     }
@@ -91,18 +63,6 @@ impl HeapObject {
             Self::Seq(value) => value.has_heap_children(),
             Self::Data(value) => value.fields.iter().any(|value| value.gc_ref().is_some()),
             Self::Closure(value) => value.captures.iter().any(|value| value.gc_ref().is_some()),
-            Self::Continuation(value) => {
-                value.frames.iter().any(|frame| {
-                    frame
-                        .locals
-                        .iter()
-                        .chain(frame.stack.iter())
-                        .any(|value| value.gc_ref().is_some())
-                }) || value
-                    .handlers
-                    .iter()
-                    .any(|handler| handler.handler.gc_ref().is_some())
-            }
             Self::String(_) | Self::Syntax(_) | Self::I64Array(_) | Self::Module(_) => false,
         }
     }
@@ -112,10 +72,6 @@ impl HeapObject {
             Self::Seq(value) => value.clear_edges(),
             Self::Data(value) => value.fields.clear(),
             Self::Closure(value) => value.captures.clear(),
-            Self::Continuation(value) => {
-                value.frames.clear();
-                value.handlers.clear();
-            }
             Self::String(_) | Self::Syntax(_) | Self::I64Array(_) | Self::Module(_) => {}
         }
     }

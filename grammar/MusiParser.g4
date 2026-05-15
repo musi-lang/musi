@@ -11,20 +11,19 @@ options {
 
 // ----------------------------------------------------------------------------- Parser
 // 
-// Surface policy: - `let` names values. `law` names obligations. Trust roots are `let` bindings
-// with metadata such as `@axiom`, not extra declaration keywords. Other form keywords (`data`,
-// `effect`, `shape`, `given`, `answer`, `ask`, `handle`, `import`, ...) build expressions; they do
-// not name values. - Keywords never become callees. `import("a")` remains keyword syntax (or an
-// error), not a function call on an identifier named `import`. - Structural blocks use `{ ... }`;
-// imperative/sequence blocks use `( ... )`. - Lambdas must start with `\`, so `=>` can remain
-// unambiguous branch-arm syntax too.
+// Surface policy: - `let` names values. Form keywords (`data`, `shape`, `import`, `if`, `match`,
+// `defer`, `yield`, `unsafe`, `pin`) build expressions; they do not name values. - Keywords never
+// become callees. `import "a"` and tuple imports like `import ("a", "b")` remain keyword syntax,
+// not calls on an identifier named `import`. - Structural blocks use `{ ... }`; imperative/sequence
+// blocks use `( ... )`. - Lambdas must start with `\`, so `=>` can remain unambiguous branch-arm
+// syntax too.
 
 root: root_stmt* EOF;
 
 root_stmt: declaration SEMICOLON | stmt;
 
 // Bodyless `let` declarations require semantic permission such as `@axiom`.
-declaration: fn_decl | law_decl;
+declaration: fn_decl;
 
 stmt: expr SEMICOLON;
 
@@ -36,13 +35,12 @@ infix_expr: prefix_expr (infix_op prefix_expr)*;
 
 infix_op:
 	COLON_EQ
+	| COLON_QUESTION_GT
+	| COLON_GT
 	| PIPE_GT
 	| MINUS_GT
-	| TILDE_GT
-	| TILDE_EQ
 	| QUESTION_QUESTION
 	| KW_OR
-	| KW_CATCH
 	| KW_XOR
 	| KW_AND
 	| EQ
@@ -51,63 +49,31 @@ infix_op:
 	| GT
 	| LT_EQ
 	| GT_EQ
-	| LT_DOT_DOT
-	| LT_DOT_DOT_LT
+	| TILDE_EQ
 	| DOT_DOT
 	| DOT_DOT_LT
 	| KW_IN
-	| KW_SHL
-	| KW_SHR
 	| PLUS
 	| MINUS
 	| STAR
 	| SLASH
 	| PERCENT;
 
-prefix_expr: (
-		MINUS
-		| KW_ANY
-		| KW_KNOWN
-		| KW_NOT
-		| KW_MUT
-		| KW_SOME
-		| DOT_DOT
-		| DOT_DOT_LT
-	) prefix_expr
+prefix_expr: (MINUS | KW_KNOWN | KW_NOT | KW_MUT) prefix_expr
 	| postfix_expr;
 
 postfix_expr: atom postfix_op*;
 
-postfix_op:
-	call_op
-	| bracket_apply_op
-	| access_op
-	| type_test_op
-	| type_cast_op;
+postfix_op: call_op | bracket_apply_op | access_op;
 
 call_op: LPAREN arg_list? RPAREN;
 
 bracket_apply_op: LBRACKET expr_list? RBRACKET;
 
-// Access-edge tokens are compound where the edge changes behavior (`?.`, `!.`) or where maximal
-// munch avoids ambiguity (`.[`, `.` followed by operator selection). `?.[` and `?.(` are not
-// separate lexer tokens: the parser reads `?.` plus a selector.
 access_op:
 	DOT field_target
 	| DOT_LBRACKET expr_list? RBRACKET
-	| DOT_LPAREN op_name RPAREN
-	| QUESTION_DOT access_selector
-	| BANG_DOT access_selector;
-
-access_selector:
-	field_target
-	| LBRACKET expr_list? RBRACKET
-	| LPAREN op_name RPAREN;
-
-// `as` aliases an already matched/refined value. It is not import/type/module alias syntax.
-type_test_op: COLON_QUESTION expr (KW_AS ident)?;
-
-type_cast_op: COLON_QUESTION_GT expr;
+	| DOT_LPAREN op_name RPAREN;
 
 field_target: ident | INT_LIT;
 
@@ -116,7 +82,6 @@ field_target: ident | INT_LIT;
 atom:
 	literal
 	| template_expr
-	| splice
 	| ident
 	| op_ident
 	| lambda_expr
@@ -124,21 +89,16 @@ atom:
 	| array_lit_expr
 	| record_literal_expr
 	| dot_prefix_expr
+	| if_expr
 	| match_expr
 	| let_expr
-	| resume_expr
+	| defer_expr
+	| yield_expr
 	| import_expr
-	| native_expr
 	| data_expr
-	| effect_expr
 	| shape_expr
-	| given_expr
-	| ask_expr
-	| answer_lit_expr
 	| unsafe_expr
 	| pin_expr
-	| handle_expr
-	| quote_expr
 	| with_mods_expr;
 
 literal: INT_LIT | FLOAT_LIT | STRING_LIT | RUNE_LIT;
@@ -151,7 +111,7 @@ ident: IDENT;
 
 op_ident: LPAREN op_name RPAREN;
 
-op_name: op_single | SYMBOLIC_OP | word_op;
+op_name: op_single | word_op;
 
 op_single:
 	PLUS
@@ -166,22 +126,12 @@ op_single:
 	| GT
 	| GT_EQ;
 
-word_op:
-	KW_AND
-	| KW_CATCH
-	| KW_IN
-	| KW_NOT
-	| KW_OR
-	| KW_SHL
-	| KW_SHR
-	| KW_XOR;
+word_op: KW_AND | KW_IN | KW_NOT | KW_OR | KW_XOR;
 
 lambda_expr: BACKSLASH params (COLON expr)? EQ_GT expr;
 
 paren_expr:
 	LPAREN RPAREN
-	| LPAREN COMMA RPAREN
-	| LPAREN SEMICOLON RPAREN
 	| LPAREN grouped_or_tuple_body RPAREN
 	| LPAREN sequence_body RPAREN;
 
@@ -216,24 +166,18 @@ variant_arg_list: variant_arg (COMMA variant_arg)* COMMA?;
 
 variant_arg: ident COLON_EQ expr | expr;
 
-resume_expr: KW_RESUME expr?;
+if_expr: KW_IF expr KW_THEN expr KW_ELSE expr;
 
-import_expr:
-	KW_IMPORT (LPAREN import_block_items? RPAREN | expr);
+defer_expr: KW_DEFER expr (KW_WHERE expr)?;
 
-import_block_items: expr (SEMICOLON expr)* SEMICOLON?;
+yield_expr: KW_YIELD expr;
 
-native_expr:
-	KW_NATIVE STRING_LIT? (
-		KW_LET let_rest
-		| LPAREN (KW_LET let_rest SEMICOLON)* RPAREN
-	);
-
-let_modifier: KW_REC;
+import_expr: KW_IMPORT expr;
 
 let_expr:
-	KW_LET let_modifier? let_head bracket_params? params? type_annot? where_clause? require_clause?
-		COLON_EQ expr;
+	KW_LET KW_RECUR? let_head bracket_params? params? type_annot? where_clause? COLON_EQ expr (
+		KW_ELSE expr
+	)?;
 
 let_head: receiver_method_head | pattern;
 
@@ -243,8 +187,6 @@ bracket_params:
 	LBRACKET bracket_param (COMMA bracket_param)* COMMA? RBRACKET;
 
 bracket_param: ident type_annot?;
-
-require_clause: KW_REQUIRE effect_set;
 
 data_expr: KW_DATA LBRACE data_body RBRACE;
 
@@ -265,47 +207,27 @@ variant_payload_def: ident COLON expr | expr;
 rec_def_fields:
 	SEMICOLON? rec_def_field (SEMICOLON rec_def_field)* SEMICOLON?;
 
-rec_def_field: ident COLON expr (COLON_EQ expr)?;
-
-effect_expr: KW_EFFECT LBRACE structural_members RBRACE;
+rec_def_field: KW_LET ident COLON expr (COLON_EQ expr)?;
 
 shape_expr:
 	KW_SHAPE (KW_WHERE constraint (COMMA constraint)* COMMA?)? LBRACE structural_members RBRACE;
 
-given_expr:
-	KW_GIVEN bracket_params? expr where_clause? LBRACE structural_members RBRACE;
-
-ask_expr: KW_ASK expr;
-
-unsafe_expr: KW_UNSAFE LBRACE stmt* RBRACE;
+unsafe_expr: KW_UNSAFE paren_expr;
 
 pin_expr: KW_PIN expr KW_AS IDENT KW_IN expr;
-
-answer_lit_expr:
-	KW_ANSWER prefix_expr LBRACE structural_fn_members RBRACE;
-
-handle_expr: KW_HANDLE expr KW_ANSWER prefix_expr;
-
-// `quote` creates hygienic syntax objects. Splices use `#` and are valid only under quote.
-quote_expr: KW_QUOTE (LPAREN expr RPAREN | LBRACE stmt* RBRACE);
-
-splice:
-	HASH ident
-	| HASH LPAREN expr RPAREN
-	| HASH LBRACKET expr_list? RBRACKET;
 
 with_mods_expr:
 	attrs modifier* (expr | let_expr)
 	| modifier+ (expr | let_expr);
 
-modifier: attr | export_mod | partial_mod;
+modifier: attr | export_mod | hidden_mod;
 
-partial_mod: KW_PARTIAL;
+hidden_mod: KW_HIDDEN;
 
-export_mod: KW_EXPORT KW_OPAQUE? (KW_NATIVE STRING_LIT?)?;
+export_mod: KW_EXPORT;
 
 let_rest:
-	let_modifier? pattern bracket_params? params? type_annot? where_clause? require_clause? (
+	pattern bracket_params? params? type_annot? where_clause? (
 		COLON_EQ expr
 	)?;
 
@@ -316,46 +238,31 @@ fn_decl:
 
 op_or_ident: ident | op_ident;
 
-law_decl:
-	attrs? KW_LAW op_or_ident bracket_params? params COLON_EQ expr;
-
 // Structural member lists accept leading and trailing separators, matching `{ ; x; }`.
 structural_members:
 	SEMICOLON* (
 		structural_member (SEMICOLON+ structural_member)* SEMICOLON*
 	)?;
 
-structural_member: fn_decl | law_decl;
-
-structural_fn_members:
-	SEMICOLON* (fn_decl (SEMICOLON+ fn_decl)* SEMICOLON*)?;
+structural_member: fn_decl;
 
 // --- Unified annotation / constraint helpers ---
 
 type_annot: COLON type_expr;
 
-type_expr: expr;
-
-effect_set: LBRACE comma_pad effect_entries? comma_pad RBRACE;
-
-effect_entries: effect_list (COMMA effect_rest)? | effect_rest;
-
-effect_rest: DOT_DOT_DOT ident;
-
-effect_list: effect_item (COMMA effect_item)*;
-
-effect_item: ident (LBRACKET expr RBRACKET)?;
+type_expr: QUESTION type_expr | type_expr BANG type_expr | expr;
 
 where_clause: KW_WHERE constraint (COMMA constraint)* COMMA?;
 
-constraint:
-	ident LT_COLON expr
-	| ident COLON expr
-	| ident TILDE_EQ expr;
+constraint: ident (PIPE_EQ | TILDE_EQ) expr;
 
 // --- Patterns ---
 
-pattern: pattern_primary;
+pattern: pattern_or;
+
+pattern_or: pattern_as (KW_OR pattern_as)*;
+
+pattern_as: pattern_primary (KW_AS ident)?;
 
 pattern_primary:
 	UNDERSCORE
@@ -371,11 +278,11 @@ variant_pat_arg_list:
 
 variant_pat_arg: ident COLON_EQ pattern | pattern;
 
-rec_pat_fields: rec_pat_field (COMMA rec_pat_field)*;
+rec_pat_fields: rec_pat_field (COMMA rec_pat_field)* COMMA?;
 
 rec_pat_field: ident (COLON pattern)?;
 
-pat_list: pattern (COMMA pattern)*;
+pat_list: pattern (COMMA pattern)* COMMA?;
 
 // --- Attributes ---
 
@@ -394,8 +301,11 @@ attr_value:
 	| INT_LIT
 	| RUNE_LIT
 	| attr_variant
+	| stack_effect
 	| attr_array
 	| attr_record;
+
+stack_effect: LBRACKET expr_list? SEMICOLON expr_list? RBRACKET;
 
 attr_variant: DOT ident (LPAREN attr_value_list? RPAREN)?;
 

@@ -3,10 +3,8 @@ use std::collections::HashSet;
 use music_base::{diag::DiagContext, parse_i64_literal};
 use music_hir::{
     HirBinaryOp, HirExprId, HirExprKind, HirLitKind, HirPatId, HirPatKind, HirPrefixOp,
-    HirQuoteKind, HirSpliceKind,
 };
 use music_names::{Ident, NameBindingId};
-use music_term::{SyntaxShape, SyntaxTerm};
 
 use super::{DiagKind, PassBase};
 use crate::api::ComptimeValue;
@@ -84,8 +82,6 @@ impl<'ctx, 'a, 'b, 'c> ConstIntEvaluator<'ctx, 'a, 'b, 'c> {
             HirExprKind::Lit { lit } => Self::eval_lit(self.ctx.lit_kind(lit)),
             HirExprKind::Name { name } => self.eval_name(name),
             HirExprKind::Prefix { op, expr } => self.eval_prefix(&op, expr),
-            HirExprKind::Quote { kind } => self.eval_quote(&kind),
-            HirExprKind::Splice { kind } => self.eval_splice(&kind),
             HirExprKind::Binary { op, left, right } => self.eval_binary(&op, left, right),
             HirExprKind::Sequence { exprs } => {
                 let exprs = self.ctx.expr_ids(exprs);
@@ -115,122 +111,6 @@ impl<'ctx, 'a, 'b, 'c> ConstIntEvaluator<'ctx, 'a, 'b, 'c> {
             HirLitKind::Float { raw } => Ok(ComptimeValue::Float(raw)),
             HirLitKind::String { value } => Ok(ComptimeValue::String(value)),
             HirLitKind::Rune { value } => Ok(ComptimeValue::Rune(value)),
-        }
-    }
-
-    fn eval_quote(&mut self, kind: &HirQuoteKind) -> Result<ComptimeValue, ConstEvalError> {
-        let (shape, raw) = match kind {
-            HirQuoteKind::Expr { expr, raw } => {
-                let raw = self.replace_expr_splices(*expr, raw)?;
-                (SyntaxShape::Expr, raw)
-            }
-            HirQuoteKind::Block { exprs, raw } => {
-                let mut raw = String::from(raw.as_ref());
-                for expr in self.ctx.expr_ids(*exprs) {
-                    raw = String::from(self.replace_splices(expr, &raw)?);
-                }
-                (SyntaxShape::Module, raw.into_boxed_str())
-            }
-        };
-        SyntaxTerm::from_quote_source(&raw)
-            .or_else(|_| SyntaxTerm::parse(shape, raw.as_ref()))
-            .map(ComptimeValue::Syntax)
-            .map_err(|_| ConstEvalError::Invalid)
-    }
-
-    fn replace_expr_splices(
-        &mut self,
-        expr: HirExprId,
-        raw: &str,
-    ) -> Result<Box<str>, ConstEvalError> {
-        self.replace_splices(expr, raw)
-    }
-
-    fn replace_splices(&mut self, expr: HirExprId, raw: &str) -> Result<Box<str>, ConstEvalError> {
-        let mut rendered = raw.to_owned();
-        self.replace_splices_in_expr(expr, &mut rendered)?;
-        Ok(rendered.into_boxed_str())
-    }
-
-    fn replace_splices_in_expr(
-        &mut self,
-        expr: HirExprId,
-        raw: &mut String,
-    ) -> Result<(), ConstEvalError> {
-        match self.ctx.expr(expr).kind {
-            HirExprKind::Splice { kind } => {
-                let replacement = self.eval_splice(&kind).and_then(Self::value_to_syntax)?;
-                let splice_raw = match kind {
-                    HirSpliceKind::Name { raw, .. }
-                    | HirSpliceKind::Expr { raw, .. }
-                    | HirSpliceKind::Exprs { raw, .. } => raw,
-                };
-                *raw = raw.replace(splice_raw.as_ref(), replacement.as_ref());
-            }
-            HirExprKind::Binary { left, right, .. } => {
-                self.replace_splices_in_expr(left, raw)?;
-                self.replace_splices_in_expr(right, raw)?;
-            }
-            HirExprKind::Prefix { expr, .. }
-            | HirExprKind::Field { base: expr, .. }
-            | HirExprKind::Index { base: expr, .. }
-            | HirExprKind::TypeTest { base: expr, .. }
-            | HirExprKind::TypeCast { base: expr, .. } => {
-                self.replace_splices_in_expr(expr, raw)?;
-            }
-            HirExprKind::Tuple { items } => {
-                for item in self.ctx.expr_ids(items) {
-                    self.replace_splices_in_expr(item, raw)?;
-                }
-            }
-            HirExprKind::Array { items } => {
-                for item in self.ctx.array_items(items) {
-                    self.replace_splices_in_expr(item.expr, raw)?;
-                }
-            }
-            _ => {}
-        }
-        Ok(())
-    }
-
-    fn eval_splice(&mut self, kind: &HirSpliceKind) -> Result<ComptimeValue, ConstEvalError> {
-        match kind {
-            HirSpliceKind::Name { name, .. } => self.eval_name(*name),
-            HirSpliceKind::Expr { expr, .. } => self.eval(*expr),
-            HirSpliceKind::Exprs { .. } => Err(ConstEvalError::Invalid),
-        }
-    }
-
-    fn value_to_syntax(value: ComptimeValue) -> Result<Box<str>, ConstEvalError> {
-        match value {
-            ComptimeValue::Int(value) => Ok(value.to_string().into_boxed_str()),
-            ComptimeValue::Nat(value) => Ok(value.to_string().into_boxed_str()),
-            ComptimeValue::Float(raw) => Ok(raw),
-            ComptimeValue::String(value) => Ok(format!("{value:?}").into_boxed_str()),
-            ComptimeValue::Rune(value) => {
-                let rune = char::from_u32(value).ok_or(ConstEvalError::Invalid)?;
-                Ok(format!("{rune:?}").into_boxed_str())
-            }
-            ComptimeValue::CPtr(value) => Ok(value.to_string().into_boxed_str()),
-            ComptimeValue::Syntax(term) => Ok(term.text().into()),
-            ComptimeValue::Unit => Ok("()".into()),
-            ComptimeValue::Seq(value) => {
-                let items = value
-                    .items
-                    .iter()
-                    .map(|item| Self::value_to_syntax(item.clone()))
-                    .collect::<Result<Vec<_>, _>>()?
-                    .join(", ");
-                Ok(format!("[{items}]").into_boxed_str())
-            }
-            ComptimeValue::Data(_)
-            | ComptimeValue::Closure(_)
-            | ComptimeValue::Continuation(_)
-            | ComptimeValue::Type(_)
-            | ComptimeValue::ImportRecord(_)
-            | ComptimeValue::Foreign(_)
-            | ComptimeValue::Effect(_)
-            | ComptimeValue::Shape(_) => Err(ConstEvalError::Invalid),
         }
     }
 
@@ -270,9 +150,7 @@ impl<'ctx, 'a, 'b, 'c> ConstIntEvaluator<'ctx, 'a, 'b, 'c> {
                 .map(ComptimeValue::Int)
                 .ok_or(ConstEvalError::Invalid),
             HirPrefixOp::Known => self.eval(expr),
-            HirPrefixOp::Not | HirPrefixOp::Mut | HirPrefixOp::Any | HirPrefixOp::Some => {
-                Err(ConstEvalError::Invalid)
-            }
+            HirPrefixOp::Not | HirPrefixOp::Mut => Err(ConstEvalError::Invalid),
         }
     }
 

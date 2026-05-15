@@ -179,7 +179,6 @@ fn encode_comptime_value(value: &ComptimeValue) -> String {
             encode_text(&value.name),
             encode_comptime_values(&value.captures)
         ),
-        ComptimeValue::Continuation(value) => format!("k{}", encode_comptime_values(&value.frames)),
         ComptimeValue::Type(value) => format!("t{}", encode_text(&value.term.to_string())),
         ComptimeValue::ImportRecord(value) => format!("m{}", encode_text(value.key.as_str())),
         ComptimeValue::Foreign(value) => format!(
@@ -194,13 +193,6 @@ fn encode_comptime_value(value: &ComptimeValue) -> String {
                 .collect::<Vec<_>>()
                 .join("_")
         ),
-        ComptimeValue::Effect(value) => {
-            format!(
-                "e{}_{}",
-                encode_text(value.module.as_str()),
-                encode_text(&value.name)
-            )
-        }
         ComptimeValue::Shape(value) => {
             format!(
                 "h{}_{}",
@@ -246,23 +238,18 @@ fn ensure_specialized_callable(
         .get(definition.params.clone())
         .to_vec();
     let previous = install_comptime_params(ctx, &params, comptime_values);
-    let (hidden_params, constraint_answer_bindings) =
-        super::hidden_constraint_answer_params_for_binding(
+    let (hidden_params, constraint_evidence_bindings) =
+        super::hidden_constraint_evidence_params_for_binding(
             ctx.sema,
             ctx.interner.resolve(definition.name.name),
             Some(definition.binding),
         );
-    super::push_constraint_answer_bindings(ctx, constraint_answer_bindings);
+    super::push_constraint_evidence_bindings(ctx, constraint_evidence_bindings);
     let body = lower_expr(ctx, definition.body);
-    super::pop_constraint_answer_bindings(ctx);
+    super::pop_constraint_evidence_bindings(ctx);
     restore_comptime_params(ctx, previous);
     let mut lowered_params = hidden_params;
     lowered_params.extend(lower_runtime_params(ctx, &params));
-    let effects = ctx
-        .sema
-        .binding_scheme(definition.binding)
-        .map(|scheme| scheme.effects.clone())
-        .unwrap_or_default();
     let attrs = ctx
         .sema
         .module()
@@ -276,7 +263,6 @@ fn ensure_specialized_callable(
     let callable = IrCallable::new(name, lowered_params.into_boxed_slice(), body)
         .with_hot(profile.hot)
         .with_cold(profile.cold)
-        .with_effects(effects)
         .with_import_record_target(ctx.module_key.clone());
     ctx.extra_callables.push(callable);
 }
@@ -315,11 +301,13 @@ fn lower_runtime_params(ctx: &LowerCtx<'_>, params: &[HirParam]) -> Vec<IrParam>
         .iter()
         .filter(|param| !param.is_comptime)
         .map(|param| {
-            IrParam::new(
-                super::decl_binding_id(ctx.sema, param.name)
-                    .unwrap_or_else(|| lowering_invariant_violation("param binding missing")),
-                ctx.interner.resolve(param.name.name),
-            )
+            let binding = super::decl_binding_id(ctx.sema, param.name)
+                .unwrap_or_else(|| lowering_invariant_violation("param binding missing"));
+            let ty = ctx.sema.binding_type(binding).map_or_else(
+                || "Unknown".into(),
+                |ty| super::render_ty_name(ctx.sema, ty, ctx.interner),
+            );
+            IrParam::new(binding, ctx.interner.resolve(param.name.name), ty)
         })
         .collect()
 }

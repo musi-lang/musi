@@ -29,8 +29,8 @@ pub(crate) type HirParamRange = SliceRange<HirParam>;
 pub(crate) type HirRecordItemRange = SliceRange<HirRecordItem>;
 pub(crate) type BoundNameSet = HashSet<NameBindingId>;
 pub(crate) type LoweredMatchArmList = Box<[IrLoweredMatchArm]>;
-pub(crate) type ConstraintAnswerBindingMap = HashMap<ConstraintKey, Box<str>>;
-pub(crate) type ConstraintAnswerBindingStack = Vec<ConstraintAnswerBindingMap>;
+pub(crate) type ConstraintEvidenceBindingMap = HashMap<ConstraintKey, Box<str>>;
+pub(crate) type ConstraintEvidenceBindingStack = Vec<ConstraintEvidenceBindingMap>;
 
 pub(crate) fn qualified_name(module: &ModuleKey, name: &str) -> Box<str> {
     format!("{}::{name}", module.as_str()).into_boxed_str()
@@ -44,7 +44,7 @@ pub(crate) struct LowerCtx<'a> {
     pub(crate) next_lambda_id: u32,
     pub(crate) next_temp_id: u32,
     pub(crate) extra_callables: Vec<IrCallable>,
-    pub(crate) constraint_answer_bindings: ConstraintAnswerBindingStack,
+    pub(crate) constraint_evidence_bindings: ConstraintEvidenceBindingStack,
     pub(crate) comptime_bindings: HashMap<NameBindingId, ComptimeValue>,
     pub(crate) specialized_callables: HashSet<Box<str>>,
 }

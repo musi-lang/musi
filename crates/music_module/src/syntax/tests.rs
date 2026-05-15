@@ -23,41 +23,7 @@ mod success {
     }
 
     #[test]
-    fn import_block_collects_each_static_site() {
-        let src = r#"
-        import (
-          "std/io";
-          "std/cmp";
-        );
-    "#;
-        let lexed = Lexer::new(src).lex();
-        let parsed = parse(lexed);
-        assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
-        let sites = collect_import_sites(SourceId::from_raw(0), parsed.tree());
-        assert_eq!(sites.len(), 2);
-        assert!(matches!(sites[0].kind, ImportSiteKind::Static { .. }));
-        assert!(matches!(sites[1].kind, ImportSiteKind::Static { .. }));
-    }
-
-    #[test]
-    fn export_block_collects_binding_names() {
-        let src = r"
-        export (
-          let x := 1;
-          let y := 2;
-        );
-    ";
-        let lexed = Lexer::new(src).lex();
-        let parsed = parse(lexed);
-        assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
-        let summary = collect_export_summary(SourceId::from_raw(0), parsed.tree());
-        let exports: Vec<&str> = summary.exports().collect();
-        assert!(exports.contains(&"x"));
-        assert!(exports.contains(&"y"));
-    }
-
-    #[test]
-    fn collects_static_template_import_site() {
+    fn template_import_site_is_nonliteral() {
         let src = r"
         let IO := import `std/io`;
     ";
@@ -65,14 +31,34 @@ mod success {
         let parsed = parse(lexed);
         let sites = collect_import_sites(SourceId::from_raw(0), parsed.tree());
         assert_eq!(sites.len(), 1);
-        assert!(matches!(sites[0].kind, ImportSiteKind::Static { .. }));
+        assert!(matches!(sites[0].kind, ImportSiteKind::NonLiteral));
     }
 
     #[test]
-    fn import_sites_ignore_quote_expr() {
+    fn collects_tuple_static_import_sites() {
+        let src = r#"
+        let (StdCmp, StdWord) := import ("@std/cmp", "@std/word");
+    "#;
+        let lexed = Lexer::new(src).lex();
+        let parsed = parse(lexed);
+        assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+        let sites = collect_import_sites(SourceId::from_raw(0), parsed.tree());
+        assert_eq!(sites.len(), 2);
+        assert!(matches!(
+            &sites[0].kind,
+            ImportSiteKind::Static { spec } if spec.as_str() == "@std/cmp"
+        ));
+        assert!(matches!(
+            &sites[1].kind,
+            ImportSiteKind::Static { spec } if spec.as_str() == "@std/word"
+        ));
+    }
+
+    #[test]
+    fn import_sites_ignore_string_contents() {
         let src = r#"
         let A := import "a";
-        quote { let B := import "b"; };
+        let text := "let B := import \"b\";";
     "#;
         let lexed = Lexer::new(src).lex();
         let parsed = parse(lexed);
@@ -83,10 +69,10 @@ mod success {
     }
 
     #[test]
-    fn collects_exports_and_marks_opaque() {
+    fn collects_exports_and_marks_hidden() {
         let src = r"
         export let x := 1;
-        export opaque let y := 2;
+        export hidden let y := 2;
     ";
         let lexed = Lexer::new(src).lex();
         let parsed = parse(lexed);
@@ -127,45 +113,26 @@ mod success {
     }
 
     #[test]
-    fn export_foreign_group_collects_binding_names() {
-        let src = r#"
-        export native "c" (
-          let puts (msg : CString) : Int;
-          let gets (buf : CString) : Int;
-        );
-    "#;
-        let lexed = Lexer::new(src).lex();
-        let parsed = parse(lexed);
-        assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
-        let summary = collect_export_summary(SourceId::from_raw(0), parsed.tree());
-        let exports: Vec<&str> = summary.exports().collect();
-        assert!(exports.contains(&"puts"));
-        assert!(exports.contains(&"gets"));
-    }
-
-    #[test]
-    fn export_given_is_tracked_separately() {
+    fn removed_given_exports_are_absent() {
         let src = r"
-        export given Eq[Int] { };
+        export let Eq := shape { };
     ";
         let lexed = Lexer::new(src).lex();
         let parsed = parse(lexed);
         assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
         let summary = collect_export_summary(SourceId::from_raw(0), parsed.tree());
-        assert_eq!(summary.exported_given_count(), 1);
-        assert_eq!(summary.exported_givens().count(), 1);
+        assert_eq!(summary.exported_given_count(), 0);
+        assert_eq!(summary.exported_givens().count(), 0);
     }
 
     #[test]
-    fn opaque_export_marking_is_order_independent() {
-        let src = r#"
+    fn hidden_export_marking_is_order_independent() {
+        let src = r"
         export let x := 1;
-        export native "c" (
-          let x (msg : CString) : Int;
-          let y (msg : CString) : Int;
-        );
-        export opaque let x := 2;
-    "#;
+        @foreign(abi := .c)
+        export let y (msg : CString) : Int;
+        export hidden let x := 2;
+    ";
         let lexed = Lexer::new(src).lex();
         let parsed = parse(lexed);
         assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());

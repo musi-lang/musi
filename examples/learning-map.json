@@ -1,0 +1,240 @@
+{
+  "title": "How to Musi examples",
+  "sequence": "00-24",
+  "validation": {
+    "nonInteractive": "scripts/run-examples.sh",
+    "interactive": "MUSI_RUN_INTERACTIVE_EXAMPLES=1 scripts/run-examples.sh",
+    "assetSetup": "examples/24-software-rasterizer/fetch-assets.sh"
+  },
+  "examples": [
+    {
+      "id": "00",
+      "path": "examples/00-hello-musi",
+      "lesson": "top-to-bottom execution and stdout",
+      "stdlib": [
+        "lib/std/io.ms"
+      ]
+    },
+    {
+      "id": "01",
+      "path": "examples/01-values-and-types",
+      "lesson": "value bindings, type annotations, literals, tuples",
+      "stdlib": [
+        "lib/std/prelude.ms",
+        "lib/std/std.ms"
+      ]
+    },
+    {
+      "id": "02",
+      "path": "examples/02-arithmetic-and-booleans",
+      "lesson": "arithmetic and comparison expressions",
+      "stdlib": [
+        "lib/std/cmp.ms",
+        "lib/std/math.ms"
+      ]
+    },
+    {
+      "id": "03",
+      "path": "examples/03-functions-and-calls",
+      "lesson": "function declarations and nested calls",
+      "stdlib": [
+        "lib/std/math.ms",
+        "lib/std/fmt.ms"
+      ]
+    },
+    {
+      "id": "04",
+      "path": "examples/04-if-expressions",
+      "lesson": "if expressions",
+      "stdlib": [
+        "lib/std/cmp.ms",
+        "lib/std/ascii.ms"
+      ]
+    },
+    {
+      "id": "05",
+      "path": "examples/05-sequences-and-tuples",
+      "lesson": "sequence literals and tuples",
+      "stdlib": [
+        "lib/std/collections.ms",
+        "lib/std/collections/array.ms"
+      ]
+    },
+    {
+      "id": "06",
+      "path": "examples/06-blocks-and-bottom-calls",
+      "lesson": "sequence blocks, local lets, final expression results",
+      "stdlib": [
+        "lib/std/process.ms",
+        "lib/std/path.ms"
+      ]
+    },
+    {
+      "id": "07",
+      "path": "examples/07-data-variants-and-match",
+      "lesson": "data variants and match destructuring",
+      "stdlib": [
+        "lib/std/cmp.ms",
+        "lib/std/path.ms"
+      ]
+    },
+    {
+      "id": "08",
+      "path": "examples/08-maybe-style-results",
+      "lesson": "maybe-style sum type and fallback",
+      "stdlib": [
+        "lib/std/maybe.ms"
+      ]
+    },
+    {
+      "id": "09",
+      "path": "examples/09-closures-and-callback-shapes",
+      "lesson": "closure capture and callable values",
+      "stdlib": [
+        "lib/std/text.ms",
+        "lib/std/encoding/hex.ms"
+      ]
+    },
+    {
+      "id": "10",
+      "path": "examples/10-stdlib-math",
+      "lesson": "math standard-library helpers",
+      "stdlib": [
+        "lib/std/math.ms"
+      ]
+    },
+    {
+      "id": "11",
+      "path": "examples/11-stdlib-text",
+      "lesson": "text standard-library helpers",
+      "stdlib": [
+        "lib/std/text.ms",
+        "lib/std/ascii.ms"
+      ]
+    },
+    {
+      "id": "12",
+      "path": "examples/12-number-guess-game",
+      "lesson": "small game logic with hints",
+      "stdlib": [
+        "lib/std/math.ms",
+        "lib/std/fmt.ms"
+      ]
+    },
+    {
+      "id": "13",
+      "path": "examples/13-text-adventure-room",
+      "lesson": "text adventure world-state modeling",
+      "stdlib": [
+        "lib/std/path.ms",
+        "lib/std/json.ms"
+      ]
+    },
+    {
+      "id": "14",
+      "path": "examples/14-todo-list-model",
+      "lesson": "immutable app state transformation",
+      "stdlib": [
+        "lib/std/collections/list.ms",
+        "lib/std/testing.ms"
+      ]
+    },
+    {
+      "id": "15",
+      "path": "examples/15-mini-database-rows",
+      "lesson": "typed database row modeling",
+      "stdlib": [
+        "lib/std/json.ms",
+        "lib/std/fs.ms"
+      ]
+    },
+    {
+      "id": "16",
+      "path": "examples/16-sqlite3-interop",
+      "lesson": "SQLite C ABI declarations and stdlib pointer helpers",
+      "stdlib": [
+        "lib/std/ffi.ms",
+        "lib/std/libc.ms"
+      ]
+    },
+    {
+      "id": "17",
+      "path": "examples/17-c-struct-pointer-interop",
+      "lesson": "opaque C pointer API boundaries",
+      "stdlib": [
+        "lib/std/ffi.ms"
+      ]
+    },
+    {
+      "id": "18",
+      "path": "examples/18-process-command",
+      "lesson": "child process launch",
+      "stdlib": [
+        "lib/std/process.ms",
+        "lib/std/cli.ms"
+      ]
+    },
+    {
+      "id": "19",
+      "path": "examples/19-glfw-window",
+      "lesson": "GLFW foreign bindings, recursive event loop, defer cleanup",
+      "stdlib": [
+        "lib/std/ffi.ms",
+        "lib/std/io.ms"
+      ],
+      "interactive": true
+    },
+    {
+      "id": "20",
+      "path": "examples/20-sdl2-input-window",
+      "lesson": "SDL2 input and window ABI surface",
+      "stdlib": [
+        "lib/std/ffi.ms",
+        "lib/std/os.ms"
+      ]
+    },
+    {
+      "id": "21",
+      "path": "examples/21-opengl-triangle",
+      "lesson": "OpenGL draw declarations and triangle data",
+      "stdlib": [
+        "lib/std/ffi.ms",
+        "lib/std/math.ms"
+      ]
+    },
+    {
+      "id": "22",
+      "path": "examples/22-opengl-cube-data",
+      "lesson": "mesh buffers and cube vertex data",
+      "stdlib": [
+        "lib/std/ffi.ms",
+        "lib/std/bytes.ms"
+      ]
+    },
+    {
+      "id": "23",
+      "path": "examples/23-shader-pipeline",
+      "lesson": "shader pipeline declarations and C string shader source",
+      "stdlib": [
+        "lib/std/ffi.ms",
+        "lib/std/text.ms"
+      ]
+    },
+    {
+      "id": "24",
+      "path": "examples/24-software-rasterizer",
+      "lesson": "GLFW/OpenGL OBJ viewer loop, camera state, asset loading, defer cleanup",
+      "stdlib": [
+        "lib/std/ffi.ms",
+        "lib/std/fs.ms",
+        "lib/std/path.ms",
+        "lib/std/text.ms",
+        "lib/std/fmt.ms"
+      ],
+      "interactive": true,
+      "assets": [
+        "examples/24-software-rasterizer/assets/monkey.obj"
+      ]
+    }
+  ]
+}

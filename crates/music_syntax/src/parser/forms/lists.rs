@@ -210,17 +210,6 @@ impl Parser<'_> {
         Ok(())
     }
 
-    pub(crate) fn parse_optional_effects_clause(
-        &mut self,
-        children: &mut SyntaxElementList,
-    ) -> ParseResult<()> {
-        if self.at(TokenKind::KwRequire) {
-            children.push(self.advance_element());
-            children.push(SyntaxElementId::Node(self.parse_effect_set()?));
-        }
-        Ok(())
-    }
-
     pub(crate) fn parse_optional_typed_expr(
         &mut self,
         children: &mut SyntaxElementList,

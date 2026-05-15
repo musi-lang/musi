@@ -4,7 +4,6 @@ use music_base::diag::DiagContext;
 use music_hir::{HirArrayItem, HirDim, HirExprId, HirOrigin, HirTyId, HirTyKind};
 
 use crate::api::{ConstraintKind, ExprFacts};
-use crate::effects::EffectRow;
 
 use super::super::{CheckPass, DiagKind};
 use super::peel_mut_ty;
@@ -18,8 +17,7 @@ impl CheckPass<'_, '_, '_> {
     ) -> ExprFacts {
         let builtins = self.builtins();
         let base_facts = super::check_expr(self, base);
-        let mut effects = base_facts.effects.clone();
-        let arg_count = self.check_index_args(origin, args, &mut effects);
+        let arg_count = self.check_index_args(origin, args);
         let ty = if let HirTyKind::Array { dims, item } =
             self.ty(peel_mut_ty(self, base_facts.ty)).kind
         {
@@ -54,12 +52,11 @@ impl CheckPass<'_, '_, '_> {
             );
             builtins.unknown
         };
-        ExprFacts::new(ty, effects)
+        ExprFacts::new(ty)
     }
 
     pub(super) fn check_array_expr(&mut self, items: SliceRange<HirArrayItem>) -> ExprFacts {
         let builtins = self.builtins();
-        let mut effects = EffectRow::empty();
         let (expected_dims, expected_item, expected_seq) = self.expected_array_contract();
         let mut item_ty = expected_item.unwrap_or(builtins.unknown);
 
@@ -68,18 +65,12 @@ impl CheckPass<'_, '_, '_> {
         let items_vec = self.array_items(items);
         for array_item in &items_vec {
             if !array_item.spread {
-                self.check_array_direct_item(
-                    array_item,
-                    &mut item_ty,
-                    &mut effects,
-                    &mut known_len,
-                );
+                self.check_array_direct_item(array_item, &mut item_ty, &mut known_len);
                 continue;
             }
             self.check_array_spread_item(
                 array_item,
                 &mut item_ty,
-                &mut effects,
                 &mut has_runtime_spread,
                 &mut known_len,
             );
@@ -101,21 +92,19 @@ impl CheckPass<'_, '_, '_> {
                 item: item_ty,
             })
         };
-        ExprFacts::new(ty, effects)
+        ExprFacts::new(ty)
     }
 
     fn check_array_direct_item(
         &mut self,
         array_item: &HirArrayItem,
         item_ty: &mut HirTyId,
-        effects: &mut EffectRow,
         known_len: &mut u32,
     ) {
         let builtins = self.builtins();
         self.push_expected_ty(*item_ty);
         let facts = super::check_expr(self, array_item.expr);
         let _ = self.pop_expected_ty();
-        effects.union_with(&facts.effects);
         if *item_ty == builtins.unknown {
             *item_ty = facts.ty;
         } else {
@@ -129,12 +118,10 @@ impl CheckPass<'_, '_, '_> {
         &mut self,
         array_item: &HirArrayItem,
         item_ty: &mut HirTyId,
-        effects: &mut EffectRow,
         has_runtime_spread: &mut bool,
         known_len: &mut u32,
     ) {
         let spread_facts = super::check_expr(self, array_item.expr);
-        effects.union_with(&spread_facts.effects);
         let spread_origin = self.expr(array_item.expr).origin;
         let spread_ty = peel_mut_ty(self, spread_facts.ty);
         match self.ty(spread_ty).kind {
@@ -159,7 +146,7 @@ impl CheckPass<'_, '_, '_> {
                 *has_runtime_spread = true;
                 self.merge_array_item_ty(spread_origin, item_ty, item);
                 if matches!(self.ty(spread_ty).kind, HirTyKind::Range { .. }) {
-                    self.resolve_rangeable_answers(array_item.expr, spread_origin, item);
+                    self.resolve_rangeable_evidence(array_item.expr, spread_origin, item);
                 }
             }
             _ => self.diag(
@@ -205,7 +192,7 @@ impl CheckPass<'_, '_, '_> {
         }
     }
 
-    pub(super) fn resolve_rangeable_answers(
+    pub(super) fn resolve_rangeable_evidence(
         &mut self,
         expr_id: HirExprId,
         origin: HirOrigin,
@@ -221,10 +208,10 @@ impl CheckPass<'_, '_, '_> {
                 .shape_facts_by_name(rangeable_symbol)
                 .map(|facts| facts.key.clone()),
         };
-        if let Some(answers) = self.resolve_obligations_to_answers(origin, &[obligation])
-            && !answers.is_empty()
+        if let Some(evidence) = self.resolve_obligations_to_evidence(origin, &[obligation])
+            && !evidence.is_empty()
         {
-            self.set_expr_constraint_answers(expr_id, answers);
+            self.set_expr_constraint_evidence(expr_id, evidence);
         }
     }
 
@@ -243,27 +230,7 @@ impl CheckPass<'_, '_, '_> {
                 item: item_ty,
             })
         };
-        ExprFacts::new(ty, EffectRow::empty())
-    }
-
-    pub(super) fn check_handler_ty_expr(
-        &mut self,
-        effect: HirExprId,
-        input: HirExprId,
-        output: HirExprId,
-    ) -> ExprFacts {
-        let effect_origin = self.expr(effect).origin;
-        let effect = self.lower_type_expr(effect, effect_origin);
-        let input_origin = self.expr(input).origin;
-        let input = self.lower_type_expr(input, input_origin);
-        let output_origin = self.expr(output).origin;
-        let output = self.lower_type_expr(output, output_origin);
-        let ty = self.alloc_ty(HirTyKind::Handler {
-            effect,
-            input,
-            output,
-        });
-        ExprFacts::new(ty, EffectRow::empty())
+        ExprFacts::new(ty)
     }
 
     fn expected_array_contract(&self) -> (Option<SliceRange<HirDim>>, Option<HirTyId>, bool) {
@@ -339,7 +306,6 @@ impl CheckPass<'_, '_, '_> {
         &mut self,
         origin: HirOrigin,
         args: SliceRange<HirExprId>,
-        effects: &mut EffectRow,
     ) -> usize {
         let builtins = self.builtins();
         let index_exprs = self.expr_ids(args);
@@ -354,7 +320,6 @@ impl CheckPass<'_, '_, '_> {
         }
         for index_expr in &index_exprs {
             let facts = super::check_expr(self, *index_expr);
-            effects.union_with(&facts.effects);
             let index_origin = self.expr(*index_expr).origin;
             self.type_mismatch(index_origin, builtins.int_, facts.ty);
         }

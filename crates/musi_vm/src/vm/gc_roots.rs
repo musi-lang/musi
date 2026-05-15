@@ -1,4 +1,4 @@
-use super::state::{CallFrameList, EffectHandlerList, LoadedModuleList, ResumeList};
+use super::state::{CallFrameList, LoadedModuleList};
 use super::{GcRef, HeapCollectionStats, HeapOptions, Value, Vm, VmError, VmErrorKind, VmResult};
 
 impl Vm {
@@ -76,14 +76,10 @@ impl Vm {
     ) -> HeapCollectionStats {
         let loaded_modules = &self.loaded_modules;
         let frames = &self.frames;
-        let handlers = &self.handlers;
-        let active_resumes = &self.active_resumes;
         let external_roots = &self.external_roots;
         let stats = self.heap.collect_major_from_refs(Self::heap_root_refs(
             loaded_modules,
             frames,
-            handlers,
-            active_resumes,
             external_roots,
             extra_root,
         ));
@@ -97,14 +93,10 @@ impl Vm {
     ) -> HeapCollectionStats {
         let loaded_modules = &self.loaded_modules;
         let frames = &self.frames;
-        let handlers = &self.handlers;
-        let active_resumes = &self.active_resumes;
         let external_roots = &self.external_roots;
         let stats = self.heap.collect_minor_from_refs(Self::heap_root_refs(
             loaded_modules,
             frames,
-            handlers,
-            active_resumes,
             external_roots,
             extra_root,
         ));
@@ -115,8 +107,6 @@ impl Vm {
     fn heap_root_refs<'a>(
         loaded_modules: &'a LoadedModuleList,
         frames: &'a CallFrameList,
-        handlers: &'a EffectHandlerList,
-        active_resumes: &'a ResumeList,
         external_roots: &'a [Value],
         extra_root: Option<&'a Value>,
     ) -> impl Iterator<Item = GcRef> + 'a {
@@ -129,12 +119,6 @@ impl Vm {
                     .flat_map(|frame| frame.locals.iter().chain(frame.stack.iter())),
             )
             .filter_map(Value::gc_ref)
-            .chain(
-                handlers
-                    .iter()
-                    .filter_map(|handler| handler.handler.gc_ref()),
-            )
-            .chain(active_resumes.iter().copied())
             .chain(external_roots.iter().filter_map(Value::gc_ref))
             .chain(extra_root.into_iter().filter_map(Value::gc_ref))
     }
@@ -148,7 +132,6 @@ const fn is_heap_value(value: &Value) -> bool {
             | Value::Seq(_)
             | Value::Data(_)
             | Value::Closure(_)
-            | Value::Continuation(_)
             | Value::Module(_)
     )
 }

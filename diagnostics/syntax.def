@@ -112,7 +112,7 @@ diag ExpectedFieldTarget 1307
   primary "found {found} here"
 
 diag ExpectedConstraintOperator 1308
-  message "constraint operator `<:` or `:` expected, found {found}"
+  message "constraint operator `|=` or `~=` expected, found {found}"
   primary "found {found} here"
 
 diag ExpectedAttrValue 1309
@@ -132,6 +132,11 @@ diag ReservedKeywordIdentifier 1312
   message "reserved keyword {keyword} cannot name identifier"
   primary "{keyword} found where identifier required"
   help "choose non-keyword identifier"
+
+diag ReservedGeneratedIdentifier 1313
+  message "generated identifier namespace reserved"
+  primary "identifier begins with `__`"
+  help "choose identifier without `__` prefix"
 
 map lex_error_kind copy:super::LexErrorKind required
   case "InvalidChar { .. }" InvalidChar
@@ -163,6 +168,7 @@ map parse_error_kind copy:super::ParseErrorKind required
   case "ExpectedMember { .. }" ExpectedMember
   case "ExpectedIdentifier { .. }" ExpectedIdentifier
   case "ReservedKeywordIdentifier { .. }" ReservedKeywordIdentifier
+  case "ReservedGeneratedIdentifier" ReservedGeneratedIdentifier
   case "ExpectedSpliceTarget { .. }" ExpectedSpliceTarget
   case "ExpectedOperatorMemberName { .. }" ExpectedOperatorMemberName
   case "ExpectedFieldTarget { .. }" ExpectedFieldTarget

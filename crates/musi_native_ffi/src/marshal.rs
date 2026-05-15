@@ -260,7 +260,7 @@ fn marshal_arg_value(
             strings: Vec::new(),
         }),
         NativeAbiType::Bool { .. } => ctx.bool_flag(value).map_or_else(
-            || invalid_arg_type(foreign, index, "Bool", value),
+            || invalid_arg_type(foreign, index, "Bit", value),
             |flag| Ok(ArgValue::Bool(u8::from(flag))),
         ),
         NativeAbiType::Int { signed, bits } => {
@@ -382,14 +382,14 @@ fn marshal_record_bytes(
         return Err(native_arg_issue(
             foreign,
             index,
-            "`@repr(\"c\")` product argument has non-zero tag",
+            "`@layout(form := .c)` product argument has non-zero tag",
         ));
     }
     if data.len() != fields.len() {
         return Err(native_arg_issue(
             foreign,
             index,
-            "`@repr(\"c\")` product argument field count mismatch",
+            "`@layout(form := .c)` product argument field count mismatch",
         ));
     }
     let field_values = (0..fields.len())
@@ -398,7 +398,7 @@ fn marshal_record_bytes(
                 native_arg_issue(
                     foreign,
                     index,
-                    "`@repr(\"c\")` product argument field missing",
+                    "`@layout(form := .c)` product argument field missing",
                 )
             })
         })
@@ -412,7 +412,7 @@ fn marshal_record_bytes(
             return Err(native_arg_issue(
                 foreign,
                 index,
-                "`@repr(\"c\")` product argument offset missing",
+                "`@layout(form := .c)` product argument offset missing",
             ));
         };
         let mut write_ctx = FieldWriteCtx {
@@ -447,7 +447,7 @@ fn write_field_bytes(
                 Err(native_arg_issue(
                     ctx.foreign,
                     ctx.arg_index,
-                    format!("expected type `Bool`, found `{:?}`", value.kind()),
+                    format!("expected type `Bit`, found `{:?}`", value.kind()),
                 ))
             },
             |flag| write_bytes(ctx.out, offset, &[u8::from(flag)]),
@@ -504,7 +504,7 @@ fn write_field_bytes(
                 return Err(native_arg_issue(
                     ctx.foreign,
                     ctx.arg_index,
-                    "nested `@repr(\"c\")` product FFI metadata missing",
+                    "nested `@layout(form := .c)` product FFI metadata missing",
                 ));
             };
             let (nested, nested_strings) = marshal_record_bytes(
@@ -615,7 +615,7 @@ fn unmarshal_result_value(
                     let Some(offset) = offsets.get(index).copied() else {
                         return Err(native_result_issue(
                             foreign,
-                            "`@repr(\"c\")` result offset missing",
+                            "`@layout(form := .c)` result offset missing",
                         ));
                     };
                     read_field_value(
@@ -632,7 +632,7 @@ fn unmarshal_result_value(
         }
         _ => Err(native_result_issue(
             foreign,
-            "`@repr(\"c\")` result storage shape mismatch",
+            "`@layout(form := .c)` result storage shape mismatch",
         )),
     }
 }
@@ -685,7 +685,7 @@ fn read_field_value(
             let Some(ffi) = ffi else {
                 return Err(native_result_issue(
                     foreign,
-                    "`@repr(\"c\")` result foreign function interface metadata missing",
+                    "`@layout(form := .c)` result foreign function interface metadata missing",
                 ));
             };
             let offsets = ffi.struct_offsets().unwrap_or(&[]);
@@ -696,7 +696,7 @@ fn read_field_value(
                     let Some(field_offset) = offsets.get(index).copied() else {
                         return Err(native_result_issue(
                             foreign,
-                            "`@repr(\"c\")` result offset missing",
+                            "`@layout(form := .c)` result offset missing",
                         ));
                     };
                     read_field_value(

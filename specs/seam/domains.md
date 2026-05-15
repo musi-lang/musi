@@ -1,13 +1,12 @@
 # SEAM Domains
 
-Status: proposed
+Status: frozen 0.1.0 baseline (2026-05-14)
 
 This spec defines the final public SEAM domain contract.
 
 Domain names are fixed:
 
 - `managed`
-- `resumable`
 - `native`
 - `link`
 - `introspect`
@@ -18,7 +17,7 @@ These are VM and module-contract concepts. They are not source-language feature 
 
 Rust 2024 is the host language for the current VM and compiler. SEAM domains may map to Rust modules, types, traits, or unsafe boundaries internally.
 
-That host structure is not the SEAM contract. Public SEAM names stay domain names such as `managed`, `resumable`, `native`, `link`, and `introspect`. Do not expose Rust trait/module names as SEAM feature ids.
+That host structure is the implementation substrate. Public SEAM names stay domain names such as `managed`, `native`, `link`, and `introspect`. Do not expose Rust trait/module names as SEAM feature ids.
 
 ## `managed`
 
@@ -39,7 +38,6 @@ Standardized heap and value kinds:
 - `array`
 - `object`
 - `closure`
-- `continuation`
 - `weakref`
 - ephemeral `ref`
 - ephemeral `mutref`
@@ -59,28 +57,6 @@ Relation to Musi specs:
 
 - `Array[T]`, `Ref[T]`, `MutRef[T]`, and `Slice[T]` lower against this domain
 - movable managed heap must remain consistent with `specs/runtime/memory-model.md`
-
-## `resumable`
-
-`resumable` defines handler-driven resumable control.
-
-Public features:
-
-- `resumable.handlers`
-- `resumable.cont.oneshot`
-- `resumable.unwind`
-
-Rules:
-
-- handler frames are first-class runtime state
-- portable bytecode names the runtime frame a handler frame
-- continuation capture is one-shot
-- resumed continuation may not resume again
-- stack restoration and handler restoration are standardized runtime behavior
-- multi-shot continuations are not part of this domain
-- generators, coroutine schedulers, and async task systems are not part of this domain
-
-This domain is named for runtime behavior, not source effect syntax. SEAM bytecode uses `hdl.push`, `hdl.pop`, `raise`, `resume`, and `drop.cont` for the portable substrate; source `answer`, `ask`, and `handle` are lowering inputs only.
 
 ## `native`
 
@@ -128,7 +104,7 @@ Rules:
 - capability imports are explicit and verified
 - dynamic loading and lookup are domain features, not ambient VM behavior
 - source-language module semantics are not part of this domain
-- dynamic module bytecode uses `mdl.load` and `mdl.get`; `mod` is not a SEAM mnemonic root because it conflicts with mathematical modulus
+- dynamic module bytecode uses action-first `ld.mod.dyn` and `ld.exp.dyn`
 
 This domain exists so runtime linking is a declared contract instead of a side effect of the host.
 
@@ -164,7 +140,6 @@ The SEAM verifier enforces:
 - stack and local discipline
 - method and block stack-signature discipline
 - non-escaping view restrictions for `managed.views`
-- one-shot continuation discipline for `resumable.cont.oneshot`
 - pin requirements for `native.pin`
 - declared capability and import correctness for `link`
 - public/export-only visibility boundaries for `introspect`

@@ -5,7 +5,6 @@ type HirTyFieldRange = SliceRange<HirTyField>;
 
 mod constraints;
 mod constructors;
-mod effects;
 mod lower;
 mod matches;
 mod params;

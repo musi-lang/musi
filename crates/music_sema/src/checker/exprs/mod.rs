@@ -1,6 +1,7 @@
 mod arrays;
 mod binary;
 mod calls;
+mod literals;
 mod members;
 mod records;
 mod variants;
@@ -8,11 +9,10 @@ mod variants;
 use music_arena::SliceRange;
 use music_base::diag::DiagContext;
 use music_hir::{
-    HirBinder, HirConstraint, HirExprId, HirExprKind, HirLitId, HirLitKind, HirMatchArm,
-    HirMemberDef, HirOrigin, HirParam, HirPrefixOp, HirQuoteKind, HirSpliceKind, HirTemplatePart,
-    HirTyId, HirTyKind,
+    HirArg, HirArrayItem, HirExprId, HirExprKind, HirMatchArm, HirOrigin, HirParam, HirPrefixOp,
+    HirRecordItem, HirTemplatePart, HirTyId, HirTyKind,
 };
-use music_names::Ident;
+use music_names::{Ident, NameBindingId};
 
 use crate::api::{ComptimeValue, ExprFacts};
 
@@ -21,7 +21,6 @@ use super::decls::{LetExprInput, check_let_expr};
 use super::pats::bind_pat;
 use super::state::Builtins;
 use super::{CheckPass, DiagKind};
-use crate::effects::EffectRow;
 
 pub fn check_module_root(ctx: &mut CheckPass<'_, '_, '_>, id: HirExprId) -> ExprFacts {
     ctx.check_module_root(id)
@@ -64,7 +63,7 @@ impl CheckPass<'_, '_, '_> {
         let expr = ctx.expr(id);
         let kind = expr.kind.clone();
         match kind {
-            HirExprKind::Error => ExprFacts::new(builtins.error, EffectRow::empty()),
+            HirExprKind::Error => ExprFacts::new(builtins.error),
             HirExprKind::Name { name } => ctx.check_name_expr(id, name),
             HirExprKind::Lit { lit } => ctx.check_lit_expr(lit),
             HirExprKind::Let {
@@ -75,7 +74,6 @@ impl CheckPass<'_, '_, '_> {
                 has_param_clause,
                 params,
                 constraints,
-                effects,
                 sig,
                 value,
             } => ctx.check_let_kind(LetExprInput {
@@ -89,7 +87,6 @@ impl CheckPass<'_, '_, '_> {
                 has_param_clause,
                 params,
                 constraints,
-                effects,
                 sig,
                 value,
             }),
@@ -109,7 +106,6 @@ impl CheckPass<'_, '_, '_> {
             HirExprKind::Tuple { .. }
             | HirExprKind::Array { .. }
             | HirExprKind::ArrayTy { .. }
-            | HirExprKind::AnswerTy { .. }
             | HirExprKind::Record { .. }
             | HirExprKind::Variant { .. }
             | HirExprKind::Pi { .. }
@@ -128,19 +124,19 @@ impl CheckPass<'_, '_, '_> {
                 invalid_expr_path(self, "nested let escaped primary dispatcher")
             }
             HirExprKind::Import { arg } => self.check_import_expr(id, arg),
+            HirExprKind::Yield { value } => self.check_yield_expr(origin, value),
+            HirExprKind::Defer { cleanup, guard } => self.check_defer_expr(cleanup, guard),
             HirExprKind::Unsafe { body } => self.check_unsafe_expr(body),
             HirExprKind::Pin { value, name, body } => self.check_pin_expr(value, name, body),
             HirExprKind::Match { scrutinee, arms } => self.check_match_expr(scrutinee, arms),
-            HirExprKind::Data { .. }
-            | HirExprKind::Effect { .. }
-            | HirExprKind::Shape { .. }
-            | HirExprKind::Given { .. } => self.check_decl_value_expr(origin),
-            HirExprKind::Request { .. }
-            | HirExprKind::AnswerLit { .. }
-            | HirExprKind::Handle { .. }
-            | HirExprKind::Resume { .. } => self.check_control_expr(origin, kind),
-            HirExprKind::Quote { kind } => self.check_quote_expr(kind),
-            HirExprKind::Splice { kind } => self.check_splice_expr(kind),
+            HirExprKind::If {
+                condition,
+                then_expr,
+                else_expr,
+            } => self.check_if_expr(condition, then_expr, else_expr),
+            HirExprKind::Data { .. } | HirExprKind::Shape { .. } => {
+                self.check_decl_value_expr(origin)
+            }
             HirExprKind::Error | HirExprKind::Name { .. } | HirExprKind::Lit { .. } => {
                 invalid_expr_path(self, "simple expr escaped primary dispatcher")
             }
@@ -154,13 +150,37 @@ impl CheckPass<'_, '_, '_> {
         facts
     }
 
+    fn check_yield_expr(&mut self, origin: HirOrigin, value: HirExprId) -> ExprFacts {
+        if self.in_pin_scope() {
+            self.diag(origin.span, DiagKind::YieldInsidePinScope, "");
+        }
+        check_expr(self, value)
+    }
+
+    fn check_defer_expr(&mut self, cleanup: HirExprId, guard: Option<HirExprId>) -> ExprFacts {
+        let builtins = self.builtins();
+        let cleanup_facts = check_expr(self, cleanup);
+        let cleanup_origin = self.expr(cleanup).origin;
+        self.type_mismatch_for(
+            "defer cleanup",
+            cleanup_origin,
+            builtins.unit,
+            cleanup_facts.ty,
+        );
+        if let Some(guard) = guard {
+            let guard_facts = check_expr(self, guard);
+            let guard_origin = self.expr(guard).origin;
+            self.type_mismatch_for("defer guard", guard_origin, builtins.bool_, guard_facts.ty);
+        }
+        ExprFacts::new(builtins.unit)
+    }
+
     fn check_pin_expr(&mut self, value: HirExprId, name: Ident, body: HirExprId) -> ExprFacts {
         if !self.in_unsafe_block() {
             self.diag(name.span, DiagKind::PinRequiresUnsafeBlock, "");
         }
         let value_facts = check_expr(self, value);
         let target_ty = value_facts.ty;
-        let mut effects = value_facts.effects;
 
         if !self.is_pinnable_ty(target_ty) {
             let target = self.render_ty(target_ty);
@@ -177,12 +197,25 @@ impl CheckPass<'_, '_, '_> {
             name: pin_name,
             args,
         });
-        if let Some(binding) = self.binding_id_for_decl(name) {
+        let pin_binding = self.binding_id_for_decl(name);
+        if let Some(binding) = pin_binding {
             self.insert_binding_type(binding, pin_ty);
         }
 
+        self.enter_pin_scope();
         let body_facts = check_expr(self, body);
-        effects.union_with(&body_facts.effects);
+        self.exit_pin_scope();
+
+        if let Some(pin_binding) = pin_binding
+            && let Some(captured_name) = self.find_pin_capture_in_closure(body, pin_binding)
+        {
+            let name_text = self.resolve_symbol(name.name).to_owned();
+            self.diag_with(
+                captured_name.span,
+                DiagKind::PinnedValueCapturedByClosure,
+                DiagContext::new().with("name", name_text),
+            );
+        }
 
         if self.is_pin_ty(body_facts.ty) {
             let name_text = self.resolve_symbol(name.name).to_owned();
@@ -193,7 +226,7 @@ impl CheckPass<'_, '_, '_> {
             );
         }
 
-        ExprFacts::new(body_facts.ty, effects)
+        ExprFacts::new(body_facts.ty)
     }
 
     fn is_pinnable_ty(&self, ty: HirTyId) -> bool {
@@ -215,16 +248,342 @@ impl CheckPass<'_, '_, '_> {
         self.resolve_symbol(name) == "Pin"
     }
 
+    fn find_pin_capture_in_closure(
+        &self,
+        expr_id: HirExprId,
+        pin_binding: NameBindingId,
+    ) -> Option<Ident> {
+        self.find_pin_capture_in_expr(expr_id, pin_binding, false)
+    }
+
+    fn find_pin_capture_in_expr(
+        &self,
+        expr_id: HirExprId,
+        pin_binding: NameBindingId,
+        in_lambda: bool,
+    ) -> Option<Ident> {
+        self.find_pin_capture_in_expr_kind(self.expr(expr_id).kind, pin_binding, in_lambda)
+    }
+
+    fn find_pin_capture_in_expr_kind(
+        &self,
+        kind: HirExprKind,
+        pin_binding: NameBindingId,
+        in_lambda: bool,
+    ) -> Option<Ident> {
+        match kind {
+            HirExprKind::Error
+            | HirExprKind::Lit { .. }
+            | HirExprKind::ArrayTy { .. }
+            | HirExprKind::Pi { .. }
+            | HirExprKind::Data { .. }
+            | HirExprKind::Shape { .. } => None,
+            HirExprKind::Name { name } => {
+                self.find_pin_capture_for_name(name, pin_binding, in_lambda)
+            }
+            HirExprKind::Template { parts } => {
+                self.find_pin_capture_in_template(parts, pin_binding, in_lambda)
+            }
+            HirExprKind::Sequence { exprs } | HirExprKind::Tuple { items: exprs } => {
+                self.find_pin_capture_in_exprs(exprs, pin_binding, in_lambda)
+            }
+            HirExprKind::Array { items } => {
+                self.find_pin_capture_in_array(items, pin_binding, in_lambda)
+            }
+            HirExprKind::Record { items } => {
+                self.find_pin_capture_in_record(items, pin_binding, in_lambda)
+            }
+            HirExprKind::Variant { args, .. } => {
+                self.find_pin_capture_in_variant(args, pin_binding, in_lambda)
+            }
+            HirExprKind::Lambda { body, .. } => {
+                self.find_pin_capture_in_expr(body, pin_binding, true)
+            }
+            HirExprKind::Call { callee, args } => {
+                self.find_pin_capture_for_call(callee, args, pin_binding, in_lambda)
+            }
+            HirExprKind::Apply { callee, args } | HirExprKind::Index { base: callee, args } => {
+                self.find_pin_capture_for_apply(callee, args, pin_binding, in_lambda)
+            }
+            HirExprKind::Field { base, .. }
+            | HirExprKind::TypeTest { base, .. }
+            | HirExprKind::TypeCast { base, .. } => {
+                self.find_pin_capture_in_expr(base, pin_binding, in_lambda)
+            }
+            HirExprKind::RecordUpdate { base, items } => {
+                self.find_pin_capture_for_record_update(base, items, pin_binding, in_lambda)
+            }
+            HirExprKind::Prefix { expr, .. } | HirExprKind::PartialRange { expr, .. } => {
+                self.find_pin_capture_in_expr(expr, pin_binding, in_lambda)
+            }
+            HirExprKind::Binary { left, right, .. } => {
+                self.find_pin_capture_for_binary(left, right, pin_binding, in_lambda)
+            }
+            HirExprKind::Let {
+                receiver,
+                params,
+                value,
+                ..
+            } => {
+                let callable_scope = receiver.is_some() || !self.params(params).is_empty();
+                self.find_pin_capture_in_expr(value, pin_binding, in_lambda || callable_scope)
+            }
+            HirExprKind::Import { arg }
+            | HirExprKind::Yield { value: arg }
+            | HirExprKind::Unsafe { body: arg } => {
+                self.find_pin_capture_in_expr(arg, pin_binding, in_lambda)
+            }
+            HirExprKind::Defer { cleanup, guard } => {
+                self.find_pin_capture_for_defer(cleanup, guard, pin_binding, in_lambda)
+            }
+            HirExprKind::Match { scrutinee, arms } => {
+                self.find_pin_capture_for_match(scrutinee, arms, pin_binding, in_lambda)
+            }
+            HirExprKind::If {
+                condition,
+                then_expr,
+                else_expr,
+            } => self.find_pin_capture_for_if(
+                condition,
+                then_expr,
+                else_expr,
+                pin_binding,
+                in_lambda,
+            ),
+            HirExprKind::Pin { value, body, .. } => self
+                .find_pin_capture_in_expr(value, pin_binding, in_lambda)
+                .or_else(|| self.find_pin_capture_in_expr(body, pin_binding, in_lambda)),
+        }
+    }
+
+    fn find_pin_capture_in_template(
+        &self,
+        parts: SliceRange<HirTemplatePart>,
+        pin_binding: NameBindingId,
+        in_lambda: bool,
+    ) -> Option<Ident> {
+        self.find_pin_capture_in_expr_iter(
+            self.template_parts(parts)
+                .into_iter()
+                .filter_map(|part| match part {
+                    HirTemplatePart::Expr { expr } => Some(expr),
+                    HirTemplatePart::Text { .. } => None,
+                }),
+            pin_binding,
+            in_lambda,
+        )
+    }
+
+    fn find_pin_capture_in_array(
+        &self,
+        items: SliceRange<HirArrayItem>,
+        pin_binding: NameBindingId,
+        in_lambda: bool,
+    ) -> Option<Ident> {
+        self.find_pin_capture_in_expr_iter(
+            self.array_items(items).into_iter().map(|item| item.expr),
+            pin_binding,
+            in_lambda,
+        )
+    }
+
+    fn find_pin_capture_in_record(
+        &self,
+        items: SliceRange<HirRecordItem>,
+        pin_binding: NameBindingId,
+        in_lambda: bool,
+    ) -> Option<Ident> {
+        self.find_pin_capture_in_expr_iter(
+            self.record_items(items).into_iter().map(|item| item.value),
+            pin_binding,
+            in_lambda,
+        )
+    }
+
+    fn find_pin_capture_in_variant(
+        &self,
+        args: SliceRange<HirArg>,
+        pin_binding: NameBindingId,
+        in_lambda: bool,
+    ) -> Option<Ident> {
+        self.find_pin_capture_in_expr_iter(
+            self.args(args).into_iter().map(|arg| arg.expr),
+            pin_binding,
+            in_lambda,
+        )
+    }
+
+    fn find_pin_capture_for_record_update(
+        &self,
+        base: HirExprId,
+        items: SliceRange<HirRecordItem>,
+        pin_binding: NameBindingId,
+        in_lambda: bool,
+    ) -> Option<Ident> {
+        self.find_pin_capture_in_record(items, pin_binding, in_lambda)
+            .or_else(|| self.find_pin_capture_in_expr(base, pin_binding, in_lambda))
+    }
+
+    fn find_pin_capture_for_binary(
+        &self,
+        left: HirExprId,
+        right: HirExprId,
+        pin_binding: NameBindingId,
+        in_lambda: bool,
+    ) -> Option<Ident> {
+        self.find_pin_capture_in_expr(left, pin_binding, in_lambda)
+            .or_else(|| self.find_pin_capture_in_expr(right, pin_binding, in_lambda))
+    }
+
+    fn find_pin_capture_for_match(
+        &self,
+        scrutinee: HirExprId,
+        arms: SliceRange<HirMatchArm>,
+        pin_binding: NameBindingId,
+        in_lambda: bool,
+    ) -> Option<Ident> {
+        self.find_pin_capture_in_expr(scrutinee, pin_binding, in_lambda)
+            .or_else(|| {
+                self.find_pin_capture_in_match_arms(self.match_arms(arms), pin_binding, in_lambda)
+            })
+    }
+
+    fn find_pin_capture_for_name(
+        &self,
+        name: Ident,
+        pin_binding: NameBindingId,
+        in_lambda: bool,
+    ) -> Option<Ident> {
+        if in_lambda
+            && self
+                .binding_id_for_use(name)
+                .is_some_and(|binding| binding == pin_binding)
+        {
+            Some(name)
+        } else {
+            None
+        }
+    }
+
+    fn find_pin_capture_for_call(
+        &self,
+        callee: HirExprId,
+        args: SliceRange<HirArg>,
+        pin_binding: NameBindingId,
+        in_lambda: bool,
+    ) -> Option<Ident> {
+        self.find_pin_capture_in_expr(callee, pin_binding, in_lambda)
+            .or_else(|| {
+                self.find_pin_capture_in_expr_iter(
+                    self.args(args).into_iter().map(|arg| arg.expr),
+                    pin_binding,
+                    in_lambda,
+                )
+            })
+    }
+
+    fn find_pin_capture_for_apply(
+        &self,
+        callee: HirExprId,
+        args: SliceRange<HirExprId>,
+        pin_binding: NameBindingId,
+        in_lambda: bool,
+    ) -> Option<Ident> {
+        self.find_pin_capture_in_expr(callee, pin_binding, in_lambda)
+            .or_else(|| self.find_pin_capture_in_exprs(args, pin_binding, in_lambda))
+    }
+
+    fn find_pin_capture_for_defer(
+        &self,
+        cleanup: HirExprId,
+        guard: Option<HirExprId>,
+        pin_binding: NameBindingId,
+        in_lambda: bool,
+    ) -> Option<Ident> {
+        self.find_pin_capture_in_expr(cleanup, pin_binding, in_lambda)
+            .or_else(|| {
+                guard.and_then(|expr| self.find_pin_capture_in_expr(expr, pin_binding, in_lambda))
+            })
+    }
+
+    fn find_pin_capture_for_if(
+        &self,
+        condition: HirExprId,
+        then_expr: HirExprId,
+        else_expr: HirExprId,
+        pin_binding: NameBindingId,
+        in_lambda: bool,
+    ) -> Option<Ident> {
+        self.find_pin_capture_in_expr(condition, pin_binding, in_lambda)
+            .or_else(|| self.find_pin_capture_in_expr(then_expr, pin_binding, in_lambda))
+            .or_else(|| self.find_pin_capture_in_expr(else_expr, pin_binding, in_lambda))
+    }
+
+    fn find_pin_capture_in_expr_iter<I>(
+        &self,
+        exprs: I,
+        pin_binding: NameBindingId,
+        in_lambda: bool,
+    ) -> Option<Ident>
+    where
+        I: IntoIterator<Item = HirExprId>,
+    {
+        for expr_id in exprs {
+            if let Some(captured_name) =
+                self.find_pin_capture_in_expr(expr_id, pin_binding, in_lambda)
+            {
+                return Some(captured_name);
+            }
+        }
+        None
+    }
+
+    fn find_pin_capture_in_match_arms<I>(
+        &self,
+        arms: I,
+        pin_binding: NameBindingId,
+        in_lambda: bool,
+    ) -> Option<Ident>
+    where
+        I: IntoIterator<Item = HirMatchArm>,
+    {
+        for arm in arms {
+            if let Some(captured_name) = arm
+                .guard
+                .and_then(|guard| self.find_pin_capture_in_expr(guard, pin_binding, in_lambda))
+            {
+                return Some(captured_name);
+            }
+            if let Some(captured_name) =
+                self.find_pin_capture_in_expr(arm.expr, pin_binding, in_lambda)
+            {
+                return Some(captured_name);
+            }
+        }
+        None
+    }
+
+    fn find_pin_capture_in_exprs(
+        &self,
+        exprs: SliceRange<HirExprId>,
+        pin_binding: NameBindingId,
+        in_lambda: bool,
+    ) -> Option<Ident> {
+        for expr_id in self.expr_ids(exprs) {
+            if let Some(captured_name) =
+                self.find_pin_capture_in_expr(expr_id, pin_binding, in_lambda)
+            {
+                return Some(captured_name);
+            }
+        }
+        None
+    }
+
     fn check_composite_expr(&mut self, kind: HirExprKind) -> ExprFacts {
         match kind {
             HirExprKind::Tuple { items } => self.check_tuple_expr(items),
             HirExprKind::Array { items } => self.check_array_expr(items),
             HirExprKind::ArrayTy { dims, item } => self.check_array_ty_expr(&dims, item),
-            HirExprKind::AnswerTy {
-                effect,
-                input,
-                output,
-            } => self.check_handler_ty_expr(effect, input, output),
             HirExprKind::Record { items } => self.check_record_expr(items),
             HirExprKind::Variant { tag, args } => self.check_variant_expr(tag, args),
             HirExprKind::Pi {
@@ -276,52 +635,21 @@ impl CheckPass<'_, '_, '_> {
     fn check_decl_value_expr(&mut self, origin: HirOrigin) -> ExprFacts {
         let builtins = self.builtins();
         self.diag(origin.span, DiagKind::DeclarationUsedAsValue, "");
-        ExprFacts::new(builtins.unknown, EffectRow::empty())
-    }
-
-    fn check_control_expr(&mut self, origin: HirOrigin, kind: HirExprKind) -> ExprFacts {
-        match kind {
-            HirExprKind::Request { expr } => self.check_perform_expr(origin, expr),
-            HirExprKind::AnswerLit { effect, clauses } => {
-                self.check_handler_literal_expr(origin, effect, clauses, None)
-            }
-            HirExprKind::Handle { expr, handler } => self.check_handle_expr(origin, expr, handler),
-            HirExprKind::Resume { expr } => self.check_resume_expr(origin, expr),
-            _ => invalid_expr_path(self, "control expr dispatcher mismatch"),
-        }
+        ExprFacts::new(builtins.unknown)
     }
 
     fn check_module_stmt(&mut self, id: HirExprId) -> ExprFacts {
         let ctx = self;
         ctx.enter_module_stmt();
         let expr = ctx.expr(id);
-        let origin = expr.origin;
         let facts = match expr.kind {
             HirExprKind::Sequence { exprs } => {
                 let mut ty = ctx.builtins().unit;
-                let mut effects = EffectRow::empty();
                 for expr_id in ctx.expr_ids(exprs) {
                     let facts = ctx.check_module_stmt(expr_id);
                     ty = facts.ty;
-                    effects.union_with(&facts.effects);
                 }
-                ExprFacts::new(ty, effects)
-            }
-            HirExprKind::Given {
-                type_params,
-                constraints,
-                capability,
-                members,
-            } => {
-                let _ = ctx.check_instance_kind(
-                    id,
-                    origin,
-                    type_params,
-                    constraints,
-                    capability,
-                    &members,
-                );
-                ExprFacts::new(ctx.builtins().unit, EffectRow::empty())
+                ExprFacts::new(ty)
             }
             _ => check_expr(ctx, id),
         };
@@ -333,32 +661,13 @@ impl CheckPass<'_, '_, '_> {
 
 fn invalid_expr_path(ctx: &CheckPass<'_, '_, '_>, detail: &str) -> ExprFacts {
     let _ = detail;
-    ExprFacts::new(ctx.builtins().error, EffectRow::empty())
+    ExprFacts::new(ctx.builtins().error)
 }
 
 impl CheckPass<'_, '_, '_> {
     fn check_let_kind(&mut self, input: LetExprInput) -> ExprFacts {
         let ctx = self;
         check_let_expr(ctx, input)
-    }
-
-    fn check_instance_kind(
-        &mut self,
-        expr_id: HirExprId,
-        origin: HirOrigin,
-        type_params: SliceRange<HirBinder>,
-        constraints: SliceRange<HirConstraint>,
-        capability: HirExprId,
-        members: &SliceRange<HirMemberDef>,
-    ) -> ExprFacts {
-        self.check_given_expr(
-            expr_id,
-            origin,
-            type_params,
-            constraints,
-            capability,
-            members,
-        )
     }
 
     fn check_name_expr(&mut self, expr_id: HirExprId, name: Ident) -> ExprFacts {
@@ -368,7 +677,7 @@ impl CheckPass<'_, '_, '_> {
             && ctx.is_gated_binding(binding)
         {
             ctx.diag(name.span, DiagKind::TargetGateRejected, "");
-            return ExprFacts::new(builtins.unknown, EffectRow::empty());
+            return ExprFacts::new(builtins.unknown);
         }
         if let Some(binding) = ctx.binding_id_for_use(name)
             && let Some(target) = ctx.binding_import_record_target(binding).cloned()
@@ -380,52 +689,38 @@ impl CheckPass<'_, '_, '_> {
             && scheme.type_params.is_empty()
         {
             let instantiated = ctx.instantiate_monomorphic_scheme(&scheme);
-            if let Some(answers) = ctx
-                .resolve_obligations_to_answers(ctx.expr(expr_id).origin, &instantiated.obligations)
-                && !answers.is_empty()
+            if let Some(evidence) = ctx.resolve_obligations_to_evidence(
+                ctx.expr(expr_id).origin,
+                &instantiated.obligations,
+            ) && !evidence.is_empty()
             {
-                ctx.set_expr_constraint_answers(expr_id, answers);
+                ctx.set_expr_constraint_evidence(expr_id, evidence);
             }
-            return ExprFacts::new(instantiated.ty, EffectRow::empty());
+            return ExprFacts::new(instantiated.ty);
         }
         let ty = ctx
             .binding_id_for_use(name)
             .and_then(|binding| ctx.binding_type(binding))
             .unwrap_or_else(|| ctx.symbol_value_type(name.name));
-        ExprFacts::new(ty, EffectRow::empty())
-    }
-
-    fn check_lit_expr(&self, lit: HirLitId) -> ExprFacts {
-        let ctx = self;
-        let builtins = ctx.builtins();
-        let ty = match ctx.lit_kind(lit) {
-            HirLitKind::Int { .. } => builtins.int_,
-            HirLitKind::Rune { .. } => builtins.rune,
-            HirLitKind::Float { .. } => builtins.float_,
-            HirLitKind::String { .. } => builtins.string_,
-        };
-        ExprFacts::new(ty, EffectRow::empty())
+        ExprFacts::new(ty)
     }
 
     fn check_template_expr(&mut self, parts: SliceRange<HirTemplatePart>) -> ExprFacts {
         let ctx = self;
         let builtins = ctx.builtins();
-        let mut effects = EffectRow::empty();
         for part in ctx.template_parts(parts) {
             if let HirTemplatePart::Expr { expr } = part {
                 let facts = check_expr(ctx, expr);
                 let origin = ctx.expr(expr).origin;
                 ctx.type_mismatch(origin, builtins.string_, facts.ty);
-                effects.union_with(&facts.effects);
             }
         }
-        ExprFacts::new(builtins.string_, effects)
+        ExprFacts::new(builtins.string_)
     }
 
     fn check_sequence_expr(&mut self, exprs: SliceRange<HirExprId>) -> ExprFacts {
         let ctx = self;
         let builtins = ctx.builtins();
-        let mut effects = EffectRow::empty();
         let mut ty = builtins.unit;
         let exprs = ctx.expr_ids(exprs);
         let len = exprs.len();
@@ -437,27 +732,24 @@ impl CheckPass<'_, '_, '_> {
             if let Some(saved) = saved_expected {
                 ctx.push_expected_ty(saved);
             }
-            effects.union_with(&facts.effects);
             ty = facts.ty;
         }
-        ExprFacts::new(ty, effects)
+        ExprFacts::new(ty)
     }
 
     fn check_tuple_expr(&mut self, items: SliceRange<HirExprId>) -> ExprFacts {
         let ctx = self;
-        let mut effects = EffectRow::empty();
         let item_types = ctx
             .expr_ids(items)
             .into_iter()
             .map(|expr| {
                 let facts = check_expr(ctx, expr);
-                effects.union_with(&facts.effects);
                 facts.ty
             })
             .collect::<Vec<_>>();
         let items = ctx.alloc_ty_list(item_types);
         let ty = ctx.alloc_ty(HirTyKind::Tuple { items });
-        ExprFacts::new(ty, effects)
+        ExprFacts::new(ty)
     }
 
     fn check_pi_expr(
@@ -475,13 +767,17 @@ impl CheckPass<'_, '_, '_> {
         }
         let ret_origin = ctx.expr(ret).origin;
         let ret_ty = ctx.lower_type_expr(ret, ret_origin);
-        let params = ctx.alloc_ty_list([param_ty]);
+        let params = if ctx.pi_binder_is_empty_tuple_expr(binder_ty) {
+            ctx.alloc_ty_list([])
+        } else {
+            ctx.alloc_ty_list([param_ty])
+        };
         let ty = ctx.alloc_ty(HirTyKind::Arrow {
             params,
             ret: ret_ty,
             is_effectful,
         });
-        ExprFacts::new(ty, EffectRow::empty())
+        ExprFacts::new(ty)
     }
 
     fn check_lambda_expr(
@@ -512,9 +808,17 @@ impl CheckPass<'_, '_, '_> {
         let ty = ctx.alloc_ty(HirTyKind::Arrow {
             params,
             ret: result_ty,
-            is_effectful: !body_facts.effects.is_pure(),
+            is_effectful: false,
         });
-        ExprFacts::new(ty, EffectRow::empty())
+        ExprFacts::new(ty)
+    }
+
+    fn pi_binder_is_empty_tuple_expr(&self, expr: HirExprId) -> bool {
+        matches!(
+            self.expr(expr).kind,
+            HirExprKind::Tuple { items } | HirExprKind::Sequence { exprs: items }
+                if self.expr_ids(items).is_empty()
+        )
     }
 }
 
@@ -538,7 +842,7 @@ impl CheckPass<'_, '_, '_> {
         if let Some(binding) = as_name.and_then(|ident| ctx.binding_id_for_decl(ident)) {
             ctx.insert_binding_type(binding, base_facts.ty);
         }
-        ExprFacts::new(builtins.bool_, base_facts.effects)
+        ExprFacts::new(builtins.bool_)
     }
 
     fn check_type_cast_expr(
@@ -548,14 +852,14 @@ impl CheckPass<'_, '_, '_> {
         ty_expr: HirExprId,
     ) -> ExprFacts {
         let ctx = self;
-        let base_facts = check_expr(ctx, base);
+        let _ = check_expr(ctx, base);
         let origin = ctx.expr(ty_expr).origin;
         let ty = ctx.lower_type_expr(ty_expr, origin);
         if ctx.contains_mut_ty(ty) {
             ctx.diag(origin.span, DiagKind::MutForbiddenInTypeCastTarget, "");
         }
         ctx.set_type_test_target(expr_id, ty);
-        ExprFacts::new(ty, base_facts.effects)
+        ExprFacts::new(ty)
     }
 
     fn check_prefix_expr(
@@ -575,11 +879,11 @@ impl CheckPass<'_, '_, '_> {
                 };
                 ctx.set_expr_comptime_value(inner, value.clone());
                 ctx.set_expr_comptime_value(expr_id, value);
-                return ExprFacts::new(ty, EffectRow::empty());
+                return ExprFacts::new(ty);
             }
             let inner_facts = check_expr(ctx, inner);
-            let _ = origin;
-            return ExprFacts::new(inner_facts.ty, EffectRow::empty());
+            ctx.diag(origin.span, DiagKind::RuntimeValueInComptimeContext, "");
+            return ExprFacts::new(inner_facts.ty);
         }
         let inner_facts = check_expr(ctx, inner);
         let ty = match op {
@@ -604,17 +908,8 @@ impl CheckPass<'_, '_, '_> {
                 inner: inner_facts.ty,
             }),
             HirPrefixOp::Known => inner_facts.ty,
-            HirPrefixOp::Any | HirPrefixOp::Some => {
-                let target = ctx.expr_subject(expr_id);
-                ctx.diag_with(
-                    origin.span,
-                    DiagKind::InvalidTypeExpression,
-                    DiagContext::new().with("target", target),
-                );
-                ctx.builtins().error
-            }
         };
-        ExprFacts::new(ty, inner_facts.effects)
+        ExprFacts::new(ty)
     }
 
     fn check_match_expr(
@@ -625,7 +920,6 @@ impl CheckPass<'_, '_, '_> {
         let ctx = self;
         let builtins = ctx.builtins();
         let scrutinee_facts = check_expr(ctx, scrutinee);
-        let mut effects = scrutinee_facts.effects.clone();
         let mut result_ty = builtins.unknown;
         for arm in ctx.match_arms(arms) {
             bind_pat(ctx, arm.pat, scrutinee_facts.ty);
@@ -633,10 +927,8 @@ impl CheckPass<'_, '_, '_> {
                 let guard_facts = check_expr(ctx, guard);
                 let origin = ctx.expr(guard).origin;
                 ctx.type_mismatch(origin, builtins.bool_, guard_facts.ty);
-                effects.union_with(&guard_facts.effects);
             }
             let arm_facts = check_expr(ctx, arm.expr);
-            effects.union_with(&arm_facts.effects);
             if result_ty == builtins.unknown {
                 result_ty = arm_facts.ty;
             } else {
@@ -644,7 +936,25 @@ impl CheckPass<'_, '_, '_> {
                 ctx.type_mismatch(origin, result_ty, arm_facts.ty);
             }
         }
-        ExprFacts::new(result_ty, effects)
+        ExprFacts::new(result_ty)
+    }
+
+    fn check_if_expr(
+        &mut self,
+        condition: HirExprId,
+        then_expr: HirExprId,
+        else_expr: HirExprId,
+    ) -> ExprFacts {
+        let ctx = self;
+        let builtins = ctx.builtins();
+        let condition_facts = check_expr(ctx, condition);
+        let condition_origin = ctx.expr(condition).origin;
+        ctx.type_mismatch(condition_origin, builtins.bool_, condition_facts.ty);
+        let then_facts = check_expr(ctx, then_expr);
+        let else_facts = check_expr(ctx, else_expr);
+        let else_origin = ctx.expr(else_expr).origin;
+        ctx.type_mismatch(else_origin, then_facts.ty, else_facts.ty);
+        ExprFacts::new(then_facts.ty)
     }
 }
 
@@ -661,26 +971,14 @@ const fn comptime_value_ty(builtins: Builtins, value: &ComptimeValue) -> HirTyId
         ComptimeValue::Seq(_)
         | ComptimeValue::Data(_)
         | ComptimeValue::Closure(_)
-        | ComptimeValue::Continuation(_)
         | ComptimeValue::Type(_)
         | ComptimeValue::ImportRecord(_)
         | ComptimeValue::Foreign(_)
-        | ComptimeValue::Effect(_)
         | ComptimeValue::Shape(_) => builtins.any,
     }
 }
 
 impl CheckPass<'_, '_, '_> {
-    fn check_quote_expr(&self, _kind: HirQuoteKind) -> ExprFacts {
-        let ctx = self;
-        ExprFacts::new(ctx.builtins().syntax, EffectRow::empty())
-    }
-
-    fn check_splice_expr(&self, _kind: HirSpliceKind) -> ExprFacts {
-        let ctx = self;
-        ExprFacts::new(ctx.builtins().syntax, EffectRow::empty())
-    }
-
     fn comptime_expr_expansion(&self, expr: HirExprId, value: &ComptimeValue) -> Option<HirExprId> {
         let ComptimeValue::Syntax(term) = value else {
             return None;
@@ -694,12 +992,8 @@ impl CheckPass<'_, '_, '_> {
         {
             return None;
         }
-        match self.expr(expr).kind {
-            HirExprKind::Quote {
-                kind: HirQuoteKind::Expr { expr, .. },
-            } => Some(expr),
-            _ => None,
-        }
+        let _ = expr;
+        None
     }
 
     fn peel_mut_ty(&self, mut ty: HirTyId) -> HirTyId {
@@ -737,15 +1031,6 @@ impl CheckPass<'_, '_, '_> {
             HirTyKind::Seq { item }
             | HirTyKind::Range { bound: item }
             | HirTyKind::Array { item, .. } => ctx.contains_mut_ty(*item),
-            HirTyKind::Handler {
-                effect,
-                input,
-                output,
-            } => {
-                ctx.contains_mut_ty(*effect)
-                    || ctx.contains_mut_ty(*input)
-                    || ctx.contains_mut_ty(*output)
-            }
             HirTyKind::AnyShape { capability } | HirTyKind::SomeShape { capability } => {
                 ctx.contains_mut_ty(*capability)
             }

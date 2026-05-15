@@ -155,11 +155,6 @@ pub enum HirExprKind {
         dims: SliceRange<HirDim>,
         item: HirExprId,
     },
-    AnswerTy {
-        effect: HirExprId,
-        input: HirExprId,
-        output: HirExprId,
-    },
     Record {
         items: SliceRange<HirRecordItem>,
     },
@@ -233,37 +228,36 @@ pub enum HirExprKind {
         has_param_clause: bool,
         params: SliceRange<HirParam>,
         constraints: ConstraintRange,
-        effects: Option<HirEffectSet>,
         sig: Option<HirExprId>,
         value: HirExprId,
     },
     Import {
         arg: HirExprId,
     },
+    Yield {
+        value: HirExprId,
+    },
+    Defer {
+        cleanup: HirExprId,
+        guard: Option<HirExprId>,
+    },
 
     Match {
         scrutinee: HirExprId,
         arms: SliceRange<HirMatchArm>,
     },
+    If {
+        condition: HirExprId,
+        then_expr: HirExprId,
+        else_expr: HirExprId,
+    },
     Data {
         variants: SliceRange<HirVariantDef>,
         fields: SliceRange<HirFieldDef>,
     },
-    Effect {
-        members: MemberDefRange,
-    },
     Shape {
         constraints: ConstraintRange,
         members: MemberDefRange,
-    },
-    Given {
-        type_params: SliceRange<HirBinder>,
-        constraints: ConstraintRange,
-        capability: HirExprId,
-        members: MemberDefRange,
-    },
-    Request {
-        expr: HirExprId,
     },
     Unsafe {
         body: HirExprId,
@@ -272,24 +266,6 @@ pub enum HirExprKind {
         value: HirExprId,
         name: Ident,
         body: HirExprId,
-    },
-    AnswerLit {
-        effect: Ident,
-        clauses: SliceRange<HirHandleClause>,
-    },
-    Handle {
-        expr: HirExprId,
-        handler: HirExprId,
-    },
-    Resume {
-        expr: Option<HirExprId>,
-    },
-
-    Quote {
-        kind: HirQuoteKind,
-    },
-    Splice {
-        kind: HirSpliceKind,
     },
 }
 
@@ -306,8 +282,6 @@ pub enum HirPrefixOp {
     Not,
     Mut,
     Known,
-    Any,
-    Some,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -320,7 +294,6 @@ pub enum HirPartialRangeKind {
 pub enum HirBinaryOp {
     Assign,
     Arrow,
-    EffectArrow,
     TypeEq,
     Or,
     Xor,
@@ -388,12 +361,13 @@ impl HirParam {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HirLetMods {
     pub is_rec: bool,
+    pub fallback: Option<HirExprId>,
 }
 
 impl HirLetMods {
     #[must_use]
-    pub const fn new(is_rec: bool) -> Self {
-        Self { is_rec }
+    pub const fn new(is_rec: bool, fallback: Option<HirExprId>) -> Self {
+        Self { is_rec, fallback }
     }
 }
 
@@ -510,7 +484,6 @@ impl HirMatchArm {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HirConstraintKind {
-    Subtype,
     Implements,
     TypeEq,
 }
@@ -526,32 +499,6 @@ impl HirConstraint {
     #[must_use]
     pub const fn new(name: Ident, kind: HirConstraintKind, value: HirExprId) -> Self {
         Self { name, kind, value }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HirEffectSet {
-    pub items: SliceRange<HirEffectItem>,
-    pub open: Option<Ident>,
-}
-
-impl HirEffectSet {
-    #[must_use]
-    pub const fn new(items: SliceRange<HirEffectItem>, open: Option<Ident>) -> Self {
-        Self { items, open }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HirEffectItem {
-    pub name: Ident,
-    pub arg: Option<HirExprId>,
-}
-
-impl HirEffectItem {
-    #[must_use]
-    pub const fn new(name: Ident, arg: Option<HirExprId>) -> Self {
-        Self { name, arg }
     }
 }
 
@@ -665,48 +612,6 @@ impl HirFieldDef {
             value,
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HirHandleClause {
-    pub op: Ident,
-    pub params: SliceRange<Ident>,
-    pub body: HirExprId,
-}
-
-impl HirHandleClause {
-    #[must_use]
-    pub const fn new(op: Ident, params: SliceRange<Ident>, body: HirExprId) -> Self {
-        Self { op, params, body }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum HirQuoteKind {
-    Expr {
-        expr: HirExprId,
-        raw: Box<str>,
-    },
-    Block {
-        exprs: SliceRange<HirExprId>,
-        raw: Box<str>,
-    },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum HirSpliceKind {
-    Name {
-        name: Ident,
-        raw: Box<str>,
-    },
-    Expr {
-        expr: HirExprId,
-        raw: Box<str>,
-    },
-    Exprs {
-        exprs: SliceRange<HirExprId>,
-        raw: Box<str>,
-    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

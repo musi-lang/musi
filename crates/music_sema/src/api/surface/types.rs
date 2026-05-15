@@ -88,11 +88,6 @@ pub enum SurfaceTyKind {
     Range {
         bound: SurfaceTyId,
     },
-    Handler {
-        effect: SurfaceTyId,
-        input: SurfaceTyId,
-        output: SurfaceTyId,
-    },
     Mut {
         inner: SurfaceTyId,
     },

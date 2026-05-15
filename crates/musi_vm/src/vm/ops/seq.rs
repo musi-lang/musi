@@ -222,9 +222,9 @@ impl Vm {
         };
         let (default_lower, default_upper) = self.range_bounds_dictionary(evidence.clone())?;
         let (lower, upper) = if lower_from_arg {
-            (bound.clone(), self.call_value(default_upper, &[])?)
+            (bound.clone(), self.call_value(&default_upper, &[])?)
         } else {
-            (self.call_value(default_lower, &[])?, bound.clone())
+            (self.call_value(&default_lower, &[])?, bound.clone())
         };
         let fields = vec![
             lower,
@@ -553,7 +553,7 @@ impl Vm {
         left: &Value,
         right: &Value,
     ) -> VmResult<i64> {
-        let compared = self.call_value(compare.clone(), &[left.clone(), right.clone()])?;
+        let compared = self.call_value(compare, &[left.clone(), right.clone()])?;
         Self::expect_int(&compared).map_err(|_| {
             VmError::new(VmErrorKind::InvalidRangeStep {
                 detail: "compare must return Int".into(),
@@ -568,10 +568,10 @@ impl Vm {
         is_ascending: bool,
         compare: &Value,
     ) -> VmResult<Value> {
-        let stepped = self.call_value(step.clone(), from_ref(current))?;
+        let stepped = self.call_value(step, from_ref(current))?;
         let Some(next) = self.option_payload(stepped)? else {
             return Err(VmError::new(VmErrorKind::InvalidRangeStep {
-                detail: "step returned .None before terminal".into(),
+                detail: "step result `.None` before terminal".into(),
             }));
         };
         let progress = self.compare_range_values(compare, &next, current)?;
@@ -591,7 +591,7 @@ impl Vm {
     fn option_payload(&self, value: Value) -> VmResult<Option<Value>> {
         let data = Self::expect_data(value).map_err(|_| {
             VmError::new(VmErrorKind::InvalidRangeStep {
-                detail: "step must return Option-like data".into(),
+                detail: "step must return Maybe data".into(),
             })
         })?;
         let data = self.heap.data(data)?;
@@ -617,7 +617,7 @@ impl Vm {
             "None" => Ok(None),
             "Some" => Ok(data.fields.first().cloned()),
             _ => Err(VmError::new(VmErrorKind::InvalidRangeStep {
-                detail: "step result must use None/Some variants".into(),
+                detail: "step result variant expected `None` or `Some`".into(),
             })),
         }
     }

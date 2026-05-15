@@ -6,13 +6,13 @@ use music_module::ModuleKey;
 use music_names::{NameBindingId, NameBindingKind, Symbol};
 use music_resolve::ResolvedImportBindingList;
 
-use crate::api::{ConstraintAnswer, ConstraintKey};
+use crate::api::{ConstraintEvidence, ConstraintKey};
 
 use super::aliases::{
-    ConstraintAnswerScope, ConstraintAnswerScopeList, ExpectedTyList, StaticImportList,
+    ConstraintEvidenceScope, ConstraintEvidenceScopeList, ExpectedTyList, StaticImportList,
 };
 
-use super::{DeclState, FactState, ModuleState, ResumeCtx, ResumeState, RuntimeEnv, TypingState};
+use super::{DeclState, FactState, ModuleState, RuntimeEnv, TypingState};
 
 pub struct PassBase<'ctx, 'interner, 'env> {
     pub module: &'ctx mut ModuleState,
@@ -36,11 +36,11 @@ pub struct CollectPass<'ctx, 'interner, 'env> {
 
 pub struct CheckPass<'ctx, 'interner, 'env> {
     pub collect: CollectPass<'ctx, 'interner, 'env>,
-    pub resume: &'ctx mut ResumeState,
     pub expected: ExpectedTyList,
-    pub answer_scopes: ConstraintAnswerScopeList,
+    pub evidence_scopes: ConstraintEvidenceScopeList,
     pub module_stmt_depth: u32,
     pub unsafe_depth: u32,
+    pub pin_depth: u32,
 }
 
 impl<'ctx, 'interner, 'env> PassBase<'ctx, 'interner, 'env> {
@@ -125,17 +125,14 @@ impl DerefMut for CollectPass<'_, '_, '_> {
 }
 
 impl<'ctx, 'interner, 'env> CheckPass<'ctx, 'interner, 'env> {
-    pub const fn new(
-        collect: CollectPass<'ctx, 'interner, 'env>,
-        resume: &'ctx mut ResumeState,
-    ) -> Self {
+    pub const fn new(collect: CollectPass<'ctx, 'interner, 'env>) -> Self {
         Self {
             collect,
-            resume,
             expected: Vec::new(),
-            answer_scopes: Vec::new(),
+            evidence_scopes: Vec::new(),
             module_stmt_depth: 0,
             unsafe_depth: 0,
+            pin_depth: 0,
         }
     }
 
@@ -163,43 +160,43 @@ impl<'ctx, 'interner, 'env> CheckPass<'ctx, 'interner, 'env> {
         self.unsafe_depth > 0
     }
 
-    pub fn push_answer_scope(&mut self, scope: ConstraintAnswerScope) {
-        self.answer_scopes.push(scope);
+    pub const fn enter_pin_scope(&mut self) {
+        self.pin_depth = self.pin_depth.saturating_add(1);
     }
 
-    pub fn pop_answer_scope(&mut self) -> Option<ConstraintAnswerScope> {
-        self.answer_scopes.pop()
+    pub const fn exit_pin_scope(&mut self) {
+        self.pin_depth = self.pin_depth.saturating_sub(1);
     }
 
-    pub fn resolve_in_scope_answer(&self, key: &ConstraintKey) -> Option<ConstraintAnswer> {
-        self.answer_scopes
+    pub const fn in_pin_scope(&self) -> bool {
+        self.pin_depth > 0
+    }
+
+    pub fn push_evidence_scope(&mut self, scope: ConstraintEvidenceScope) {
+        self.evidence_scopes.push(scope);
+    }
+
+    pub fn pop_evidence_scope(&mut self) -> Option<ConstraintEvidenceScope> {
+        self.evidence_scopes.pop()
+    }
+
+    pub fn resolve_in_scope_evidence(&self, key: &ConstraintKey) -> Option<ConstraintEvidence> {
+        self.evidence_scopes
             .iter()
             .rev()
             .find_map(|scope| scope.get(key).cloned())
     }
 
-    pub fn answer_entries_in_scope(&self) -> Vec<(ConstraintKey, ConstraintAnswer)> {
-        self.answer_scopes
+    pub fn evidence_entries_in_scope(&self) -> Vec<(ConstraintKey, ConstraintEvidence)> {
+        self.evidence_scopes
             .iter()
             .rev()
             .flat_map(|scope| {
                 scope
                     .iter()
-                    .map(|(key, answer)| (key.clone(), answer.clone()))
+                    .map(|(key, evidence)| (key.clone(), evidence.clone()))
             })
             .collect()
-    }
-
-    pub fn push_resume(&mut self, ctx: ResumeCtx) {
-        self.resume.stack.push(ctx);
-    }
-
-    pub fn pop_resume(&mut self) -> Option<ResumeCtx> {
-        self.resume.stack.pop()
-    }
-
-    pub fn resume_top(&self) -> Option<ResumeCtx> {
-        self.resume.stack.last().cloned()
     }
 
     pub fn push_expected_ty(&mut self, ty: HirTyId) {

@@ -13,6 +13,7 @@ struct CatalogEntry {
     help: Option<&'static str>,
 }
 
+#[rustfmt::skip]
 const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: EmitDiagKind::MissingExportTarget,
@@ -75,22 +76,6 @@ const ENTRIES: &[CatalogEntry] = &[
         code: 3507,
         message: "emitted closure target `{target}` unknown",
         primary: "emitted closure target `{target}` unknown",
-        secondary: None,
-        help: None,
-    },
-    CatalogEntry {
-        kind: EmitDiagKind::UnknownEffect,
-        code: 3508,
-        message: "emitted effect `{effect}` unknown",
-        primary: "emitted effect `{effect}` unknown",
-        secondary: None,
-        help: None,
-    },
-    CatalogEntry {
-        kind: EmitDiagKind::UnknownHandlerType,
-        code: 3509,
-        message: "emitted answer type `{type}` unknown",
-        primary: "emitted answer type `{type}` unknown",
         secondary: None,
         help: None,
     },

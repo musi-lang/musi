@@ -1,0 +1,91 @@
+# Musi
+
+> Musi is an expression-first programming language with typed effects, a SEAM bytecode pipeline, package tooling, a first-party standard library, and Rust compiler/runtime/tooling crates. Current version: `0.1.0`; language contracts are frozen for the 0.1.0 baseline.
+
+Use this file as the concise LLM entry point. Use `llms-full.txt` for a fuller inline repository and language briefing.
+
+## Primary Context
+
+- [README](README.md): installation, quick start, commands, import model, project layout, and validation entry points.
+- [Workspace map](docs/where/workspace-map.md): crate ownership, compiler/runtime/tooling layout, and dependency direction.
+- [Public API inventory](docs/reference/public-api.md): high-signal public entrypoints by crate and binary.
+- [Language feature coverage](docs/reference/language-feature-coverage.md): current language surface checklist and where features are documented.
+- [Builtin registry](docs/reference/builtins.md): compiler-owned builtins, `musi:*` foundation modules, `@std/*`, `Bit`, `Bool`, `Maybe`, `Expect`, `Pin`, and external boundary facts.
+- [Diagnostics guide](docs/reference/diagnostics.md): diagnostic wording, labels, hints, and renderer shape.
+- [Comments guide](docs/reference/comments.md): ordinary comments, item docs, and module docs.
+
+## Language Specification
+
+- [Specs index](specs/index.md): canonical spec map and Rust host-language comparison rules.
+- [Source syntax](specs/language/syntax.md): delimiters, semicolons, binding, assignment, data bodies, control, calls, operators, and attributes.
+- [Core type model](specs/language/type-core.md): primitive/library types, data shapes, mutability, absence/failure sugar, callables, and ranges.
+- [First-class everything](specs/language/first-class-everything.md): expression-first language design and first-class surfaces.
+- [Items and attributes](specs/language/items-and-attributes.md): builtin metadata, intrinsics, and public attributes.
+- [Module boundaries](specs/language/module-boundaries.md): imports, exports, hidden exports, and `@foreign`.
+- [Contextual capabilities](specs/language/contextual-capabilities.md): `shape`, `erased`, and explicit capability values.
+- [Yield and capabilities](specs/language/yield-and-capabilities.md): `defer`, `yield`, `pin`, and consequence-bearing forms.
+- [Runtime interop](specs/runtime/interop.md): runtime interoperability model.
+- [Memory model](specs/runtime/memory-model.md): managed memory rules.
+- [C interop memory](specs/interop/c-interop-memory.md): C boundary memory mapping.
+
+## SEAM Artifact And VM
+
+- [SEAM IL reference](docs/reference/seam-il.md): text IL and artifact reference.
+- [SEAM domains](specs/seam/domains.md): bytecode/domain model.
+- [SEAM format](specs/seam/format.md): artifact format.
+- [SEAM bytecode](specs/seam/bytecode.md): bytecode contract.
+- [SEAM lowering](specs/seam/lowering.md): lowering expectations from language/IR to artifact.
+- [Performance notes](docs/reference/performance.md): VM/runtime benchmark tracking and performance context.
+
+## Grammar Sources
+
+- [ANTLR parser grammar](grammar/MusiParser.g4): parser source of truth.
+- [ANTLR lexer grammar](grammar/MusiLexer.g4): lexer source of truth.
+- [ABNF grammar](grammar/Musi.abnf): compact grammar reference.
+
+## Standard Library And Foundation
+
+- [`lib/std/musi.json`](lib/std/musi.json): first-party `@std` package manifest.
+- [`lib/std/std.ms`](lib/std/std.ms): root `@std` barrel module.
+- [`lib/std/prelude.ms`](lib/std/prelude.ms): standard prelude exports.
+- [`lib/std/bool.ms`](lib/std/bool.ms), [`lib/std/maybe.ms`](lib/std/maybe.ms), [`lib/std/expect.ms`](lib/std/expect.ms): core library data and helpers.
+- [`lib/std/io.ms`](lib/std/io.ms), [`lib/std/fs.ms`](lib/std/fs.ms), [`lib/std/env.ms`](lib/std/env.ms), [`lib/std/process.ms`](lib/std/process.ms), [`lib/std/log.ms`](lib/std/log.ms): host-facing std wrappers.
+- [`crates/musi_foundation/modules`](crates/musi_foundation/modules): compiler-owned `musi:*` foundation modules.
+
+## Implementation Crates
+
+- [`crates/music_syntax`](crates/music_syntax): lexer, parser, syntax tree.
+- [`crates/music_module`](crates/music_module): module keys, import maps, module syntax helpers.
+- [`crates/music_resolve`](crates/music_resolve): name and import resolution.
+- [`crates/music_sema`](crates/music_sema): semantic checking, exported surfaces, effect rows.
+- [`crates/music_ir`](crates/music_ir): IR model and diagnostics.
+- [`crates/music_ir_lower`](crates/music_ir_lower): sema-to-IR lowering.
+- [`crates/music_emit`](crates/music_emit): IR-to-SEAM emission.
+- [`crates/music_session`](crates/music_session): end-to-end compilation orchestration and caches.
+- [`crates/music_seam`](crates/music_seam): SEAM artifact, HIL, text, binary, opcodes.
+- [`crates/musi_vm`](crates/musi_vm): program loader, VM, values, host/loader traits, VM errors.
+- [`crates/musi_native`](crates/musi_native): native host dispatch.
+- [`crates/musi_rt`](crates/musi_rt): embeddable runtime wrapper.
+- [`crates/musi_project`](crates/musi_project): manifests, workspace graph, project compile entrypoints.
+- [`crates/musi_fmt`](crates/musi_fmt): source and path formatter.
+- [`crates/musi_tooling`](crates/musi_tooling): diagnostics collection, hover, artifact helpers, editor tooling primitives.
+- [`crates/musi_lsp`](crates/musi_lsp): language server.
+- [`crates/music`](crates/music), [`crates/musi`](crates/musi): user-facing CLI binaries.
+
+## Common Commands
+
+- `musi init hello && cd hello && musi run && musi test`
+- `music check index.ms`
+- `musi check`, `musi build`, `musi run`, `musi test`
+- `make check`, `make lint`, `make rscheck`
+- `cargo test -p music_syntax`, `cargo test -p music_sema`
+
+## Important Conventions For Agents
+
+- Source of truth for syntax is `grammar/MusiParser.g4`, `grammar/MusiLexer.g4`, and `grammar/Musi.abnf`.
+- Feature and language docs describe current implementation behavior; do not treat them as permanent language policy.
+- `musi:*` is compiler-owned foundation/runtime capability space. Prefer `@std/*` for user code.
+- `Bit` is the primitive condition type. `Bool` is a standard-library item.
+- `Maybe[T]` and `Expect[T, E]` are library data types; `?T`, `E!T`, and `??` are source sugar over public types.
+- There is no truthiness and no hidden exception syntax.
+- Diagnostics must come from typed diagnostic enums in the owning crate/phase.

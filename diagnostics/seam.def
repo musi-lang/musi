@@ -26,17 +26,24 @@ diag TextParseFailed 5406
 diag InvalidReference 5407
   message "table reference `{table}` invalid"
 
+diag SectionLimitExceeded 5410
+  message "SEAM `{table}` section exceeds binary encoding limit"
+  primary "`{table}` section too large"
+
 diag DuplicateLabel 5408
   message "procedure `{procedure}` label duplicate"
 
 diag MissingLabel 5409
   message "procedure `{procedure}` label reference missing"
 
-diag InvalidEffectOp 5410
-  message "effect operation reference `effect.op` invalid"
-
 diag OperandShapeMismatch 5411
   message "opcode `{opcode}` operand shape mismatch"
+
+diag InternalOpcodeSerialized 5440
+  message "internal opcode `{opcode}` cannot be serialized"
+
+diag BranchTableTargetStackMismatch 5441
+  message "procedure `{procedure}` branch table target stacks differ"
 
 diag HilMissingEntryBlock 5412
   message "HIL function `{function}` missing entry block"
@@ -129,10 +136,12 @@ end
 
 map artifact_error_kind crate::ArtifactError required
   case "InvalidReference { .. }" InvalidReference
+  case "SectionLimitExceeded { .. }" SectionLimitExceeded
   case "DuplicateLabel { .. }" DuplicateLabel
   case "MissingLabel { .. }" MissingLabel
-  case "InvalidEffectOp" InvalidEffectOp
   case "OperandShapeMismatch { .. }" OperandShapeMismatch
+  case "InternalOpcodeSerialized { .. }" InternalOpcodeSerialized
+  case "BranchTableTargetStackMismatch { .. }" BranchTableTargetStackMismatch
 end
 
 map hil_verify_error_kind crate::HilVerifyError required

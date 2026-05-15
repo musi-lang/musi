@@ -5,6 +5,7 @@ use thiserror::Error;
 use crate::TokenKind;
 
 #[path = "diag_catalog_gen.rs"]
+#[rustfmt::skip]
 mod diag_catalog_gen;
 
 #[repr(u8)]
@@ -36,6 +37,7 @@ pub enum SyntaxDiagKind {
     ExpectedMember,
     ExpectedIdentifier,
     ReservedKeywordIdentifier,
+    ReservedGeneratedIdentifier,
     ExpectedSpliceTarget,
     ExpectedOperatorMemberName,
     ExpectedFieldTarget,
@@ -216,6 +218,9 @@ pub enum ParseErrorKind {
     #[error("reserved keyword {keyword} cannot name identifier")]
     ReservedKeywordIdentifier { keyword: TokenKind },
 
+    #[error("generated identifier namespace reserved")]
+    ReservedGeneratedIdentifier,
+
     #[error("expected splice target, found {found}")]
     ExpectedSpliceTarget { found: TokenKind },
 
@@ -225,7 +230,7 @@ pub enum ParseErrorKind {
     #[error("expected field name or tuple index, found {found}")]
     ExpectedFieldTarget { found: TokenKind },
 
-    #[error("expected constraint operator '<:' or ':', found {found}")]
+    #[error("expected constraint operator '|=' or '~=', found {found}")]
     ExpectedConstraintOperator { found: TokenKind },
 
     #[error("expected attribute value, found {found}")]
@@ -377,7 +382,9 @@ impl ParseErrorKind {
             Self::ReservedKeywordIdentifier { keyword } => {
                 DiagContext::new().with("keyword", keyword)
             }
-            Self::SpliceOutsideQuote | Self::NonAssociativeChain => DiagContext::new(),
+            Self::ReservedGeneratedIdentifier
+            | Self::SpliceOutsideQuote
+            | Self::NonAssociativeChain => DiagContext::new(),
         }
     }
 
@@ -400,6 +407,7 @@ impl ParseErrorKind {
             Self::ReservedKeywordIdentifier { keyword } => {
                 format!("{keyword} found where identifier required")
             }
+            Self::ReservedGeneratedIdentifier => "identifier begins with `__`".into(),
             Self::SpliceOutsideQuote => {
                 format!("found {}", describe_span(source_text, span, "`#`"))
             }

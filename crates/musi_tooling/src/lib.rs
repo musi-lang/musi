@@ -6,9 +6,13 @@ mod completion;
 mod diag;
 mod diagnostics;
 mod direct;
+mod document_link;
 mod errors;
+mod folding;
 mod navigation;
+mod selection;
 mod semantic;
+mod signature;
 
 pub use analysis::{
     ToolHover, ToolInlayHint, ToolInlayHintKind, ToolPosition, ToolRange, ToolSymbolKind,
@@ -28,17 +32,38 @@ pub use diagnostics::{
     session_error_report, tooling_error_report,
 };
 pub use direct::{DirectGraph, load_direct_graph};
+pub use document_link::{
+    ToolDocumentLink, document_links_for_project_file, document_links_for_project_file_with_overlay,
+};
 pub use errors::{ToolingError, ToolingResult};
+pub use folding::{
+    ToolFoldingRange, ToolFoldingRangeKind, folding_ranges_for_project_file,
+    folding_ranges_for_project_file_with_overlay,
+};
 pub use navigation::{
-    ToolDocumentSymbol, ToolLocation, ToolTextEdit, ToolWorkspaceEdit, ToolWorkspaceSymbol,
-    definition_for_project_file_with_overlay, document_symbols_for_project_file_with_overlay,
-    prepare_rename_for_project_file_with_overlay, references_for_project_file_with_overlay,
-    rename_for_project_file_with_overlay, workspace_symbols_for_project_file_with_overlay,
+    NavigationWorkspace, ToolCallHierarchyItem, ToolDocumentHighlight, ToolDocumentHighlightKind,
+    ToolDocumentSymbol, ToolLocation, ToolMoniker, ToolMonikerKind, ToolOutgoingCall,
+    ToolReferenceLens, ToolTextEdit, ToolWorkspaceEdit, ToolWorkspaceSymbol,
+    definition_for_project_file_with_overlay, document_highlights_for_project_file_with_overlay,
+    document_symbols_for_project_file_with_overlay, implementation_for_project_file_with_overlay,
+    moniker_for_project_file_with_overlay, outgoing_calls_for_project_file_with_overlay,
+    prepare_rename_for_project_file_with_overlay, reference_lenses_for_project_file_with_overlay,
+    references_for_project_file_with_overlay, rename_for_project_file_with_overlay,
+    type_definition_for_project_file_with_overlay, workspace_symbols_for_project_file_with_overlay,
+    workspace_symbols_for_project_root,
+};
+pub use selection::{
+    ToolSelectionRange, selection_ranges_for_project_file,
+    selection_ranges_for_project_file_with_overlay,
 };
 pub use semantic::{
     ToolSemanticModifier, ToolSemanticModifierList, ToolSemanticToken, ToolSemanticTokenKind,
     ToolSemanticTokenList, semantic_tokens_for_project_file,
     semantic_tokens_for_project_file_with_overlay,
+};
+pub use signature::{
+    ToolParameterInformation, ToolSignatureHelp, ToolSignatureInformation,
+    signature_help_for_project_file_with_overlay,
 };
 
 #[cfg(test)]

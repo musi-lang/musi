@@ -1,6 +1,7 @@
 use music_base::diag::{Diag, DiagCode, DiagContext, DiagLevel, DiagnosticKind};
 
 #[path = "diag_catalog_gen.rs"]
+#[rustfmt::skip]
 mod diag_catalog_gen;
 
 #[repr(u8)]
@@ -36,6 +37,8 @@ pub enum SemaDiagKind {
     AttrWhenRequiresStringValue,
     AttrWhenRequiresStringList,
     ForeignSignatureRequired,
+    ExternalImportCannotBeExported,
+    ExternalBodyRequiresExport,
     InvalidPartialModifier,
     PartialForeignConflict,
     InvalidFfiType,
@@ -45,29 +48,11 @@ pub enum SemaDiagKind {
     InvalidDataVariantDiscriminant,
     CyclicDataVariantDiscriminant,
     RuntimeValueInComptimeContext,
-    CollectDuplicateEffectOp,
-    CollectDuplicateEffectLaw,
     CollectDuplicateShapeMember,
     CollectDuplicateShapeLaw,
     UnknownExport,
-    InvalidRequestTarget,
-    UnknownEffect,
-    DuplicateHandlerClause,
-    UnknownEffectOp,
-    HandlerClauseArityMismatch,
-    HandleRequiresSingleValueClause,
-    HandlerMissingOperationClause,
-    ResumeOutsideHandlerClause,
-    EffectNotDeclared,
-    GivenMemberArityMismatch,
-    UnknownGivenMember,
-    GivenMemberValueRequired,
-    DuplicateGivenMember,
-    MissingGivenMember,
-    InvalidGivenTarget,
     SealedShape,
     UnknownShape,
-    DuplicateGiven,
     PlainLetRequiresIrrefutablePattern,
     ImportRecordDestructuringRequiresImportRecord,
     RecordDestructuringRequiresRecord,
@@ -104,6 +89,8 @@ pub enum SemaDiagKind {
     PinRequiresUnsafeBlock,
     UnsupportedPinTarget,
     PinnedValueEscapes,
+    PinnedValueCapturedByClosure,
+    YieldInsidePinScope,
     InvalidTypeApplication,
     CallRuntimeSpreadRequiresArrayAny,
     CallSpreadRequiresTupleOrArray,
@@ -132,7 +119,7 @@ pub enum SemaDiagKind {
     VariantPatternArityMismatch,
     OrPatternBindersMismatch,
     UnsatisfiedConstraint,
-    AmbiguousGivenMatch,
+    AmbiguousConstraintEvidence,
     ConstrainedNonCallableBinding,
     ExportedCallableRequiresConcreteConstraints,
 }

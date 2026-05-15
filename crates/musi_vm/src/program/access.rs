@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use music_seam::descriptor::ExportTarget;
-use music_seam::{Artifact, EffectId, ForeignId, ProcedureId, ShapeId, StringId, TypeId};
+use music_seam::{Artifact, ForeignId, ProcedureId, ShapeId, StringId, TypeId};
 use music_term::{TypeTerm, TypeTermKind};
 
 use super::layout::{ProgramDataLayout, ProgramExport, source_export_name};
@@ -41,17 +41,6 @@ impl Program {
     #[must_use]
     pub fn foreign_source_name(&self, id: ForeignId) -> &str {
         source_export_name(self.foreign_name(id))
-    }
-
-    #[must_use]
-    pub fn effect_name(&self, id: EffectId) -> &str {
-        let descriptor = self.inner.artifact.effects.get(id);
-        self.string_text(descriptor.name)
-    }
-
-    #[must_use]
-    pub fn effect_source_name(&self, id: EffectId) -> &str {
-        source_export_name(self.effect_name(id))
     }
 
     #[must_use]

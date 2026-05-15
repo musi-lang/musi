@@ -1,20 +1,15 @@
 use std::collections::HashMap;
 
-use musi_vm::{EffectCall, ForeignCall, Value, VmHostCallContext, VmResult};
+use musi_vm::{ForeignCall, Value, VmHostCallContext, VmResult};
 
 type ForeignHandler =
     Box<dyn FnMut(VmHostCallContext<'_, '_>, &ForeignCall, &[Value]) -> VmResult<Value> + Send>;
-type EffectHandler =
-    Box<dyn FnMut(VmHostCallContext<'_, '_>, &EffectCall, &[Value]) -> VmResult<Value> + Send>;
 type HandlerName = Box<str>;
 type ForeignHandlerMap = HashMap<Box<str>, ForeignHandler>;
-type EffectHandlerKey = (Box<str>, Box<str>);
-type EffectHandlerMap = HashMap<EffectHandlerKey, EffectHandler>;
 
 #[derive(Default)]
 pub struct RegisteredHost {
     foreign_handlers: ForeignHandlerMap,
-    effect_handlers: EffectHandlerMap,
 }
 
 impl RegisteredHost {
@@ -42,34 +37,32 @@ impl RegisteredHost {
         let _ = self.foreign_handlers.insert(name.into(), Box::new(handler));
     }
 
-    pub fn register_effect_handler<Effect, Op>(
+    pub fn register_foundation_handler<Module, Op>(
         &mut self,
-        effect: Effect,
+        module: Module,
         op: Op,
-        mut handler: impl FnMut(&EffectCall, &[Value]) -> VmResult<Value> + Send + 'static,
+        mut handler: impl FnMut(&ForeignCall, &[Value]) -> VmResult<Value> + Send + 'static,
     ) where
-        Effect: Into<HandlerName>,
-        Op: Into<HandlerName>,
+        Module: AsRef<str>,
+        Op: AsRef<str>,
     {
-        self.register_effect_handler_with_context(effect, op, move |_ctx, effect, args| {
-            handler(effect, args)
+        self.register_foundation_handler_with_context(module, op, move |_ctx, foreign, args| {
+            handler(foreign, args)
         });
     }
 
-    pub fn register_effect_handler_with_context<Effect, Op>(
+    pub fn register_foundation_handler_with_context<Module, Op>(
         &mut self,
-        effect: Effect,
+        module: Module,
         op: Op,
-        handler: impl FnMut(VmHostCallContext<'_, '_>, &EffectCall, &[Value]) -> VmResult<Value>
+        handler: impl FnMut(VmHostCallContext<'_, '_>, &ForeignCall, &[Value]) -> VmResult<Value>
         + Send
         + 'static,
     ) where
-        Effect: Into<HandlerName>,
-        Op: Into<HandlerName>,
+        Module: AsRef<str>,
+        Op: AsRef<str>,
     {
-        let _ = self
-            .effect_handlers
-            .insert((effect.into(), op.into()), Box::new(handler));
+        self.register_foreign_handler_with_context(foundation_foreign_name(module, op), handler);
     }
 
     #[must_use]
@@ -82,17 +75,12 @@ impl RegisteredHost {
         let handler = self.foreign_handlers.get_mut(foreign.name())?;
         Some(handler(ctx, foreign, args))
     }
+}
 
-    #[must_use]
-    pub fn handle_effect(
-        &mut self,
-        ctx: VmHostCallContext<'_, '_>,
-        effect: &EffectCall,
-        args: &[Value],
-    ) -> Option<VmResult<Value>> {
-        let handler = self
-            .effect_handlers
-            .get_mut(&(effect.effect_name().into(), effect.op_name().into()))?;
-        Some(handler(ctx, effect, args))
-    }
+fn foundation_foreign_name(module: impl AsRef<str>, op: impl AsRef<str>) -> Box<str> {
+    let module = module
+        .as_ref()
+        .split_once("::")
+        .map_or_else(|| module.as_ref(), |(head, _)| head);
+    format!("{module}::Musi__{}", op.as_ref()).into_boxed_str()
 }

@@ -25,13 +25,13 @@ pub(crate) fn collect_module_level_bindings_from_expr(
             collect_module_level_bindings_from_expr(sema, *body, out);
         }
         HirExprKind::Let { pat, .. } => {
-            if let HirPatKind::Bind { name } = sema.module().store.pats.get(*pat).kind {
-                if let Some(binding) = super::decl_binding_id(sema, name) {
-                    if sema.is_gated_binding(binding) {
-                        return;
-                    }
-                    let _ = out.insert(binding);
+            if let HirPatKind::Bind { name } = sema.module().store.pats.get(*pat).kind
+                && let Some(binding) = super::decl_binding_id(sema, name)
+            {
+                if sema.is_gated_binding(binding) {
+                    return;
                 }
+                let _ = out.insert(binding);
             }
         }
         _ => {}

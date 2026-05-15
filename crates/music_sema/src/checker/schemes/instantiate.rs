@@ -3,9 +3,8 @@ use std::iter::repeat;
 
 use music_hir::{HirOrigin, HirTyId, HirTyKind};
 
-use crate::api::{ConstraintAnswer, ConstraintFacts, ConstraintKey, ConstraintKind};
+use crate::api::{ConstraintEvidence, ConstraintFacts, ConstraintKey, ConstraintKind};
 use crate::checker::{CheckPass, DiagKind};
-use crate::effects::EffectRow;
 
 use super::{BindingScheme, ConstraintObligation, InstantiatedBinding, TypeSubstMap};
 
@@ -62,7 +61,6 @@ impl CheckPass<'_, '_, '_> {
             comptime_params: Box::default(),
             constraints: Box::default(),
             ty: body,
-            effects: EffectRow::empty(),
         };
         self.instantiate_binding_scheme(origin, &scheme, args)
     }
@@ -94,33 +92,32 @@ impl CheckPass<'_, '_, '_> {
         self.instantiate_binding_with_subst(scheme, &TypeSubstMap::new())
     }
 
-    pub fn resolve_obligations_to_answers(
+    pub fn resolve_obligations_to_evidence(
         &mut self,
         origin: HirOrigin,
         obligations: &[ConstraintObligation],
-    ) -> Option<Box<[ConstraintAnswer]>> {
-        let mut stack = Vec::<String>::new();
-        let mut answers = Vec::new();
+    ) -> Option<Box<[ConstraintEvidence]>> {
+        let mut evidence = Vec::new();
         for obligation in obligations {
             if !matches!(obligation.kind, ConstraintKind::Implements) {
-                let _ = self.solve_obligation(origin, obligation, &mut stack);
+                let _ = self.solve_obligation(origin, obligation);
                 continue;
             }
-            answers.push(self.resolve_obligation_answer(origin, obligation, &mut stack)?);
+            evidence.push(self.resolve_obligation_evidence(origin, obligation)?);
         }
-        Some(answers.into_boxed_slice())
+        Some(evidence.into_boxed_slice())
     }
 
-    pub fn answer_scope_for_constraints(
+    pub fn evidence_scope_for_constraints(
         &mut self,
         constraints: &[ConstraintFacts],
-    ) -> HashMap<ConstraintKey, ConstraintAnswer> {
+    ) -> HashMap<ConstraintKey, ConstraintEvidence> {
         constraints
             .iter()
             .filter_map(|constraint| {
                 self.constraint_key_for_facts(constraint).map(|key| {
-                    let answer = ConstraintAnswer::Param { key: key.clone() };
-                    (key, answer)
+                    let evidence = ConstraintEvidence::Param { key: key.clone() };
+                    (key, evidence)
                 })
             })
             .collect()
@@ -133,18 +130,13 @@ impl CheckPass<'_, '_, '_> {
     ) -> InstantiatedBinding {
         let ctx = self;
         let ty = ctx.substitute_ty(scheme.ty, subst);
-        let effects = ctx.substitute_effect_row(&scheme.effects, subst);
         let obligations = scheme
             .constraints
             .iter()
             .map(|constraint| ctx.instantiate_obligation(constraint, subst))
             .collect::<Vec<_>>()
             .into_boxed_slice();
-        InstantiatedBinding {
-            ty,
-            effects,
-            obligations,
-        }
+        InstantiatedBinding { ty, obligations }
     }
 
     pub(super) fn instantiate_obligation(

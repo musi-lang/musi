@@ -129,7 +129,7 @@ impl Vm {
 fn bits_width_from_type_name(name: &str) -> Option<u32> {
     let inner = name.strip_prefix("Bits[")?.strip_suffix(']')?;
     let width = inner.parse::<u32>().ok()?;
-    (width > 0).then_some(width)
+    Some(width)
 }
 
 fn int_value_in_range(value: &Value, min: i64, max: i64) -> bool {

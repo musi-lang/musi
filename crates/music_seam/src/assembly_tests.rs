@@ -1,11 +1,11 @@
 #![allow(unused_imports)]
 
 use crate::descriptor::{
-    ConstantDescriptor, ConstantValue, EffectDescriptor, EffectOpDescriptor, ForeignDescriptor,
-    GlobalDescriptor, MetaDescriptor, ProcedureDescriptor, TypeDescriptor,
+    ConstantDescriptor, ConstantValue, ForeignDescriptor, GlobalDescriptor, ImportDescriptor,
+    ManifestDescriptor, MetaDescriptor, ProcedureDescriptor, RootMapDescriptor, TypeDescriptor,
 };
 use crate::{Artifact, CodeEntry, Instruction, Label, Opcode, Operand, SeamDiagKind};
-use crate::{decode_binary, encode_binary, format_text, parse_text};
+use crate::{decode_binary, encode_binary, format_disasm, parse_disasm};
 use music_term::SyntaxShape;
 
 fn sample_artifact() -> Artifact {
@@ -62,10 +62,10 @@ mod success {
     #[test]
     fn text_roundtrip_preserves_artifact_shape() {
         let artifact = sample_artifact();
-        let text = format_text(&artifact);
-        let decoded = parse_text(&text).unwrap();
+        let text = format_disasm(&artifact);
+        let decoded = parse_disasm(&text).unwrap();
 
-        assert_eq!(format_text(&decoded), text);
+        assert_eq!(format_disasm(&decoded), text);
     }
 
     #[test]
@@ -76,9 +76,45 @@ mod success {
             .types
             .alloc(TypeDescriptor::new(record_name, record_name));
 
-        let text = format_text(&artifact);
-        let decoded = parse_text(&text).unwrap();
-        assert_eq!(format_text(&decoded), text);
+        let text = format_disasm(&artifact);
+        let decoded = parse_disasm(&text).unwrap();
+        assert_eq!(format_disasm(&decoded), text);
+    }
+
+    #[test]
+    fn procedure_result_types_roundtrip_in_text_and_binary() {
+        let mut artifact = Artifact::new();
+        let entry = artifact.intern_string("entry");
+        let int = artifact.intern_string("Int");
+        let bool_name = artifact.intern_string("Bool");
+        let int_ty = artifact.types.alloc(TypeDescriptor::new(int, int));
+        let bool_ty = artifact
+            .types
+            .alloc(TypeDescriptor::new(bool_name, bool_name));
+        let _ = artifact.procedures.alloc(
+            ProcedureDescriptor::new(
+                entry,
+                2,
+                0,
+                Box::new([CodeEntry::Instruction(Instruction::new(
+                    Opcode::Ret,
+                    Operand::None,
+                ))]),
+            )
+            .with_param_tys(Box::new([int_ty, bool_ty]))
+            .with_result_tys(Box::new([int_ty, bool_ty])),
+        );
+
+        let text = format_disasm(&artifact);
+        assert!(text.contains(
+            ".procedure $entry params 2 param_types [$Int $Bool] locals 0 result [$Int $Bool]"
+        ));
+        let parsed = parse_disasm(&text).unwrap();
+        assert_eq!(format_disasm(&parsed), text);
+
+        let bytes = encode_binary(&artifact).unwrap();
+        let decoded = decode_binary(&bytes).unwrap();
+        assert_eq!(decoded, artifact);
     }
 
     #[test]
@@ -93,10 +129,6 @@ mod success {
             constant_name,
             ConstantValue::Float(3.5),
         ));
-
-        let text = format_text(&artifact);
-        let parsed = parse_text(&text).unwrap();
-        assert_eq!(format_text(&parsed), text);
 
         let bytes = encode_binary(&artifact).unwrap();
         let decoded = decode_binary(&bytes).unwrap();
@@ -116,11 +148,11 @@ mod success {
             },
         ));
 
-        let text = format_text(&artifact);
+        let text = format_disasm(&artifact);
         assert!(text.contains("syntax expr \"#(1 + 2)\""));
 
-        let parsed = parse_text(&text).unwrap();
-        assert_eq!(format_text(&parsed), text);
+        let parsed = parse_disasm(&text).unwrap();
+        assert_eq!(format_disasm(&parsed), text);
 
         let bytes = encode_binary(&artifact).unwrap();
         let decoded = decode_binary(&bytes).unwrap();
@@ -128,25 +160,41 @@ mod success {
     }
 
     #[test]
-    fn foreign_link_roundtrips_in_text_and_binary() {
+    fn foreign_descriptor_payload_roundtrips_in_text_and_binary() {
         let mut artifact = Artifact::new();
         let name = artifact.intern_string("main::puts");
         let abi = artifact.intern_string("c");
         let symbol = artifact.intern_string("puts");
         let link = artifact.intern_string("c");
+        let domain = artifact.intern_string("native");
+        let lifetime = artifact.intern_string("call");
         let int_name = artifact.intern_string("Int");
         let int_ty = artifact
             .types
             .alloc(TypeDescriptor::new(int_name, int_name));
+        let ptr_name = artifact.intern_string("Ptr");
+        let ptr_ty = artifact
+            .types
+            .alloc(TypeDescriptor::new(ptr_name, ptr_name));
         let _ = artifact.foreigns.alloc(
-            ForeignDescriptor::new(name, Box::new([]), int_ty, abi, symbol)
+            ForeignDescriptor::new(name, Box::new([int_ty, ptr_ty]), int_ty, abi, symbol)
                 .with_link(link)
+                .with_domain(domain)
+                .with_pinned_params(Box::new([0]))
+                .with_nullable_params(Box::new([1]))
+                .with_nullable_result(true)
+                .with_lifetime(lifetime)
                 .with_export(true),
         );
 
-        let text = format_text(&artifact);
-        let parsed = parse_text(&text).unwrap();
-        assert_eq!(format_text(&parsed), text);
+        let text = format_disasm(&artifact);
+        assert!(text.contains("domain \"native\""));
+        assert!(text.contains("pin %0"));
+        assert!(text.contains("nullable %1"));
+        assert!(text.contains("nullable_result"));
+        assert!(text.contains("lifetime \"call\""));
+        let parsed = parse_disasm(&text).unwrap();
+        assert_eq!(format_disasm(&parsed), text);
 
         let bytes = encode_binary(&artifact).unwrap();
         let decoded = decode_binary(&bytes).unwrap();
@@ -163,9 +211,60 @@ mod success {
             .meta
             .alloc(MetaDescriptor::new(target, key, Box::new([meta_value])));
 
-        let text = format_text(&artifact);
-        let parsed = parse_text(&text).unwrap();
-        assert_eq!(format_text(&parsed), text);
+        let text = format_disasm(&artifact);
+        let parsed = parse_disasm(&text).unwrap();
+        assert_eq!(format_disasm(&parsed), text);
+
+        let bytes = encode_binary(&artifact).unwrap();
+        let decoded = decode_binary(&bytes).unwrap();
+        assert_eq!(decoded, artifact);
+    }
+
+    #[test]
+    fn manifest_and_import_tables_roundtrip_in_text_and_binary() {
+        let mut artifact = sample_artifact();
+        let package = artifact.intern_string("app");
+        let version = artifact.intern_string("0.1.0");
+        let profile = artifact.intern_string("debug");
+        let entry = artifact.intern_string("@app@0.1.0/index.ms::__entry");
+        let spec = artifact.intern_string("@std/cmp");
+        let resolved = artifact.intern_string("@@std@0.1.0/cmp.ms");
+        let _ = artifact
+            .manifest
+            .alloc(ManifestDescriptor::new(package, version, profile).with_entry(entry));
+        let _ = artifact
+            .imports
+            .alloc(ImportDescriptor::new(spec, resolved));
+
+        let text = format_disasm(&artifact);
+        let parsed = parse_disasm(&text).unwrap();
+        assert_eq!(format_disasm(&parsed), text);
+
+        let bytes = encode_binary(&artifact).unwrap();
+        let decoded = decode_binary(&bytes).unwrap();
+        assert_eq!(decoded, artifact);
+    }
+
+    #[test]
+    fn root_map_table_roundtrips_in_text_and_binary() {
+        let mut artifact = sample_artifact();
+        let (procedure_id, _) = artifact
+            .procedures
+            .iter()
+            .next()
+            .expect("sample procedure should exist");
+        let safe_point = artifact.intern_string("entry.L0");
+        let _ = artifact.root_maps.alloc(
+            RootMapDescriptor::new(safe_point, Box::new([0]), Box::new([0, 1]))
+                .with_procedure(procedure_id),
+        );
+
+        let text = format_disasm(&artifact);
+        assert!(text.contains(
+            ".root_map point $entry.L0 kind call procedure $entry local %0 stack %0 stack %1"
+        ));
+        let parsed = parse_disasm(&text).unwrap();
+        assert_eq!(format_disasm(&parsed), text);
 
         let bytes = encode_binary(&artifact).unwrap();
         let decoded = decode_binary(&bytes).unwrap();
@@ -213,9 +312,9 @@ mod success {
             .with_labels(Box::new([label])),
         );
 
-        let text = format_text(&artifact);
-        let parsed = parse_text(&text).unwrap();
-        assert_eq!(format_text(&parsed), text);
+        let text = format_disasm(&artifact);
+        let parsed = parse_disasm(&text).unwrap();
+        assert_eq!(format_disasm(&parsed), text);
 
         let bytes = encode_binary(&artifact).unwrap();
         let decoded = decode_binary(&bytes).unwrap();
@@ -262,9 +361,9 @@ mod success {
             .with_labels(Box::new([label])),
         );
 
-        let text = format_text(&artifact);
-        let parsed = parse_text(&text).unwrap();
-        assert_eq!(format_text(&parsed), text);
+        let text = format_disasm(&artifact);
+        let parsed = parse_disasm(&text).unwrap();
+        assert_eq!(format_disasm(&parsed), text);
 
         let bytes = encode_binary(&artifact).unwrap();
         let decoded = decode_binary(&bytes).unwrap();
@@ -288,21 +387,12 @@ mod success {
             ))]),
         ));
 
-        let effect_name = artifact.intern_string("Abort");
-        let op_name = artifact.intern_string("abort");
         let int_ty = artifact
             .types
             .iter()
             .next()
             .map(|(id, _)| id)
             .expect("sample artifact type");
-        let effect = artifact.effects.alloc(EffectDescriptor::new(
-            effect_name,
-            Box::new(
-                [EffectOpDescriptor::new(op_name, Box::new([int_ty]), int_ty)
-                    .with_comptime_safe(true)],
-            ),
-        ));
 
         let foreign_name = artifact.intern_string("puts");
         let c_abi = artifact.intern_string("c");
@@ -334,20 +424,15 @@ mod success {
                         Opcode::CallFfi,
                         Operand::Foreign(foreign),
                     )),
-                    CodeEntry::Instruction(Instruction::new(
-                        Opcode::Raise,
-                        Operand::Effect { effect, op: 0 },
-                    )),
                     CodeEntry::Instruction(Instruction::new(Opcode::Ret, Operand::None)),
                 ]),
             )
             .with_labels(Box::new([label])),
         );
 
-        let text = format_text(&artifact);
-        let parsed = parse_text(&text).unwrap();
-        assert_eq!(format_text(&parsed), text);
-        assert!(parsed.effects.get(effect).ops[0].is_comptime_safe);
+        let text = format_disasm(&artifact);
+        let parsed = parse_disasm(&text).unwrap();
+        assert_eq!(format_disasm(&parsed), text);
 
         let bytes = encode_binary(&artifact).unwrap();
         let decoded = decode_binary(&bytes).unwrap();

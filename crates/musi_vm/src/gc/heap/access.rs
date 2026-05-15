@@ -1,6 +1,6 @@
 use crate::error::{VmError, VmErrorKind};
 use crate::types::VmResult;
-use crate::value::{ClosureValue, ContinuationValue, DataValue, GcRef, ModuleValue, SequenceValue};
+use crate::value::{ClosureValue, DataValue, GcRef, ModuleValue, SequenceValue};
 use music_term::SyntaxTerm;
 use std::ptr::from_mut;
 
@@ -109,13 +109,6 @@ impl RuntimeHeap {
         match self.object(reference)? {
             HeapObject::Module(value) => Ok(value),
             _ => Err(invalid_heap_ref(reference, "module")),
-        }
-    }
-
-    pub(crate) fn continuation(&self, reference: GcRef) -> VmResult<&ContinuationValue> {
-        match self.object(reference)? {
-            HeapObject::Continuation(value) => Ok(value),
-            _ => Err(invalid_heap_ref(reference, "continuation")),
         }
     }
 

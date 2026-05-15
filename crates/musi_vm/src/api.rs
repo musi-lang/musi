@@ -12,5 +12,6 @@ pub use super::value::{
 };
 pub use super::vm::{
     BoundExportCall, BoundI64Call, BoundInitCall, BoundSeq2x2Arg, BoundSeq2x2Call, BoundSeq8Call,
-    MvmFeatures, MvmMode, MvmOptionsParseError, Vm, VmOptimizationLevel, VmOptions, VmRuntime,
+    MvmFeatures, MvmMode, MvmModeBundle, MvmOptionsParseError, Vm, VmOptimizationLevel, VmOptions,
+    VmRuntime,
 };

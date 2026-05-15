@@ -17,6 +17,7 @@ musi_fmt = { path = "../musi_fmt" }
 musi_project = { path = "../musi_project" }
 async-lsp = { version = "0.2.4", features = ["tokio", "stdio"] }
 musi_tooling = { path = "../musi_tooling" }
+serde_json = { workspace = true }
 tokio = { version = "1.52.1", features = ["macros", "rt-multi-thread"] }
 
 [lints]

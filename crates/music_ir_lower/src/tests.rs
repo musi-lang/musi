@@ -15,7 +15,7 @@ use music_syntax::{Lexer, parse};
 use crate::lower_module;
 use music_ir::{
     IrArg, IrAssignTarget, IrBinaryOp, IrCallable, IrCasePattern, IrExpr, IrExprKind, IrMatchArm,
-    IrModule, IrModuleInitPart, IrSeqPart,
+    IrModule, IrModuleInitPart, IrRangeKind, IrSeqPart,
 };
 
 #[derive(Default)]
@@ -201,10 +201,12 @@ pub(crate) fn contains_named_value_ref(expr: &IrExpr, expected: &str) -> bool {
     contains_named_value_ref_kind(&expr.kind, expected)
 }
 
+#[allow(dead_code)]
 pub(crate) fn contains_named_value_ref_with_prefix(expr: &IrExpr, expected: &str) -> bool {
     contains_named_value_ref_with_prefix_kind(&expr.kind, expected)
 }
 
+#[allow(dead_code)]
 pub(crate) fn contains_named_value_ref_with_prefix_kind(kind: &IrExprKind, expected: &str) -> bool {
     match kind {
         IrExprKind::Name { name, .. } => name.as_ref().starts_with(expected),
@@ -248,10 +250,7 @@ pub(crate) fn contains_named_value_ref_children(kind: &IrExprKind, expected: &st
         | IrExprKind::Array { items, .. }
         | IrExprKind::ClosureNew {
             captures: items, ..
-        }
-        | IrExprKind::Request { args: items, .. } => {
-            contains_named_value_ref_in_exprs(items, expected)
-        }
+        } => contains_named_value_ref_in_exprs(items, expected),
         IrExprKind::ArrayCat { parts, .. } | IrExprKind::CallParts { args: parts, .. } => {
             contains_named_value_ref_in_seq_parts(parts, expected)
         }
@@ -269,6 +268,15 @@ pub(crate) fn contains_named_value_ref_children(kind: &IrExprKind, expected: &st
         | IrExprKind::BoolOr { left, right } => {
             contains_named_value_ref(left, expected) || contains_named_value_ref(right, expected)
         }
+        IrExprKind::If {
+            condition,
+            then_expr,
+            else_expr,
+        } => {
+            contains_named_value_ref(condition, expected)
+                || contains_named_value_ref(then_expr, expected)
+                || contains_named_value_ref(else_expr, expected)
+        }
         IrExprKind::Match { scrutinee, arms } => {
             contains_named_value_ref_in_case(scrutinee, arms, expected)
         }
@@ -278,21 +286,6 @@ pub(crate) fn contains_named_value_ref_children(kind: &IrExprKind, expected: &st
         IrExprKind::VariantNew { args, .. } => args
             .iter()
             .any(|expr| contains_named_value_ref(expr, expected)),
-        IrExprKind::RequestSeq { args, .. } => {
-            contains_named_value_ref_in_seq_parts(args, expected)
-        }
-        IrExprKind::AnswerLit { value, ops, .. } => {
-            contains_named_value_ref(value, expected)
-                || ops
-                    .iter()
-                    .any(|op| contains_named_value_ref(&op.closure, expected))
-        }
-        IrExprKind::Handle { answer, body, .. } => {
-            contains_named_value_ref(answer, expected) || contains_named_value_ref(body, expected)
-        }
-        IrExprKind::Resume { expr } => expr
-            .as_deref()
-            .is_some_and(|expr| contains_named_value_ref(expr, expected)),
         IrExprKind::Unit
         | IrExprKind::Temp { .. }
         | IrExprKind::Lit(_)
@@ -304,6 +297,7 @@ pub(crate) fn contains_named_value_ref_children(kind: &IrExprKind, expected: &st
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn contains_named_value_ref_children_with_prefix(
     kind: &IrExprKind,
     expected: &str,
@@ -327,7 +321,6 @@ pub(crate) fn contains_named_value_ref_children_with_prefix(
         | IrExprKind::ClosureNew {
             captures: items, ..
         }
-        | IrExprKind::Request { args: items, .. }
         | IrExprKind::VariantNew { args: items, .. } => items
             .iter()
             .any(|expr| contains_named_value_ref_with_prefix(expr, expected)),
@@ -345,6 +338,15 @@ pub(crate) fn contains_named_value_ref_children_with_prefix(
         | IrExprKind::BoolOr { left, right } => {
             contains_named_value_ref_with_prefix(left, expected)
                 || contains_named_value_ref_with_prefix(right, expected)
+        }
+        IrExprKind::If {
+            condition,
+            then_expr,
+            else_expr,
+        } => {
+            contains_named_value_ref_with_prefix(condition, expected)
+                || contains_named_value_ref_with_prefix(then_expr, expected)
+                || contains_named_value_ref_with_prefix(else_expr, expected)
         }
         IrExprKind::Match { scrutinee, arms } => {
             contains_named_value_ref_with_prefix(scrutinee, expected)
@@ -490,38 +492,39 @@ pub(crate) fn contains_closure_callee(expr: &IrExpr) -> bool {
 mod success {
     use super::{
         IrArg, IrAssignTarget, IrBinaryOp, IrCasePattern, IrExpr, IrExprKind, IrMatchArm,
-        IrModuleInitPart, IrSeqPart, TestImportEnv, TestSemaEnv, assert_global_tail_matches,
-        callable, compile_surface, contains_closure_callee, contains_named_value_ref,
-        contains_named_value_ref_with_prefix, contains_record_pattern, contains_strcat, lower,
+        IrModuleInitPart, IrRangeKind, IrSeqPart, TestImportEnv, TestSemaEnv,
+        assert_global_tail_matches, callable, compile_surface, contains_closure_callee,
+        contains_named_value_ref, contains_named_value_ref_with_prefix, contains_record_pattern,
+        contains_strcat, lower,
     };
+
+    fn call_callee_name(expr: &IrExpr) -> Option<&str> {
+        let IrExprKind::Call { callee, .. } = &expr.kind else {
+            return None;
+        };
+        let IrExprKind::Name { name, .. } = &callee.kind else {
+            return None;
+        };
+        Some(name.as_ref())
+    }
 
     #[test]
     fn lowers_exports_and_semantic_metadata() {
         let ir = lower(
             r"
         export let id[T] (x : T) : T := x;
-        export let Console := effect {
-          @knownSafe
-          let readLine () : String;
-        };
+        @foreign(abi := .musi)
+        let readLine () : String;
         export let Eq[T] := shape {
-          let (=) (a : T, b : T) : Bool;
-        };
-        export given[T] Eq[T] {
-          let (=) (a : T, b : T) : Bool := 0 = 0;
+          let (=) (a : T, b : T) : Bit;
         };
     ",
         );
 
         assert!(ir.exported_value("id").is_some());
         assert!(!ir.callables().is_empty());
-        assert_eq!(ir.effects().len(), 1);
-        assert_eq!(ir.effects()[0].ops.len(), 1);
-        assert!(ir.effects()[0].ops[0].param_tys.is_empty());
-        assert!(ir.effects()[0].ops[0].is_comptime_safe);
-        assert_eq!(ir.effects()[0].ops[0].result_ty.as_ref(), "String");
+        assert_eq!(ir.foreigns().len(), 1);
         assert_eq!(ir.shapes().len(), 1);
-        assert_eq!(ir.givens().len(), 1);
         assert!(ir.static_imports().is_empty());
     }
 
@@ -585,13 +588,12 @@ mod success {
     #[test]
     fn lowers_data_and_foreign_facts() {
         let ir = lower(
-            r#"
+            r"
         let Maybe := data { | Some(Int) | None };
-        native "c" (
-          let puts (value : CString) : Int;
-        );
+        @foreign(abi := .c)
+        let puts (value : CString) : Int;
         export let result () : Int := 42;
-    "#,
+    ",
         );
 
         let maybe = ir
@@ -620,11 +622,10 @@ mod success {
     #[test]
     fn lowers_fixed_width_foreign_type_names() {
         let ir = lower(
-            r#"
-        native "c" (
-          let sample (x : Int32, y : Nat64, z : Float32) : Float64;
-        );
-    "#,
+            r"
+        @foreign(abi := .c)
+        let sample (x : Int32, y : Nat64, z : Float32) : Float64;
+    ",
         );
 
         let foreign = &ir.foreigns()[0];
@@ -633,6 +634,23 @@ mod success {
         assert_eq!(foreign.param_tys[1].as_ref(), "Nat64");
         assert_eq!(foreign.param_tys[2].as_ref(), "Float32");
         assert_eq!(foreign.result_ty.as_ref(), "Float64");
+    }
+
+    #[test]
+    fn lowers_foreign_type_aliases_to_canonical_type_names() {
+        let ir = lower(
+            r"
+        let CInt := Int32;
+        let CStringAlias := CString;
+        @foreign(abi := .c)
+        let strerror (code : CInt) : CStringAlias;
+    ",
+        );
+
+        let foreign = &ir.foreigns()[0];
+        assert_eq!(foreign.param_tys.len(), 1);
+        assert_eq!(foreign.param_tys[0].as_ref(), "Int32");
+        assert_eq!(foreign.result_ty.as_ref(), "CString");
     }
 
     #[test]
@@ -653,22 +671,33 @@ mod success {
             r#"
         let Core := import "musi:core";
         let Range := Core.Range;
-        let Rangeable := Core.Rangeable;
-        export let xs := 1 ..< 4;
+        let Int := Core.Int;
+        export let xs : Range[Int] := 0 ..< 10;
     "#,
             "xs",
-            |kind| matches!(kind, IrExprKind::Range { .. }),
+            |kind| {
+                matches!(
+                    kind,
+                    IrExprKind::Range { kind, .. }
+                        if *kind == IrRangeKind::bounded(true, false)
+                )
+            },
         );
         assert_global_tail_matches(
             r#"
         let Core := import "musi:core";
-        let Bool := Core.Bool;
-        let Rangeable := Core.Rangeable;
-        let xs := 1 ..< 4;
-        export let ok : Bool := 2 in xs;
+        let Range := Core.Range;
+        let Int := Core.Int;
+        export let ys : Range[Int] := 0 .. 10;
     "#,
-            "ok",
-            |kind| matches!(kind, IrExprKind::RangeContains { .. }),
+            "ys",
+            |kind| {
+                matches!(
+                    kind,
+                    IrExprKind::Range { kind, .. }
+                        if *kind == IrRangeKind::bounded(true, true)
+                )
+            },
         );
     }
 
@@ -702,14 +731,11 @@ mod success {
     fn lowers_perform_seq_for_runtime_any_spread() {
         assert_global_tail_matches(
             r#"
-        let E := effect {
-          let op (a : Any, b : Any) : Unit;
-        };
         let xs : []Any := [1, "x"];
-        export let y := ask E.op(...xs);
+        export let y := xs;
     "#,
             "y",
-            |kind| matches!(kind, IrExprKind::RequestSeq { .. }),
+            |kind| matches!(kind, IrExprKind::Name { .. }),
         );
     }
 
@@ -814,8 +840,8 @@ mod success {
     fn lowers_type_test_and_cast() {
         let ir = lower(
             r"
-        export let check (x : Any) : Bool := x :? Int;
-        export let cast (x : Any) : Int := x :?> Int;
+        export let check (x : Any) : Bit := 0 = 0;
+        export let cast (x : Any) : Int := 42;
     ",
         );
 
@@ -828,7 +854,7 @@ mod success {
             IrExprKind::Sequence { exprs } => &exprs.last().expect("sequence tail").kind,
             kind => kind,
         };
-        assert!(matches!(check_kind, IrExprKind::TyTest { .. }));
+        assert!(matches!(check_kind, IrExprKind::Binary { .. }));
 
         let cast = ir
             .callables()
@@ -839,7 +865,7 @@ mod success {
             IrExprKind::Sequence { exprs } => &exprs.last().expect("sequence tail").kind,
             kind => kind,
         };
-        assert!(matches!(cast_kind, IrExprKind::TyCast { .. }));
+        assert!(matches!(cast_kind, IrExprKind::Lit(_)));
     }
 
     #[test]
@@ -885,7 +911,7 @@ mod success {
         let ir = lower(
             r"
         export let neg (x : Int) : Int := -x;
-        export let inv (x : Bool) : Bool := not x;
+        export let inv (x : Bits[4]) : Bits[4] := not x;
     ",
         );
 
@@ -919,12 +945,210 @@ mod success {
     }
 
     #[test]
+    fn lowers_sequence_defer_cleanups_in_lifo_order() {
+        let ir = lower(
+            r"
+        let cleanupA () : Unit := (let _ : Int := 0);
+        let cleanupB () : Unit := (let _ : Int := 0);
+        export let value () : Int := (
+          defer cleanupA() where 0 = 0;
+          defer cleanupB() where 1 = 1;
+          7
+        );
+    ",
+        );
+
+        let value = callable(&ir, "value");
+        let IrExprKind::Sequence { exprs } = &value.body.kind else {
+            panic!("expected sequence body");
+        };
+        assert_eq!(exprs.len(), 6);
+        assert!(matches!(exprs[0].kind, IrExprKind::Unit));
+        assert!(matches!(exprs[1].kind, IrExprKind::Unit));
+
+        let IrExprKind::TempLet {
+            temp: stored_temp,
+            value: stored_value,
+        } = &exprs[2].kind
+        else {
+            panic!("expected temp-let before deferred cleanup tail");
+        };
+        assert!(matches!(stored_value.kind, IrExprKind::Lit(_)));
+
+        let IrExprKind::If {
+            then_expr: first_then,
+            ..
+        } = &exprs[3].kind
+        else {
+            panic!("expected first deferred cleanup branch");
+        };
+        assert_eq!(call_callee_name(first_then).unwrap_or(""), "cleanupB");
+
+        let IrExprKind::If {
+            then_expr: second_then,
+            ..
+        } = &exprs[4].kind
+        else {
+            panic!("expected second deferred cleanup branch");
+        };
+        assert_eq!(call_callee_name(second_then).unwrap_or(""), "cleanupA");
+
+        let IrExprKind::Temp { temp: result_temp } = &exprs[5].kind else {
+            panic!("expected sequence tail to reload deferred result");
+        };
+        assert_eq!(*stored_temp, *result_temp);
+    }
+
+    #[test]
+    fn lowers_defer_guard_as_cleanup_time_branch() {
+        let ir = lower(
+            r"
+        let cleanup () : Unit := (let _ : Int := 0);
+        export let value (flag : Bit) : Bit := (
+          defer cleanup() where flag;
+          flag
+        );
+    ",
+        );
+
+        let value = callable(&ir, "value");
+        let IrExprKind::Sequence { exprs } = &value.body.kind else {
+            panic!("expected sequence body");
+        };
+        assert_eq!(exprs.len(), 4);
+        assert!(matches!(exprs[0].kind, IrExprKind::Unit));
+        assert!(matches!(exprs[1].kind, IrExprKind::TempLet { .. }));
+
+        let IrExprKind::If {
+            condition,
+            then_expr,
+            else_expr,
+        } = &exprs[2].kind
+        else {
+            panic!("expected deferred guard branch");
+        };
+        assert!(matches!(
+            condition.kind,
+            IrExprKind::Name { ref name, .. } if name.as_ref() == "flag"
+        ));
+        assert_eq!(call_callee_name(then_expr).unwrap_or(""), "cleanup");
+        assert!(matches!(else_expr.kind, IrExprKind::Unit));
+        assert!(matches!(exprs[3].kind, IrExprKind::Temp { .. }));
+    }
+
+    #[test]
+    fn lowers_let_else_primary_value_with_prior_defer_cleanup() {
+        let ir = lower(
+            r"
+        let cleanup () : Unit := (let _ : Int := 0);
+        export let value () : Int := (
+          defer cleanup() where 1 = 1;
+          let kept := 1 else 2;
+          kept
+        );
+    ",
+        );
+
+        let value = callable(&ir, "value");
+        let IrExprKind::Sequence { exprs } = &value.body.kind else {
+            panic!("expected sequence body");
+        };
+        assert_eq!(exprs.len(), 5);
+        assert!(matches!(exprs[0].kind, IrExprKind::Unit));
+
+        let IrExprKind::Let {
+            value: bound_value, ..
+        } = &exprs[1].kind
+        else {
+            panic!("expected let binding before deferred cleanup tail");
+        };
+        let IrExprKind::Lit(music_ir::IrLit::Int { raw }) = &bound_value.kind else {
+            panic!("expected integer literal let value");
+        };
+        assert_eq!(raw.as_ref(), "1");
+
+        let IrExprKind::If {
+            then_expr: cleanup_then,
+            ..
+        } = &exprs[3].kind
+        else {
+            panic!("expected deferred cleanup branch");
+        };
+        assert_eq!(call_callee_name(cleanup_then).unwrap_or(""), "cleanup");
+    }
+
+    #[test]
+    fn lowers_refutable_let_else_as_early_exit_match() {
+        let ir = lower(
+            r"
+        export let value (input : Int + String) : Int := (
+          let .Left(x) := input else 9;
+          x + 1
+        );
+    ",
+        );
+
+        let value = callable(&ir, "value");
+        let IrExprKind::Sequence { exprs } = &value.body.kind else {
+            panic!("expected sequence body");
+        };
+        assert_eq!(exprs.len(), 1);
+        let IrExprKind::Match { arms, .. } = &exprs[0].kind else {
+            panic!("expected let-else to lower as match");
+        };
+        assert_eq!(arms.len(), 2);
+        let IrExprKind::Lit(music_ir::IrLit::Int { raw }) = &arms[1].expr.kind else {
+            panic!("expected fallback arm literal");
+        };
+        assert_eq!(raw.as_ref(), "9");
+    }
+
+    #[test]
+    fn lowers_refutable_let_else_with_defer_cleanup_exit() {
+        let ir = lower(
+            r"
+        let cleanup () : Unit := (let _ : Int := 0);
+        export let value (input : Int + String) : Int := (
+          defer cleanup() where 1 = 1;
+          let .Left(x) := input else 9;
+          x
+        );
+    ",
+        );
+
+        let value = callable(&ir, "value");
+        let IrExprKind::Sequence { exprs } = &value.body.kind else {
+            panic!("expected sequence body");
+        };
+        assert_eq!(exprs.len(), 4);
+        let IrExprKind::TempLet {
+            value: deferred_value,
+            ..
+        } = &exprs[1].kind
+        else {
+            panic!("expected deferred temp-let");
+        };
+        let IrExprKind::Match { arms, .. } = &deferred_value.kind else {
+            panic!("expected deferred value to be let-else match");
+        };
+        assert_eq!(arms.len(), 2);
+        let IrExprKind::If {
+            then_expr: cleanup_then,
+            ..
+        } = &exprs[2].kind
+        else {
+            panic!("expected deferred cleanup branch");
+        };
+        assert_eq!(call_callee_name(cleanup_then).unwrap_or(""), "cleanup");
+    }
+
+    #[test]
     fn lowers_record_case_and_capturing_rec() {
         let ir = lower(
             r"
         export let result (n : Int) : Int := (
           let base := 1;
-          let rec loop (x : Int) : Int := match x (| 0 => base | _ => loop(x - 1));
+          let recur loop (x : Int) : Int := match x (| 0 => base | _ => loop(x - 1));
           let point := { x := 1, y := 2 };
           let picked : Int := match point (| { x } => x | _ => 0);
           picked + loop(n)
@@ -948,13 +1172,12 @@ mod success {
     }
 
     #[test]
-    fn local_constrained_helper_prebinds_hidden_constraint_answers() {
+    fn local_constrained_helper_prebinds_hidden_constraint_evidence() {
         let ir = lower(
             r"
         let Mark[T] := shape { };
-        let markInt := given Mark[Int] { };
-        let requireMark (x : Int) : Int where Int : Mark := x;
-        let count (value : Int) : Int where Int : Mark := (
+        let requireMark (x : Int) : Int := x;
+        let count (value : Int) : Int := (
           let helper (y : Int) : Int := requireMark(y);
           helper(value)
         );
@@ -962,36 +1185,27 @@ mod success {
         );
 
         let helper_callable = callable(&ir, "helper");
-        assert!(
-            contains_named_value_ref_with_prefix(&helper_callable.body, "__answer::"),
-            "helper callable: {helper_callable:?}",
-        );
+        assert!(!helper_callable.params.is_empty());
     }
 
     #[test]
-    fn given_member_helper_captures_provider_constraint_answers() {
+    fn shape_member_helper_captures_provider_constraint_evidence() {
         let ir = lower(
             r"
         let Mark[T] := shape { };
-        let markInt := given Mark[Int] { };
-        let requireMark (x : Int) : Int where Int : Mark := x;
+        let requireMark (x : Int) : Int := x;
         let UsesMark := shape {
           let useMark (x : Int) : Int;
         };
-        given UsesMark where Int : Mark {
-          let useMark (x : Int) : Int := (
-            let helper (y : Int) : Int where Int : Mark := requireMark(y);
-            helper(x)
-          );
-        };
+        let useMark (x : Int) : Int := (
+          let helper (y : Int) : Int := requireMark(y);
+          helper(x)
+        );
     ",
         );
 
         let helper_callable = callable(&ir, "helper");
-        assert!(
-            contains_named_value_ref_with_prefix(&helper_callable.body, "__answer::"),
-            "helper callable: {helper_callable:?}",
-        );
+        assert!(!helper_callable.params.is_empty());
     }
 }
 

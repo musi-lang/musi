@@ -177,10 +177,7 @@ impl Vm {
         Ok(StepOutcome::Continue)
     }
 
-    pub(super) fn exec_fast_brfalse(
-        &mut self,
-        runtime: &RuntimeInstruction,
-    ) -> VmResult<StepOutcome> {
+    pub(super) fn exec_fast_brz(&mut self, runtime: &RuntimeInstruction) -> VmResult<StepOutcome> {
         let Some(target) = runtime.branch_target else {
             let instruction = self.current_raw_instruction(runtime.raw_index)?;
             return self.exec_branch(&instruction);

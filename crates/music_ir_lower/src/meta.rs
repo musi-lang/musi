@@ -1,7 +1,7 @@
 use music_module::ModuleKey;
 use music_sema::{
     Attr, AttrValue, ConstraintKind, ExportedValue, ModuleSurface, SemaModule, SurfaceDim,
-    SurfaceEffectRow, SurfaceTyField, SurfaceTyId, SurfaceTyKind,
+    SurfaceTyField, SurfaceTyId, SurfaceTyKind,
 };
 
 use music_ir::IrMetaRecord;
@@ -44,7 +44,7 @@ const SIMPLE_SURFACE_TY_NAMES: &[SimpleSurfaceTyName] = &[
     },
     SimpleSurfaceTyName {
         kind: SurfaceTyKind::Bool,
-        display_name: "Bool",
+        display_name: "Bit",
     },
     SimpleSurfaceTyName {
         kind: SurfaceTyKind::Nat,
@@ -222,16 +222,6 @@ pub(crate) fn format_surface_ty(surface: &ModuleSurface, ty: SurfaceTyId) -> Str
         SurfaceTyKind::Array { dims, item } => format_array_surface_ty(surface, dims, *item),
         SurfaceTyKind::Bits { width } => format!("Bits[{width}]"),
         SurfaceTyKind::Range { bound } => format!("Range[{}]", format_surface_ty(surface, *bound)),
-        SurfaceTyKind::Handler {
-            effect,
-            input,
-            output,
-        } => format!(
-            "answer {} ({} -> {})",
-            format_surface_ty(surface, *effect),
-            format_surface_ty(surface, *input),
-            format_surface_ty(surface, *output)
-        ),
         SurfaceTyKind::Mut { inner } => format!("mut {}", format_surface_ty(surface, *inner)),
         SurfaceTyKind::AnyShape { capability: shape } => {
             format!("any {}", format_surface_ty(surface, *shape))
@@ -371,23 +361,6 @@ pub(crate) fn format_record_surface_ty(
     format!("{{ {fields} }}")
 }
 
-pub(crate) fn format_effect_row(surface: &ModuleSurface, row: &SurfaceEffectRow) -> String {
-    let mut items = row
-        .items
-        .iter()
-        .map(|item| {
-            item.arg.map_or_else(
-                || item.name.to_string(),
-                |arg| format!("{}[{}]", item.name, format_surface_ty(surface, arg)),
-            )
-        })
-        .collect::<Vec<_>>();
-    if let Some(open) = row.open.as_deref() {
-        items.push(format!("...{open}"));
-    }
-    format!("require {{ {} }}", items.join(", "))
-}
-
 pub(crate) fn push_meta(
     out: &mut MetaRecordList,
     target: &str,
@@ -456,8 +429,7 @@ pub(crate) fn push_export_sig_meta(
                 .iter()
                 .map(|constraint| {
                     let op = match constraint.kind {
-                        ConstraintKind::Subtype => "<:",
-                        ConstraintKind::Implements => ":",
+                        ConstraintKind::Implements => "|=",
                         ConstraintKind::TypeEq => "~=",
                     };
                     format!(
@@ -469,14 +441,6 @@ pub(crate) fn push_export_sig_meta(
                 })
                 .collect::<Vec<_>>()
                 .into_boxed_slice(),
-        );
-    }
-    if !export.effects.items.is_empty() || export.effects.open.is_some() {
-        push_meta(
-            out,
-            target,
-            "value.effects",
-            vec![format_effect_row(surface, &export.effects).into_boxed_str()].into_boxed_slice(),
         );
     }
 }
@@ -508,29 +472,6 @@ pub(crate) fn collect_meta(sema: &SemaModule) -> Box<[IrMetaRecord]> {
         );
     }
 
-    for effect in surface.exported_effects() {
-        let target = qualified_name(&effect.key.module, effect.key.name.as_ref());
-        if !effect.laws.is_empty() {
-            push_meta(
-                &mut out,
-                target.as_ref(),
-                "effect.laws",
-                effect
-                    .laws
-                    .iter()
-                    .map(|law| law.name.clone())
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-            );
-        }
-        push_inert_and_musi_attrs(
-            &mut out,
-            target.as_ref(),
-            &effect.inert_attrs,
-            &effect.musi_attrs,
-        );
-    }
-
     for data in surface.exported_data_defs() {
         let target = qualified_name(&data.key.module, data.key.name.as_ref());
         push_inert_and_musi_attrs(
@@ -550,16 +491,6 @@ pub(crate) fn collect_meta(sema: &SemaModule) -> Box<[IrMetaRecord]> {
             &export.musi_attrs,
         );
         push_export_sig_meta(&mut out, surface, target.as_ref(), export);
-    }
-
-    for (idx, inst) in surface.exported_givens().iter().enumerate() {
-        let target: Box<str> = format!("{}::given::{idx}", surface.module_key().as_str()).into();
-        push_inert_and_musi_attrs(
-            &mut out,
-            target.as_ref(),
-            &inst.inert_attrs,
-            &inst.musi_attrs,
-        );
     }
 
     out.into_boxed_slice()

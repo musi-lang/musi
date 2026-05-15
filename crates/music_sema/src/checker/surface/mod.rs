@@ -8,7 +8,7 @@ use crate::api::ModuleSurface;
 
 use self::exports::{ExportSurfaceCollector, collect_module_exports};
 use self::types::SurfaceTyBuilder;
-pub use self::types::{canonical_surface_ty, import_surface_ty, surface_key};
+pub use self::types::{import_surface_ty, surface_key};
 use super::{DeclState, ModuleState, RuntimeEnv, TypingState};
 
 pub fn build_module_surface(
@@ -32,19 +32,11 @@ pub fn build_module_surface(
     let exported_values = collector.collect_exported_values(typing, decls);
     let exported_data = collector.collect_exported_data(decls);
     let exported_shapes = collector.collect_exported_shapes(decls);
-    let exported_effects = collector.collect_exported_effects(decls);
-    let exported_givens = collector.collect_exported_givens(decls);
 
     ModuleSurface::from_collected(
         module.resolved.module_key.clone(),
         static_imports,
         collector.finish(),
-        (
-            exported_values,
-            exported_data,
-            exported_shapes,
-            exported_effects,
-            exported_givens,
-        ),
+        (exported_values, exported_data, exported_shapes),
     )
 }

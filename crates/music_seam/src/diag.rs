@@ -1,6 +1,7 @@
 use music_base::diag::{DiagCode, DiagContext, DiagLevel, DiagnosticKind};
 
 #[path = "diag_catalog_gen.rs"]
+#[rustfmt::skip]
 mod diag_catalog_gen;
 
 pub use diag_catalog_gen::{artifact_error_kind, assembly_error_kind, hil_verify_error_kind};
@@ -15,10 +16,12 @@ pub enum SeamDiagKind {
     UnknownOpcode,
     TextParseFailed,
     InvalidReference,
+    SectionLimitExceeded,
     DuplicateLabel,
     MissingLabel,
-    InvalidEffectOp,
     OperandShapeMismatch,
+    InternalOpcodeSerialized,
+    BranchTableTargetStackMismatch,
     HilMissingEntryBlock,
     HilDuplicateBlock,
     HilDuplicateValue,

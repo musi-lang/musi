@@ -6,7 +6,7 @@ use super::decode::build_procedures;
 use super::layout::{build_data_layouts, build_exports};
 use super::model::{Program, ProgramInner};
 use crate::VmResult;
-use crate::program_init::{build_global_init_image, specialize_runtime_kernels};
+use crate::program_init::build_global_init_image;
 
 impl Program {
     /// Loads validated SEAM bytes into an opaque runtime program.
@@ -20,8 +20,7 @@ impl Program {
     }
 
     pub(crate) fn from_artifact(artifact: Artifact) -> VmResult<Self> {
-        let mut procedures = build_procedures(&artifact)?;
-        specialize_runtime_kernels(&mut procedures);
+        let procedures = build_procedures(&artifact)?;
         let (exports, export_list) = build_exports(&artifact);
         let (data_layouts, data_layout_list) = build_data_layouts(&artifact);
         let entry_procedure = find_suffix_procedure(&artifact, "::__entry");

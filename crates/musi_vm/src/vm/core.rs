@@ -26,10 +26,6 @@ impl Vm {
             options,
             frames: Vec::new(),
             spare_frames: Vec::new(),
-            handlers: Vec::new(),
-            active_resumes: Vec::new(),
-            next_handler_id: 0,
-            continuation_target_handler: None,
             return_depth: None,
             heap: RuntimeHeap::new(),
             heap_dirty: false,
@@ -54,10 +50,6 @@ impl Vm {
             options,
             frames: Vec::new(),
             spare_frames: Vec::new(),
-            handlers: Vec::new(),
-            active_resumes: Vec::new(),
-            next_handler_id: 0,
-            continuation_target_handler: None,
             return_depth: None,
             heap: RuntimeHeap::new(),
             heap_dirty: false,
@@ -124,7 +116,7 @@ impl Vm {
             }
         }
         let value = self.lookup_export(name)?;
-        self.call_value(value, args)
+        self.call_value(&value, args)
     }
 
     /// Calls one export from one loaded module handle.
@@ -150,7 +142,7 @@ impl Vm {
             }
         }
         let value = self.lookup_module_export(module, name)?;
-        self.call_value(value, args)
+        self.call_value(&value, args)
     }
 
     /// Loads one loaded module through host boundary and returns one initialized module handle.

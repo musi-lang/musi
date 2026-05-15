@@ -14,7 +14,7 @@ pub fn semantic_syntax_tokens_for_source(source: &Source) -> ToolSemanticTokenLi
     collect_syntax_type_tokens(source, parsed.tree().root(), false, &mut tokens);
     collect_apply_type_arg_tokens(source, parsed.tree().root(), &mut tokens);
     collect_attribute_name_tokens(source, parsed.tree().root(), &mut tokens);
-    collect_variant_and_law_tokens(source, parsed.tree().root(), &mut tokens);
+    collect_variant_tokens(source, parsed.tree().root(), &mut tokens);
     tokens
 }
 
@@ -66,11 +66,8 @@ fn collect_typed_context_tokens(
     for child in node.children() {
         match child {
             SyntaxElement::Token(token) => match token.kind() {
-                TokenKind::Colon | TokenKind::LtColon | TokenKind::TildeEq => after_colon = true,
-                TokenKind::ColonEq
-                | TokenKind::EqGt
-                | TokenKind::KwWhere
-                | TokenKind::KwRequire => {
+                TokenKind::Colon | TokenKind::TildeEq => after_colon = true,
+                TokenKind::ColonEq | TokenKind::EqGt | TokenKind::KwWhere => {
                     after_colon = false;
                 }
                 _ => {}
@@ -92,7 +89,6 @@ const fn is_typed_context_node(kind: SyntaxNodeKind) -> bool {
             | SyntaxNodeKind::Member
             | SyntaxNodeKind::LambdaExpr
             | SyntaxNodeKind::Constraint
-            | SyntaxNodeKind::EffectItem
     )
 }
 
@@ -194,12 +190,7 @@ fn collect_type_like_tokens(source: &Source, node: SyntaxNode<'_, '_>, out: Sema
     for child in node.children() {
         match child {
             SyntaxElement::Node(child_node) => collect_type_like_tokens(source, child_node, out),
-            SyntaxElement::Token(token)
-                if matches!(
-                    token.kind(),
-                    TokenKind::Ident | TokenKind::KwAny | TokenKind::KwSome
-                ) =>
-            {
+            SyntaxElement::Token(token) if token.kind() == TokenKind::Ident => {
                 push_span_tokens(
                     source,
                     out,
@@ -246,24 +237,17 @@ fn collect_attribute_name_tokens(
     }
 }
 
-fn collect_variant_and_law_tokens(
-    source: &Source,
-    node: SyntaxNode<'_, '_>,
-    out: SemanticTokenSink<'_>,
-) {
+fn collect_variant_tokens(source: &Source, node: SyntaxNode<'_, '_>, out: SemanticTokenSink<'_>) {
     match node.kind() {
         SyntaxNodeKind::Variant | SyntaxNodeKind::VariantExpr | SyntaxNodeKind::VariantPat => {
             push_first_direct_ident(source, node, out, ToolSemanticTokenKind::EnumMember);
             return;
         }
-        SyntaxNodeKind::Member => {
-            push_law_name(source, node, out);
-        }
         _ => {}
     }
     for child in node.children() {
         if let SyntaxElement::Node(child_node) = child {
-            collect_variant_and_law_tokens(source, child_node, out);
+            collect_variant_tokens(source, child_node, out);
         }
     }
 }
@@ -284,39 +268,12 @@ fn push_first_direct_ident(
     }
 }
 
-fn push_law_name(source: &Source, node: SyntaxNode<'_, '_>, out: SemanticTokenSink<'_>) {
-    let mut after_law = false;
-    for child in node.children() {
-        if let SyntaxElement::Token(token) = child {
-            match token.kind() {
-                TokenKind::KwLaw => after_law = true,
-                TokenKind::Ident if after_law => {
-                    push_span_tokens(
-                        source,
-                        out,
-                        token.span(),
-                        ToolSemanticTokenKind::Function,
-                        Vec::new(),
-                    );
-                    return;
-                }
-                _ => {}
-            }
-        }
-    }
-}
-
 fn syntax_type_token_kind(
     token: SyntaxToken<'_, '_>,
     is_type_context: bool,
 ) -> Option<ToolSemanticTokenKind> {
     let kind = token.kind();
-    if is_type_context
-        && matches!(
-            kind,
-            TokenKind::Ident | TokenKind::KwAny | TokenKind::KwSome
-        )
-    {
+    if is_type_context && kind == TokenKind::Ident {
         return Some(ToolSemanticTokenKind::Type);
     }
     if kind == TokenKind::Ident
@@ -347,7 +304,7 @@ fn is_builtin_type_name(text: &str) -> bool {
             | "Syntax"
             | "Empty"
             | "Unit"
-            | "Bool"
+            | "Bit"
             | "Nat"
             | "Int"
             | "Int8"

@@ -116,15 +116,19 @@ impl ImmixBlock {
         if let Some(start) = self.reserve_lines_in(line_count, self.cursor, limit) {
             return Some(start);
         }
-        if self.cursor > 0
-            && let Some(start) = self.reserve_lines_in(line_count, 0, self.cursor.saturating_sub(1))
-        {
-            return Some(start);
+        if self.cursor > 0 {
+            let wrapped_limit = self.cursor.saturating_sub(1).min(limit);
+            if let Some(start) = self.reserve_lines_in(line_count, 0, wrapped_limit) {
+                return Some(start);
+            }
         }
         None
     }
 
     fn reserve_lines_in(&mut self, line_count: usize, start: usize, limit: usize) -> Option<usize> {
+        if start > limit {
+            return None;
+        }
         for start_line in start..=limit {
             if self.lines[start_line..start_line + line_count]
                 .iter()
@@ -164,3 +168,28 @@ impl ImmixBlock {
         }
     }
 }
+
+#[cfg(test)]
+mod success {
+    use super::{HeapSpace, IMMIX_LINES_PER_BLOCK, ImmixBlock};
+
+    #[test]
+    fn full_block_reservation_does_not_probe_past_end() {
+        let mut block = ImmixBlock::new(HeapSpace::Young);
+
+        assert_eq!(block.reserve_lines(IMMIX_LINES_PER_BLOCK), Some(0));
+        assert_eq!(block.reserve_lines(1), None);
+        assert_eq!(block.reserve_lines(2), None);
+    }
+
+    #[test]
+    fn wrapped_reservation_does_not_probe_past_end() {
+        let mut block = ImmixBlock::new(HeapSpace::Young);
+
+        assert_eq!(block.reserve_lines(IMMIX_LINES_PER_BLOCK - 1), Some(0));
+        assert_eq!(block.reserve_lines(2), None);
+    }
+}
+
+#[cfg(test)]
+mod failure {}

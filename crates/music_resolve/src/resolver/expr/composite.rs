@@ -75,22 +75,6 @@ where
         )
     }
 
-    pub(super) fn lower_answer_ty_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
-        let origin = self.origin_node(node);
-        let mut exprs = node.child_nodes();
-        let effect = self.lower_opt_expr(origin, exprs.next());
-        let input = self.lower_opt_expr(origin, exprs.next());
-        let output = self.lower_opt_expr(origin, exprs.next());
-        self.alloc_expr(
-            origin,
-            HirExprKind::AnswerTy {
-                effect,
-                input,
-                output,
-            },
-        )
-    }
-
     pub(super) fn lower_record_expr(&mut self, node: SyntaxNode<'tree, 'src>) -> HirExprId {
         let origin = self.origin_node(node);
         let items = self.lower_record_items(node.child_nodes());

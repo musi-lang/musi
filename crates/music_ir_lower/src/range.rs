@@ -1,6 +1,6 @@
 use super::{
     HirBinaryOp, HirExprId, HirPartialRangeKind, IrExprKind, IrOrigin, IrRangeKind, LowerCtx,
-    lower_boxed_expr, lower_constraint_answer_expr, lowering_invariant_violation, render_ty_name,
+    lower_boxed_expr, lower_constraint_evidence_expr, lowering_invariant_violation, render_ty_name,
 };
 
 pub(crate) fn lower_range_expr(
@@ -48,9 +48,9 @@ pub(crate) fn lower_partial_range_expr(
     );
     let bounds_evidence = ctx
         .sema
-        .expr_constraint_answers(expr_id)
+        .expr_constraint_evidence(expr_id)
         .and_then(|items| items.get(1))
-        .map(|item| Box::new(lower_constraint_answer_expr(ctx, origin, item)));
+        .map(|item| Box::new(lower_constraint_evidence_expr(ctx, origin, item)));
     let bound = lower_boxed_expr(ctx, expr);
     let range_kind = match kind {
         HirPartialRangeKind::From { include_lower } => IrRangeKind::from(include_lower),
@@ -77,11 +77,11 @@ pub(crate) fn lower_in_expr(
     );
     let evidence = ctx
         .sema
-        .expr_constraint_answers(expr_id)
+        .expr_constraint_evidence(expr_id)
         .and_then(|items| items.first())
         .map_or_else(
             || lowering_invariant_violation("range membership evidence missing"),
-            |item| lower_constraint_answer_expr(ctx, origin, item),
+            |item| lower_constraint_evidence_expr(ctx, origin, item),
         );
     IrExprKind::RangeContains {
         value: lower_boxed_expr(ctx, left),

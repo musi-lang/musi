@@ -1,0 +1,9 @@
+{
+  "$schema": "https://raw.githubusercontent.com/musi-lang/musi/refs/heads/main/schemas/musi.schema.v1.json",
+  "name": "@examples/03-functions-and-calls",
+  "version": "0.1.0",
+  "entry": "./index.ms",
+  "imports": {
+    "@std": "../../lib/std"
+  }
+}

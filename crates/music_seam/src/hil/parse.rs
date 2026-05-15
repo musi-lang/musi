@@ -201,7 +201,6 @@ fn parse_capabilities(text: &str) -> Result<Vec<HilShape>, AssemblyError> {
     }
     text.split(',')
         .map(|name| match name.trim() {
-            "effect" => Ok(HilShape::Effect),
             "native" => Ok(HilShape::Native),
             "syntax" => Ok(HilShape::Syntax),
             "known" => Ok(HilShape::Known),
@@ -285,19 +284,6 @@ fn parse_assigned_instruction(
                 .map_err(|_| hil_parse_error("native.call args malformed"))?,
         });
     }
-    if let Some(rest) = rhs.strip_prefix("effect.call ")
-        && let Some((head, args)) = parse_named_call(rest)
-        && let Some((effect, op)) = head.split_once('.')
-    {
-        return Ok(HilInstruction::EffectCall {
-            out,
-            result_ty: ty,
-            effect: effect.into(),
-            op: op.into(),
-            args: parse_value_id_list(args)
-                .map_err(|_| hil_parse_error("effect.call args malformed"))?,
-        });
-    }
     if let Some(rest) = rhs.strip_prefix("data.new .")
         && let Some((variant, args)) = parse_named_call(rest)
     {
@@ -365,7 +351,7 @@ fn parse_terminator(line: &str) -> Result<Option<HilTerminator>, AssemblyError> 
             else_target: else_text.trim().into(),
         }));
     }
-    if let Some(rest) = line.strip_prefix("tail.call ")
+    if let Some(rest) = line.strip_prefix("call.tail ")
         && let Some((callee, args)) = parse_named_call(rest)
     {
         return Ok(Some(HilTerminator::TailCall {

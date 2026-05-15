@@ -6,7 +6,7 @@ use music_ir::{IrRangeEndpoint, IrRangeKind};
 use super::support::push_expr_diag_with;
 
 const ANY_TY: &str = "Any";
-const BOOL_TY: &str = "Bool";
+const BOOL_TY: &str = "Bit";
 
 impl ProcedureEmitter<'_, '_> {
     pub(super) fn compile_range(

@@ -47,16 +47,6 @@ pub struct TargetInfo {
     pub features: BTreeSet<Box<str>>,
     pub pointer_width: Option<u16>,
     pub endian: Option<Box<str>>,
-    pub jit: JitTargetInfo,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct JitTargetInfo {
-    pub supported: bool,
-    pub backend: Option<Box<str>>,
-    pub isa: Option<Box<str>>,
-    pub call_conv: Option<Box<str>>,
-    pub features: BTreeSet<Box<str>>,
 }
 
 impl TargetInfo {
@@ -74,13 +64,6 @@ impl TargetInfo {
             features: BTreeSet::new(),
             pointer_width: None,
             endian: None,
-            jit: JitTargetInfo {
-                supported: false,
-                backend: None,
-                isa: None,
-                call_conv: None,
-                features: BTreeSet::new(),
-            },
         }
     }
 
@@ -110,7 +93,6 @@ impl TargetInfo {
         let arch = normalize_arch_text(&arch.into());
         self.arch_family = arch_family(&arch).map(Into::into);
         self.arch = Some(arch.into_boxed_str());
-        self.jit = jit_target_for_arch(self.arch.as_deref());
         self
     }
 
@@ -213,26 +195,5 @@ pub fn arch_family(arch: &str) -> Option<&'static str> {
         "loongarch32" | "loongarch64" => Some("loongarch"),
         "s390x" => Some("ibm-z"),
         _ => None,
-    }
-}
-
-#[must_use]
-pub fn jit_target_for_arch(arch: Option<&str>) -> JitTargetInfo {
-    let Some(arch) = arch else {
-        return JitTargetInfo::default();
-    };
-    let isa = match normalize_arch_text(arch).as_str() {
-        "x86-64" => "x64",
-        "aarch64" => "aarch64",
-        "rv64" | "riscv64" => "riscv64",
-        "s390x" => "s390x",
-        _ => return JitTargetInfo::default(),
-    };
-    JitTargetInfo {
-        supported: true,
-        backend: Some("cranelift".into()),
-        isa: Some(isa.into()),
-        call_conv: None,
-        features: BTreeSet::new(),
     }
 }

@@ -13,6 +13,7 @@ struct CatalogEntry {
     help: Option<&'static str>,
 }
 
+#[rustfmt::skip]
 const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: MusicCliDiagKind::UnsupportedRunArgs,
@@ -78,6 +79,7 @@ pub fn from_code(raw: u16) -> Option<MusicCliDiagKind> {
         .map(|entry| entry.kind)
 }
 
+#[rustfmt::skip]
 pub const fn music_cli_error_kind(source: &crate::MusicError) -> Option<MusicCliDiagKind> {
     match source {
         crate::MusicError::DirectToolingFailed(_)

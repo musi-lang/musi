@@ -1,0 +1,7 @@
+timestamp_utc,commit,owner,path,cyclomatic_sum,cyclomatic_max_fn
+2026-05-15T00:00:00+00:00,de5c549c,musi_lsp,crates/musi_lsp/src/server/navigation.rs,58,11
+2026-05-15T00:00:00+00:00,de5c549c,music_sema,crates/music_sema/src/checker/exprs/mod.rs,137,10
+2026-05-15T00:00:00+00:00,de5c549c,musi_fmt,crates/musi_fmt/src/source/cst/mod.rs,1,1
+2026-05-15T02:14:54+00:00,de5c549c,musi_lsp,crates/musi_lsp/src/server/navigation.rs,58,11
+2026-05-15T02:14:54+00:00,de5c549c,music_sema,crates/music_sema/src/checker/exprs/mod.rs,137,10
+2026-05-15T02:14:54+00:00,de5c549c,musi_fmt,crates/musi_fmt/src/source/cst/mod.rs,1,1

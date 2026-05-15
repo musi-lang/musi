@@ -67,10 +67,10 @@ impl ProcedureEmitter<'_, '_> {
         name: &str,
         import_record_target: Option<&ModuleKey>,
     ) -> Option<ProcedureId> {
-        if import_record_target.is_none_or(|target| target == self.module_key) {
-            if let Some(procedure) = self.layout.callables_by_name.get(name).copied() {
-                return Some(procedure);
-            }
+        if import_record_target.is_none_or(|target| target == self.module_key)
+            && let Some(procedure) = self.layout.callables_by_name.get(name).copied()
+        {
+            return Some(procedure);
         }
         resolve_named_binding(
             binding,

@@ -47,9 +47,7 @@ impl CheckPass<'_, '_, '_> {
 
     fn is_structural_target(&self, inner: HirExprId) -> bool {
         match self.expr(inner).kind {
-            HirExprKind::Data { .. } | HirExprKind::Effect { .. } | HirExprKind::Shape { .. } => {
-                true
-            }
+            HirExprKind::Data { .. } | HirExprKind::Shape { .. } => true,
             HirExprKind::Let { value, .. } => expr_has_structural_target(self, value),
             _ => false,
         }
@@ -87,10 +85,11 @@ impl CheckPass<'_, '_, '_> {
         for attr in attrs {
             let path = self.attr_path(&attr);
             match path.as_slice() {
-                ["link" | "target"] if !inner_is_native => {
+                ["link"] if !inner_is_native => {
                     self.diag(origin.span, DiagKind::AttrLinkRequiresForeignLet, "");
                 }
-                ["repr" | "layout"] if !self.is_data_target(inner) => {
+                ["target"] => self.validate_when_attr(&attr, origin),
+                ["layout"] if !self.is_data_target(inner) => {
                     self.diag(origin.span, DiagKind::AttrDataLayoutRequiresDataTarget, "");
                 }
                 ["frozen"] => self.validate_frozen_attr(origin, inner),

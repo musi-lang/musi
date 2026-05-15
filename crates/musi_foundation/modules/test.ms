@@ -1,28 +1,39 @@
+--! Host-backed test primitives.
+
 let Core := import "musi:core";
-let Bool := Core.Bool;
+let Bit := Core.Bit;
 let String := Core.String;
 let Unit := Core.Unit;
 
-export opaque let SampleCase [T] := data {
+--- Sample test case marker.
+export hidden let SampleCase [T] := data {
   | Case
 };
 
-export opaque let SampleList [T] := data {
+--- Sample test list marker.
+export hidden let SampleList [T] := data {
   | Nil
 };
 
-export opaque let Sample [T] := shape {
+--- Sample test contract.
+export hidden let Sample [T] := shape {
 };
 
-export opaque let Test := effect {
-  let suiteStart (name : String) : Unit;
-  let suiteEnd () : Unit;
-  let testCase (name : String, passed : Bool) : Unit;
-};
+@foreign(abi := .musi)
+let Musi__suiteStart (name : String) : Unit;
 
-export let suiteStart (name : String) : Unit := ask Test.suiteStart(name);
+--- Start a named test suite.
+export let suiteStart (name : String) := unsafe (Musi__suiteStart(name));
 
-export let suiteEnd () : Unit := ask Test.suiteEnd();
+@foreign(abi := .musi)
+let Musi__suiteEnd () : Unit;
 
-export let testCase (name : String, passed : Bool) : Unit :=
-  ask Test.testCase(name, passed);
+--- End current test suite.
+export let suiteEnd () := unsafe (Musi__suiteEnd());
+
+@foreign(abi := .musi)
+let Musi__testCase (name : String, passed : Bit) : Unit;
+
+--- Record one named test case.
+export let testCase (name : String, passed : Bit) :=
+  unsafe (Musi__testCase(name, passed));

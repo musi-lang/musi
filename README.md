@@ -1,9 +1,9 @@
 # Musi
 
-Musi is an expression-first programming language with typed effects, a SEAM bytecode pipeline, and package tooling built around `.ms` source files.
+Musi is an expression-first programming language with a compact core, a SEAM bytecode pipeline, and package tooling built around `.ms` source files.
 
-> [!WARNING]
-> Musi is `v0.1.0-alpha.1`. Language, tooling, and stdlib shape will still change.
+> [!NOTE]
+> Musi documentation tracks the frozen `0.1.0` host-language baseline: Rust 2024 is the host substrate for the compiler/runtime, and the source + SEAM contracts in this repo are the `0.1.0` canon.
 
 ## Overview
 
@@ -154,7 +154,7 @@ Use `musi` inside package roots. Use `music` when you want one source graph or o
 Prefer focused stdlib imports:
 
 ```musi
-let option := import "@std/option";
+let maybe := import "@std/maybe";
 let testing := import "@std/testing";
 ```
 
@@ -162,7 +162,7 @@ Root import also works:
 
 ```musi
 let std := import "@std";
-let option := std.option;
+let maybe := std.maybe;
 let testing := std.testing;
 let os := std.os;
 ```
@@ -173,8 +173,8 @@ Foundation host modules stay separate from stdlib:
 
 ```musi
 let Core := import "musi:core";
-let Io := import "musi:io";
 let Fs := import "musi:fs";
+let Io := import "musi:io";
 ```
 
 Reach for `@std` first in ordinary application code. Reach for `musi:*` only when you are working at language, runtime, or integration boundaries.

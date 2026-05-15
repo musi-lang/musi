@@ -55,10 +55,7 @@ pub(super) fn binding_token_kind(
     sema: Option<&SemaModule>,
 ) -> ToolSemanticTokenKind {
     match kind {
-        NameBindingKind::Param
-        | NameBindingKind::PiBinder
-        | NameBindingKind::HandleClauseParam
-        | NameBindingKind::HandleClauseResult => ToolSemanticTokenKind::Parameter,
+        NameBindingKind::Param | NameBindingKind::PiBinder => ToolSemanticTokenKind::Parameter,
         NameBindingKind::TypeParam => ToolSemanticTokenKind::TypeParameter,
         NameBindingKind::Prelude
         | NameBindingKind::Import

@@ -20,8 +20,6 @@ impl Parser<'_> {
             }
             TokenKind::TemplateNoSubst | TokenKind::TemplateHead => self.parse_template_expr(),
             TokenKind::Ident | TokenKind::OpIdent => self.parse_name_expr(),
-            TokenKind::Hash => self.parse_splice_expr(),
-            TokenKind::KwQuote => self.parse_quote_expr(),
             _ => return None,
         })
     }
@@ -36,10 +34,11 @@ impl Parser<'_> {
                 }
             }
             TokenKind::Backslash => self.parse_lambda_expr(),
+            TokenKind::LBracket if self.at_stack_effect_expr() => self.parse_stack_effect_expr(),
             TokenKind::LBracket => self.parse_array_expr(),
             TokenKind::LBrace => self.parse_record_expr(),
             TokenKind::Dot => self.parse_dot_prefix_expr(),
-            TokenKind::At | TokenKind::KwExport | TokenKind::KwPartial => {
+            TokenKind::At | TokenKind::KwExport | TokenKind::KwHidden => {
                 self.parse_with_mods_expr()
             }
             _ => return None,
@@ -49,15 +48,13 @@ impl Parser<'_> {
     fn parse_atom_keyword_expr(&mut self) -> Option<ParseResult<SyntaxNodeId>> {
         Some(match self.peek_kind() {
             TokenKind::KwMatch => self.parse_match_expr(),
+            TokenKind::KwIf => self.parse_if_expr(),
             TokenKind::KwLet => self.parse_let_expr(Vec::new()),
-            TokenKind::KwResume => self.parse_resume_expr(),
+            TokenKind::KwDefer => self.parse_defer_expr(),
+            TokenKind::KwYield => self.parse_yield_expr(),
             TokenKind::KwImport => self.parse_import_expr(),
             TokenKind::KwData => self.parse_data_expr(),
-            TokenKind::KwEffect => self.parse_effect_expr(),
             TokenKind::KwShape => self.parse_shape_expr(),
-            TokenKind::KwAsk => self.parse_ask_expr(),
-            TokenKind::KwHandle => self.parse_handle_expr(),
-            TokenKind::KwNative => self.parse_foreign_expr(Vec::new()),
             TokenKind::KwUnsafe => self.parse_unsafe_expr(),
             TokenKind::KwPin => self.parse_pin_expr(),
             _ => return None,
@@ -164,7 +161,7 @@ impl Parser<'_> {
     fn parse_variant_expr_payload_item(&mut self) -> ParseResult<SyntaxNodeId> {
         let mut children = Vec::new();
         if self.peek_kind() == TokenKind::Ident && self.nth_kind(1) == TokenKind::ColonEq {
-            children.push(self.advance_element());
+            children.push(self.expect_ident_element()?);
             children.push(self.advance_element());
         }
         children.push(SyntaxElementId::Node(self.parse_expr(0)?));
@@ -176,7 +173,7 @@ impl Parser<'_> {
     fn parse_variant_pat_payload_item(&mut self) -> ParseResult<SyntaxNodeId> {
         let mut children = Vec::new();
         if self.peek_kind() == TokenKind::Ident && self.nth_kind(1) == TokenKind::ColonEq {
-            children.push(self.advance_element());
+            children.push(self.expect_ident_element()?);
             children.push(self.advance_element());
         }
         children.push(SyntaxElementId::Node(self.parse_pattern()?));
@@ -187,6 +184,10 @@ impl Parser<'_> {
 
     pub(super) fn parse_expr_node(&mut self) -> ParseResult<SyntaxNodeId> {
         self.parse_expr(0)
+    }
+
+    pub(super) fn parse_type_expr_node(&mut self) -> ParseResult<SyntaxNodeId> {
+        self.parse_type_expr(0)
     }
 
     pub(super) fn parse_attr_value_node(&mut self) -> ParseResult<SyntaxNodeId> {

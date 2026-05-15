@@ -13,6 +13,7 @@ struct CatalogEntry {
     help: Option<&'static str>,
 }
 
+#[rustfmt::skip]
 const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: CliDiagKind::MissingCurrentDirectory,
@@ -142,12 +143,15 @@ pub fn from_code(raw: u16) -> Option<CliDiagKind> {
         .map(|entry| entry.kind)
 }
 
+#[rustfmt::skip]
 pub const fn cli_error_kind(source: &crate::MusiError) -> Option<CliDiagKind> {
     match source {
         crate::MusiError::ProjectModelFailed(_)
         | crate::MusiError::SessionCompilationFailed(_)
         | crate::MusiError::RuntimeExecutionFailed(_)
         | crate::MusiError::ToolingIoFailed(_)
+        | crate::MusiError::ArtifactTransportFailed(_)
+        | crate::MusiError::ArchiveTransportFailed(_)
         | crate::MusiError::FormattingFailed(_)
         | crate::MusiError::JsonSerializationFailed(_) => None,
         crate::MusiError::MissingCurrentDirectory => Some(CliDiagKind::MissingCurrentDirectory),

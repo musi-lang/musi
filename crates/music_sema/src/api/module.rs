@@ -7,13 +7,11 @@ use music_module::ModuleKey;
 use music_names::{NameBindingId, Symbol};
 use music_resolve::ResolvedModule;
 
-use crate::effects::EffectRow;
 use crate::{BindingScheme, SemaModuleBuild};
 
 use super::{
-    ComptimeValue, ConstraintAnswer, ConstraintKey, ExprFacts, ExprMemberFact, ForeignLinkInfo,
-    GivenFacts, ModuleSurface, PatFacts, SemaDataDef, SemaDiagList, SemaEffectDef, ShapeFacts,
-    TargetInfo,
+    ComptimeValue, ConstraintEvidence, ConstraintKey, ExprFacts, ExprMemberFact, ForeignLinkInfo,
+    ModuleSurface, PatFacts, SemaDataDef, SemaDiagList, ShapeFacts, TargetInfo,
 };
 
 #[derive(Debug)]
@@ -31,14 +29,12 @@ pub struct SemaModule {
     pat_facts: Box<[PatFacts]>,
     expr_import_record_targets: HashMap<HirExprId, ModuleKey>,
     type_test_targets: HashMap<HirExprId, HirTyId>,
-    expr_constraint_answers: HashMap<HirExprId, Box<[ConstraintAnswer]>>,
+    expr_constraint_evidence: HashMap<HirExprId, Box<[ConstraintEvidence]>>,
     expr_dot_callable_bindings: HashMap<HirExprId, NameBindingId>,
     expr_member_facts: HashMap<HirExprId, ExprMemberFact>,
     expr_comptime_values: HashMap<HirExprId, ComptimeValue>,
-    effect_defs: HashMap<Box<str>, SemaEffectDef>,
     data_defs: HashMap<Box<str>, SemaDataDef>,
     shape_facts: HashMap<HirExprId, ShapeFacts>,
-    given_facts: HashMap<HirExprId, GivenFacts>,
     surface: ModuleSurface,
     diags: SemaDiagList,
 }
@@ -59,17 +55,15 @@ struct SemaFactTables {
     pat_facts: Vec<PatFacts>,
     expr_import_record_targets: HashMap<HirExprId, ModuleKey>,
     type_test_targets: HashMap<HirExprId, HirTyId>,
-    expr_constraint_answers: HashMap<HirExprId, Box<[ConstraintAnswer]>>,
+    expr_constraint_evidence: HashMap<HirExprId, Box<[ConstraintEvidence]>>,
     expr_dot_callable_bindings: HashMap<HirExprId, NameBindingId>,
     expr_member_facts: HashMap<HirExprId, ExprMemberFact>,
     expr_comptime_values: HashMap<HirExprId, ComptimeValue>,
 }
 
 struct SemaDeclTables {
-    effect_defs: HashMap<Box<str>, SemaEffectDef>,
     data_defs: HashMap<Box<str>, SemaDataDef>,
     shape_facts: HashMap<HirExprId, ShapeFacts>,
-    given_facts: HashMap<HirExprId, GivenFacts>,
 }
 
 impl From<SemaModuleBuild> for SemaModule {
@@ -87,7 +81,7 @@ impl From<SemaModuleBuild> for SemaModule {
             pat_facts,
             expr_import_record_targets,
             type_test_targets,
-            expr_constraint_answers,
+            expr_constraint_evidence,
             expr_dot_callable_bindings,
             expr_member_facts,
             expr_comptime_values,
@@ -107,16 +101,14 @@ impl From<SemaModuleBuild> for SemaModule {
             pat_facts,
             expr_import_record_targets,
             type_test_targets,
-            expr_constraint_answers,
+            expr_constraint_evidence,
             expr_dot_callable_bindings,
             expr_member_facts,
             expr_comptime_values,
         };
         let decls = SemaDeclTables {
-            effect_defs: build_decls.effect_defs,
             data_defs: build_decls.data_defs,
             shape_facts: build_decls.shape_facts,
-            given_facts: build_decls.given_facts,
         };
         Self::from_parts(resolved, context, facts, decls, surface, diags)
     }
@@ -149,13 +141,6 @@ impl SemaModule {
     }
 
     #[must_use]
-    pub fn try_expr_effects(&self, id: HirExprId) -> Option<&EffectRow> {
-        self.expr_facts
-            .get(idx_to_usize(id))
-            .map(|facts| &facts.effects)
-    }
-
-    #[must_use]
     pub fn expr_import_record_target(&self, id: HirExprId) -> Option<&ModuleKey> {
         self.expr_import_record_targets.get(&id)
     }
@@ -166,8 +151,8 @@ impl SemaModule {
     }
 
     #[must_use]
-    pub fn expr_constraint_answers(&self, id: HirExprId) -> Option<&[ConstraintAnswer]> {
-        self.expr_constraint_answers.get(&id).map(Box::as_ref)
+    pub fn expr_constraint_evidence(&self, id: HirExprId) -> Option<&[ConstraintEvidence]> {
+        self.expr_constraint_evidence.get(&id).map(Box::as_ref)
     }
 
     #[must_use]
@@ -244,26 +229,12 @@ impl SemaModule {
     }
 
     #[must_use]
-    pub fn effect_def(&self, name: &str) -> Option<&SemaEffectDef> {
-        self.effect_defs.get(name)
-    }
-
-    pub fn effect_defs(&self) -> impl Iterator<Item = &SemaEffectDef> {
-        self.effect_defs.values()
-    }
-
-    #[must_use]
     pub fn data_def(&self, name: &str) -> Option<&SemaDataDef> {
         self.data_defs.get(name)
     }
 
     pub fn data_defs(&self) -> impl Iterator<Item = &SemaDataDef> {
         self.data_defs.values()
-    }
-
-    #[must_use]
-    pub fn given_facts(&self, id: HirExprId) -> Option<&GivenFacts> {
-        self.given_facts.get(&id)
     }
 
     #[must_use]
@@ -295,14 +266,12 @@ impl SemaModule {
             pat_facts: facts.pat_facts.into_boxed_slice(),
             expr_import_record_targets: facts.expr_import_record_targets,
             type_test_targets: facts.type_test_targets,
-            expr_constraint_answers: facts.expr_constraint_answers,
+            expr_constraint_evidence: facts.expr_constraint_evidence,
             expr_dot_callable_bindings: facts.expr_dot_callable_bindings,
             expr_member_facts: facts.expr_member_facts,
             expr_comptime_values: facts.expr_comptime_values,
-            effect_defs: decls.effect_defs,
             data_defs: decls.data_defs,
             shape_facts: decls.shape_facts,
-            given_facts: decls.given_facts,
             surface,
             diags,
         }

@@ -34,6 +34,18 @@ pub enum FmtOperatorBreakArg {
     After,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum BuildProfileArg {
+    Debug,
+    Release,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum BuildPackageArg {
+    Thin,
+    Fat,
+}
+
 #[derive(Debug, Parser)]
 #[command(name = "musi")]
 pub struct Cli {
@@ -113,6 +125,12 @@ pub enum Command {
         out: Option<PathBuf>,
         #[arg(long)]
         target_name: Option<String>,
+        #[arg(long, action = ArgAction::Count)]
+        archive: u8,
+        #[arg(long, value_enum)]
+        profile: Option<BuildProfileArg>,
+        #[arg(long, value_enum)]
+        package: Option<BuildPackageArg>,
     },
     Run {
         target: Option<PathBuf>,
@@ -130,6 +148,12 @@ pub enum Command {
     },
     Info {
         target: Option<PathBuf>,
+    },
+    Disasm {
+        target: PathBuf,
+    },
+    Decomp {
+        target: PathBuf,
     },
     Lsp,
     Compile(ReservedCommandArgs),

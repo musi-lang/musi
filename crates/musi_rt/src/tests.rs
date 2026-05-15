@@ -6,10 +6,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use musi_native::{NativeHost, NativeTestCaseResult, NativeTestReport};
 use musi_vm::{
-    EffectCall, ForeignCall, Value, ValueView, VmDiagKind, VmError, VmErrorKind, VmHost,
-    VmHostCallContext, VmHostContext, VmResult,
+    ForeignCall, Value, ValueView, VmError, VmErrorKind, VmHost, VmHostCallContext, VmHostContext,
+    VmResult,
 };
-use music_base::diag::DiagContext;
 use music_module::ImportMap;
 use music_session::SessionOptions;
 use music_term::{SyntaxShape, SyntaxTerm, SyntaxTermError};
@@ -28,26 +27,6 @@ impl VmHost for TestHost {
     ) -> VmResult<Value> {
         Err(VmError::new(VmErrorKind::ForeignCallRejected {
             foreign: foreign.name().into(),
-        }))
-    }
-
-    fn handle_effect(
-        &mut self,
-        _ctx: VmHostCallContext<'_, '_>,
-        effect: &EffectCall,
-        _args: &[Value],
-    ) -> VmResult<Value> {
-        Err(VmError::new(VmErrorKind::EffectRejected {
-            effect: effect.effect_name().into(),
-            op: Some(effect.op_name().into()),
-            reason: VmDiagKind::EffectRejected
-                .message_with(
-                    &DiagContext::new()
-                        .with("effect", effect.effect_name())
-                        .with("op", effect.op_name())
-                        .with("reason", "test host"),
-                )
-                .into(),
         }))
     }
 }
@@ -81,6 +60,59 @@ fn assert_runtime_string(runtime: &Runtime, value: &Value, expected: &str) {
 
 fn register_runtime_module(runtime: &mut Runtime, spec: &str, text: &str) {
     runtime.register_module_text(spec, text).unwrap();
+}
+
+fn runtime_options_with_std_imports(output: RuntimeOutputMode) -> RuntimeOptions {
+    let mut import_map = ImportMap::default();
+    let _ = import_map.imports.insert("@std/".into(), "@std/".into());
+    RuntimeOptions::default()
+        .with_output(output)
+        .with_session(SessionOptions::new().with_import_map(import_map))
+}
+
+fn register_runtime_std_log(runtime: &mut Runtime) {
+    register_runtime_module(
+        runtime,
+        "@std/prelude",
+        r#"
+let Core := import "musi:core";
+export let Int := Core.Int;
+export let Bit := Core.Bit;
+export let String := Core.String;
+export let Unit := Core.Unit;
+"#,
+    );
+    register_runtime_module(
+        runtime,
+        "@std/log",
+        r#"
+let Io := import "musi:io";
+
+export hidden let Level := data {
+  | Info := 20
+  | Error := 40
+};
+
+export let infoLevel : Level := .Info;
+export let errorLevel : Level := .Error;
+
+export let (self : Level).name () : String :=
+  match self (
+  | .Info => "info"
+  | .Error => "error"
+  );
+
+export let write (level : Level, message : String) : Unit :=
+  (
+    Io.writeErr("[");
+    Io.writeErr(level.name());
+    Io.writeErr("] ");
+    Io.writeErrLn(message)
+  );
+
+export let info (message : String) : Unit := write(infoLevel, message);
+"#,
+    );
 }
 
 fn unique_test_suffix() -> String {
@@ -181,7 +213,7 @@ mod success {
                 r"
             export let prependMatches () : Int :=
               match () (
-              | _ if [0, ...[1, 2]] = [0, 1, 2] => 1
+              | _ where [0, ...[1, 2]] = [0, 1, 2] => 1
               | _ => 0
               );
         ",
@@ -235,10 +267,13 @@ mod success {
             .register_module_text(
                 "main",
                 r#"
-            native "c" (
-              let puts (value : Int) : Int;
-            );
-            export let result () : Int := unsafe { puts(42); };
+            let Core := import "musi:core";
+            let String := Core.String;
+            @foreign(
+              abi := .musi
+            )
+            let puts(value : Int) : Int;
+            export let result () : Int := unsafe (puts(42));
         "#,
             )
             .unwrap();
@@ -249,28 +284,26 @@ mod success {
     }
 
     #[test]
-    fn routes_effect_calls_through_registered_handlers() {
+    fn routes_foreign_calls_through_registered_handlers_with_context() {
         let mut host = NativeHost::new();
-        host.register_effect_handler_with_context(
-            "main::Console",
-            "readLine",
-            |ctx, _effect, args| {
-                let [prompt] = args else {
-                    panic!("prompt expected");
-                };
-                let prompt = ctx.string(prompt).expect("prompt should be string");
-                assert_eq!(prompt.as_str(), ">");
-                Ok(Value::Int(42))
-            },
-        );
+        host.register_foreign_handler_with_context("main::readInt", |_ctx, _foreign, args| {
+            let [Value::Int(value)] = args else {
+                panic!("integer expected");
+            };
+            assert_eq!(*value, 7);
+            Ok(Value::Int(42))
+        });
         let mut runtime = Runtime::new(host, RuntimeOptions::default());
         runtime
             .register_module_text(
                 "main",
-                r#"
-            let Console := effect { let readLine (prompt : String) : Int; };
-            export let result () : Int := ask Console.readLine(">");
-        "#,
+                r"
+            @foreign(
+              abi := .musi
+            )
+            let readInt(value : Int) : Int;
+            export let result () : Int := unsafe (readInt(7));
+        ",
             )
             .unwrap();
         runtime.load_root("main").unwrap();
@@ -288,12 +321,13 @@ mod success {
         runtime
             .register_module_text(
                 "main",
-                r#"
-            native "c" (
-              let puts (value : Int) : Int;
-            );
-            export let result () : Int := unsafe { puts(1); };
-        "#,
+                r"
+            @foreign(
+              abi := .c
+            )
+            let puts(value : Int) : Int;
+            export let result () : Int := unsafe (puts(1));
+        ",
             )
             .unwrap();
         runtime.load_root("main").unwrap();
@@ -320,7 +354,7 @@ mod success {
             r#"
 let Core := import "musi:core";
 export let Int := Core.Int;
-export let Bool := Core.Bool;
+export let Bit := Core.Bit;
 export let String := Core.String;
 export let Unit := Core.Unit;
 "#,
@@ -472,22 +506,23 @@ export let test () :=
     fn handles_runtime_fs_and_log_services() {
         let mut runtime = Runtime::new(
             NativeHost::new(),
-            RuntimeOptions::default().with_output(RuntimeOutputMode::Capture),
+            runtime_options_with_std_imports(RuntimeOutputMode::Capture),
         );
+        register_runtime_std_log(&mut runtime);
         runtime
             .register_module_text(
                 "main",
                 r#"
             let Fs := import "musi:fs";
             let Io := import "musi:io";
-            let Log := import "musi:log";
+            let Log := import "@std/log";
             export let roundtrip (path : String, text : String) : String := (
               Fs.writeText(path, text);
               Fs.readText(path)
             );
             export let logAndPrint () : Unit := (
               Log.info("runtime-log");
-              Io.print("runtime-print")
+              Io.write("runtime-print")
             );
         "#,
             )
@@ -512,20 +547,21 @@ export let test () :=
     fn captures_runtime_output_during_tests() {
         let mut runtime = Runtime::new(
             NativeHost::new(),
-            RuntimeOptions::default().with_output(RuntimeOutputMode::Capture),
+            runtime_options_with_std_imports(RuntimeOutputMode::Capture),
         );
+        register_runtime_std_log(&mut runtime);
         runtime
             .register_module_text(
                 "main",
                 r#"
             let Io := import "musi:io";
-            let Log := import "musi:log";
+            let Log := import "@std/log";
             export let test () : Unit := (
-              Io.print("out");
-              Io.printLine(" line");
-              Io.printError("err");
-              Io.printErrorLine(" line");
-              Log.write(40, "boom")
+              Io.write("out");
+              Io.writeLn(" line");
+              Io.writeErr("err");
+              Io.writeErrLn(" line");
+              Log.write(Log.errorLevel, "boom")
             );
         "#,
             )
@@ -534,25 +570,26 @@ export let test () :=
         let report = runtime.run_test_export("main", "test").unwrap();
 
         assert_eq!(report.stdout.as_ref(), "out line\n");
-        assert_eq!(report.stderr.as_ref(), "err line\n[std:40] boom\n");
+        assert_eq!(report.stderr.as_ref(), "err line\n[error] boom\n");
     }
 
     #[test]
     fn suppresses_runtime_output_during_tests() {
         let mut runtime = Runtime::new(
             NativeHost::new(),
-            RuntimeOptions::default().with_output(RuntimeOutputMode::Suppress),
+            runtime_options_with_std_imports(RuntimeOutputMode::Suppress),
         );
+        register_runtime_std_log(&mut runtime);
         runtime
             .register_module_text(
                 "main",
                 r#"
             let Io := import "musi:io";
-            let Log := import "musi:log";
+            let Log := import "@std/log";
             export let test () : Unit := (
-              Io.printLine("hidden");
-              Io.printErrorLine("hidden");
-              Log.write(40, "hidden")
+              Io.writeLn("hidden");
+              Io.writeErrLn("hidden");
+              Log.write(Log.errorLevel, "hidden")
             );
         "#,
             )
@@ -566,103 +603,27 @@ export let test () :=
 
     #[test]
     fn runs_root_hub_std_test_module() {
-        let mut import_map = ImportMap::default();
-        let _ = import_map.imports.insert("@std/".into(), "@std/".into());
         let mut runtime = Runtime::new(
             NativeHost::new(),
-            RuntimeOptions::default()
-                .with_session(SessionOptions::new().with_import_map(import_map)),
+            runtime_options_with_std_imports(RuntimeOutputMode::Capture),
         );
-        register_runtime_module(
-            &mut runtime,
-            "@std/prelude",
-            r#"
-let Core := import "musi:core";
-export let Int := Core.Int;
-export let Bool := Core.Bool;
-export let String := Core.String;
-export let Unit := Core.Unit;
-"#,
-        );
-        register_runtime_module(
-            &mut runtime,
-            "@std",
-            r#"
-	export let bytes := import "@std/bytes";
-	export let math := import "@std/math";
-	export let option := import "@std/option";
-	export let testing := import "@std/testing";
-"#,
-        );
-        register_runtime_module(
-            &mut runtime,
-            "@std/bytes",
-            r"
-export let equals (left : []Int, right : []Int) : Bool := left = right;
-",
-        );
-        register_runtime_module(
-            &mut runtime,
-            "@std/math",
-            r"
-export let clamp (value : Int, low : Int, high : Int) : Int :=
-    match () (
-        | _ if value < low => low
-        | _ if value > high => high
-        | _ => value
-    );
-",
-        );
-        register_runtime_module(
-            &mut runtime,
-            "@std/option",
-            r"
-export opaque let Option[T] := data {
-    | Some(T)
-    | None
-};
-
-export let none [T] () : Option[T] := .None;
-
-export let unwrapOr [T] (value : Option[T], fallback : T) : T :=
-    match value (
-        | .Some(item) => item
-        | .None => fallback
-    );
-",
-        );
-        register_runtime_module(
-            &mut runtime,
-            "@std/testing",
-            r#"
-let Intrinsics := import "musi:test";
-
-export let toBe (actual : Int, expected : Int) := actual = expected;
-export let toBeTrue (actual : Bool) := actual;
-
-export let describe (name : String) :=
-    Intrinsics.suiteStart(name);
-export let endDescribe () :=
-    Intrinsics.suiteEnd();
-export let it (name : String, passed : Bool) :=
-    Intrinsics.testCase(name, passed);
-"#,
-        );
+        register_root_hub_std_modules(&mut runtime);
         register_runtime_module(
             &mut runtime,
             "suite",
             r#"
 let Testing := import "@std/testing";
+let Assert := import "@std/assert";
 let Bytes := import "@std/bytes";
 let Math := import "@std/math";
-let Option := import "@std/option";
+let Maybe := import "@std/maybe";
 
 export let test () :=
     (
       Testing.describe("std root");
-      Testing.it("bytes chain", Testing.toBeTrue(Bytes.equals([1, 2], [1, 2])));
-      Testing.it("math chain", Testing.toBe(Math.clamp(9, 0, 4), 4));
-      Testing.it("option chain", Testing.toBe(Option.unwrapOr[Int](Option.none[Int](), 5), 5));
+      Testing.it("bytes chain", Assert.toBeTrue(Bytes.equals([1, 2], [1, 2])));
+      Testing.it("math chain", Assert.toBe(Math.clamp(9, 0, 4), 4));
+      Testing.it("maybe chain", Assert.toBe(Maybe.unwrapOr[Int](Maybe.None[Int](), 5), 5));
       Testing.endDescribe()
     );
 "#,
@@ -672,6 +633,94 @@ export let test () :=
 
         assert_eq!(report.cases.len(), 3);
         assert!(report.cases.iter().all(|case| case.passed));
+    }
+
+    fn register_root_hub_std_modules(runtime: &mut Runtime) {
+        register_runtime_module(
+            runtime,
+            "@std/prelude",
+            r#"
+let Core := import "musi:core";
+export let Int := Core.Int;
+export let Bit := Core.Bit;
+export let String := Core.String;
+export let Unit := Core.Unit;
+"#,
+        );
+        register_runtime_module(
+            runtime,
+            "@std",
+            r#"
+	export let bytes := import "@std/bytes";
+	export let math := import "@std/math";
+	export let maybe := import "@std/maybe";
+	export let assert := import "@std/assert";
+	export let testing := import "@std/testing";
+"#,
+        );
+        register_runtime_module(
+            runtime,
+            "@std/bytes",
+            r"
+export let equals (left : []Int, right : []Int) : Bit := left = right;
+",
+        );
+        register_root_hub_math_maybe_modules(runtime);
+        register_runtime_module(
+            runtime,
+            "@std/assert",
+            r"
+export let toBe (actual : Int, expected : Int) := actual = expected;
+export let toBeTrue (actual : Bit) := actual;
+",
+        );
+        register_runtime_module(
+            runtime,
+            "@std/testing",
+            r#"
+let Intrinsics := import "musi:test";
+
+export let describe (name : String) :=
+    Intrinsics.suiteStart(name);
+export let endDescribe () :=
+    Intrinsics.suiteEnd();
+export let it (name : String, passed : Bit) :=
+    Intrinsics.testCase(name, passed);
+"#,
+        );
+    }
+
+    fn register_root_hub_math_maybe_modules(runtime: &mut Runtime) {
+        register_runtime_module(
+            runtime,
+            "@std/math",
+            r"
+export let clamp (value : Int, low : Int, high : Int) : Int :=
+    match () (
+	    | _ where value < low => low
+	    | _ where value > high => high
+        | _ => value
+    );
+",
+        );
+        register_runtime_module(
+            runtime,
+            "@std/maybe",
+            r"
+	export hidden let Maybe[T] := data {
+    | Some(T)
+    | None
+};
+
+export let None [T] () : Maybe[T] := .None;
+
+export let unwrapOr [T] (value : Maybe[T], fallback : T) : T :=
+    match value (
+        | .Some(item) => item
+        | .None => fallback
+    );
+",
+        );
     }
 }
 
@@ -684,21 +733,20 @@ mod failure {
         runtime
         .register_module_text(
             "main",
-            "export opaque let Secret := data { | Secret(Int) }; export let root () : Int := 0;",
+            "export hidden let Secret := data { | Secret(Int) }; export let root () : Int := 0;",
         )
         .unwrap();
         runtime
         .register_module_text(
             "dep",
-            "export opaque let Hidden := data { | Hidden(Int) }; export let result () : Int := 42;",
+            "export hidden let Hidden := data { | Hidden(Int) }; export let result () : Int := 42;",
         )
         .unwrap();
         runtime.load_root("main").unwrap();
 
-        let err = runtime.lookup_export("Secret").unwrap_err();
         assert!(matches!(
-            err.kind(),
-            RuntimeErrorKind::VmExecutionFailed(VmError { .. })
+            runtime.lookup_export("Secret").unwrap(),
+            Value::Type(_)
         ));
 
         let module = runtime.load_module("dep").unwrap();

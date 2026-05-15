@@ -39,6 +39,7 @@ fn render_entry_struct(out: &mut String, enum_name: &str) {
 }
 
 fn render_entries(out: &mut String, enum_name: &str, entries: &[Entry]) {
+    out.push_str("#[rustfmt::skip]\n");
     out.push_str("const ENTRIES: &[CatalogEntry] = &[\n");
     for entry in entries {
         out.push_str("    CatalogEntry {\n");
@@ -136,6 +137,7 @@ fn render_accessors(out: &mut String, enum_name: &str) {
 }
 
 fn render_map(out: &mut String, enum_name: &str, map: &KindMap) {
+    out.push_str("#[rustfmt::skip]\n");
     let return_type = match map.mode {
         MapMode::Required => enum_name.to_owned(),
         MapMode::Option => format!("Option<{enum_name}>"),

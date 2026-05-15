@@ -1,6 +1,7 @@
 use music_base::diag::{Diag, DiagCode, DiagContext, DiagLevel, DiagnosticKind};
 
 #[path = "diag_catalog_gen.rs"]
+#[rustfmt::skip]
 mod diag_catalog_gen;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

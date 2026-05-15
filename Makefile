@@ -1,4 +1,4 @@
-.PHONY: check lint fmt test rscheck bench-vm bench-musi bench-csharp bench-csharp-smoke bench-csharp-vm-mode bench-csharp-smoke-vm-mode bench-fsharp bench-fsharp-smoke bench-fsharp-vm-mode bench-fsharp-smoke-vm-mode bench-java bench-java-smoke bench-java-vm-mode bench-java-smoke-vm-mode bench-lua bench-lua-smoke bench-scala bench-scala-smoke bench-scala-vm-mode bench-scala-smoke-vm-mode bench-vms bench-vms-smoke bench-vms-quick bench-vms-long bench-vms-gc bench-vms-peers install-local
+.PHONY: check lint fmt test rscheck bench-hot-path-guard complexity-trend-guard complexity-trend-report bench-vm bench-musi bench-csharp bench-csharp-smoke bench-csharp-vm-mode bench-csharp-smoke-vm-mode bench-fsharp bench-fsharp-smoke bench-fsharp-vm-mode bench-fsharp-smoke-vm-mode bench-java bench-java-smoke bench-java-vm-mode bench-java-smoke-vm-mode bench-lua bench-lua-smoke bench-scala bench-scala-smoke bench-scala-vm-mode bench-scala-smoke-vm-mode bench-vms bench-vms-smoke bench-vms-quick bench-vms-long bench-vms-gc bench-vms-peers install-local
 
 RUST_TOOLCHAIN := 1.95.0
 CARGO := rustup run $(RUST_TOOLCHAIN) cargo
@@ -14,10 +14,13 @@ VM_BENCH_WARMUP_ITERATIONS ?= 10000
 VM_BENCH_WORKLOAD ?= all
 VM_BENCH_ARGS := --phase $(VM_BENCH_PHASE) --rounds $(VM_BENCH_ROUNDS) --iterations $(VM_BENCH_ITERATIONS) --warmup-iterations $(VM_BENCH_WARMUP_ITERATIONS) --workload $(VM_BENCH_WORKLOAD)
 CLR_VM_MODE_ENV := COMPlus_TieredCompilation=0 COMPlus_TC_QuickJit=0 COMPlus_TC_QuickJitForLoops=0 COMPlus_ReadyToRun=0 DOTNET_TieredPGO=0
+RSCHECK_JSON ?= target/rscheck/latest.json
+HOT_PATH_GUARD ?= 0
 
 check:
 	$(CARGO) check --workspace
 	$(CARGO) check --workspace --tests
+	@if [ "$(HOT_PATH_GUARD)" = "1" ]; then $(MAKE) bench-hot-path-guard; fi
 
 rscheck:
 	@RSCHECK_BIN="$$(command -v rscheck 2>/dev/null || true)"; \
@@ -28,14 +31,27 @@ rscheck:
 		echo "rscheck not installed; run: cargo install rscheck-cli --locked"; \
 		exit 1; \
 	fi; \
-	"$$RSCHECK_BIN" check; code=$$?; test $$code -le 1
+	"$$RSCHECK_BIN" check; code=$$?; test $$code -le 1; \
+	mkdir -p "$$(dirname "$(RSCHECK_JSON)")"; \
+	"$$RSCHECK_BIN" check --format json --output "$(RSCHECK_JSON)"; code=$$?; test $$code -le 1
+	$(MAKE) complexity-trend-guard RSCHECK_JSON=$(RSCHECK_JSON)
 
 lint:
 	$(CARGO) run -p musi_diaggen -- write
 	$(CARGO) run -p musi_diaggen -- check
 	$(MAKE) rscheck
+	@if [ "$(HOT_PATH_GUARD)" = "1" ]; then $(MAKE) bench-hot-path-guard; fi
 	$(CARGO) clippy --locked --workspace -- -D warnings
 	$(CARGO) clippy --locked --workspace --tests -- -D warnings
+
+bench-hot-path-guard:
+	python3 scripts/perf/hot_path_guard.py --skip-run
+
+complexity-trend-guard:
+	python3 scripts/complexity/module_complexity_trends.py --mode guard --rscheck-json "$(RSCHECK_JSON)"
+
+complexity-trend-report:
+	python3 scripts/complexity/module_complexity_trends.py --mode report --rscheck-json "$(RSCHECK_JSON)" --write-report --append-history
 
 fmt:
 	$(CARGO) fmt --all

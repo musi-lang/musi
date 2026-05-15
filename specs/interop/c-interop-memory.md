@@ -13,7 +13,7 @@ Musi does not expose Rust FFI syntax as the language model. Musi boundary types 
 - `CString` for C-compatible string mapping
 - `CPtr` for erased C pointer mapping
 - `Ptr[T]` for typed raw pointer wrappers
-- `Option[...]` or fallible `E!T` for nullable/error results
+- `Maybe[...]` or fallible `E!T` for nullable/error results
 
 Rust may enforce wrapper invariants in implementation code; Musi wrapper APIs must still document nullability, ownership, aliasing, and lifetime consequences in Musi terms.
 
@@ -24,7 +24,7 @@ Current repo exports:
 - `CString`
 - `CPtr`
 
-from `crates/musi_foundation/modules/core.ms` and `packages/std/prelude.ms`.
+from `crates/musi_foundation/modules/core.ms` and `lib/std/prelude.ms`.
 
 These names remain valid, but their role is narrow:
 
@@ -74,8 +74,8 @@ C nulls do not infect Musi type defaults.
 
 Mapping policy:
 
-- nullable C pointer result => `Option[Ptr[T]]` or `Option[CPtr]`
-- nullable C string result => `Option[CString]` if absence is ordinary result
+- nullable C pointer result => `Maybe[Ptr[T]]` or `Maybe[CPtr]`
+- nullable C string result => `Maybe[CString]` if absence is ordinary result
 - null where contract forbids it => interop failure
 
 Choice between optional result and interop failure belongs to wrapper API contract, not ambient pointer semantics.

@@ -1,8 +1,7 @@
 use super::{
-    BTreeMap, DefinitionKey, Diag, DiagContext, HashMap, HashSet, Interner, IrDataDef,
-    IrDataVariantDef, IrDiagKind, IrDiagList, IrEffectDef, IrEffectOpDef, IrGivenDef, IrModule,
-    IrModuleParts, IrShapeDef, LowerCtx, SemaModule, TopLevelItems, bindings, meta, render_ty_name,
-    toplevel, validate,
+    DefinitionKey, Diag, DiagContext, HashMap, HashSet, Interner, IrDataDef, IrDataVariantDef,
+    IrDiagKind, IrDiagList, IrModule, IrModuleParts, IrShapeDef, IrStaticImport, LowerCtx,
+    SemaModule, TopLevelItems, bindings, meta, render_ty_name, toplevel, validate,
 };
 use std::any::Any;
 use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
@@ -17,7 +16,7 @@ pub(crate) struct LoweringInvariant {
 ///
 /// # Errors
 ///
-/// Returns semantic diagnostics when exported surface types or effect rows reference invalid
+/// Returns semantic diagnostics when exported surface types reference invalid
 /// sema-owned ids.
 pub fn lower_module(sema: &SemaModule, interner: &Interner) -> Result<IrModule, IrDiagList> {
     match catch_unwind(AssertUnwindSafe(|| lower_module_impl(sema, interner))) {
@@ -76,7 +75,7 @@ pub(crate) fn lower_module_impl(
         next_lambda_id: 0,
         next_temp_id: 0,
         extra_callables: Vec::new(),
-        constraint_answer_bindings: Vec::new(),
+        constraint_evidence_bindings: Vec::new(),
         comptime_bindings: HashMap::new(),
         specialized_callables: HashSet::new(),
     };
@@ -91,6 +90,12 @@ pub(crate) fn lower_module_impl(
     Ok(IrModule::new(
         sema.resolved().module_key.clone(),
         surface.static_imports().to_vec().into_boxed_slice(),
+        sema.resolved()
+            .imports
+            .iter()
+            .map(|import| IrStaticImport::new(import.spec.as_str(), import.to.clone()))
+            .collect::<Vec<_>>()
+            .into_boxed_slice(),
         surface.types().to_vec().into_boxed_slice(),
         IrModuleParts {
             exports: surface
@@ -105,17 +110,10 @@ pub(crate) fn lower_module_impl(
             init_parts: items.init_parts.into_boxed_slice(),
             data_defs: items.data_defs.into_boxed_slice(),
             foreigns: items.foreigns.into_boxed_slice(),
-            effects: build_effect_defs(sema, ctx.interner),
             shapes: surface
                 .exported_shapes()
                 .iter()
                 .map(IrShapeDef::from)
-                .collect::<Vec<_>>()
-                .into_boxed_slice(),
-            givens: surface
-                .exported_givens()
-                .iter()
-                .map(IrGivenDef::from)
                 .collect::<Vec<_>>()
                 .into_boxed_slice(),
             meta,
@@ -172,35 +170,6 @@ pub(crate) fn append_synthesized_sum_data_defs(
         }
         items.data_defs.push(data_def);
     }
-}
-
-pub(crate) fn build_effect_defs(sema: &SemaModule, interner: &Interner) -> Box<[IrEffectDef]> {
-    let mut seen = BTreeMap::<DefinitionKey, IrEffectDef>::new();
-    for effect in sema.effect_defs() {
-        let _ = seen.entry(effect.key().clone()).or_insert_with(|| {
-            IrEffectDef::new(
-                effect.key().clone(),
-                effect
-                    .ops()
-                    .map(|(name, def)| {
-                        IrEffectOpDef::new(
-                            name,
-                            def.params()
-                                .iter()
-                                .copied()
-                                .map(|ty| render_ty_name(sema, ty, interner))
-                                .collect::<Vec<_>>()
-                                .into_boxed_slice(),
-                            render_ty_name(sema, def.result(), interner),
-                        )
-                        .with_comptime_safe(def.is_comptime_safe())
-                    })
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-            )
-        });
-    }
-    seen.into_values().collect::<Vec<_>>().into_boxed_slice()
 }
 
 pub(crate) fn lowering_invariant_violation(description: impl AsRef<str>) -> ! {

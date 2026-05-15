@@ -22,6 +22,30 @@ impl ProcedureEmitter<'_, '_> {
         self.compile_bool_short_circuit(left, right, true, diags);
     }
 
+    pub(in crate::emit::expr) fn compile_if(
+        &mut self,
+        condition: &IrExpr,
+        then_expr: &IrExpr,
+        else_expr: &IrExpr,
+        diags: &mut EmitDiagList,
+    ) {
+        let else_label = self.alloc_label();
+        let end_label = self.alloc_label();
+        self.compile_expr(condition, true, diags);
+        self.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::BrZ,
+            Operand::Label(else_label),
+        )));
+        self.compile_expr(then_expr, true, diags);
+        self.code.push(CodeEntry::Instruction(Instruction::new(
+            Opcode::Br,
+            Operand::Label(end_label),
+        )));
+        self.code.push(CodeEntry::Label(Label { id: else_label }));
+        self.compile_expr(else_expr, true, diags);
+        self.code.push(CodeEntry::Label(Label { id: end_label }));
+    }
+
     fn compile_bool_short_circuit(
         &mut self,
         left: &IrExpr,
@@ -47,7 +71,7 @@ impl ProcedureEmitter<'_, '_> {
             )));
         }
         self.code.push(CodeEntry::Instruction(Instruction::new(
-            Opcode::BrFalse,
+            Opcode::BrZ,
             Operand::Label(end_label),
         )));
         self.compile_expr(right, true, diags);

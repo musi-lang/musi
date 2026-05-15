@@ -1,8 +1,6 @@
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
 
-use musi_vm::{
-    EffectCall, ForeignCall, Value, VmError, VmErrorKind, VmHost, VmHostCallContext, VmResult,
-};
+use musi_vm::{ForeignCall, Value, VmError, VmErrorKind, VmHost, VmHostCallContext, VmResult};
 
 use crate::platform::PlatformHost;
 use crate::registered::RegisteredHost;
@@ -86,37 +84,37 @@ impl NativeHost {
         }
     }
 
-    pub fn register_effect_handler<Effect, Op>(
+    pub fn register_foundation_handler<Module, Op>(
         &mut self,
-        effect: Effect,
+        module: Module,
         op: Op,
-        handler: impl FnMut(&EffectCall, &[Value]) -> VmResult<Value> + Send + 'static,
+        handler: impl FnMut(&ForeignCall, &[Value]) -> VmResult<Value> + Send + 'static,
     ) where
-        Effect: Into<HandlerName>,
-        Op: Into<HandlerName>,
+        Module: AsRef<str>,
+        Op: AsRef<str>,
     {
         if let Ok(mut state) = self.state.lock() {
             state
                 .registered
-                .register_effect_handler(effect, op, handler);
+                .register_foundation_handler(module, op, handler);
         }
     }
 
-    pub fn register_effect_handler_with_context<Effect, Op>(
+    pub fn register_foundation_handler_with_context<Module, Op>(
         &mut self,
-        effect: Effect,
+        module: Module,
         op: Op,
-        handler: impl FnMut(VmHostCallContext<'_, '_>, &EffectCall, &[Value]) -> VmResult<Value>
+        handler: impl FnMut(VmHostCallContext<'_, '_>, &ForeignCall, &[Value]) -> VmResult<Value>
         + Send
         + 'static,
     ) where
-        Effect: Into<HandlerName>,
-        Op: Into<HandlerName>,
+        Module: AsRef<str>,
+        Op: AsRef<str>,
     {
         if let Ok(mut state) = self.state.lock() {
             state
                 .registered
-                .register_effect_handler_with_context(effect, op, handler);
+                .register_foundation_handler_with_context(module, op, handler);
         }
     }
 
@@ -185,42 +183,16 @@ impl VmHost for NativeHost {
             return result;
         }
 
+        let test_result = self.state()?.testing.handle_foreign(ctx, foreign, args);
+        if let Some(result) = test_result {
+            return result;
+        }
+
         if self.state()?.fallback.is_none() {
             return Err(VmError::new(VmErrorKind::ForeignCallRejected {
                 foreign: foreign.name().into(),
             }));
         }
         self.call_fallback(|host| host.call_foreign(ctx, foreign, args))
-    }
-
-    fn handle_effect(
-        &mut self,
-        ctx: VmHostCallContext<'_, '_>,
-        effect: &EffectCall,
-        args: &[Value],
-    ) -> VmResult<Value> {
-        let registered_result = self.state()?.registered.handle_effect(ctx, effect, args);
-        if let Some(result) = registered_result {
-            return result;
-        }
-
-        let testing_result = self.state()?.testing.handle_effect(ctx, effect, args);
-        if let Some(result) = testing_result {
-            return result;
-        }
-
-        let platform_result = self.state()?.platform.handle_effect(effect, args);
-        if let Some(result) = platform_result {
-            return result;
-        }
-
-        if self.state()?.fallback.is_none() {
-            return Err(VmError::new(VmErrorKind::EffectRejected {
-                effect: effect.effect_name().into(),
-                op: Some(effect.op_name().into()),
-                reason: "native host rejected runtime effect".into(),
-            }));
-        }
-        self.call_fallback(|host| host.handle_effect(ctx, effect, args))
     }
 }

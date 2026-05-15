@@ -14,7 +14,6 @@ pub(super) fn register_exports(
             layout,
             export.name.as_ref(),
             export.data_key.as_ref(),
-            export.effect_key.as_ref(),
             export.shape_key.as_ref(),
         );
 
@@ -41,7 +40,6 @@ fn export_target(
     layout: &mut ModuleLayout,
     export_name: &str,
     data_key: Option<&DefinitionKey>,
-    effect_key: Option<&DefinitionKey>,
     shape_key: Option<&DefinitionKey>,
 ) -> Option<ExportTarget> {
     if let Some(binding) = export_binding(module, export_name) {
@@ -66,10 +64,6 @@ fn export_target(
             layout,
             ty_name.as_ref(),
         )));
-    }
-
-    if let Some(effect) = effect_key.and_then(|key| layout.effects.get(key).copied()) {
-        return Some(ExportTarget::Effect(effect));
     }
 
     shape_key

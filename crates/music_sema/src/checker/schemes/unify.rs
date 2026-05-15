@@ -1,88 +1,12 @@
 use std::collections::HashMap;
 
 use music_arena::SliceRange;
-use music_hir::{HirDim, HirOrigin, HirTyField, HirTyId, HirTyKind};
-use music_module::ModuleKey;
+use music_hir::{HirDim, HirTyField, HirTyId, HirTyKind};
 use music_names::Symbol;
 
-use crate::api::{ConstraintAnswer, ConstraintKind, GivenFacts};
 use crate::checker::CheckPass;
 
 use super::TypeSubstMap;
-
-impl CheckPass<'_, '_, '_> {
-    pub(super) fn given_matches(
-        &mut self,
-        origin: HirOrigin,
-        given: &GivenFacts,
-        shape_args: &[HirTyId],
-        stack: &mut Vec<String>,
-    ) -> bool {
-        let ctx = self;
-        let Some(subst) = ctx.unify_given_args(&given.type_params, &given.shape_args, shape_args)
-        else {
-            return false;
-        };
-        let obligations = given
-            .constraints
-            .iter()
-            .map(|constraint| ctx.instantiate_obligation(constraint, &subst))
-            .collect::<Vec<_>>();
-        obligations
-            .iter()
-            .all(|obligation| ctx.solve_obligation(origin, obligation, stack))
-    }
-
-    pub(super) fn given_provider_answer(
-        &mut self,
-        origin: HirOrigin,
-        given: &GivenFacts,
-        module: ModuleKey,
-        shape_args: &[HirTyId],
-        stack: &mut Vec<String>,
-    ) -> Option<ConstraintAnswer> {
-        let subst = self.unify_given_args(&given.type_params, &given.shape_args, shape_args)?;
-        let obligations = given
-            .constraints
-            .iter()
-            .map(|constraint| self.instantiate_obligation(constraint, &subst))
-            .collect::<Vec<_>>();
-        let args = obligations
-            .iter()
-            .filter(|obligation| matches!(obligation.kind, ConstraintKind::Implements))
-            .map(|obligation| self.resolve_obligation_answer(origin, obligation, stack))
-            .collect::<Option<Vec<_>>>()?
-            .into_boxed_slice();
-        Some(ConstraintAnswer::Provider {
-            module,
-            name: self.given_provider_name(given),
-            args,
-        })
-    }
-
-    pub(super) fn unify_given_args(
-        &mut self,
-        type_params: &[Symbol],
-        pattern_args: &[HirTyId],
-        actual_args: &[HirTyId],
-    ) -> Option<TypeSubstMap> {
-        let ctx = self;
-        if pattern_args.len() != actual_args.len() {
-            return None;
-        }
-        let mut subst = HashMap::new();
-        for (pattern, actual) in pattern_args
-            .iter()
-            .copied()
-            .zip(actual_args.iter().copied())
-        {
-            if !ctx.unify_ty(type_params, pattern, actual, &mut subst) {
-                return None;
-            }
-        }
-        Some(subst)
-    }
-}
 
 impl CheckPass<'_, '_, '_> {
     pub(super) fn unify_ty(

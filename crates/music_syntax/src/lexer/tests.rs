@@ -52,17 +52,17 @@ mod success {
         assert_eq!(lexed.token_trivia(4).len(), 1);
         assert_eq!(lexed.token_trivia(4)[0].kind, TriviaKind::Newline);
 
-        let rec_kw = lex("rec");
-        assert_eq!(rec_kw.tokens()[0].kind, TokenKind::KwRec);
-        assert_eq!(rec_kw.tokens()[1].kind, TokenKind::Eof);
+        let rec_ident = lex("rec");
+        assert_eq!(rec_ident.tokens()[0].kind, TokenKind::Ident);
+        assert_eq!(rec_ident.tokens()[1].kind, TokenKind::Eof);
 
         let known_kw = lex("known");
         assert_eq!(known_kw.tokens()[0].kind, TokenKind::KwKnown);
         assert_eq!(known_kw.tokens()[1].kind, TokenKind::Eof);
 
-        let any_kw = lex("any");
-        assert_eq!(any_kw.tokens()[0].kind, TokenKind::KwAny);
-        assert_eq!(any_kw.tokens()[1].kind, TokenKind::Eof);
+        let any_ident = lex("any");
+        assert_eq!(any_ident.tokens()[0].kind, TokenKind::Ident);
+        assert_eq!(any_ident.tokens()[1].kind, TokenKind::Eof);
 
         let pin_kw = lex("pin");
         assert_eq!(pin_kw.tokens()[0].kind, TokenKind::KwPin);
@@ -72,21 +72,21 @@ mod success {
         assert_eq!(shape_kw.tokens()[0].kind, TokenKind::KwShape);
         assert_eq!(shape_kw.tokens()[1].kind, TokenKind::Eof);
 
-        let some_kw = lex("some");
-        assert_eq!(some_kw.tokens()[0].kind, TokenKind::KwSome);
-        assert_eq!(some_kw.tokens()[1].kind, TokenKind::Eof);
+        let some_ident = lex("some");
+        assert_eq!(some_ident.tokens()[0].kind, TokenKind::Ident);
+        assert_eq!(some_ident.tokens()[1].kind, TokenKind::Eof);
 
-        let answer_kw = lex("answer");
-        assert_eq!(answer_kw.tokens()[0].kind, TokenKind::KwAnswer);
-        assert_eq!(answer_kw.tokens()[1].kind, TokenKind::Eof);
+        let answer_ident = lex("answer");
+        assert_eq!(answer_ident.tokens()[0].kind, TokenKind::Ident);
+        assert_eq!(answer_ident.tokens()[1].kind, TokenKind::Eof);
 
-        let catch_kw = lex("catch");
-        assert_eq!(catch_kw.tokens()[0].kind, TokenKind::KwCatch);
-        assert_eq!(catch_kw.tokens()[1].kind, TokenKind::Eof);
+        let catch_ident = lex("catch");
+        assert_eq!(catch_ident.tokens()[0].kind, TokenKind::Ident);
+        assert_eq!(catch_ident.tokens()[1].kind, TokenKind::Eof);
 
-        let given_kw = lex("given");
-        assert_eq!(given_kw.tokens()[0].kind, TokenKind::KwGiven);
-        assert_eq!(given_kw.tokens()[1].kind, TokenKind::Eof);
+        let given_ident = lex("given");
+        assert_eq!(given_ident.tokens()[0].kind, TokenKind::Ident);
+        assert_eq!(given_ident.tokens()[1].kind, TokenKind::Eof);
 
         let of_ident = lex("of");
         assert_eq!(of_ident.tokens()[0].kind, TokenKind::Ident);
@@ -150,12 +150,14 @@ mod success {
     }
 
     #[test]
-    fn lex_compound_tokens_and_symbolic_ops() {
+    fn lex_maybe_expect_sugar_and_symbolic_ops() {
         assert_token_kinds(
-            "a:?>b a ++ b",
+            "?T E!T a ++ b",
             [
+                TokenKind::Question,
                 TokenKind::Ident,
-                TokenKind::ColonQuestionGt,
+                TokenKind::Ident,
+                TokenKind::Bang,
                 TokenKind::Ident,
                 TokenKind::Ident,
                 TokenKind::SymbolicOp,
@@ -163,6 +165,35 @@ mod success {
                 TokenKind::Eof,
             ]
             .as_slice(),
+        );
+    }
+
+    #[test]
+    fn lex_ranges_longest_first_while_spread_stays_distinct() {
+        assert_token_kinds(
+            "... ..< .. .. .",
+            [
+                TokenKind::DotDotDot,
+                TokenKind::DotDotLt,
+                TokenKind::DotDot,
+                TokenKind::DotDot,
+                TokenKind::Dot,
+                TokenKind::Eof,
+            ]
+            .as_slice(),
+        );
+    }
+
+    #[test]
+    fn lex_type_equality_constraint_operator() {
+        assert_token_kinds(
+            "T ~= U",
+            &[
+                TokenKind::Ident,
+                TokenKind::TildeEq,
+                TokenKind::Ident,
+                TokenKind::Eof,
+            ],
         );
     }
 
@@ -243,32 +274,43 @@ mod success {
     }
 
     #[test]
+    fn numeric_suffixes_are_part_of_number_tokens() {
+        assert_no_errors(
+            "1_z 2_n16 3.5_f64 4f32 5z32",
+            &[
+                TokenKind::Int,
+                TokenKind::Int,
+                TokenKind::Float,
+                TokenKind::Int,
+                TokenKind::Int,
+                TokenKind::Eof,
+            ],
+        );
+    }
+
+    #[test]
     fn lex_reserved_compound_tokens() {
         let cases = [
             (
-                ":?> := = :? ... .[ ?. !. ?? -> ~> => /= <= >= <: <.. <..< .. ..< |>",
+                ":= :> :?> = ... .[ ?? -> => /= <= >= |> |= ~= ? !",
                 vec![
-                    TokenKind::ColonQuestionGt,
                     TokenKind::ColonEq,
+                    TokenKind::ColonGt,
+                    TokenKind::ColonQuestionGt,
                     TokenKind::Eq,
-                    TokenKind::ColonQuestion,
                     TokenKind::DotDotDot,
                     TokenKind::DotLBracket,
-                    TokenKind::QuestionDot,
-                    TokenKind::BangDot,
                     TokenKind::QuestionQuestion,
                     TokenKind::MinusGt,
-                    TokenKind::TildeGt,
                     TokenKind::EqGt,
                     TokenKind::SlashEq,
                     TokenKind::LtEq,
                     TokenKind::GtEq,
-                    TokenKind::LtColon,
-                    TokenKind::LtDotDot,
-                    TokenKind::LtDotDotLt,
-                    TokenKind::DotDot,
-                    TokenKind::DotDotLt,
                     TokenKind::PipeGt,
+                    TokenKind::PipeEq,
+                    TokenKind::TildeEq,
+                    TokenKind::Question,
+                    TokenKind::Bang,
                     TokenKind::Eof,
                 ],
             ),
@@ -309,29 +351,14 @@ mod success {
     }
 
     #[test]
-    fn question_and_bang_are_only_valid_in_compounds() {
-        let q = lex("?");
-        assert!(
-            q.errors()
-                .iter()
-                .any(|e| e.kind == LexErrorKind::InvalidChar { ch: '?' })
-        );
-
-        let b = lex("!");
-        assert!(
-            b.errors()
-                .iter()
-                .any(|e| e.kind == LexErrorKind::InvalidChar { ch: '!' })
-        );
-
+    fn question_and_bang_support_maybe_expect_sugar() {
         assert_token_kinds(
-            "a?.b a!.b a ?? b",
+            "?T E!T a ?? b",
             &[
+                TokenKind::Question,
                 TokenKind::Ident,
-                TokenKind::QuestionDot,
                 TokenKind::Ident,
-                TokenKind::Ident,
-                TokenKind::BangDot,
+                TokenKind::Bang,
                 TokenKind::Ident,
                 TokenKind::Ident,
                 TokenKind::QuestionQuestion,

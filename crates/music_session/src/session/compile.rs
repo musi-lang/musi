@@ -1,14 +1,14 @@
 use music_emit::lower_ir_program;
 use music_module::ModuleKey;
 use music_seam::Artifact;
-use music_seam::{encode_binary, format_text};
+use music_seam::{encode_binary, format_disasm};
 
 use crate::api::{CompiledOutput, SessionError};
 
 use super::Session;
 
 impl Session {
-    /// Compiles one module into the in-memory artifact plus binary and text encodings.
+    /// Compiles one module into the in-memory artifact, binary encoding, and disassembly view.
     ///
     /// # Errors
     ///
@@ -36,13 +36,13 @@ impl Session {
         Ok(self.compile_module(key)?.bytes)
     }
 
-    /// Compiles one module and returns its text assembly form.
+    /// Compiles one module and returns its disassembly view.
     ///
     /// # Errors
     ///
     /// Returns any parse, resolve, semantic, IR, emit, or assembly error for the target module.
-    pub fn compile_module_text(&mut self, key: &ModuleKey) -> Result<String, SessionError> {
-        Ok(self.compile_module(key)?.text)
+    pub fn compile_module_disasm(&mut self, key: &ModuleKey) -> Result<String, SessionError> {
+        Ok(self.compile_module(key)?.disasm)
     }
 
     /// Compiles the reachable static-import graph rooted at `key`.
@@ -53,6 +53,24 @@ impl Session {
     pub fn compile_entry(&mut self, key: &ModuleKey) -> Result<CompiledOutput, SessionError> {
         let artifact = self.compile_entry_artifact(key)?;
         Self::build_output(&artifact)
+    }
+
+    /// Compiles entry artifacts for each module reachable from the static-import graph rooted at `key`.
+    ///
+    /// # Errors
+    ///
+    /// Returns any parse, resolve, semantic, IR, emit, or assembly error from the reachable graph.
+    pub fn compile_entry_modules(
+        &mut self,
+        key: &ModuleKey,
+    ) -> Result<Vec<(ModuleKey, CompiledOutput)>, SessionError> {
+        self.collect_reachable_module_keys(key)?
+            .into_iter()
+            .map(|module_key| {
+                let output = self.compile_entry(&module_key)?;
+                Ok((module_key, output))
+            })
+            .collect()
     }
 
     /// Emits the reachable static-import graph rooted at `key` to an in-memory artifact.
@@ -101,20 +119,20 @@ impl Session {
         Ok(self.compile_entry(key)?.bytes)
     }
 
-    /// Compiles the reachable static-import graph rooted at `key` and returns its text assembly.
+    /// Compiles the reachable static-import graph rooted at `key` and returns its disassembly view.
     ///
     /// # Errors
     ///
     /// Returns any parse, resolve, semantic, IR, emit, or assembly error from the reachable graph.
-    pub fn compile_entry_text(&mut self, key: &ModuleKey) -> Result<String, SessionError> {
-        Ok(self.compile_entry(key)?.text)
+    pub fn compile_entry_disasm(&mut self, key: &ModuleKey) -> Result<String, SessionError> {
+        Ok(self.compile_entry(key)?.disasm)
     }
 
     fn build_output(artifact: &Artifact) -> Result<CompiledOutput, SessionError> {
         Ok(CompiledOutput::new(
             artifact.clone(),
             encode_binary(artifact)?,
-            format_text(artifact),
+            format_disasm(artifact),
         ))
     }
 }

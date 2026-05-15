@@ -12,7 +12,7 @@ Current public entrypoints by crate. Keep this list high-signal. Do not mirror e
 - `music_syntax` — lex/parse entrypoints and syntax tree exports
 - `music_builtin` — builtin type and intrinsic catalog used by compiler/runtime layers
 - `music_resolve` — resolved module model
-- `music_sema` — `check_module`, semantic surface, diagnostics, effect rows
+- `music_sema` — `check_module`, semantic API, diagnostics, and checked type metadata
 - `music_ir` — IR model and diagnostics
 - `music_ir_lower` — sema-to-IR lowering
 - `music_emit` — IR-to-SEAM lowering
@@ -20,7 +20,7 @@ Current public entrypoints by crate. Keep this list high-signal. Do not mirror e
 
 ## Runtime libraries
 
-- `music_seam` — SEAM artifact encode/decode, SEAM HIL model/verifier, lowered `.seam` text, instruction/types surface
+- `music_seam` — SEAM artifact encode/decode, SEAM HIL model/verifier, lowered `.seam` text, and instruction/type model
 - `musi_vm` — `Program`, `Vm`, `VmOptions`, `MvmMode`, `MvmFeatures`, `VmOptimizationLevel`, `MvmOptionsParseError`, runtime `Value`, bound call handles, value inspection views, host/loader traits, VM errors
 - `musi_native` — `NativeHost`, native test report types
 - `musi_rt` — `Runtime`, `RuntimeOptions`, runtime errors

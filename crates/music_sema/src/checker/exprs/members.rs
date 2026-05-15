@@ -27,30 +27,9 @@ impl CheckPass<'_, '_, '_> {
         name: Ident,
     ) -> ExprFacts {
         let base_facts = super::check_expr(self, base);
-        let effects = base_facts.effects.clone();
-
-        if let HirExprKind::Name { name: effect_name } = self.expr(base).kind {
-            let effect_name = self.resolve_symbol(effect_name.name);
-            let op_name = self.resolve_symbol(name.name);
-            if let Some(effect) = self.effect_def(effect_name)
-                && let Some(op) = effect.op(op_name).cloned()
-            {
-                let params = self.alloc_ty_list(op.params().iter().copied());
-                let ty = self.alloc_ty(HirTyKind::Arrow {
-                    params,
-                    ret: op.result(),
-                    is_effectful: true,
-                });
-                self.set_expr_member_fact(
-                    expr_id,
-                    ExprMemberFact::new(ExprMemberKind::EffectOperation, name.name, ty),
-                );
-                return ExprFacts::new(ty, effects);
-            }
-        }
 
         if let Some(ty) = self.check_shape_member_field(expr_id, origin, base, name) {
-            return ExprFacts::new(ty, effects);
+            return ExprFacts::new(ty);
         }
 
         let base_is_mut = self.is_mut_ty(base_facts.ty);
@@ -74,7 +53,7 @@ impl CheckPass<'_, '_, '_> {
                 name,
             )
         };
-        ExprFacts::new(ty, effects)
+        ExprFacts::new(ty)
     }
 
     fn check_shape_member_field(
@@ -164,8 +143,7 @@ impl CheckPass<'_, '_, '_> {
             self.set_expr_import_record_target(expr_id, target);
         }
         let scheme = self.scheme_from_export(&surface, &export);
-        self.resolve_import_record_export_answers(expr_id, origin, &scheme);
-        self.set_expr_callable_effects(expr_id, scheme.effects.clone());
+        self.resolve_import_record_export_evidence(expr_id, origin, &scheme);
         let value_ty = self.scheme_value_ty(&scheme);
         let mut fact = ExprMemberFact::new(ExprMemberKind::ImportRecordExport, name.name, value_ty);
         if let Some(target) = import_record_target {
@@ -175,7 +153,7 @@ impl CheckPass<'_, '_, '_> {
         value_ty
     }
 
-    fn resolve_import_record_export_answers(
+    fn resolve_import_record_export_evidence(
         &mut self,
         expr_id: HirExprId,
         origin: HirOrigin,
@@ -185,11 +163,11 @@ impl CheckPass<'_, '_, '_> {
             return;
         }
         let instantiated = self.instantiate_monomorphic_scheme(scheme);
-        if let Some(answers) =
-            self.resolve_obligations_to_answers(origin, &instantiated.obligations)
-            && !answers.is_empty()
+        if let Some(evidence) =
+            self.resolve_obligations_to_evidence(origin, &instantiated.obligations)
+            && !evidence.is_empty()
         {
-            self.set_expr_constraint_answers(expr_id, answers);
+            self.set_expr_constraint_evidence(expr_id, evidence);
         }
     }
 
@@ -275,7 +253,6 @@ impl CheckPass<'_, '_, '_> {
         }
         if let Some(binding) = candidates.first().copied() {
             let scheme = self.binding_scheme(binding).cloned()?;
-            self.set_expr_callable_effects(expr_id, scheme.effects.clone());
             let mut fact = ExprMemberFact::new(
                 ExprMemberKind::AttachedMethodNamespace,
                 method_name,
@@ -297,7 +274,6 @@ impl CheckPass<'_, '_, '_> {
         }
         let imported = imported.into_iter().next()?;
         let ImportedAttachedMethod { module, scheme } = imported;
-        self.set_expr_callable_effects(expr_id, scheme.effects.clone());
         self.set_expr_import_record_target(expr_id, module.clone());
         let fact = ExprMemberFact::new(
             ExprMemberKind::AttachedMethodNamespace,
@@ -335,7 +311,6 @@ impl CheckPass<'_, '_, '_> {
             .exported_value(self.resolve_symbol(name.name))?
             .clone();
         let scheme = self.scheme_from_export(&surface, &export);
-        self.set_expr_callable_effects(expr_id, scheme.effects.clone());
         let value_ty = self.scheme_value_ty(&scheme);
         self.set_expr_member_fact(
             expr_id,
@@ -395,14 +370,13 @@ impl CheckPass<'_, '_, '_> {
         let scheme = self.binding_scheme(binding).cloned()?;
         if scheme.type_params.is_empty() {
             let instantiated = self.instantiate_monomorphic_scheme(&scheme);
-            if let Some(answers) =
-                self.resolve_obligations_to_answers(origin, &instantiated.obligations)
-                && !answers.is_empty()
+            if let Some(evidence) =
+                self.resolve_obligations_to_evidence(origin, &instantiated.obligations)
+                && !evidence.is_empty()
             {
-                self.set_expr_constraint_answers(expr_id, answers);
+                self.set_expr_constraint_evidence(expr_id, evidence);
             }
         }
-        self.set_expr_callable_effects(expr_id, scheme.effects.clone());
         let value_ty = self
             .strip_dot_callable_param(scheme.ty)
             .unwrap_or(scheme.ty);
@@ -440,14 +414,13 @@ impl CheckPass<'_, '_, '_> {
         let ImportedAttachedMethod { module, scheme } = imported.into_iter().next()?;
         if scheme.type_params.is_empty() {
             let instantiated = self.instantiate_monomorphic_scheme(&scheme);
-            if let Some(answers) =
-                self.resolve_obligations_to_answers(origin, &instantiated.obligations)
-                && !answers.is_empty()
+            if let Some(evidence) =
+                self.resolve_obligations_to_evidence(origin, &instantiated.obligations)
+                && !evidence.is_empty()
             {
-                self.set_expr_constraint_answers(expr_id, answers);
+                self.set_expr_constraint_evidence(expr_id, evidence);
             }
         }
-        self.set_expr_callable_effects(expr_id, scheme.effects.clone());
         let value_ty = self
             .strip_dot_callable_param(scheme.ty)
             .unwrap_or(scheme.ty);
@@ -500,7 +473,6 @@ impl CheckPass<'_, '_, '_> {
             comptime_params: scheme.comptime_params.clone(),
             constraints: Box::default(),
             ty: instantiated.ty,
-            effects: instantiated.effects,
         })
     }
 

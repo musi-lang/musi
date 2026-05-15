@@ -59,6 +59,15 @@ impl<'a> SyntheticNameSetMut<'a> {
                 self.collect_used(left);
                 self.collect_used(right);
             }
+            IrExprKind::If {
+                condition,
+                then_expr,
+                else_expr,
+            } => {
+                self.collect_used(condition);
+                self.collect_used(then_expr);
+                self.collect_used(else_expr);
+            }
             IrExprKind::RangeContains {
                 value,
                 range,
@@ -89,13 +98,12 @@ impl<'a> SyntheticNameSetMut<'a> {
             | IrExprKind::Tuple { items: exprs, .. }
             | IrExprKind::Array { items: exprs, .. }
             | IrExprKind::VariantNew { args: exprs, .. }
-            | IrExprKind::Request { args: exprs, .. }
             | IrExprKind::ClosureNew {
                 captures: exprs, ..
             } => self.collect_expr_slice(exprs),
-            IrExprKind::ArrayCat { parts, .. }
-            | IrExprKind::CallParts { args: parts, .. }
-            | IrExprKind::RequestSeq { args: parts, .. } => self.collect_seq_part_exprs(parts),
+            IrExprKind::ArrayCat { parts, .. } | IrExprKind::CallParts { args: parts, .. } => {
+                self.collect_seq_part_exprs(parts);
+            }
             IrExprKind::Record { fields, .. } => self.collect_record_field_exprs(fields),
             IrExprKind::RecordUpdate { base, updates, .. } => {
                 self.collect_used(base);
@@ -116,27 +124,7 @@ impl<'a> SyntheticNameSetMut<'a> {
                     self.collect_used(&arg.expr);
                 }
             }
-            IrExprKind::AnswerLit { value, ops, .. } => {
-                self.collect_used(value);
-                for op in ops {
-                    self.collect_used(&op.closure);
-                }
-            }
-            IrExprKind::Handle { answer, body, .. } => {
-                self.collect_used(answer);
-                self.collect_used(body);
-            }
-            IrExprKind::Resume { expr } => {
-                if let Some(expr) = expr {
-                    self.collect_used(expr);
-                }
-            }
-            IrExprKind::Unit
-            | IrExprKind::Temp { .. }
-            | IrExprKind::Lit(_)
-            | IrExprKind::Name { .. }
-            | IrExprKind::TypeValue { .. }
-            | IrExprKind::SyntaxValue { .. } => {}
+            _ => {}
         }
     }
 
@@ -263,6 +251,15 @@ pub(crate) fn collect_nested_bindings(
             collect(left, out);
             collect(right, out);
         }
+        IrExprKind::If {
+            condition,
+            then_expr,
+            else_expr,
+        } => {
+            collect(condition, out);
+            collect(then_expr, out);
+            collect(else_expr, out);
+        }
         IrExprKind::RangeContains {
             value,
             range,
@@ -293,13 +290,10 @@ pub(crate) fn collect_nested_bindings(
         | IrExprKind::Tuple { items: exprs, .. }
         | IrExprKind::Array { items: exprs, .. }
         | IrExprKind::VariantNew { args: exprs, .. }
-        | IrExprKind::Request { args: exprs, .. }
         | IrExprKind::ClosureNew {
             captures: exprs, ..
         } => collect_expr_slice(exprs, out, collect),
-        IrExprKind::ArrayCat { parts, .. }
-        | IrExprKind::CallParts { args: parts, .. }
-        | IrExprKind::RequestSeq { args: parts, .. } => {
+        IrExprKind::ArrayCat { parts, .. } | IrExprKind::CallParts { args: parts, .. } => {
             collect_seq_part_exprs(parts, out, collect);
         }
         IrExprKind::Record { fields, .. } => {
@@ -317,27 +311,7 @@ pub(crate) fn collect_nested_bindings(
         IrExprKind::IntrinsicCall { args, .. } => {
             collect_call_arg_exprs(args, out, collect);
         }
-        IrExprKind::AnswerLit { value, ops, .. } => {
-            collect(value, out);
-            for op in ops {
-                collect(&op.closure, out);
-            }
-        }
-        IrExprKind::Handle { answer, body, .. } => {
-            collect(answer, out);
-            collect(body, out);
-        }
-        IrExprKind::Resume { expr } => {
-            if let Some(expr) = expr {
-                collect(expr, out);
-            }
-        }
-        IrExprKind::Unit
-        | IrExprKind::Temp { .. }
-        | IrExprKind::Lit(_)
-        | IrExprKind::Name { .. }
-        | IrExprKind::TypeValue { .. }
-        | IrExprKind::SyntaxValue { .. } => {}
+        _ => {}
     }
 }
 

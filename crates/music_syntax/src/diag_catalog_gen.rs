@@ -13,6 +13,7 @@ struct CatalogEntry {
     help: Option<&'static str>,
 }
 
+#[rustfmt::skip]
 const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: SyntaxDiagKind::InvalidChar,
@@ -241,7 +242,7 @@ const ENTRIES: &[CatalogEntry] = &[
     CatalogEntry {
         kind: SyntaxDiagKind::ExpectedConstraintOperator,
         code: 1308,
-        message: "constraint operator `<:` or `:` expected, found {found}",
+        message: "constraint operator `|=` or `~=` expected, found {found}",
         primary: "found {found} here",
         secondary: None,
         help: None,
@@ -277,6 +278,14 @@ const ENTRIES: &[CatalogEntry] = &[
         primary: "{keyword} found where identifier required",
         secondary: None,
         help: Some("choose non-keyword identifier"),
+    },
+    CatalogEntry {
+        kind: SyntaxDiagKind::ReservedGeneratedIdentifier,
+        code: 1313,
+        message: "generated identifier namespace reserved",
+        primary: "identifier begins with `__`",
+        secondary: None,
+        help: Some("choose identifier without `__` prefix"),
     },
 ];
 
@@ -326,6 +335,7 @@ pub fn from_code(raw: u16) -> Option<SyntaxDiagKind> {
         .map(|entry| entry.kind)
 }
 
+#[rustfmt::skip]
 pub const fn lex_error_kind(source: super::LexErrorKind) -> SyntaxDiagKind {
     match source {
         super::LexErrorKind::InvalidChar { .. } => SyntaxDiagKind::InvalidChar,
@@ -369,6 +379,7 @@ pub const fn lex_error_kind(source: super::LexErrorKind) -> SyntaxDiagKind {
     }
 }
 
+#[rustfmt::skip]
 pub const fn parse_error_kind(source: super::ParseErrorKind) -> SyntaxDiagKind {
     match source {
         super::ParseErrorKind::ExpectedToken { .. } => SyntaxDiagKind::ExpectedToken,
@@ -378,6 +389,9 @@ pub const fn parse_error_kind(source: super::ParseErrorKind) -> SyntaxDiagKind {
         super::ParseErrorKind::ExpectedIdentifier { .. } => SyntaxDiagKind::ExpectedIdentifier,
         super::ParseErrorKind::ReservedKeywordIdentifier { .. } => {
             SyntaxDiagKind::ReservedKeywordIdentifier
+        }
+        super::ParseErrorKind::ReservedGeneratedIdentifier => {
+            SyntaxDiagKind::ReservedGeneratedIdentifier
         }
         super::ParseErrorKind::ExpectedSpliceTarget { .. } => SyntaxDiagKind::ExpectedSpliceTarget,
         super::ParseErrorKind::ExpectedOperatorMemberName { .. } => {

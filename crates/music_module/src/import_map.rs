@@ -14,10 +14,10 @@ impl ImportMap {
         let from = from.as_str();
         let spec = spec.as_str();
 
-        if let Some(scoped) = longest_scope_prefix(&self.scopes, from) {
-            if let Some(resolved) = resolve_in_map(scoped, spec) {
-                return Some(ModuleSpecifier::new(resolved));
-            }
+        if let Some(scoped) = longest_scope_prefix(&self.scopes, from)
+            && let Some(resolved) = resolve_in_map(scoped, spec)
+        {
+            return Some(ModuleSpecifier::new(resolved));
         }
 
         resolve_in_map(&self.imports, spec).map(ModuleSpecifier::new)

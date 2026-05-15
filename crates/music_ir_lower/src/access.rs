@@ -1,7 +1,7 @@
 use super::{
     BTreeMap, ExprMemberKind, HirExprId, HirExprKind, HirTyId, HirTyKind, Interner, IrExprKind,
     IrNameRef, IrOrigin, IrRecordLayoutField, LowerCtx, RecordLayout, SemaModule, SliceRange,
-    Symbol, lower_boxed_expr, lower_constraint_answer_expr, lower_expr,
+    Symbol, lower_boxed_expr, lower_constraint_evidence_expr, lower_expr,
     lowering_invariant_violation, use_binding_id,
 };
 
@@ -100,11 +100,11 @@ pub(crate) fn lower_field_expr(
     if let Some(fact) = sema.expr_member_fact(expr_id)
         && fact.kind == ExprMemberKind::ShapeMember
         && let Some(evidence) = sema
-            .expr_constraint_answers(expr_id)
+            .expr_constraint_evidence(expr_id)
             .and_then(|items| items.first())
     {
         return IrExprKind::RecordGet {
-            base: Box::new(lower_constraint_answer_expr(
+            base: Box::new(lower_constraint_evidence_expr(
                 ctx,
                 IrOrigin::new(
                     sema.module().store.exprs.get(expr_id).origin.source_id,

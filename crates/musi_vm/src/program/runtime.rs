@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
 use music_seam::{
-    ConstantId, EffectId, ForeignId, GlobalId, Instruction, Opcode, Operand, ProcedureId, StringId,
-    TypeId,
+    ConstantId, ForeignId, GlobalId, Instruction, Opcode, Operand, ProcedureId, StringId, TypeId,
 };
 
 pub type RuntimeInstructionList = Arc<[RuntimeInstruction]>;
@@ -57,14 +56,6 @@ pub enum RuntimeKernel {
     ConstI64Array8Return {
         ty: TypeId,
         cells: [i64; 8],
-    },
-    InlineEffectResume {
-        resume_value: i16,
-        value_add: i16,
-    },
-    InlineEffectResumeClauses {
-        value_clause: ProcedureId,
-        op_clause: ProcedureId,
     },
 }
 
@@ -222,11 +213,6 @@ pub enum RuntimeOperand {
     Global(GlobalId),
     Procedure(ProcedureId),
     Foreign(ForeignId),
-    EffectId(EffectId),
-    Effect {
-        effect: EffectId,
-        op: u16,
-    },
     TypeLen {
         ty: TypeId,
         len: u16,
@@ -323,8 +309,6 @@ impl RuntimeOperand {
             Self::Global(value) => Operand::Global(value),
             Self::Procedure(value) => Operand::Procedure(value),
             Self::Foreign(value) => Operand::Foreign(value),
-            Self::EffectId(value) => Operand::EffectId(value),
-            Self::Effect { effect, op } => Operand::Effect { effect, op },
             Self::TypeLen { ty, len } => Operand::TypeLen { ty, len },
             Self::WideProcedureCaptures {
                 procedure,
@@ -343,7 +327,6 @@ impl From<&Operand> for RuntimeOperand {
         match *operand {
             Operand::None => Self::None,
             Operand::Label(_) | Operand::BranchTable(_) => Self::Raw,
-            Operand::Effect { effect, op } => Self::Effect { effect, op },
             Operand::I16(value) => Self::I16(value),
             Operand::Local(slot) => Self::Local(slot),
             Operand::String(value) => Self::String(value),
@@ -352,7 +335,6 @@ impl From<&Operand> for RuntimeOperand {
             Operand::Global(value) => Self::Global(value),
             Operand::Procedure(procedure) => Self::Procedure(procedure),
             Operand::Foreign(value) => Self::Foreign(value),
-            Operand::EffectId(value) => Self::EffectId(value),
             Operand::TypeLen { ty, len } => Self::TypeLen { ty, len },
             Operand::WideProcedureCaptures {
                 procedure,

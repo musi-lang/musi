@@ -167,8 +167,8 @@ const SIMPLE_TYPE_TERMS: &[SimpleTypeTermInfo] = &[
     },
     SimpleTypeTermInfo {
         kind: TypeTermKind::Bool,
-        parse_name: "Bool",
-        display_name: "Bool",
+        parse_name: "Bit",
+        display_name: "Bit",
     },
     SimpleTypeTermInfo {
         kind: TypeTermKind::Nat,

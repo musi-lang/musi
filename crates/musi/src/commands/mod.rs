@@ -1,5 +1,6 @@
 mod build;
 mod check;
+mod disasm;
 mod format;
 mod initialize;
 mod install;
@@ -29,11 +30,17 @@ pub fn run_command(command: Command) -> MusiResult {
             workspace,
             out,
             target_name,
+            archive,
+            profile,
+            package,
         } => build::build(
             target.as_deref(),
             workspace,
             out.as_deref(),
             target_name.as_deref(),
+            archive,
+            profile,
+            package,
         ),
         Command::Run { target, args } => run::run_project(target.as_deref(), &args),
         Command::Test { target, workspace } => {
@@ -41,6 +48,8 @@ pub fn run_command(command: Command) -> MusiResult {
         }
         Command::Task { name, target } => task::run_task(&name, target.as_deref()),
         Command::Info { target } => metadata::print_project_metadata(target.as_deref()),
+        Command::Disasm { target } => disasm::disasm(&target),
+        Command::Decomp { target } => disasm::decomp(&target),
         Command::Install { target } => install::install_project(target.as_deref()),
         Command::Lsp => run_stdio_server().map_err(|source| MusiError::LspServerFailed {
             message: source.to_string(),

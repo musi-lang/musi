@@ -14,7 +14,7 @@ impl Vm {
                 self.jump_to(label)?;
                 Ok(StepOutcome::Continue)
             }
-            Opcode::BrFalse => {
+            Opcode::BrZ => {
                 let Operand::Label(label) = instruction.operand else {
                     return Err(Self::invalid_operand(instruction));
                 };

@@ -17,11 +17,13 @@ fn attr_is_reserved(path: &[Box<str>]) -> bool {
             true
         }
         [head] if head.as_ref() == "native" => true,
+        [head] if head.as_ref() == "foreign" => true,
+        [head] if head.as_ref() == "link" => true,
         [head] if head.as_ref() == "target" => true,
         [head] if head.as_ref() == "profile" => true,
         [head] if head.as_ref() == "lifecycle" => true,
-        [head] if head.as_ref() == "repr" => true,
         [head] if head.as_ref() == "layout" => true,
+        [head] if head.as_ref() == "repr" => true,
         [head] if head.as_ref() == "frozen" => true,
         [head, ..] if head.as_ref() == "diag" => true,
         [head, ..] if head.as_ref() == "musi" => true,

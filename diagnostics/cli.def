@@ -38,6 +38,8 @@ map cli_error_kind crate::MusiError option
   case "SessionCompilationFailed(_)" none
   case "RuntimeExecutionFailed(_)" none
   case "ToolingIoFailed(_)" none
+  case "ArtifactTransportFailed(_)" none
+  case "ArchiveTransportFailed(_)" none
   case "FormattingFailed(_)" none
   case "JsonSerializationFailed(_)" none
   case "MissingCurrentDirectory" MissingCurrentDirectory

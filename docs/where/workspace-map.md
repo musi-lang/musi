@@ -10,7 +10,7 @@ This workspace splits language pipeline, runtime, tooling, and user-facing binar
 - `music_syntax` — lexer, parser, syntax tree
 - `music_module` — module keys, import maps, module syntax helpers
 - `music_resolve` — name and import resolution
-- `music_sema` — semantic checking, exported surface, effect rows
+- `music_sema` — semantic checking, exported surface, constraints, shape facts, and FFI validation
 - `music_ir` — IR model and diagnostics
 - `music_ir_lower` — sema-to-IR lowering
 - `music_emit` — SEAM emission from IR
@@ -18,10 +18,10 @@ This workspace splits language pipeline, runtime, tooling, and user-facing binar
 
 ## Runtime and host
 
-- `music_seam` — SEAM artifact, SEAM HIL, lowered `.seam` text, binary, opcodes
+- `music_seam` — SEAM artifacts, SEAM HIL, bytecode disassembly text, binary, opcodes
 - `musi_vm` — VM program loading, values, execution
 - `musi_native_ffi` — libffi-backed native call bridge
-- `musi_native` — host effect and native dispatch
+- `musi_native` — native host dispatch
 - `musi_rt` — embeddable runtime wrapper around session + VM + native host
 - `musi_foundation` — compiler-owned `musi:*` modules
 

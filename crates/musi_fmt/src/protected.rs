@@ -25,12 +25,10 @@ pub fn protected_line_ranges(source: &str, tree: &SyntaxTree) -> Vec<Range<usize
         if line.contains("musi-fmt-ignore")
             && !line.contains("musi-fmt-ignore-file")
             && !line.contains("musi-fmt-ignore-end")
-        {
-            if let Some(next_range) = next_syntax_item_lines(&lines, tree, line_range.end)
+            && let Some(next_range) = next_syntax_item_lines(&lines, tree, line_range.end)
                 .or_else(|| next_source_line(&lines, source, index.saturating_add(1)))
-            {
-                protected.push(next_range);
-            }
+        {
+            protected.push(next_range);
         }
     }
     merge_ranges(protected)

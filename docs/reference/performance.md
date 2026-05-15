@@ -23,15 +23,15 @@ Rules:
 - Do not compare Musi selective paths with peer default runtime rows as if they were the same thing.
 - Do not compare forced-GC rows with normal allocation rows.
 - Do not compare cold rows with hot rows.
-- Use `interpreter_vm_mode` for Musi fast no-JIT interpreter behavior. It may use quickening, fused dispatch, and runtime kernels, like Java `-Xint` still uses VM templates and runtime helpers.
+- Use `interpreter_vm_mode` for Musi fast interpreter behavior. It may use quickening, fused dispatch, and runtime kernels, like Java `-Xint` still uses VM templates and runtime helpers.
 - Use `debug_interpreter_vm_mode` for no-kernel/no-fused-dispatch diagnostics.
 - Use `generic_vm_mode` for Musi optimized peer-style VM mode.
 
 ## Why These Targets Are Low
 
-Musi is not a clone of loop-heavy host languages. Its own language surface makes VM overhead visible in places that other runtimes often hide behind `for`, `while`, or host-native callbacks. The grammar has `rec` as the only direct repetition modifier, `resume` as effect-continuation control flow, and no `for`, `while`, or `continue` keyword forms in the canonical lexer/parser. That means recursive calls and effect resume are not benchmark curiosities; they are core language paths.
+Musi is designed for different control flow than loop-heavy host languages. Its own language design makes VM overhead visible in places that other runtimes often hide behind `for`, `while`, or host-native callbacks. The grammar has `recur` as the direct repetition modifier and no `for`, `while`, or `continue` keyword forms in the canonical lexer/parser. Recursive calls remain core language paths.
 
-The low nanosecond and sub-nanosecond targets exist for Musi's market: small embeddable programs, generated programs, and agent-written code that may lean on the language's own control forms instead of host loops. When an embedder calls Musi in a tight path, export lookup, sequence return, GC barriers, recursive kernels, and effect resume can dominate the whole interaction.
+The low nanosecond and sub-nanosecond targets exist for Musi's market: small embeddable programs, generated programs, and agent-written code that may lean on the language's own control forms instead of host loops. When an embedder calls Musi in a tight path, export lookup, sequence return, GC barriers, recursive kernels, and suspension/runtime protocol costs can dominate the whole interaction.
 
 For AI agents updating this file: inspect `grammar/MusiLexer.g4`, `grammar/MusiParser.g4`, and `grammar/Musi.abnf` before changing rationale. Do not loosen targets by comparing Musi to languages with different loop/control constructs. Start from Musi semantics, then classify each row as exact peer, close family, selective path, or diagnostic-only.
 
@@ -53,12 +53,12 @@ make bench-vms-gc
 | Mode                        | Runtime             | What it measures                                                                          | Match level                                          |
 | --------------------------- | ------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------- |
 | `native`                    | Java, Scala, C#, F# | Default runtime behavior                                                                  | Exact peer when phase and workload match             |
-| `vm_mode`                   | Java, Scala, C#, F# | Best-effort no-JIT lane (`-Xint` on JVM; CLR tiering/quick-jit/ready-to-run disabled)     | Diagnostic peer                                      |
+| `vm_mode`                   | Java, Scala, C#, F# | Best-effort interpreter-style lane (`-Xint` on JVM; selected runtime tiering disabled)    | Diagnostic peer                                      |
 | `native`                    | Lua                 | PUC-Lua interpreter VM                                                                    | Exact scripting peer for common Lua-shaped workloads |
 | `normal_vm_mode`            | Musi                | Default tiered VM with reusable bindings and typed kernels where shape is proven          | Exact only when table says so                        |
 | `generic_vm_mode`           | Musi                | Prewarmed VM, reusable export bindings, runtime kernels and fused paths enabled           | Selective Musi path                                  |
 | `hot_vm_mode`               | Musi                | Optimized embedder path with bound handles and typed kernels                              | Selective Musi path                                  |
-| `interpreter_vm_mode`       | Musi                | Fast no-JIT interpreter lane with quickening, fused dispatch, and runtime kernels allowed | Diagnostic peer when compared with no-JIT lanes      |
+| `interpreter_vm_mode`       | Musi                | Fast interpreter lane with quickening, fused dispatch, and runtime kernels allowed        | Diagnostic peer when compared with interpreter lanes |
 | `debug_interpreter_vm_mode` | Musi                | Slow diagnostic lane with kernels and fused dispatch disabled                             | Diagnostic only                                      |
 | `cold_vm_mode`              | Musi                | Load precompiled SEAM bytes, construct VM, initialize, call once                          | Cold-start diagnostic                                |
 
@@ -73,6 +73,12 @@ Musi Criterion output uses `bench_vm_<mode>_<workload>` or grouped `bench_vm_seq
 
 Musi accepts Java/.NET-style VM options from both `MVM_OPTIONS` and CLI `-Xmvm:` flags. CLI flags override defaults after environment flags are applied.
 
+`Tier` mode bundles are the primary surface:
+
+- `Tier=Normal`, `Tier=Interp`, `Tier=Hot` start from full feature set.
+- `Tier=Debug` starts with runtime kernels and fused dispatch disabled.
+- `+Use*` / `-Use*` flags override bundle defaults after tier selection.
+
 Examples:
 
 ```sh
@@ -84,10 +90,10 @@ Supported options:
 
 | Option                                                | Meaning                                                                   |
 | ----------------------------------------------------- | ------------------------------------------------------------------------- |
-| `-Xmvm:Tier=Normal`                                   | Default tiered VM mode.                                                   |
-| `-Xmvm:Tier=Interp`                                   | No-JIT interpreter lane; quickening, fused dispatch, and kernels may run. |
-| `-Xmvm:Tier=Debug`                                    | Diagnostic interpreter lane with kernels and fused dispatch disabled.     |
-| `-Xmvm:Tier=Hot`                                      | Embedder-oriented hot mode.                                               |
+| `-Xmvm:Tier=Normal`                                   | Canonical normal bundle (default tiered VM mode).                         |
+| `-Xmvm:Tier=Interp`                                   | Canonical interpreter bundle.                                              |
+| `-Xmvm:Tier=Debug`                                    | Canonical debug bundle (kernels and fused dispatch off by default).       |
+| `-Xmvm:Tier=Hot`                                      | Canonical hot bundle for embedder-oriented hot path.                      |
 | `-Xmvm:+UseQuickening` / `-Xmvm:-UseQuickening`       | Enable or disable quickening flag.                                        |
 | `-Xmvm:+UseKernels` / `-Xmvm:-UseKernels`             | Enable or disable runtime kernels.                                        |
 | `-Xmvm:+UseFusedDispatch` / `-Xmvm:-UseFusedDispatch` | Enable or disable fused dispatch.                                         |
@@ -110,7 +116,6 @@ These names stay aligned across C#, F#, Java, Lua, Musi, and Scala when behavior
 | `closure_capture`           | Closure captures one integer and applies through function value |
 | `sequence_index_mutation`   | Mutate nested two-by-two integer sequence/array/table           |
 | `data_match_option`         | Construct option-like tagged value and match it                 |
-| `effect_resume_equivalent`  | Resume-like callback flow returning 42 then adding 1            |
 | `sequence_return_alloc`     | Allocate and retain an eight-integer sequence/array/table       |
 | `sequence_return_forced_gc` | Allocate and force host GC/collector after return               |
 
@@ -146,7 +151,6 @@ Use this table for broad scripting/runtime comparison. It excludes Musi selectiv
 | `closure_capture`          |       177.7 ns |         6.5 ns |         7.2 ns |          24.7 ns |           6.8 ns |       1.193 ns |
 | `sequence_index_mutation`  |        74.5 ns |         7.9 ns |         8.8 ns |           6.1 ns |          11.6 ns |       0.772 ns |
 | `data_match_option`        |       168.8 ns |         7.1 ns |         9.8 ns |           9.2 ns |           4.9 ns |       1.196 ns |
-| `effect_resume_equivalent` |       202.0 ns |         7.1 ns |         7.2 ns |          10.1 ns |           9.4 ns |       1.845 ns |
 
 Notes:
 
@@ -154,9 +158,9 @@ Notes:
 - Musi normal VM can still use runtime-proven typed kernels.
 - This table does not include Musi `generic_vm_mode` or `hot_vm_mode`.
 
-## Diagnostic Peer: No-JIT / Interpreter Hot Runtime
+## Diagnostic Peer: Interpreter Hot Runtime
 
-This table compares no-JIT or interpreter lanes.
+This table compares interpreter lanes.
 
 Use it to see dispatch overhead and interpreter behavior. Do not use it as a best-performance table.
 
@@ -167,12 +171,11 @@ Use it to see dispatch overhead and interpreter behavior. Do not use it as a bes
 | `closure_capture`          |          445.5 ns |          627.6 ns |             19.2 ns |             13.0 ns |                   1.224 ns |
 | `sequence_index_mutation`  |          124.8 ns |          286.9 ns |              3.1 ns |              5.7 ns |                   0.763 ns |
 | `data_match_option`        |          249.2 ns |          408.4 ns |              6.4 ns |              8.9 ns |                   1.194 ns |
-| `effect_resume_equivalent` |          387.4 ns |          618.3 ns |              6.7 ns |             11.5 ns |                   1.872 ns |
 
 Notes:
 
-- CLR `vm_mode` is not a true interpreter. It disables selected JIT optimizations.
-- Musi `interpreter_vm_mode` is now the apples-to-apples no-JIT lane. It still permits kernels and fused dispatch, matching how peer VMs keep runtime helpers in no-JIT modes.
+- CLR `vm_mode` disables selected runtime tiering.
+- Musi `interpreter_vm_mode` permits kernels and fused dispatch, matching how peer VMs keep runtime helpers in interpreter-style modes.
 - Use `debug_interpreter_vm_mode` to isolate slow general dispatch without kernels.
 
 ## Selective Musi Fast Paths
@@ -188,7 +191,6 @@ Use it for embedder APIs and runtime specialization work. Do not compare it with
 | `closure_capture`          |               1.192 ns |           1.263 ns | Bound integer call path          |
 | `sequence_index_mutation`  |               0.765 ns |           0.810 ns | Bound typed sequence mutation    |
 | `data_match_option`        |               1.183 ns |           1.199 ns | Runtime data-match kernel        |
-| `effect_resume_equivalent` |               1.989 ns |           1.819 ns | Inline effect-resume kernel      |
 | `sequence_return_alloc`    |               8.454 ns |           8.679 ns | Bound const `[8]Int` return path |
 
 Hard-target status from latest run:
@@ -199,7 +201,6 @@ Normal VM targets:
 - `normal_vm_mode/closure_capture <= 1.25ns`: PASS (`1.193ns`)
 - `normal_vm_mode/sequence_index_mutation <= 800ps`: PASS (`771.8ps`)
 - `normal_vm_mode/data_match_option <= 1.22ns`: PASS (`1.196ns`)
-- `normal_vm_mode/effect_resume_equivalent <= 1.90ns`: PASS (`1.845ns`)
 - `normal_vm_mode/sequence_return_alloc <= 9.5ns`: PASS (`9.196ns`)
 
 Interpreter VM targets:
@@ -208,7 +209,6 @@ Interpreter VM targets:
 - `interpreter_vm_mode/closure_capture <= 1.25ns`: PASS (`1.224ns`)
 - `interpreter_vm_mode/sequence_index_mutation <= 800ps`: PASS (`763.3ps`)
 - `interpreter_vm_mode/data_match_option <= 1.22ns`: PASS (`1.194ns`)
-- `interpreter_vm_mode/effect_resume_equivalent <= 1.90ns`: PASS (`1.872ns`)
 - `interpreter_vm_mode/sequence_return_alloc <= 9.2ns`: PASS (`8.974ns`)
 
 Generic VM targets:
@@ -217,7 +217,6 @@ Generic VM targets:
 - `generic_vm_mode/closure_capture <= 1.22ns`: PASS (`1.192ns`)
 - `generic_vm_mode/sequence_index_mutation <= 800ps`: PASS (`764.6ps`)
 - `generic_vm_mode/data_match_option <= 1.20ns`: PASS (`1.183ns`)
-- `generic_vm_mode/effect_resume_equivalent <= 2.05ns`: PASS (`1.989ns`)
 - `generic_vm_mode/sequence_return_alloc <= 8.7ns`: PASS (`8.454ns`)
 
 Allocation target:
@@ -269,7 +268,6 @@ These rows are Musi-only. Use them to track regressions inside one mode.
 | `bench_vm_hot_vm_mode_closure_capture`                                             | `[1.1920, 1.2626, 1.3857] ns` |
 | `bench_vm_hot_vm_mode_sequence_index_mutation`                                     | `[777.81, 809.81, 855.63] ps` |
 | `bench_vm_hot_vm_mode_data_match_option`                                           | `[1.1810, 1.1986, 1.2255] ns` |
-| `bench_vm_hot_vm_mode_effect_resume_equivalent`                                    | `[1.7997, 1.8185, 1.8469] ns` |
 | `bench_vm_sequence_return_gc/hot_vm_mode_sequence_return_alloc`                    | `[8.5364, 8.6791, 8.8656] ns` |
 | `bench_vm_sequence_return_gc/hot_vm_mode_sequence_return_bound_export_alloc`       | `[9.0638, 9.2113, 9.3986] ns` |
 | `bench_vm_sequence_return_gc/hot_vm_mode_sequence_return_call_export_alloc`        | `[348.16, 348.87, 350.28] ns` |
@@ -288,7 +286,6 @@ These rows are Musi-only. Use them to track regressions inside one mode.
 | `bench_vm_normal_vm_mode_closure_capture`                          | `[1.1837, 1.1928, 1.2063] ns`       |
 | `bench_vm_normal_vm_mode_sequence_index_mutation`                  | `[764.68, 771.81, 783.36] ps`       |
 | `bench_vm_normal_vm_mode_data_match_option`                        | `[1.1833, 1.1955, 1.2171] ns`       |
-| `bench_vm_normal_vm_mode_effect_resume_equivalent`                 | `[1.7996, 1.8445, 1.9016] ns`       |
 | `bench_vm_sequence_return_gc/normal_vm_mode_sequence_return_alloc` | `[9.0456, 9.1959, 9.4024] ns`       |
 
 ### Generic VM mode
@@ -300,7 +297,6 @@ These rows are Musi-only. Use them to track regressions inside one mode.
 | `bench_vm_generic_vm_mode_closure_capture`                          | `[1.1811, 1.1922, 1.2091] ns`       |
 | `bench_vm_generic_vm_mode_sequence_index_mutation`                  | `[762.06, 764.60, 769.13] ps`       |
 | `bench_vm_generic_vm_mode_data_match_option`                        | `[1.1793, 1.1826, 1.1867] ns`       |
-| `bench_vm_generic_vm_mode_effect_resume_equivalent`                 | `[1.8421, 1.9888, 2.2080] ns`       |
 | `bench_vm_sequence_return_gc/generic_vm_mode_sequence_return_alloc` | `[8.4203, 8.4542, 8.5085] ns`       |
 
 ### Interpreter VM mode
@@ -312,7 +308,6 @@ These rows are Musi-only. Use them to track regressions inside one mode.
 | `bench_vm_interpreter_vm_mode_closure_capture`                          | `[1.1954, 1.2238, 1.2600] ns`       |
 | `bench_vm_interpreter_vm_mode_sequence_index_mutation`                  | `[758.39, 763.28, 773.82] ps`       |
 | `bench_vm_interpreter_vm_mode_data_match_option`                        | `[1.1813, 1.1937, 1.2140] ns`       |
-| `bench_vm_interpreter_vm_mode_effect_resume_equivalent`                 | `[1.8371, 1.8719, 1.9108] ns`       |
 | `bench_vm_sequence_return_gc/interpreter_vm_mode_sequence_return_alloc` | `[8.4143, 8.9738, 9.7954] ns`       |
 
 ### Debug interpreter VM mode
@@ -323,7 +318,6 @@ These rows are Musi-only. Use them to track regressions inside one mode.
 | `bench_vm_debug_interpreter_vm_mode_closure_capture`                          | `[3.6789, 3.8568, 4.0457] µs` |
 | `bench_vm_debug_interpreter_vm_mode_sequence_index_mutation`                  | `[1.1965, 1.2089, 1.2316] µs` |
 | `bench_vm_debug_interpreter_vm_mode_data_match_option`                        | `[3.5730, 3.7370, 3.8785] µs` |
-| `bench_vm_debug_interpreter_vm_mode_effect_resume_equivalent`                 | `[5.0970, 5.2107, 5.3117] µs` |
 | `bench_vm_sequence_return_gc/debug_interpreter_vm_mode_sequence_return_alloc` | `[879.95, 894.61, 912.00] ns` |
 
 ### Cold VM mode
@@ -335,7 +329,6 @@ These rows are Musi-only. Use them to track regressions inside one mode.
 | `bench_vm_cold_vm_mode_closure_capture`                          | `[6.6917, 6.7697, 6.8751] µs` |
 | `bench_vm_cold_vm_mode_sequence_index_mutation`                  | `[6.9495, 6.9971, 7.0945] µs` |
 | `bench_vm_cold_vm_mode_data_match_option`                        | `[8.0813, 8.1398, 8.2456] µs` |
-| `bench_vm_cold_vm_mode_effect_resume_equivalent`                 | `[11.328, 12.016, 13.150] µs` |
 | `bench_vm_sequence_return_gc/cold_vm_mode_sequence_return_alloc` | `[4.9987, 5.0993, 5.1923] µs` |
 
 ## Latest Validation
@@ -373,9 +366,9 @@ Implementation checkpoints:
 
 ## Optimization Queue
 
-1. Recursion: keep `rec` fast because Musi has no `for`, `while`, or `continue` constructs; expand tail-recursive and structurally-recursive kernels only when semantics prove the shape.
+1. Recursion: keep `recur` fast because Musi has no `for`, `while`, or `continue` constructs; expand tail-recursive and structurally-recursive kernels only when semantics prove the shape.
 2. General export calls: reduce lookup, retain, and dynamic call overhead so default `call_export` can approach bound handles without requiring embedder-only APIs.
-3. Effects: optimize continuation allocation, handler dispatch, and `resume` value flow without changing handler reuse semantics.
+3. Suspension protocols: optimize explicit runtime state and returned value flow without hiding source-level `yield`.
 4. Sequence return and GC diagnostics: cut explicit collection, stress collection, and returned-sequence root handling while preserving precise roots.
 5. Bound exports: expand reusable handles beyond const sequence returns so embedders avoid name lookup on hot calls.
 6. Sequence mutation: keep pushing plain nested `[2][2]Int` fast path while allowing typed/described heap payloads and rejecting untyped packed blobs.
@@ -397,8 +390,8 @@ Interpreter dispatch, quickening, inline caches, and GC terms in this file follo
 - M. Anton Ertl and David Gregg, "The Structure and Performance of Efficient Interpreters", Journal of Instruction-Level Parallelism, 2003. Use for interpreter dispatch costs, threaded dispatch, and why indirect branches matter in VM loops: <http://www.jilp.org/vol5/v5paper12.pdf>
 - Kevin Casey, M. Anton Ertl, and David Gregg, "Optimizing Indirect Branch Prediction Accuracy in Virtual Machine Interpreters", ACM TOPLAS, 2007. Use for replicated instructions, superinstructions, and branch-prediction framing for fused dispatch: <https://doi.org/10.1145/1286821.1286828>
 - L. Peter Deutsch and Allan M. Schiffman, "Efficient Implementation of the Smalltalk-80 System", POPL 1984. Use for inline caches and runtime representation changes as VM optimization tools: <https://dblp.org/rec/conf/popl/DeutschS84>
-- Stefan Brunthaler, "Inline Caching Meets Quickening", ECOOP 2010. Use for interpreter inline caching without JIT and quickening-based instruction specialization: <https://doi.org/10.1007/978-3-642-14107-2_21>
-- Stefan Brunthaler, "Efficient Interpretation using Quickening", DLS 2010. Use for quickening as a no-JIT interpreter speed technique: <https://doi.org/10.1145/1869631.1869633>
+- Stefan Brunthaler, "Inline Caching Meets Quickening", ECOOP 2010. Use for interpreter inline caching and quickening-based instruction specialization: <https://doi.org/10.1007/978-3-642-14107-2_21>
+- Stefan Brunthaler, "Efficient Interpretation using Quickening", DLS 2010. Use for quickening as an interpreter speed technique: <https://doi.org/10.1145/1869631.1869633>
 - Stefan Brunthaler, "Multi-Level Quickening: Ten Years Later", arXiv 2021. Use as later context for multi-level quickening and no-dynamic-code interpreter optimization: <https://arxiv.org/abs/2109.02958>
 - Tobias Würthinger and collaborators, "Context-sensitive trace inlining for Java", Science of Computer Programming, 2013. Use only as context for HotSpot template interpreter / trace interpreter terminology, not as a Musi design dependency: <https://pmc.ncbi.nlm.nih.gov/articles/PMC4872537/>
 

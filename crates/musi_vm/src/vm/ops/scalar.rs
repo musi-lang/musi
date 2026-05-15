@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use music_seam::{Instruction, Opcode};
 
 use crate::VmValueKind;
@@ -56,32 +58,38 @@ impl Vm {
         self.push_value(value)
     }
 
-    pub(crate) fn compare_ord<OpInt, OpNat, OpFloat, OpString>(
-        &mut self,
-        op_int: OpInt,
-        op_nat: OpNat,
-        op_float: OpFloat,
-        op_string: OpString,
-    ) -> VmResult
-    where
-        OpInt: FnOnce(i64, i64) -> bool,
-        OpNat: FnOnce(u64, u64) -> bool,
-        OpFloat: FnOnce(f64, f64) -> bool,
-        OpString: FnOnce(&str, &str) -> bool,
-    {
+    pub(crate) fn compare_ord(&mut self, op: impl FnOnce(Ordering) -> bool) -> VmResult {
         let right_value = self.pop_value()?;
         let left_value = self.pop_value()?;
-        let value = match (&left_value, &right_value) {
-            (Value::Int(left), Value::Int(right)) => op_int(*left, *right),
-            (Value::Nat(left), Value::Nat(right)) => op_nat(*left, *right),
-            (Value::Float(left), Value::Float(right)) => op_float(*left, *right),
+        let ordering = match (&left_value, &right_value) {
+            (Value::Int(left), Value::Int(right)) => left.cmp(right),
+            (Value::Nat(left), Value::Nat(right)) => left.cmp(right),
+            (Value::Nat(left), Value::Int(right)) => {
+                let Ok(right) = u64::try_from(*right) else {
+                    let module_slot = self.current_module_slot()?;
+                    let value = self.bool_value(module_slot, op(Ordering::Greater))?;
+                    self.push_value(value)?;
+                    return Ok(());
+                };
+                left.cmp(&right)
+            }
+            (Value::Int(left), Value::Nat(right)) => {
+                let Ok(left) = u64::try_from(*left) else {
+                    let module_slot = self.current_module_slot()?;
+                    let value = self.bool_value(module_slot, op(Ordering::Less))?;
+                    self.push_value(value)?;
+                    return Ok(());
+                };
+                left.cmp(right)
+            }
+            (Value::Float(left), Value::Float(right)) => left.total_cmp(right),
             (Value::String(left), Value::String(right)) => {
-                op_string(self.heap.string(*left)?, self.heap.string(*right)?)
+                self.heap.string(*left)?.cmp(self.heap.string(*right)?)
             }
             _ => return Err(Self::invalid_value_kind(left_value.kind(), &right_value)),
         };
         let module_slot = self.current_module_slot()?;
-        let value = self.bool_value(module_slot, value)?;
+        let value = self.bool_value(module_slot, op(ordering))?;
         self.push_value(value)
     }
 
@@ -111,39 +119,19 @@ impl Vm {
                 Ok(StepOutcome::Continue)
             }
             Opcode::CltS => {
-                self.compare_ord(
-                    |left, right| left < right,
-                    |left, right| left < right,
-                    |left, right| left < right,
-                    |left, right| left < right,
-                )?;
+                self.compare_ord(Ordering::is_lt)?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::CgtS => {
-                self.compare_ord(
-                    |left, right| left > right,
-                    |left, right| left > right,
-                    |left, right| left > right,
-                    |left, right| left > right,
-                )?;
+                self.compare_ord(Ordering::is_gt)?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::CleS => {
-                self.compare_ord(
-                    |left, right| left <= right,
-                    |left, right| left <= right,
-                    |left, right| left <= right,
-                    |left, right| left <= right,
-                )?;
+                self.compare_ord(|ordering| !ordering.is_gt())?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::CgeS => {
-                self.compare_ord(
-                    |left, right| left >= right,
-                    |left, right| left >= right,
-                    |left, right| left >= right,
-                    |left, right| left >= right,
-                )?;
+                self.compare_ord(|ordering| !ordering.is_lt())?;
                 Ok(StepOutcome::Continue)
             }
             Opcode::And => self.logical_binary_op(BoolOp::And),

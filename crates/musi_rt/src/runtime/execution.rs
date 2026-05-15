@@ -69,7 +69,7 @@ impl Runtime {
     /// # Errors
     ///
     /// Returns [`crate::RuntimeError`] if root runtime state is missing or the value call fails.
-    pub fn call_value(&mut self, value: Value, args: &[Value]) -> RuntimeResult<Value> {
+    pub fn call_value(&mut self, value: &Value, args: &[Value]) -> RuntimeResult<Value> {
         Ok(self.vm_mut()?.call_value(value, args)?)
     }
 

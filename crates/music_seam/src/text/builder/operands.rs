@@ -22,8 +22,6 @@ impl TextBuilder {
                 self.parse_wide_procedure_captures_operand(parts)
             }
             OperandShape::Foreign => self.parse_foreign_operand(parts),
-            OperandShape::Effect => self.parse_effect_operand(parts),
-            OperandShape::EffectId => self.parse_effect_id_operand(parts),
             OperandShape::Label => self.parse_label_operand(parts, labels, label_ids),
             OperandShape::TypeLen => self.parse_type_len_operand(parts),
             OperandShape::BranchTable => self.parse_branch_table_operand(parts, labels, label_ids),
@@ -94,34 +92,6 @@ impl TextBuilder {
             .get(&name)
             .ok_or_else(|| text_unknown_symbol("native", &name))?;
         Ok(Operand::Foreign(foreign))
-    }
-
-    fn parse_effect_operand(&self, parts: &[String]) -> AssemblyResult<Operand> {
-        let effect_name = parse_symbol(must_get(parts.get(1), "effect")?)?;
-        let op_name = parse_symbol(must_get(parts.get(2), "effect op")?)?;
-        let effect_id = *self
-            .effects
-            .get(&effect_name)
-            .ok_or_else(|| text_unknown_symbol("effect", &effect_name))?;
-        let effect = self.artifact.effects.get(effect_id);
-        let op = effect
-            .ops
-            .iter()
-            .position(|candidate| self.artifact.string_text(candidate.name) == op_name)
-            .ok_or_else(|| text_unknown_symbol("effect op", &op_name))?;
-        Ok(Operand::Effect {
-            effect: effect_id,
-            op: u16::try_from(op).map_err(|_| text_invalid_operand("effect op index", op))?,
-        })
-    }
-
-    fn parse_effect_id_operand(&self, parts: &[String]) -> AssemblyResult<Operand> {
-        let effect_name = parse_symbol(must_get(parts.get(1), "effect")?)?;
-        let effect_id = *self
-            .effects
-            .get(&effect_name)
-            .ok_or_else(|| text_unknown_symbol("effect", &effect_name))?;
-        Ok(Operand::EffectId(effect_id))
     }
 
     fn parse_label_operand(

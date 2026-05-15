@@ -1,7 +1,7 @@
 use super::*;
 
 #[must_use]
-pub(super) fn render_hir_ty(sema: &SemaModule, session: &Session, ty: HirTyId) -> String {
+pub fn render_hir_ty(sema: &SemaModule, session: &Session, ty: HirTyId) -> String {
     let kind = &sema.ty(ty).kind;
     if let Some(atomic) = render_atomic_hir_ty(kind) {
         return atomic;
@@ -52,11 +52,6 @@ pub(super) fn render_hir_ty(sema: &SemaModule, session: &Session, ty: HirTyId) -
         HirTyKind::Array { dims, item } => render_array_hir_ty(sema, session, dims, *item),
         HirTyKind::Seq { item } => format!("[]{}", render_hir_ty(sema, session, *item)),
         HirTyKind::Range { bound } => render_applied_hir_ty("Range", sema, session, *bound),
-        HirTyKind::Handler {
-            effect,
-            input,
-            output,
-        } => render_handler_hir_ty(sema, session, *effect, *input, *output),
         HirTyKind::Mut { inner } => render_prefixed_hir_ty("mut", sema, session, *inner),
         HirTyKind::AnyShape { capability } => {
             render_prefixed_hir_ty("any", sema, session, *capability)
@@ -81,6 +76,9 @@ fn render_prefixed_hir_ty(
 fn render_atomic_hir_ty(kind: &HirTyKind) -> Option<String> {
     if let HirTyKind::NatLit(value) = kind {
         return Some(value.to_string());
+    }
+    if let HirTyKind::Bits { width } = kind {
+        return Some(format!("Bits[{width}]"));
     }
     simple_hir_ty_display_name(kind).map(str::to_owned)
 }
@@ -118,21 +116,6 @@ fn render_applied_hir_ty(
     bound: HirTyId,
 ) -> String {
     format!("{name}[{}]", render_hir_ty(sema, session, bound))
-}
-
-fn render_handler_hir_ty(
-    sema: &SemaModule,
-    session: &Session,
-    effect: HirTyId,
-    input: HirTyId,
-    output: HirTyId,
-) -> String {
-    format!(
-        "answer {} ({} -> {})",
-        render_hir_ty(sema, session, effect),
-        render_hir_ty(sema, session, input),
-        render_hir_ty(sema, session, output)
-    )
 }
 
 fn render_record_hir_ty(

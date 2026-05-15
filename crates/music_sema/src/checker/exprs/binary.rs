@@ -6,7 +6,6 @@ use music_hir::{
 use music_names::{Ident, Symbol};
 
 use crate::api::{ConstraintKind, ExprFacts};
-use crate::effects::EffectRow;
 
 use super::super::{CheckPass, DiagKind};
 use super::peel_mut_ty;
@@ -25,20 +24,36 @@ impl CheckPass<'_, '_, '_> {
         }
         let builtins = self.builtins();
         let left_facts = super::check_expr(self, left);
+        if matches!(
+            op,
+            HirBinaryOp::Eq
+                | HirBinaryOp::TypeEq
+                | HirBinaryOp::Ne
+                | HirBinaryOp::Lt
+                | HirBinaryOp::Gt
+                | HirBinaryOp::Le
+                | HirBinaryOp::Ge
+        ) {
+            self.push_expected_ty(left_facts.ty);
+        }
         let right_facts = super::check_expr(self, right);
-        let mut effects = left_facts.effects.clone();
-        effects.union_with(&right_facts.effects);
+        if matches!(
+            op,
+            HirBinaryOp::Eq
+                | HirBinaryOp::TypeEq
+                | HirBinaryOp::Ne
+                | HirBinaryOp::Lt
+                | HirBinaryOp::Gt
+                | HirBinaryOp::Le
+                | HirBinaryOp::Ge
+        ) {
+            let _ = self.pop_expected_ty();
+        }
         if matches!(op, HirBinaryOp::Range { .. }) {
-            return self.check_range_binary_expr(origin, left_facts.ty, right_facts.ty, effects);
+            return self.check_range_binary_expr(origin, left_facts.ty, right_facts.ty);
         }
         if matches!(op, HirBinaryOp::In) {
-            return self.check_in_binary_expr(
-                expr_id,
-                origin,
-                left_facts.ty,
-                right_facts.ty,
-                effects,
-            );
+            return self.check_in_binary_expr(expr_id, origin, left_facts.ty, right_facts.ty);
         }
         if matches!(
             op,
@@ -49,12 +64,16 @@ impl CheckPass<'_, '_, '_> {
                 DiagKind::BinaryOperatorHasNoExecutableLowering,
                 "",
             );
-            return ExprFacts::new(builtins.unknown, effects);
+            return ExprFacts::new(builtins.unknown);
         }
-        ExprFacts::new(
-            self.binary_result_ty(origin, op, left, right, left_facts.ty, right_facts.ty),
-            effects,
-        )
+        ExprFacts::new(self.binary_result_ty(
+            origin,
+            op,
+            left,
+            right,
+            left_facts.ty,
+            right_facts.ty,
+        ))
     }
 
     pub(super) fn check_partial_range_expr(
@@ -70,13 +89,13 @@ impl CheckPass<'_, '_, '_> {
             self.range_obligation(bound, self.known().rangeable),
             self.range_obligation(bound, self.known().range_bounds),
         ];
-        if let Some(answers) = self.resolve_obligations_to_answers(origin, &obligations)
-            && !answers.is_empty()
+        if let Some(evidence) = self.resolve_obligations_to_evidence(origin, &obligations)
+            && !evidence.is_empty()
         {
-            self.set_expr_constraint_answers(expr_id, answers);
+            self.set_expr_constraint_evidence(expr_id, evidence);
         }
         let ty = self.alloc_ty(HirTyKind::Range { bound });
-        ExprFacts::new(ty, facts.effects)
+        ExprFacts::new(ty)
     }
 
     fn check_assign_expr(
@@ -86,16 +105,15 @@ impl CheckPass<'_, '_, '_> {
         right: HirExprId,
     ) -> ExprFacts {
         let builtins = self.builtins();
-        let (expected_rhs, mut effects) = self.assignment_contract(origin, left);
+        let expected_rhs = self.assignment_contract(origin, left);
         self.push_expected_ty(expected_rhs);
         let rhs_facts = super::check_expr(self, right);
         let _ = self.pop_expected_ty();
-        effects.union_with(&rhs_facts.effects);
         self.type_mismatch(origin, expected_rhs, rhs_facts.ty);
-        ExprFacts::new(builtins.unit, effects)
+        ExprFacts::new(builtins.unit)
     }
 
-    fn assignment_contract(&mut self, origin: HirOrigin, left: HirExprId) -> (HirTyId, EffectRow) {
+    fn assignment_contract(&mut self, origin: HirOrigin, left: HirExprId) -> HirTyId {
         let builtins = self.builtins();
         match self.expr(left).kind {
             HirExprKind::Name { name } => {
@@ -104,14 +122,14 @@ impl CheckPass<'_, '_, '_> {
                     .and_then(|binding| self.binding_type(binding))
                     .unwrap_or_else(|| self.symbol_value_type(name.name));
                 if self.is_mut_ty(ty) {
-                    (peel_mut_ty(self, ty), EffectRow::empty())
+                    peel_mut_ty(self, ty)
                 } else {
                     self.diag(
                         origin.span,
                         DiagKind::WriteTargetRequiresMut,
                         "assignment target must be mutable",
                     );
-                    (builtins.unknown, EffectRow::empty())
+                    builtins.unknown
                 }
             }
             HirExprKind::Index { base, args } => self.assignment_index_contract(origin, base, args),
@@ -125,7 +143,7 @@ impl CheckPass<'_, '_, '_> {
                     DiagKind::UnsupportedAssignmentTarget,
                     DiagContext::new().with("target", target),
                 );
-                (builtins.unknown, EffectRow::empty())
+                builtins.unknown
             }
         }
     }
@@ -135,12 +153,12 @@ impl CheckPass<'_, '_, '_> {
         origin: HirOrigin,
         base: HirExprId,
         args: SliceRange<HirExprId>,
-    ) -> (HirTyId, EffectRow) {
+    ) -> HirTyId {
         let builtins = self.builtins();
         let base_facts = super::check_expr(self, base);
-        let mut effects = base_facts.effects;
-        let arg_count = self.check_index_args(origin, args, &mut effects);
-        let expected = match self.ty(peel_mut_ty(self, base_facts.ty)).kind {
+        let arg_count = self.check_index_args(origin, args);
+
+        match self.ty(peel_mut_ty(self, base_facts.ty)).kind {
             HirTyKind::Array { dims, item } if self.is_mut_ty(base_facts.ty) => {
                 let dims = self.dims(dims);
                 if !dims.is_empty() && dims.len() != arg_count {
@@ -192,8 +210,7 @@ impl CheckPass<'_, '_, '_> {
                 );
                 builtins.unknown
             }
-        };
-        (expected, effects)
+        }
     }
 
     fn assignment_field_contract(
@@ -201,11 +218,11 @@ impl CheckPass<'_, '_, '_> {
         origin: HirOrigin,
         base: HirExprId,
         name: Ident,
-    ) -> (HirTyId, EffectRow) {
+    ) -> HirTyId {
         let builtins = self.builtins();
         let base_facts = super::check_expr(self, base);
-        let effects = base_facts.effects;
-        let expected = match self.ty(peel_mut_ty(self, base_facts.ty)).kind {
+
+        match self.ty(peel_mut_ty(self, base_facts.ty)).kind {
             HirTyKind::Record { fields } if self.is_mut_ty(base_facts.ty) => self
                 .ty_fields(fields)
                 .into_iter()
@@ -239,8 +256,7 @@ impl CheckPass<'_, '_, '_> {
                 );
                 builtins.unknown
             }
-        };
-        (expected, effects)
+        }
     }
 
     fn check_range_binary_expr(
@@ -248,11 +264,10 @@ impl CheckPass<'_, '_, '_> {
         origin: HirOrigin,
         left: HirTyId,
         right: HirTyId,
-        effects: EffectRow,
     ) -> ExprFacts {
         let item_ty = self.range_item_ty(origin, left, right);
         let ty = self.alloc_ty(HirTyKind::Range { bound: item_ty });
-        ExprFacts::new(ty, effects)
+        ExprFacts::new(ty)
     }
 
     fn check_in_binary_expr(
@@ -261,22 +276,21 @@ impl CheckPass<'_, '_, '_> {
         origin: HirOrigin,
         left: HirTyId,
         right: HirTyId,
-        effects: EffectRow,
     ) -> ExprFacts {
         let builtins = self.builtins();
         let Some(item_ty) = self.range_item_type(right) else {
             let expected = self.alloc_ty(HirTyKind::Range { bound: left });
             self.type_mismatch(origin, expected, right);
-            return ExprFacts::new(builtins.bool_, effects);
+            return ExprFacts::new(builtins.bool_);
         };
         self.type_mismatch(origin, item_ty, left);
         let obligation = self.range_obligation(item_ty, self.known().rangeable);
-        if let Some(answers) = self.resolve_obligations_to_answers(origin, &[obligation])
-            && !answers.is_empty()
+        if let Some(evidence) = self.resolve_obligations_to_evidence(origin, &[obligation])
+            && !evidence.is_empty()
         {
-            self.set_expr_constraint_answers(expr_id, answers);
+            self.set_expr_constraint_evidence(expr_id, evidence);
         }
-        ExprFacts::new(builtins.bool_, effects)
+        ExprFacts::new(builtins.bool_)
     }
 
     fn binary_result_ty(
@@ -290,7 +304,7 @@ impl CheckPass<'_, '_, '_> {
     ) -> HirTyId {
         let builtins = self.builtins();
         match op {
-            HirBinaryOp::Arrow | HirBinaryOp::EffectArrow => {
+            HirBinaryOp::Arrow => {
                 let left_origin = self.expr(left).origin;
                 let left_ty = self.lower_type_expr(left, left_origin);
                 let params = self.alloc_ty_list([left_ty]);
@@ -299,7 +313,7 @@ impl CheckPass<'_, '_, '_> {
                 self.alloc_ty(HirTyKind::Arrow {
                     params,
                     ret,
-                    is_effectful: matches!(op, HirBinaryOp::EffectArrow),
+                    is_effectful: false,
                 })
             }
             HirBinaryOp::Add

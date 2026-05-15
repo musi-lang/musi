@@ -1,6 +1,6 @@
 !.github/workflows
 .wrangler/
-tempdocs/
+.openagentlayer/
 
 .cursorignore
 .cursorindexingignore

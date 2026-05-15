@@ -69,8 +69,19 @@ fn leading_block_doc_text(source: &Source, mut line: usize) -> Option<String> {
 }
 
 pub(super) fn module_doc_text(source: &Source) -> Option<String> {
+    module_doc_range_and_text(source).map(|(_, text)| text)
+}
+
+pub(super) fn module_doc_hover(source: &Source, offset: u32) -> Option<(Span, String)> {
+    let (span, text) = module_doc_range_and_text(source)?;
+    span.contains(offset).then_some((span, text))
+}
+
+fn module_doc_range_and_text(source: &Source) -> Option<(Span, String)> {
     let mut line = 1;
     let mut docs = Vec::new();
+    let mut start = None::<u32>;
+    let mut end = None::<u32>;
     while let Some(text) = source.line_text(line) {
         let trimmed = text.trim_start();
         if trimmed.is_empty() {
@@ -78,19 +89,25 @@ pub(super) fn module_doc_text(source: &Source) -> Option<String> {
             continue;
         }
         if let Some(doc_text) = trimmed.strip_prefix("--!") {
+            let line_span = line_span(source, line)?;
+            let _ = start.get_or_insert(line_span.start);
+            end = Some(line_span.end);
             docs.push(doc_text.trim_start().to_owned());
             line += 1;
             continue;
         }
         if starts_with_module_doc_block(trimmed) {
+            let block_start = line_span(source, line)?.start;
             let (doc, next_line) = module_block_doc_text(source, line)?;
+            let _ = start.get_or_insert(block_start);
+            end = Some(line_span(source, next_line.saturating_sub(1))?.end);
             docs.push(doc);
             line = next_line;
             continue;
         }
         break;
     }
-    (!docs.is_empty()).then(|| docs.join("\n"))
+    Some((Span::new(start?, end?), docs.join("\n"))).filter(|(_, text)| !text.is_empty())
 }
 
 fn module_block_doc_text(source: &Source, start_line: usize) -> Option<(String, usize)> {
@@ -113,4 +130,11 @@ fn clean_block_doc_text(text: &str, opener_len: usize) -> String {
         .unwrap_or(without_opener)
         .trim()
         .to_owned()
+}
+
+fn line_span(source: &Source, line: usize) -> Option<Span> {
+    let text = source.line_text(line)?;
+    let start = source.offset(line, 1)?;
+    let end = source.offset(line, text.chars().count().saturating_add(1))?;
+    Some(Span::new(start, end))
 }
