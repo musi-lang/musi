@@ -29,7 +29,7 @@ smallvec = "1.15.1"
 base64 = "0.22.1"
 getrandom = "0.4.2"
 sha2 = "0.11.0"
-uuid = { version = "1.23.1", features = ["v4"] }
+uuid = { version = "1.23.2", features = ["v4"] }
 
 [workspace.lints.rust]
 dead_code = "deny"
